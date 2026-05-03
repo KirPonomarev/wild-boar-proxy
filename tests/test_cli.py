@@ -243,6 +243,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["effective_mode"], "stable")
 
     def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
         stable_port = free_port()
@@ -360,6 +361,16 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertFalse(payload["attestation"]["effective_mode_match"])
+
+    def test_healthcheck_reconciles_managed_listener_loss_for_reporting(self) -> None:
+        result = self.run_cli("healthcheck", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertFalse(payload["attestation"]["effective_mode_match"])
+        self.assertFalse(payload["attestation"]["base_url_match"])
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()

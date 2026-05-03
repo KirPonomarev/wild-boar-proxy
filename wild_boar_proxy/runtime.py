@@ -309,6 +309,14 @@ def read_effective_mode_artifact(paths: RuntimePaths) -> str:
     return mode if mode in {"stable", "managed"} else ""
 
 
+def reconcile_effective_mode_for_reporting(
+    effective_mode: str, *, listener_ok: bool
+) -> str:
+    if effective_mode == "managed" and not listener_ok:
+        return "stable"
+    return effective_mode
+
+
 def get_endpoint(paths: RuntimePaths, effective_mode: str) -> tuple[str, int, str]:
     if effective_mode == "managed":
         host = read_yaml_value(paths.managed_config_file, "host") or "127.0.0.1"
@@ -413,7 +421,6 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     registry = read_json(paths.registry_file)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
-    effective_mode = get_effective_mode(paths, state)
     current_proxy_url = state.get("current_proxy_url", "")
     pool_summary = {
         "active": int(state.get("active_count", 0) or 0),
@@ -442,7 +449,7 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
         exit_code=int(health_payload["exit_code"]),
         extra={
             "desired_mode": desired_mode,
-            "effective_mode": effective_mode,
+            "effective_mode": health_payload["effective_mode"],
             "endpoint": health_payload["endpoint"],
             "current_proxy_url": current_proxy_url,
             "pool_summary": pool_summary,
@@ -463,7 +470,6 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     effective_mode = get_effective_mode(paths, state)
     host, port, endpoint = get_endpoint(paths, effective_mode)
     configured_base_url = read_toml_string(paths.config_toml, "base_url")
-    expected_base_url = endpoint
     listener_ok = socket_is_listening(host, port)
     models_ok = False
     responses_ok = False
@@ -490,12 +496,17 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         except Exception as exc:  # noqa: BLE001
             error_detail = str(exc)
 
-    base_url_match = configured_base_url == expected_base_url
     state_effective_mode = state.get("effective_mode")
     effective_mode_artifact = read_effective_mode_artifact(paths)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    expected_base_url = reported_endpoint
+    base_url_match = configured_base_url == expected_base_url
     effective_mode_match = (
-        state_effective_mode in {None, "", effective_mode}
-        and effective_mode_artifact == effective_mode
+        state_effective_mode in {None, "", reported_effective_mode}
+        and effective_mode_artifact == reported_effective_mode
     )
 
     if not listener_ok:
@@ -542,7 +553,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         changed_files=[],
         extra={
             "desired_mode": desired_mode,
-            "effective_mode": effective_mode,
+            "effective_mode": reported_effective_mode,
             "endpoint": endpoint,
             "attestation": attestation,
             "last_error": error_detail
@@ -748,6 +759,9 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     effective_mode = get_effective_mode(paths, state)
     host, port, endpoint = get_endpoint(paths, effective_mode)
     listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
 
     if result.returncode != 0:
         return build_command_payload(
@@ -760,7 +774,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             changed_files=changed_files,
             extra={
                 "desired_mode": desired_mode,
-                "effective_mode": effective_mode,
+                "effective_mode": reported_effective_mode,
                 "endpoint": endpoint,
                 "last_error": state.get("last_error", result.stderr.strip()),
             },
@@ -778,7 +792,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             changed_files=changed_files,
             extra={
                 "desired_mode": desired_mode,
-                "effective_mode": effective_mode,
+                "effective_mode": reported_effective_mode,
                 "endpoint": endpoint,
                 "last_error": state.get("last_error", ""),
             },
@@ -795,7 +809,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         changed_files=changed_files,
         extra={
             "desired_mode": desired_mode,
-            "effective_mode": effective_mode,
+            "effective_mode": reported_effective_mode,
             "endpoint": endpoint,
             "last_error": state.get("last_error", ""),
         },
