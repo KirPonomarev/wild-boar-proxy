@@ -468,7 +468,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
-    host, port, endpoint = get_endpoint(paths, effective_mode)
+    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
     configured_base_url = read_toml_string(paths.config_toml, "base_url")
     listener_ok = socket_is_listening(host, port)
     models_ok = False
@@ -479,10 +479,10 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     if listener_ok:
         api_key = read_api_key(paths.auth_file)
         try:
-            models_payload = http_get_json(f"{endpoint}/models", api_key)
+            models_payload = http_get_json(f"{attestation_endpoint}/models", api_key)
             models_ok = isinstance(models_payload.get("data"), list)
             responses_payload = http_post_json(
-                f"{endpoint}/responses",
+                f"{attestation_endpoint}/responses",
                 api_key,
                 {"model": model_name, "input": "Respond with exactly OK"},
             )
@@ -514,7 +514,13 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         severity = "recoverable"
         operator_action = "retry"
         machine_error_code = "LISTENER_DOWN"
-        human_message = f"Listener is not reachable at {endpoint}."
+        if reported_endpoint != attestation_endpoint:
+            human_message = (
+                f"Listener is not reachable at {attestation_endpoint}; "
+                f"effective endpoint is reconciled to {reported_endpoint}."
+            )
+        else:
+            human_message = f"Listener is not reachable at {attestation_endpoint}."
         ok = False
     elif models_ok and responses_ok and base_url_match and effective_mode_match:
         liveness = "healthy"
@@ -554,7 +560,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         extra={
             "desired_mode": desired_mode,
             "effective_mode": reported_effective_mode,
-            "endpoint": endpoint,
+            "endpoint": reported_endpoint,
             "attestation": attestation,
             "last_error": error_detail
             or (
@@ -762,6 +768,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     reported_effective_mode = reconcile_effective_mode_for_reporting(
         effective_mode, listener_ok=listener_ok
     )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
 
     if result.returncode != 0:
         return build_command_payload(
@@ -775,7 +782,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             extra={
                 "desired_mode": desired_mode,
                 "effective_mode": reported_effective_mode,
-                "endpoint": endpoint,
+                "endpoint": reported_endpoint,
                 "last_error": state.get("last_error", result.stderr.strip()),
             },
             exit_code=result.returncode,
@@ -793,7 +800,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             extra={
                 "desired_mode": desired_mode,
                 "effective_mode": reported_effective_mode,
-                "endpoint": endpoint,
+                "endpoint": reported_endpoint,
                 "last_error": state.get("last_error", ""),
             },
             exit_code=1,
@@ -810,7 +817,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         extra={
             "desired_mode": desired_mode,
             "effective_mode": reported_effective_mode,
-            "endpoint": endpoint,
+            "endpoint": reported_endpoint,
             "last_error": state.get("last_error", ""),
         },
     )

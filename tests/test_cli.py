@@ -244,6 +244,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["next_action"], "retry")
         self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
 
     def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
         stable_port = free_port()
@@ -369,6 +370,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
         self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
         self.assertFalse(payload["attestation"]["effective_mode_match"])
         self.assertFalse(payload["attestation"]["base_url_match"])
 
@@ -497,6 +499,8 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         self.assertEqual(payload["liveness"], "down")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-ran")
 
