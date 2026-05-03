@@ -34,5 +34,7 @@ low-level routing.
 - no split-brain between docs and runtime
 - no false-green or stale-green status
 - runtime data is never committed
+- repo work is not considered synchronized while it exists only in a local worktree
+- each closed write contour must reach GitHub, not just a local commit
 - architecture is designed for 20 accounts from day one
 - scaling proof is staged: 10, then 15, then 20

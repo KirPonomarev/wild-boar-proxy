@@ -11,6 +11,7 @@ of `CLIProxyAPI`.
 - do not build a second proxy engine
 - keep `CLIProxyAPI` as engine
 - keep Wild Boar Proxy as the managing layer
+- close each completed write contour with commit, push, and reviewable GitHub sync
 - design the architecture for 20 accounts from day one
 - prove rollout gradually through staged updates
 

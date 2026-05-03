@@ -19,3 +19,9 @@ This repository is the bootstrap for the public experimental project.
 `CLIProxyAPI` stays the engine.
 
 `Wild Boar Proxy App` stays the managing layer.
+
+## Repo discipline
+
+Repo work must be synchronized to GitHub in the same closeout cycle as
+verification and commit.
+A local-only commit is not treated as a closed contour.
