@@ -1,0 +1,7 @@
+MIT License
+
+The upstream CLIProxyAPI project is represented in this repository as a
+third-party engine dependency. The exact upstream snapshot and its final
+packaging method must be re-confirmed before any bundled release is published.
+
+At bootstrap time, the project is tracked as MIT-licensed.

@@ -1,0 +1,17 @@
+.DS_Store
+node_modules
+dist
+build
+coverage
+.env
+.env.*
+.idea
+.vscode
+
+# Runtime data must never be committed.
+auth
+state
+logs
+runtime
+tmp
+cache
