@@ -12,6 +12,11 @@
 - each meaningful write contour ends with a commit
 - public repo delivery uses branch, push, PR, merge
 - new write work does not start from a dirty worktree unless it is an explicit hygiene task
+- a contour is not considered closed while its changes exist only as local commits
+- each closed contour must be pushed to GitHub on its branch before the next contour begins
+- timely sync is mandatory: branch push happens in the same closeout cycle as verification and commit
+- PR creation follows push as soon as the contour is ready for reviewable delivery
+- merge is allowed only after verification evidence exists for the contour
 
 ## Runtime discipline
 
