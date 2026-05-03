@@ -313,6 +313,38 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertFalse(payload["attestation"]["effective_mode_match"])
 
+    def test_healthcheck_requires_effective_mode_artifact(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").unlink()
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertFalse(payload["attestation"]["effective_mode_match"])
+        self.assertIn("runtime-effective-mode", payload["last_error"])
+
     def test_status_uses_live_attestation_for_green_state(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"

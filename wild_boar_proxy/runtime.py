@@ -142,6 +142,11 @@ def sanitized_env() -> dict[str, str]:
     return env
 
 
+def proxyless_urlopen(request: urllib.request.Request, timeout: int):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return opener.open(request, timeout=timeout)
+
+
 def read_json(path: Path, *, required: bool = True) -> dict[str, Any]:
     if not path.exists():
         if required:
@@ -240,7 +245,7 @@ def http_get_json(url: str, api_key: str) -> dict[str, Any]:
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {api_key}"}
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
+    with proxyless_urlopen(request, timeout=10) as response:
         payload = json.loads(response.read().decode("utf-8"))
         if not isinstance(payload, dict):
             raise RuntimeErrorInfo(
@@ -261,7 +266,7 @@ def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str,
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with proxyless_urlopen(request, timeout=20) as response:
         data = json.loads(response.read().decode("utf-8"))
         if not isinstance(data, dict):
             raise RuntimeErrorInfo(
@@ -290,6 +295,11 @@ def get_effective_mode(paths: RuntimePaths, state: dict[str, Any]) -> str:
     if state_mode in {"stable", "managed"}:
         return str(state_mode)
     return "stable"
+
+
+def read_effective_mode_artifact(paths: RuntimePaths) -> str:
+    mode = read_text(paths.runtime_effective_mode_file)
+    return mode if mode in {"stable", "managed"} else ""
 
 
 def get_endpoint(paths: RuntimePaths, effective_mode: str) -> tuple[str, int, str]:
@@ -475,10 +485,10 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
 
     base_url_match = configured_base_url == expected_base_url
     state_effective_mode = state.get("effective_mode")
+    effective_mode_artifact = read_effective_mode_artifact(paths)
     effective_mode_match = (
         state_effective_mode in {None, "", effective_mode}
-        and read_text(paths.runtime_effective_mode_file, default=effective_mode)
-        == effective_mode
+        and effective_mode_artifact == effective_mode
     )
 
     if not listener_ok:
@@ -528,7 +538,12 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
             "effective_mode": effective_mode,
             "endpoint": endpoint,
             "attestation": attestation,
-            "last_error": error_detail or state.get("last_error", ""),
+            "last_error": error_detail
+            or (
+                "Missing or invalid runtime-effective-mode.txt"
+                if not effective_mode_artifact
+                else state.get("last_error", "")
+            ),
         },
     )
 
