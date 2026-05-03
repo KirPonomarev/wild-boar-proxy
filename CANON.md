@@ -8,8 +8,7 @@
 4. `STATE_SCHEMA.md`
 5. `COMMAND_API.md`
 6. `DELIVERY_RULES.md`
-7. `docs/WILD_BOAR_CHANGE_GUIDE_V1.md`
-8. `README.md`
+7. `README.md`
 
 ## Product definition
 
@@ -37,11 +36,3 @@ low-level routing.
 - runtime data is never committed
 - architecture is designed for 20 accounts from day one
 - scaling proof is staged: 10, then 15, then 20
-
-## Advisory guide rule
-
-`docs/WILD_BOAR_CHANGE_GUIDE_V1.md` is an advisory operating guide.
-
-It helps classify change contours and reading order.
-
-It does not override this canon.
