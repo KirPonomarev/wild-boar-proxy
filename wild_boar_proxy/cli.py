@@ -14,6 +14,7 @@ from .runtime import (
     mode_set,
     run_accounts_command,
     run_healthcheck,
+    run_launch_smoke,
     run_onboard,
     run_sync,
     summarize_status,
@@ -34,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     sync = subparsers.add_parser("sync")
     sync.add_argument("--json", action="store_true", required=True)
     sync.add_argument("--model")
+
+    launch = subparsers.add_parser("launch")
+    launch_subparsers = launch.add_subparsers(dest="launch_command", required=True)
+    launch_smoke = launch_subparsers.add_parser("smoke")
+    launch_smoke.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -99,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(summarize_status(paths))
         if args.command == "sync":
             return emit_json(run_sync(paths, args.model))
+        if args.command == "launch" and args.launch_command == "smoke":
+            return emit_json(run_launch_smoke(paths))
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":

@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
@@ -47,6 +48,7 @@ class RuntimePaths:
     registry_file: Path
     state_file: Path
     managed_config_file: Path
+    launcher_script: Path
     sync_script: Path
     accounts_bin: Path
     onboard_bin: Path
@@ -96,6 +98,11 @@ class RuntimePaths:
             managed_config_file=Path(
                 os.environ.get(
                     "WBP_MANAGED_CONFIG_FILE", str(managed_dir / "managed-config.yaml")
+                )
+            ).expanduser(),
+            launcher_script=Path(
+                os.environ.get(
+                    "WBP_LAUNCHER_SCRIPT", str(profile_dir / "codex-custom-launch.sh")
                 )
             ).expanduser(),
             sync_script=Path(
@@ -598,6 +605,7 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, int]:
         paths.registry_file,
         paths.state_file,
         paths.managed_config_file,
+        paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
     ]
@@ -617,6 +625,91 @@ def detect_changed_files(before: dict[Path, int], after_paths: list[Path]) -> li
         if before.get(candidate) != after:
             changed.append(str(candidate))
     return changed
+
+
+def get_launch_stabilization_seconds() -> float:
+    raw = os.environ.get("WBP_LAUNCH_STABILIZATION_SECONDS", "30")
+    try:
+        value = float(raw)
+    except ValueError:
+        return 30.0
+    return value if value >= 0 else 30.0
+
+
+def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
+    if not paths.launcher_script.exists():
+        raise RuntimeErrorInfo(
+            f"Missing launcher script: {paths.launcher_script}",
+            machine_error_code="MISSING_LAUNCHER_SCRIPT",
+            operator_action="user_action",
+        )
+    before = snapshot_known_files(paths)
+    with serialized_lock(paths):
+        result = subprocess.run(
+            [str(paths.launcher_script), "smoke"],
+            capture_output=True,
+            text=True,
+            env=sanitized_env(),
+            check=False,
+        )
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+    if result.stdout:
+        sys.stderr.write(result.stdout)
+
+    changed_files = detect_changed_files(
+        before,
+        [
+            paths.config_toml,
+            paths.registry_file,
+            paths.state_file,
+            paths.managed_config_file,
+            paths.runtime_effective_mode_file,
+        ],
+    )
+    status_payload = summarize_status(paths)
+    stabilization_seconds = get_launch_stabilization_seconds()
+    if (
+        result.returncode == 0
+        and status_payload["status"] == "ok"
+        and str(status_payload["effective_mode"]) == "managed"
+        and stabilization_seconds > 0
+    ):
+        time.sleep(stabilization_seconds)
+        status_payload = summarize_status(paths)
+    desired_mode = str(status_payload["desired_mode"])
+    effective_mode = str(status_payload["effective_mode"])
+    launch_ok = result.returncode == 0 and status_payload["status"] == "ok"
+    if launch_ok:
+        machine_error_code = "OK"
+        human_message = "Launcher smoke completed."
+    elif result.returncode != 0:
+        machine_error_code = "LAUNCHER_EXIT_NONZERO"
+        human_message = "Launcher smoke exited non-zero."
+    else:
+        machine_error_code = str(status_payload["machine_error_code"])
+        human_message = "Launcher smoke failed or did not remain in a healthy runtime state."
+    return build_command_payload(
+        ok=launch_ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness=str(status_payload["liveness"]),
+        severity=str(status_payload["severity"]),
+        operator_action=str(status_payload["operator_action"]),
+        changed_files=changed_files,
+        extra={
+            "desired_mode": desired_mode,
+            "effective_mode": effective_mode,
+            "endpoint": status_payload["endpoint"],
+            "current_proxy_url": status_payload.get("current_proxy_url", ""),
+            "attestation_summary": status_payload.get("attestation_summary", {}),
+            "last_error": status_payload.get("last_error", ""),
+            "launch_mode": "smoke",
+            "launcher_exit_code": result.returncode,
+            "stabilization_seconds": stabilization_seconds,
+        },
+        exit_code=result.returncode if result.returncode != 0 else status_payload["exit_code"],
+    )
 
 
 def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
