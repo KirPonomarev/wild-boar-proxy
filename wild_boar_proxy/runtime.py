@@ -534,6 +534,35 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
     }
 
 
+def summarize_registry_identity(registry_identity: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": registry_identity.get("status", "unknown"),
+        "machine_error_code": registry_identity.get("machine_error_code", "UNKNOWN"),
+    }
+
+
+def get_claim_gate(
+    policy_drift: dict[str, Any], registry_identity: dict[str, Any]
+) -> dict[str, Any]:
+    blocked_claims = set()
+    sources = []
+    if policy_drift.get("claim_blockers"):
+        blocked_claims.update(str(claim) for claim in policy_drift["claim_blockers"])
+        sources.append("policy_drift")
+    if registry_identity.get("claim_blockers"):
+        blocked_claims.update(str(claim) for claim in registry_identity["claim_blockers"])
+        sources.append("registry_identity")
+
+    blocked = bool(blocked_claims)
+    return {
+        "status": "blocked" if blocked else "clear",
+        "machine_error_code": "CLAIM_GATE_BLOCKED" if blocked else "OK",
+        "blocked_claims": sorted(blocked_claims),
+        "sources": sources,
+        "next_action": "inspect_claim_gate" if blocked else "none",
+    }
+
+
 def response_ok(payload: dict[str, Any]) -> bool:
     def iter_strings(value: Any) -> list[str]:
         if isinstance(value, str):
@@ -728,6 +757,8 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     desired_mode = get_desired_mode(paths)
     health_payload = run_healthcheck(paths)
     registry = read_json(paths.registry_file)
+    policy_drift = get_stable_policy_drift(paths, registry)
+    registry_identity = get_registry_identity(registry)
     state = read_json(paths.state_file, required=False)
     current_proxy_url = state.get("current_proxy_url", "")
     pool_summary = {
@@ -760,7 +791,9 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
             "endpoint": health_payload["endpoint"],
             "current_proxy_url": current_proxy_url,
             "pool_summary": pool_summary,
-            "policy_drift": get_stable_policy_drift(paths, registry),
+            "policy_drift": policy_drift,
+            "registry_identity_summary": summarize_registry_identity(registry_identity),
+            "claim_gate": get_claim_gate(policy_drift, registry_identity),
             "last_error": health_payload.get("last_error", state.get("last_error", "")),
             "attestation_summary": {
                 "status": health_payload["status"],
