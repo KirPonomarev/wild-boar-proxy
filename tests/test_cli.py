@@ -2006,6 +2006,179 @@ class CliTests(unittest.TestCase):
             [],
         )
 
+    def test_status_reports_stable_runtime_consumer_contract_when_approved_target_not_ready(
+        self,
+    ) -> None:
+        result = self.run_cli("status", "--json")
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        self.assertEqual(consumer["status"], "contract_ready")
+        self.assertEqual(
+            consumer["observed_stable_inventory_source"]["source"],
+            "stable_config_parent",
+        )
+        self.assertEqual(
+            consumer["approved_repair_target_reference"]["status"],
+            "fixed_not_materialized",
+        )
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["status"],
+            "observed_source_selected",
+        )
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["status"],
+            "observed_source_active",
+        )
+        self.assertTrue(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        derived_surface = consumer["derived_stable_runtime_config_surface"]
+        self.assertEqual(derived_surface["status"], "declared_not_materialized")
+        self.assertEqual(
+            derived_surface["config_file"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertFalse(derived_surface["truth_surface"])
+        self.assertFalse(derived_surface["exists"])
+        self.assertEqual(
+            consumer["baseline_stable_config_surface"]["config_file"],
+            str(self.stable_dir / "config.yaml"),
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"], "OK"
+        )
+
+    def test_status_reports_desired_approved_target_before_effective_activation(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        result = self.run_cli("status", "--json")
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        self.assertEqual(
+            consumer["approved_repair_target_reference"]["status"],
+            "materialized_aligned",
+        )
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["resolved_path"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["resolved_path"],
+            str(self.stable_dir),
+        )
+        self.assertFalse(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"],
+            "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+        )
+        self.assertTrue(consumer["fallback_contract"]["fallback_allowed"])
+        self.assertTrue(consumer["fallback_contract"]["silent_fallback_forbidden"])
+
+    def test_status_reports_effective_approved_target_only_when_observation_matches_target(
+        self,
+    ) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{self.managed_dir / "stable-repair-target"}"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("status", "--json")
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertTrue(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"], "OK"
+        )
+
+    def test_launch_smoke_reports_stable_runtime_consumer_contract(self) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("launch", "smoke", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        self.assertEqual(consumer["status"], "contract_ready")
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+
+    def test_stable_runtime_consumer_contract_does_not_leak_to_unrelated_json_surfaces(
+        self,
+    ) -> None:
+        for args in (
+            ("healthcheck", "--json"),
+            ("accounts", "list", "--json"),
+            ("stable", "repair", "--dry-run", "--json"),
+        ):
+            with self.subTest(args=args):
+                result = self.run_cli(*args)
+                payload = json.loads(result.stdout)
+                self.assertNotIn("stable_runtime_consumer", payload)
+
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"

@@ -169,3 +169,44 @@ Field meaning rules:
   observed-source drift
 - apply blocker paths for missing source files or basename collisions must be
   machine-readable and must not fall back to implicit rename logic
+
+## Additional stable-runtime consumer contract surface
+
+The current stable-runtime consumer contour does not open activation behavior.
+
+It must expose explicit machine-readable separation between:
+
+- observed stable inventory source
+- approved repair-target reference
+- desired stable runtime consumer source
+- effective stable runtime consumer source
+- derived stable runtime config surface
+- explicit fallback contract
+
+Current reporting surfaces for this contract are:
+
+- `status --json`
+- `launch smoke --json`
+
+Required contract fields:
+
+- `stable_runtime_consumer.status`
+- `stable_runtime_consumer.observed_stable_inventory_source`
+- `stable_runtime_consumer.approved_repair_target_reference`
+- `stable_runtime_consumer.desired_stable_runtime_consumer_source`
+- `stable_runtime_consumer.effective_stable_runtime_consumer_source`
+- `stable_runtime_consumer.derived_stable_runtime_config_surface`
+- `stable_runtime_consumer.baseline_stable_config_surface`
+- `stable_runtime_consumer.fallback_contract`
+- `stable_runtime_consumer.consumer_activation_readiness`
+
+Field meaning rules:
+
+- desired stable runtime consumer source is control-layer selection truth
+- effective stable runtime consumer source is runtime-observed truth only
+- desired source must not be reported as effective before successful live
+  activation evidence
+- baseline stable config remains an engine-adjacent observation surface
+- `stable-runtime-config.generated.yaml` is a generated control artifact, not a
+  truth surface
+- silent fallback from approved target to observed source is forbidden

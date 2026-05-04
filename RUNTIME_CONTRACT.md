@@ -21,6 +21,17 @@
 - managed preflight failure must not leave effective mode claiming managed
 - desired mode may remain `managed` while effective mode falls back to `stable`
 - effective mode must match the listener and endpoint actually serving traffic
+- desired stable runtime consumer source must be reported separately from
+  effective stable runtime consumer source
+- observed stable inventory source remains observation truth, not approved
+  runtime-target truth
+- approved repair-target reference remains control-layer target truth, not
+  effective runtime-consumer truth
+- a generated stable runtime config is a control artifact, not a truth surface
+- fallback from approved target to observed stable source must be explicit and
+  machine-readable
+- desired stable runtime consumer source must never be reported as effective
+  before successful live activation evidence
 
 ## Safety rules
 

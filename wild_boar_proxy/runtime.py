@@ -58,6 +58,7 @@ class RuntimePaths:
     repair_target_inventory_dir: Path
     repair_target_reference_file: Path
     target_switch_transaction_file: Path
+    stable_runtime_generated_config_file: Path
 
     @classmethod
     def from_env(cls) -> "RuntimePaths":
@@ -134,6 +135,8 @@ class RuntimePaths:
             repair_target_inventory_dir=managed_dir / "stable-repair-target",
             repair_target_reference_file=managed_dir / "approved-repair-target.json",
             target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
+            stable_runtime_generated_config_file=managed_dir
+            / "stable-runtime-config.generated.yaml",
         )
 
 
@@ -645,6 +648,7 @@ APPROVED_REPAIR_TARGET_SCHEMA_VERSION = 1
 TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION = 1
 APPROVED_REPAIR_TARGET_IDENTITY = "companion_managed_stable_auth_inventory"
 APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
+STABLE_RUNTIME_GENERATED_CONFIG_METHOD = "control_owned_generated_config"
 
 
 def read_json_if_file(path: Path) -> dict[str, Any] | None:
@@ -811,6 +815,139 @@ def build_target_switch_surface_context(paths: RuntimePaths) -> dict[str, Any]:
         "approved_repair_target_reference": approved_target,
         "target_switch_transaction_metadata_surface": transaction_metadata_surface,
         "mode_set_is_target_switch": False,
+    }
+
+
+def build_stable_runtime_generated_config_surface(
+    paths: RuntimePaths,
+) -> dict[str, Any]:
+    generated_path = paths.stable_runtime_generated_config_file
+    return {
+        "status": "materialized_unactivated" if generated_path.exists() else "declared_not_materialized",
+        "config_file": str(generated_path),
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+        "artifact_kind": "generated_runtime_config",
+        "truth_surface": False,
+        "activation_method": STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
+        "exists": generated_path.exists(),
+    }
+
+
+def build_stable_runtime_consumer_contract(
+    paths: RuntimePaths,
+    registry: dict[str, Any],
+    policy_drift: dict[str, Any],
+) -> dict[str, Any]:
+    observed_path, observed_source = get_stable_auth_inventory_source(paths)
+    approved_target = get_approved_repair_target_reference(paths)
+    repair_plan = build_stable_repair_transaction_plan(
+        paths,
+        registry,
+        policy_drift,
+        {"status": "available", "machine_error_code": "OK", "holder_pid": None},
+        mode="dry_run",
+    )
+    target_plan = repair_plan.get("target_reconciliation_plan", {})
+    approved_target_ready = (
+        approved_target.get("status") == "materialized_aligned"
+        and not target_plan.get("target_would_add")
+        and not target_plan.get("target_would_prune")
+    )
+    desired_path = (
+        paths.repair_target_inventory_dir if approved_target_ready else observed_path
+    )
+    desired_kind = (
+        "approved_repair_target"
+        if approved_target_ready
+        else "observed_stable_inventory_source"
+    )
+    desired_status = (
+        "approved_target_selected"
+        if approved_target_ready
+        else "observed_source_selected"
+    )
+    desired_reason = (
+        "approved_target_materialized_and_reconciled"
+        if approved_target_ready
+        else "approved_target_not_ready_for_runtime_consumption"
+    )
+    effective_matches_approved_target = (
+        approved_target_ready
+        and observed_path == paths.repair_target_inventory_dir
+    )
+    effective_kind = (
+        "approved_repair_target"
+        if effective_matches_approved_target
+        else "observed_stable_inventory_source"
+    )
+    effective_path = (
+        paths.repair_target_inventory_dir
+        if effective_matches_approved_target
+        else observed_path
+    )
+    effective_status = (
+        "approved_target_active_by_observation"
+        if effective_matches_approved_target
+        else "observed_source_active"
+    )
+    effective_reason = (
+        "stable_runtime_observation_matches_approved_target"
+        if effective_matches_approved_target
+        else "stable_runtime_observation_still_points_to_observed_source"
+    )
+    desired_matches_effective = (
+        desired_kind == effective_kind and desired_path == effective_path
+    )
+    if desired_kind == "approved_repair_target" and not desired_matches_effective:
+        readiness_status = "activation_pending"
+        readiness_code = "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+        readiness_reason = "desired_consumer_source_differs_from_effective_observation"
+        readiness_next_step = "activation_contour"
+    else:
+        readiness_status = "aligned"
+        readiness_code = "OK"
+        readiness_reason = "desired_consumer_source_matches_effective_observation"
+        readiness_next_step = "none"
+    return {
+        "status": "contract_ready",
+        "observed_stable_inventory_source": observed_source,
+        "approved_repair_target_reference": approved_target,
+        "desired_stable_runtime_consumer_source": {
+            "status": desired_status,
+            "source_kind": desired_kind,
+            "resolved_path": str(desired_path),
+            "selection_reason": desired_reason,
+        },
+        "effective_stable_runtime_consumer_source": {
+            "status": effective_status,
+            "source_kind": effective_kind,
+            "resolved_path": str(effective_path),
+            "observation_reason": effective_reason,
+            "matches_desired": desired_matches_effective,
+        },
+        "derived_stable_runtime_config_surface": (
+            build_stable_runtime_generated_config_surface(paths)
+        ),
+        "baseline_stable_config_surface": {
+            "config_file": str(paths.stable_config),
+            "ownership": "engine_adjacent",
+            "role": "observed_source_discovery_surface",
+        },
+        "fallback_contract": {
+            "status": "contract_ready",
+            "fallback_allowed": True,
+            "fallback_source_kind": "observed_stable_inventory_source",
+            "silent_fallback_forbidden": True,
+            "desired_source_remains_visible": True,
+            "effective_source_must_report_fallback": True,
+        },
+        "consumer_activation_readiness": {
+            "status": readiness_status,
+            "machine_error_code": readiness_code,
+            "reason": readiness_reason,
+            "next_step": readiness_next_step,
+        },
     }
 
 
@@ -2050,6 +2187,9 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     health_payload = run_healthcheck(paths)
     registry = read_json(paths.registry_file)
     policy_drift = get_stable_policy_drift(paths, registry)
+    stable_runtime_consumer = build_stable_runtime_consumer_contract(
+        paths, registry, policy_drift
+    )
     registry_identity = get_registry_identity(registry)
     state = read_json(paths.state_file, required=False)
     current_proxy_url = state.get("current_proxy_url", "")
@@ -2084,6 +2224,7 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
             "current_proxy_url": current_proxy_url,
             "pool_summary": pool_summary,
             "policy_drift": policy_drift,
+            "stable_runtime_consumer": stable_runtime_consumer,
             "registry_identity_summary": summarize_registry_identity(registry_identity),
             "claim_gate": get_claim_gate(policy_drift, registry_identity),
             "last_error": health_payload.get("last_error", state.get("last_error", "")),
@@ -2410,6 +2551,9 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             "effective_mode": effective_mode,
             "endpoint": status_payload["endpoint"],
             "current_proxy_url": status_payload.get("current_proxy_url", ""),
+            "stable_runtime_consumer": status_payload.get(
+                "stable_runtime_consumer", {}
+            ),
             "attestation_summary": status_payload.get("attestation_summary", {}),
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",

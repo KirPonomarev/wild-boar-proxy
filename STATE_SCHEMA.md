@@ -165,6 +165,21 @@ The apply transaction may create ephemeral sibling scratch directories under
 These are process-local transaction mechanics only. They are not persisted
 state surfaces and must not remain after success or rollback.
 
+`stable-runtime-config.generated.yaml` is a control-owned generated stable
+runtime config artifact.
+
+It is:
+
+- engine-facing derived config
+- companion-managed data
+- not registry state
+- not runtime truth state
+- not diagnostics state
+
+In this contour it may remain absent.
+Its later materialization belongs only to the serialized stable-runtime
+consumer activation path.
+
 ## Write-surface ownership
 
 - `backend-registry.json` may be mutated only by the serialized account-state
@@ -178,6 +193,8 @@ state surfaces and must not remain after success or rollback.
   target-switch selection path
 - `target-switch-transaction.json` may be mutated only by the serialized
   target-switch transaction path
+- `stable-runtime-config.generated.yaml` may be mutated only by the serialized
+  stable-runtime consumer activation path
 
 Every mutating path must declare which of these surfaces it writes before the
 write begins.
