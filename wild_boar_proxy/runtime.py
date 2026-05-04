@@ -358,6 +358,75 @@ def get_auth_basename(auth_ref: Any) -> str:
     return Path(str(auth_ref or "")).name
 
 
+def get_backend_identifier(backend: dict[str, Any], index: int) -> str:
+    backend_id = backend.get("id")
+    if backend_id:
+        return str(backend_id)
+    return f"<missing-id:{index}>"
+
+
+def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
+    backends = registry.get("backends") or []
+    backend_ids: dict[str, list[str]] = {}
+    auth_basenames: dict[str, list[str]] = {}
+    missing_auth_refs = []
+    empty_auth_ref_backends = []
+    invalid_auth_basenames = []
+
+    for index, backend in enumerate(backends):
+        backend_key = get_backend_identifier(backend, index)
+        backend_id = backend.get("id")
+        if backend_id:
+            backend_ids.setdefault(str(backend_id), []).append(backend_key)
+
+        if "auth_ref" not in backend:
+            missing_auth_refs.append(backend_key)
+            continue
+
+        auth_ref = backend.get("auth_ref")
+        if auth_ref is None or not str(auth_ref).strip():
+            empty_auth_ref_backends.append(backend_key)
+            continue
+
+        auth_basename = get_auth_basename(auth_ref)
+        if not auth_basename or auth_basename in {".", ".."}:
+            invalid_auth_basenames.append(backend_key)
+            continue
+        auth_basenames.setdefault(auth_basename, []).append(backend_key)
+
+    duplicate_backend_ids = sorted(
+        backend_id for backend_id, matches in backend_ids.items() if len(matches) > 1
+    )
+    duplicate_auth_basenames = sorted(
+        auth_basename
+        for auth_basename, matches in auth_basenames.items()
+        if len(matches) > 1
+    )
+    ambiguous = bool(
+        duplicate_backend_ids
+        or duplicate_auth_basenames
+        or missing_auth_refs
+        or empty_auth_ref_backends
+        or invalid_auth_basenames
+    )
+    claim_blockers = [
+        "stable-15-proved",
+        "active-only-traffic",
+        "pool-participation-correct",
+    ]
+    return {
+        "status": "ambiguous" if ambiguous else "clear",
+        "machine_error_code": "REGISTRY_IDENTITY_AMBIGUOUS" if ambiguous else "OK",
+        "duplicate_backend_ids": duplicate_backend_ids,
+        "duplicate_auth_basenames": duplicate_auth_basenames,
+        "missing_auth_refs": sorted(missing_auth_refs),
+        "empty_auth_ref_backends": sorted(empty_auth_ref_backends),
+        "invalid_auth_basenames": sorted(invalid_auth_basenames),
+        "claim_blockers": claim_blockers if ambiguous else [],
+        "next_action": "inspect_registry_identity" if ambiguous else "none",
+    }
+
+
 def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
     reasons = []
     if backend.get("enabled", True) is False:
@@ -381,10 +450,12 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         if (auth_basename := get_auth_basename(backend.get("auth_ref")))
     }
     allowed_auths = set()
+    allowed_backends = []
     for auth_basename, backend in mapped_backends.items():
         allowed, _ = is_stable_auth_allowed(backend)
         if allowed:
             allowed_auths.add(auth_basename)
+            allowed_backends.append((auth_basename, backend))
 
     configured_active_count = sum(
         1
@@ -405,13 +476,16 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
             "allowed_stable_auth_count": len(allowed_auths),
             "stable_auth_inventory_count": 0,
             "disallowed_configured_auths": [],
+            "missing_auths": [],
             "unknown_auths": [],
             "claim_blockers": claim_blockers[:2],
             "next_action": "inspect_stable_policy_drift",
         }
 
     inventory = sorted(path.name for path in stable_auth_dir.glob("codex-*.json"))
+    inventory_set = set(inventory)
     disallowed_configured_auths = []
+    missing_auths = []
     unknown_auths = []
     for auth_basename in inventory:
         backend = mapped_backends.get(auth_basename)
@@ -431,8 +505,21 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
                     "reason": ",".join(reasons),
                 }
             )
+    for auth_basename, backend in allowed_backends:
+        if auth_basename not in inventory_set:
+            missing_auths.append(
+                {
+                    "backend_id": backend.get("id"),
+                    "auth_basename": auth_basename,
+                    "pool": backend.get("pool"),
+                    "manual_hold": bool(backend.get("manual_hold")),
+                    "status": backend.get("status"),
+                    "enabled": backend.get("enabled", True),
+                    "reason": "auth_ref_not_in_stable_inventory",
+                }
+            )
 
-    detected = bool(disallowed_configured_auths or unknown_auths)
+    detected = bool(disallowed_configured_auths or missing_auths or unknown_auths)
     return {
         "status": "detected" if detected else "clear",
         "machine_error_code": "STABLE_POLICY_DRIFT" if detected else "OK",
@@ -440,6 +527,7 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         "allowed_stable_auth_count": len(allowed_auths),
         "stable_auth_inventory_count": len(inventory),
         "disallowed_configured_auths": disallowed_configured_auths,
+        "missing_auths": missing_auths,
         "unknown_auths": unknown_auths,
         "claim_blockers": claim_blockers if detected else [],
         "next_action": "inspect_stable_policy_drift" if detected else "none",
@@ -1114,6 +1202,7 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
         changed_files=[],
         extra={
             "accounts": registry.get("backends", []),
+            "registry_identity": get_registry_identity(registry),
             "pool_policy": registry.get("pool_policy", {}),
             "stable_default_backend_id": registry.get("stable_default_backend_id"),
         },
