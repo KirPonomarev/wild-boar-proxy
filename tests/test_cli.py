@@ -237,6 +237,24 @@ class CliTests(unittest.TestCase):
             check=False,
         )
 
+    def state_snapshot(self) -> dict[str, str]:
+        paths = [
+            self.stable_dir / "config.yaml",
+            self.managed_dir / "backend-registry.json",
+            self.managed_dir / "supervisor-state.json",
+            self.profile_dir / "config.toml",
+            self.profile_dir / "runtime-mode.txt",
+            self.profile_dir / "runtime-effective-mode.txt",
+        ]
+        snapshot = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in paths
+            if path.exists()
+        }
+        for path in sorted(self.stable_dir.glob("codex-*.json")):
+            snapshot[str(path)] = path.read_text(encoding="utf-8")
+        return snapshot
+
     def test_mode_set_updates_desired_mode(self) -> None:
         result = self.run_cli("mode", "set", "stable", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1031,6 +1049,207 @@ class CliTests(unittest.TestCase):
         self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT_UNKNOWN")
         self.assertEqual(drift["stable_auth_inventory_source"]["source"], "auth-dir")
         self.assertFalse(drift["stable_auth_inventory_source"]["exists"])
+
+    def test_stable_repair_dry_run_reports_not_needed_without_mutation(self) -> None:
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_NOT_NEEDED")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        plan = payload["transaction_plan"]
+        self.assertEqual(plan["mode"], "dry_run")
+        self.assertTrue(plan["snapshot_required"])
+        self.assertTrue(plan["lock_required"])
+        self.assertEqual(plan["lock_preflight"]["status"], "available")
+        self.assertEqual(plan["would_add"], [])
+        self.assertEqual(plan["would_remove"], [])
+        self.assertEqual(plan["would_keep"][0]["auth_basename"], "codex-active.json")
+
+    def test_stable_repair_dry_run_reports_disallowed_auth_plan(self) -> None:
+        stable_auth = self.stable_dir / "codex-reserve.json"
+        stable_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                "id": "reserve-backend",
+                "label": "Reserve Backend",
+                "pool": "reserve",
+                "status": "healthy",
+                "manual_hold": True,
+                "auth_ref": str(stable_auth),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            }
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertTrue(payload["would_change"])
+        self.assertEqual(payload["next_action"], "review_transaction_plan")
+        self.assertEqual(payload["changed_files"], [])
+        plan = payload["transaction_plan"]
+        self.assertEqual(plan["disallowed_auths"][0]["auth_basename"], "codex-reserve.json")
+        self.assertEqual(plan["would_remove"][0]["auth_basename"], "codex-reserve.json")
+        self.assertEqual(plan["would_add"], [])
+
+    def test_stable_repair_dry_run_reports_missing_allowed_auth_plan(self) -> None:
+        missing_auth = self.stable_dir / "codex-missing.json"
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(missing_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertTrue(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        plan = payload["transaction_plan"]
+        self.assertEqual(plan["missing_auths"][0]["auth_basename"], "codex-missing.json")
+        self.assertEqual(plan["would_add"][0]["auth_basename"], "codex-missing.json")
+        self.assertEqual(plan["would_remove"], [])
+
+    def test_stable_repair_dry_run_blocks_ambiguous_registry(self) -> None:
+        auth_a = self.stable_dir / "codex-a.json"
+        auth_b = self.stable_dir / "codex-b.json"
+        auth_a.write_text("{}", encoding="utf-8")
+        auth_b.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                **registry["backends"][0],
+                "id": "duplicate-backend",
+                "auth_ref": str(auth_a),
+            },
+            {
+                **registry["backends"][0],
+                "id": "duplicate-backend",
+                "auth_ref": str(auth_b),
+            },
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "inspect_registry_identity")
+        self.assertEqual(
+            payload["transaction_plan"]["blocked_reasons"][0]["machine_error_code"],
+            "REGISTRY_IDENTITY_AMBIGUOUS",
+        )
+
+    def test_stable_repair_dry_run_blocks_missing_stable_auth_dir(self) -> None:
+        missing_dir = self.stable_dir / "missing-auth"
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{missing_dir}"\n',
+            encoding="utf-8",
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["machine_error_code"], "STABLE_AUTH_DIR_MISSING")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(
+            payload["transaction_plan"]["stable_auth_inventory_source"]["exists"]
+        )
+
+    def test_stable_repair_dry_run_blocks_held_lock_without_mutation(self) -> None:
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "wild-boar-proxy.lock").write_text(
+            f"{os.getpid()}\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["transaction_plan"]["lock_preflight"]["status"], "held")
+
+    def test_stable_repair_dry_run_blocks_stale_lock_without_mutation(self) -> None:
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "wild-boar-proxy.lock").write_text(
+            "not-a-pid\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_DRY_RUN_BLOCKED")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "inspect_stale_lock")
+        self.assertEqual(payload["transaction_plan"]["lock_preflight"]["status"], "stale")
+
+    def test_stable_repair_dry_run_does_not_leak_to_other_json_surfaces(self) -> None:
+        for args in (
+            ("status", "--json"),
+            ("healthcheck", "--json"),
+            ("accounts", "list", "--json"),
+        ):
+            with self.subTest(args=args):
+                result = self.run_cli(*args)
+                payload = json.loads(result.stdout)
+                self.assertNotIn("transaction_plan", payload)
+                self.assertNotIn("would_change", payload)
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
