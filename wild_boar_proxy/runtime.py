@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -385,6 +386,68 @@ def is_proxy_path_error(error_detail: str) -> bool:
     )
 
 
+def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
+    try:
+        parsed = urllib.parse.urlparse(candidate)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return None
+    if not host or not port:
+        return None
+    if host not in {"localhost", "::1"} and not host.startswith("127."):
+        return None
+    return host, port
+
+
+def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
+    raw_candidates = []
+    env_candidates = os.environ.get("WBP_PROXY_REPROBE_CANDIDATES", "")
+    raw_candidates.extend(item.strip() for item in env_candidates.split(","))
+    raw_candidates.append(str(state.get("current_proxy_url") or ""))
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for candidate in raw_candidates:
+        if not candidate or candidate in seen:
+            continue
+        if parse_local_proxy_candidate(candidate) is None:
+            continue
+        candidates.append(candidate)
+        seen.add(candidate)
+        if len(candidates) >= 8:
+            break
+    return candidates
+
+
+def probe_proxy_candidate(candidate: str) -> bool:
+    parsed = parse_local_proxy_candidate(candidate)
+    if parsed is None:
+        return False
+    host, port = parsed
+    return socket_is_listening(host, port)
+
+
+def run_proxy_reprobe(state: dict[str, Any]) -> dict[str, Any]:
+    candidates = get_proxy_reprobe_candidates(state)
+    for candidate in candidates:
+        if probe_proxy_candidate(candidate):
+            return {
+                "attempted": True,
+                "candidate_count": len(candidates),
+                "candidates": candidates,
+                "found_candidate": True,
+                "working_candidate": candidate,
+            }
+    return {
+        "attempted": bool(candidates),
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+        "found_candidate": False,
+        "working_candidate": None,
+    }
+
+
 def process_is_alive(pid_text: str) -> bool:
     try:
         pid = int(pid_text.strip())
@@ -572,6 +635,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     responses_ok = False
     model_name = model or get_model(paths)
     error_detail = ""
+    proxy_reprobe: dict[str, Any] | None = None
 
     if listener_ok:
         api_key = read_api_key(paths.auth_file)
@@ -632,8 +696,19 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         severity = "recoverable"
         operator_action = "retry"
         if listener_ok and is_proxy_path_error(error_detail):
-            machine_error_code = "PROXY_PATH_BROKEN"
-            human_message = "Runtime attestation failed because the outbound proxy path is broken."
+            proxy_reprobe = run_proxy_reprobe(state)
+            if proxy_reprobe["found_candidate"]:
+                machine_error_code = "PROXY_PATH_BROKEN"
+                human_message = (
+                    "Runtime attestation failed because the outbound proxy path is broken; "
+                    "a local proxy candidate is reachable."
+                )
+            else:
+                machine_error_code = "PROXY_REPROBE_FAILED"
+                human_message = (
+                    "Runtime attestation failed because the outbound proxy path is broken; "
+                    "no bounded local proxy candidate is reachable."
+                )
         else:
             machine_error_code = "ATTESTATION_FAILED"
             human_message = "Runtime attestation failed one or more checks."
@@ -650,6 +725,20 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": "healthcheck --json",
     }
+    extra = {
+        "desired_mode": desired_mode,
+        "effective_mode": reported_effective_mode,
+        "endpoint": reported_endpoint,
+        "attestation": attestation,
+        "last_error": error_detail
+        or (
+            "Missing or invalid runtime-effective-mode.txt"
+            if not effective_mode_artifact
+            else state.get("last_error", "")
+        ),
+    }
+    if proxy_reprobe is not None:
+        extra["proxy_reprobe"] = proxy_reprobe
 
     return build_command_payload(
         ok=ok,
@@ -659,18 +748,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         severity=severity,
         operator_action=operator_action,
         changed_files=[],
-        extra={
-            "desired_mode": desired_mode,
-            "effective_mode": reported_effective_mode,
-            "endpoint": reported_endpoint,
-            "attestation": attestation,
-            "last_error": error_detail
-            or (
-                "Missing or invalid runtime-effective-mode.txt"
-                if not effective_mode_artifact
-                else state.get("last_error", "")
-            ),
-        },
+        extra=extra,
     )
 
 
