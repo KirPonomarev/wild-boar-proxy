@@ -649,6 +649,18 @@ TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION = 1
 APPROVED_REPAIR_TARGET_IDENTITY = "companion_managed_stable_auth_inventory"
 APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
 STABLE_RUNTIME_GENERATED_CONFIG_METHOD = "control_owned_generated_config"
+STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV = "WBP_STABLE_CONFIG"
+STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC = "stable_runtime_consumer_snapshot"
+STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS = [
+    "schema_version",
+    "activation_method",
+    "selected_config_file",
+    "selected_source_kind",
+    "selected_source_path",
+    "activation_outcome",
+    "fallback_reason",
+    "observed_at_utc",
+]
 
 
 def read_json_if_file(path: Path) -> dict[str, Any] | None:
@@ -834,10 +846,69 @@ def build_stable_runtime_generated_config_surface(
     }
 
 
+def build_stable_runtime_launcher_handoff_contract(
+    paths: RuntimePaths,
+) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "handoff_method": "process_local_env_override",
+        "env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+        "generated_config_file": str(paths.stable_runtime_generated_config_file),
+        "scope": "launcher_subprocess_only",
+        "recovery_scope": "explicit_stable_runtime_recovery_only",
+        "baseline_config_rewrite_forbidden": True,
+        "generic_config_routing_forbidden": True,
+    }
+
+
+def build_stable_runtime_activation_evidence_surface(
+    paths: RuntimePaths, state: dict[str, Any]
+) -> dict[str, Any]:
+    snapshot = state.get(STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC)
+    snapshot_present = isinstance(snapshot, dict)
+    snapshot_shape_valid = snapshot_present and all(
+        field in snapshot for field in STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS
+    )
+    if snapshot_shape_valid:
+        status = "snapshot_present"
+    elif snapshot_present:
+        status = "snapshot_shape_invalid"
+    else:
+        status = "declared_not_materialized"
+    payload = {
+        "status": status,
+        "snapshot_file": str(paths.state_file),
+        "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        "classification": "runtime_state_snapshot_evidence",
+        "owner": "serialized_runtime_state_mutation_path",
+        "final_truth_without_live_checks": False,
+        "live_runtime_observation_required": True,
+        "required_fields": STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
+        "snapshot_present": snapshot_present,
+        "snapshot_shape_valid": snapshot_shape_valid,
+    }
+    if snapshot_present:
+        payload["current_snapshot"] = snapshot
+    return payload
+
+
+def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "truth_source": "live_runtime_observation_plus_snapshot_evidence",
+        "desired_source_alone_sufficient": False,
+        "generated_config_existence_alone_sufficient": False,
+        "activation_evidence_snapshot_alone_sufficient": False,
+        "live_runtime_observation_required": True,
+        "baseline_config_is_observation_surface": True,
+    }
+
+
 def build_stable_runtime_consumer_contract(
     paths: RuntimePaths,
     registry: dict[str, Any],
     policy_drift: dict[str, Any],
+    state: dict[str, Any],
 ) -> dict[str, Any]:
     observed_path, observed_source = get_stable_auth_inventory_source(paths)
     approved_target = get_approved_repair_target_reference(paths)
@@ -929,6 +1000,13 @@ def build_stable_runtime_consumer_contract(
         "derived_stable_runtime_config_surface": (
             build_stable_runtime_generated_config_surface(paths)
         ),
+        "launcher_handoff_contract": build_stable_runtime_launcher_handoff_contract(
+            paths
+        ),
+        "activation_evidence_surface": build_stable_runtime_activation_evidence_surface(
+            paths, state
+        ),
+        "effective_truth_contract": build_stable_runtime_effective_truth_contract(),
         "baseline_stable_config_surface": {
             "config_file": str(paths.stable_config),
             "ownership": "engine_adjacent",
@@ -2187,11 +2265,11 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     health_payload = run_healthcheck(paths)
     registry = read_json(paths.registry_file)
     policy_drift = get_stable_policy_drift(paths, registry)
+    state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
-        paths, registry, policy_drift
+        paths, registry, policy_drift, state
     )
     registry_identity = get_registry_identity(registry)
-    state = read_json(paths.state_file, required=False)
     current_proxy_url = state.get("current_proxy_url", "")
     pool_summary = {
         "active": int(state.get("active_count", 0) or 0),

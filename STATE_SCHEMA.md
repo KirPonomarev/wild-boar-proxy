@@ -98,6 +98,25 @@ Optional fields currently supported by the local contour:
 - `probe_port`
 - `last_proxy_discovery_at`
 - `last_full_deep_probe_at`
+- `stable_runtime_consumer_snapshot`
+
+If `stable_runtime_consumer_snapshot` is materialized, it is:
+
+- runtime-state snapshot evidence
+- not lifecycle registry truth
+- not final runtime truth without live checks
+- not control-layer target truth
+
+Required fields if materialized:
+
+- `schema_version`
+- `activation_method`
+- `selected_config_file`
+- `selected_source_kind`
+- `selected_source_path`
+- `activation_outcome`
+- `fallback_reason`
+- `observed_at_utc`
 
 ## Mode files
 
@@ -179,6 +198,10 @@ It is:
 In this contour it may remain absent.
 Its later materialization belongs only to the serialized stable-runtime
 consumer activation path.
+
+The generated config is handed to later activation only through the narrow
+launcher-scoped `WBP_STABLE_CONFIG` override contract.
+That handoff must not become a generic config-routing surface.
 
 ## Write-surface ownership
 

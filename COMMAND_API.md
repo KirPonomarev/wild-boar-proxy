@@ -196,6 +196,9 @@ Required contract fields:
 - `stable_runtime_consumer.desired_stable_runtime_consumer_source`
 - `stable_runtime_consumer.effective_stable_runtime_consumer_source`
 - `stable_runtime_consumer.derived_stable_runtime_config_surface`
+- `stable_runtime_consumer.launcher_handoff_contract`
+- `stable_runtime_consumer.activation_evidence_surface`
+- `stable_runtime_consumer.effective_truth_contract`
 - `stable_runtime_consumer.baseline_stable_config_surface`
 - `stable_runtime_consumer.fallback_contract`
 - `stable_runtime_consumer.consumer_activation_readiness`
@@ -206,6 +209,13 @@ Field meaning rules:
 - effective stable runtime consumer source is runtime-observed truth only
 - desired source must not be reported as effective before successful live
   activation evidence
+- launcher handoff for stable-runtime activation is a narrow process-local
+  override contract:
+  `WBP_STABLE_CONFIG=<managed_dir>/stable-runtime-config.generated.yaml`
+- that handoff must remain launcher-scoped and must not silently become a
+  generic config-routing platform
+- runtime-state activation evidence is a snapshot surface only; snapshot evidence
+  alone must not flip effective stable runtime consumer truth
 - baseline stable config remains an engine-adjacent observation surface
 - `stable-runtime-config.generated.yaml` is a generated control artifact, not a
   truth surface

@@ -2044,6 +2044,35 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(derived_surface["truth_surface"])
         self.assertFalse(derived_surface["exists"])
+        launcher_handoff = consumer["launcher_handoff_contract"]
+        self.assertEqual(launcher_handoff["status"], "contract_ready")
+        self.assertEqual(launcher_handoff["handoff_method"], "process_local_env_override")
+        self.assertEqual(launcher_handoff["env_var"], "WBP_STABLE_CONFIG")
+        self.assertEqual(
+            launcher_handoff["generated_config_file"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertTrue(launcher_handoff["baseline_config_rewrite_forbidden"])
+        self.assertTrue(launcher_handoff["generic_config_routing_forbidden"])
+        activation_evidence = consumer["activation_evidence_surface"]
+        self.assertEqual(activation_evidence["status"], "declared_not_materialized")
+        self.assertEqual(
+            activation_evidence["snapshot_file"],
+            str(self.managed_dir / "supervisor-state.json"),
+        )
+        self.assertEqual(
+            activation_evidence["snapshot_topic"], "stable_runtime_consumer_snapshot"
+        )
+        self.assertFalse(activation_evidence["snapshot_present"])
+        self.assertFalse(activation_evidence["snapshot_shape_valid"])
+        effective_truth = consumer["effective_truth_contract"]
+        self.assertEqual(effective_truth["status"], "contract_ready")
+        self.assertTrue(effective_truth["live_runtime_observation_required"])
+        self.assertFalse(effective_truth["desired_source_alone_sufficient"])
+        self.assertFalse(effective_truth["generated_config_existence_alone_sufficient"])
+        self.assertFalse(
+            effective_truth["activation_evidence_snapshot_alone_sufficient"]
+        )
         self.assertEqual(
             consumer["baseline_stable_config_surface"]["config_file"],
             str(self.stable_dir / "config.yaml"),
@@ -2098,6 +2127,9 @@ class CliTests(unittest.TestCase):
         )
         self.assertTrue(consumer["fallback_contract"]["fallback_allowed"])
         self.assertTrue(consumer["fallback_contract"]["silent_fallback_forbidden"])
+        self.assertEqual(
+            consumer["activation_evidence_surface"]["status"], "declared_not_materialized"
+        )
 
     def test_status_reports_effective_approved_target_only_when_observation_matches_target(
         self,
@@ -2138,6 +2170,67 @@ class CliTests(unittest.TestCase):
             consumer["consumer_activation_readiness"]["machine_error_code"], "OK"
         )
 
+    def test_status_does_not_promote_activation_snapshot_to_effective_truth(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["stable_runtime_consumer_snapshot"] = {
+            "schema_version": 1,
+            "activation_method": "process_local_env_override",
+            "selected_config_file": str(
+                self.managed_dir / "stable-runtime-config.generated.yaml"
+            ),
+            "selected_source_kind": "approved_repair_target",
+            "selected_source_path": str(self.managed_dir / "stable-repair-target"),
+            "activation_outcome": "approved_target_activated",
+            "fallback_reason": "",
+            "observed_at_utc": "2026-05-04T00:00:00+00:00",
+        }
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("status", "--json")
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        evidence = consumer["activation_evidence_surface"]
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertTrue(evidence["snapshot_present"])
+        self.assertTrue(evidence["snapshot_shape_valid"])
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_source_kind"], "approved_repair_target"
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertFalse(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertFalse(
+            consumer["effective_truth_contract"][
+                "activation_evidence_snapshot_alone_sufficient"
+            ]
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"],
+            "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+        )
+
     def test_launch_smoke_reports_stable_runtime_consumer_contract(self) -> None:
         stable_port = free_port()
         (self.stable_dir / "config.yaml").write_text(
@@ -2164,6 +2257,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             consumer["effective_stable_runtime_consumer_source"]["source_kind"],
             "observed_stable_inventory_source",
+        )
+        self.assertEqual(
+            consumer["launcher_handoff_contract"]["env_var"], "WBP_STABLE_CONFIG"
+        )
+        self.assertEqual(
+            consumer["activation_evidence_surface"]["status"], "declared_not_materialized"
         )
 
     def test_stable_runtime_consumer_contract_does_not_leak_to_unrelated_json_surfaces(
