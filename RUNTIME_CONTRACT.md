@@ -46,6 +46,8 @@
 - deterministic stable recovery must regenerate generated config per
   approved-target attempt and must not treat a stale generated config artifact
   as authoritative truth
+- `healthcheck --json` may expose a top-level
+  `deterministic_stable_recovery_contract` surface for owner-lane semantics
 - `launch smoke --json` must not pretend to own the deterministic stable
   recovery lane or echo its result surface
 - approved-target activation success must remain separately observable from a
@@ -57,6 +59,16 @@
 - top-level healthcheck and status truth must continue to describe final live
   runtime state, while deterministic stable recovery outcome remains a separate
   recovery-attempt surface
+- `deterministic_stable_recovery_result.entry_lane` and top-level
+  `STABLE_SERVICE_DISABLED` packet rules are contract-fixed before
+  implementation; absent positive evidence, final listener failure stays on
+  conservative `LISTENER_DOWN`
+- `stable_service_disabled` remains a control-layer classification and must stay
+  separate from `PROXY_PATH_BROKEN` and `PROXY_REPROBE_FAILED`
+- no new persisted recovery metadata file or snapshot-schema widening is
+  required for stable-service-disabled packet truth by default
+- last-known-good outbound proxy persistence remains a separate runtime-hardening
+  lane and is not reopened by this contour
 
 ## Safety rules
 

@@ -243,11 +243,24 @@ Field meaning rules:
   config per approved-target attempt and must not treat a stale generated
   config artifact as authoritative truth
 - `healthcheck --json` may expose top-level
+  `deterministic_stable_recovery_contract`
+- `healthcheck --json` may expose top-level
   `deterministic_stable_recovery_result`
 - `status --json` may expose nested
   `stable_runtime_consumer.deterministic_stable_recovery_result`
+- `deterministic_stable_recovery_result.entry_lane` and top-level
+  `STABLE_SERVICE_DISABLED` packet rules are currently contract-fixed but not yet
+  implemented
+- absent positive evidence for the narrower disabled-service lane, the system
+  must stay on generic `LISTENER_DOWN`
+- `stable_service_disabled` classification must remain separate from
+  `PROXY_PATH_BROKEN` and `PROXY_REPROBE_FAILED`
 - `launch smoke --json` must not surface deterministic stable recovery result as
   if it owned the healthcheck recovery lane
 - `sync --json` must not expose deterministic stable recovery as an owner lane
+- no new persisted recovery metadata file or snapshot-schema widening is
+  required for `stable_service_disabled` packet truth by default
 - owner-path writes across fallback reconciliation, generated-config
   materialization, and snapshot refresh must remain visible in `changed_files`
+- last-known-good outbound proxy persistence remains a separate runtime-hardening
+  lane and is not part of the stable-service-disabled contract contour

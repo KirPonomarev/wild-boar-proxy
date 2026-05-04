@@ -937,6 +937,18 @@ def build_deterministic_stable_recovery_contract(
             "stable_service_disabled",
             "explicit_stable_recovery_lane",
         ],
+        "entry_lane_surface": {
+            "status": "contract_fixed_not_implemented",
+            "field": "deterministic_stable_recovery_result.entry_lane",
+            "nested_recovery_surface": True,
+            "top_level_machine_error_code_separate": True,
+            "allowed_values": [
+                "managed_preflight_failure",
+                "stable_service_disabled",
+                "explicit_stable_recovery_lane",
+                "not_invoked",
+            ],
+        },
         "failure_taxonomy_redesign_forbidden": True,
         "shared_activation_mechanics": {
             "status": "contract_fixed_not_implemented",
@@ -956,11 +968,61 @@ def build_deterministic_stable_recovery_contract(
         "snapshot_refresh_after_stable_live_outcome": True,
         "snapshot_schema_widening_required": False,
         "new_persisted_recovery_metadata_required": False,
+        "stable_service_disabled_classification": {
+            "status": "contract_fixed_not_implemented",
+            "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+            "control_layer_classification": True,
+            "persisted_engine_state_flag": False,
+            "positive_evidence_required": True,
+            "desired_mode_alone_sufficient": False,
+            "generated_config_existence_alone_sufficient": False,
+            "snapshot_presence_alone_sufficient": False,
+            "bounded_reenable_lane_eligible_required": True,
+            "proxy_path_failure_codes_separate": [
+                "PROXY_PATH_BROKEN",
+                "PROXY_REPROBE_FAILED",
+            ],
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "overclassification_forbidden": True,
+        },
+        "re_enable_method_contract": {
+            "status": "contract_fixed_not_implemented",
+            "owner_path_scope": "bounded_control_layer_recovery_action",
+            "owner_command_surface": "healthcheck --json",
+            "reuse_private_launch_smoke_helper_allowed": True,
+            "launcher_protocol_widening_required": False,
+            "launchd_integration_forbidden": True,
+            "os_service_manager_integration_forbidden": True,
+            "generic_service_supervision_forbidden": True,
+        },
         "approved_target_recovery_outcome": "separate",
         "observed_source_fallback_recovery_outcome": "separate",
         "recovery_failure_outcome": "separate",
+        "top_level_truth_boundaries": {
+            "status": "contract_ready",
+            "top_level_final_truth_fields": [
+                "status",
+                "machine_error_code",
+                "liveness",
+                "endpoint",
+            ],
+            "nested_recovery_surface": "deterministic_stable_recovery_result",
+            "final_live_truth_separate": True,
+            "launch_smoke_owner_lane_fields_forbidden": True,
+            "status_second_owner_forbidden": True,
+            "sync_owner_lane_forbidden": True,
+        },
+        "top_level_machine_error_code_rules": {
+            "status": "contract_fixed_not_implemented",
+            "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+            "stable_service_disabled_requires_final_unhealthy": True,
+            "ok_after_successful_reenable": "OK",
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "proxy_path_codes_remain_separate": True,
+        },
         "live_runtime_observation_required": True,
         "mode_truth_redefinition_forbidden": True,
+        "last_known_good_proxy_persistence_in_scope": False,
     }
 
 
@@ -2944,6 +3006,9 @@ def run_healthcheck(
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
+    extra["deterministic_stable_recovery_contract"] = (
+        build_deterministic_stable_recovery_contract(paths)
+    )
     if recovery_result is not None:
         extra["deterministic_stable_recovery_result"] = recovery_result
 

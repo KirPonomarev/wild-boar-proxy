@@ -500,6 +500,48 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["attestation"]["responses_ok"])
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
+        recovery_contract = payload["deterministic_stable_recovery_contract"]
+        self.assertEqual(recovery_contract["owner_command_surface"], "healthcheck --json")
+        self.assertEqual(
+            recovery_contract["entry_lane_surface"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["entry_lane_surface"]["field"],
+            "deterministic_stable_recovery_result.entry_lane",
+        )
+        self.assertIn(
+            "stable_service_disabled",
+            recovery_contract["entry_lane_surface"]["allowed_values"],
+        )
+        self.assertEqual(
+            recovery_contract["stable_service_disabled_classification"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            recovery_contract["stable_service_disabled_classification"][
+                "positive_evidence_required"
+            ]
+        )
+        self.assertEqual(
+            recovery_contract["stable_service_disabled_classification"][
+                "generic_listener_down_fallback"
+            ],
+            "LISTENER_DOWN",
+        )
+        self.assertEqual(
+            recovery_contract["top_level_machine_error_code_rules"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["top_level_machine_error_code_rules"][
+                "stable_service_disabled_final_code"
+            ],
+            "STABLE_SERVICE_DISABLED",
+        )
+        self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
+        recovery_result = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(recovery_result["status"], "not_invoked")
 
     def test_healthcheck_rejects_not_ok_probe(self) -> None:
         port = free_port()
@@ -2381,6 +2423,18 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(recovery_contract["stale_generated_config_authoritative"])
         self.assertEqual(
+            recovery_contract["entry_lane_surface"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["entry_lane_surface"]["field"],
+            "deterministic_stable_recovery_result.entry_lane",
+        )
+        self.assertIn(
+            "stable_service_disabled",
+            recovery_contract["entry_lane_surface"]["allowed_values"],
+        )
+        self.assertEqual(
             recovery_contract["snapshot_refresh_status"],
             "contract_fixed_not_implemented",
         )
@@ -2389,6 +2443,76 @@ class CliTests(unittest.TestCase):
         self.assertFalse(
             recovery_contract["new_persisted_recovery_metadata_required"]
         )
+        self.assertEqual(
+            recovery_contract["stable_service_disabled_classification"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            recovery_contract["stable_service_disabled_classification"][
+                "control_layer_classification"
+            ]
+        )
+        self.assertTrue(
+            recovery_contract["stable_service_disabled_classification"][
+                "positive_evidence_required"
+            ]
+        )
+        self.assertFalse(
+            recovery_contract["stable_service_disabled_classification"][
+                "desired_mode_alone_sufficient"
+            ]
+        )
+        self.assertEqual(
+            recovery_contract["stable_service_disabled_classification"][
+                "generic_listener_down_fallback"
+            ],
+            "LISTENER_DOWN",
+        )
+        self.assertEqual(
+            recovery_contract["re_enable_method_contract"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            recovery_contract["re_enable_method_contract"][
+                "launchd_integration_forbidden"
+            ]
+        )
+        self.assertTrue(
+            recovery_contract["re_enable_method_contract"][
+                "os_service_manager_integration_forbidden"
+            ]
+        )
+        self.assertEqual(
+            recovery_contract["top_level_truth_boundaries"]["status"],
+            "contract_ready",
+        )
+        self.assertTrue(
+            recovery_contract["top_level_truth_boundaries"][
+                "final_live_truth_separate"
+            ]
+        )
+        self.assertTrue(
+            recovery_contract["top_level_truth_boundaries"][
+                "launch_smoke_owner_lane_fields_forbidden"
+            ]
+        )
+        self.assertEqual(
+            recovery_contract["top_level_machine_error_code_rules"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["top_level_machine_error_code_rules"][
+                "stable_service_disabled_final_code"
+            ],
+            "STABLE_SERVICE_DISABLED",
+        )
+        self.assertEqual(
+            recovery_contract["top_level_machine_error_code_rules"][
+                "generic_listener_down_fallback"
+            ],
+            "LISTENER_DOWN",
+        )
+        self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
         self.assertEqual(
             recovery_contract["approved_target_recovery_outcome"], "separate"
         )
@@ -2672,6 +2796,17 @@ class CliTests(unittest.TestCase):
             consumer["deterministic_stable_recovery_contract"][
                 "status_delegates_to_owner"
             ]
+        )
+        self.assertEqual(
+            consumer["deterministic_stable_recovery_contract"]["entry_lane_surface"][
+                "status"
+            ],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            consumer["deterministic_stable_recovery_contract"][
+                "top_level_truth_boundaries"
+            ]["launch_smoke_owner_lane_fields_forbidden"]
         )
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
 
