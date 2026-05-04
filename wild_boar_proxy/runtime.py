@@ -372,6 +372,19 @@ def response_ok(payload: dict[str, Any]) -> bool:
     return any(item.strip() == "OK" for item in iter_strings(payload))
 
 
+def is_proxy_path_error(error_detail: str) -> bool:
+    lowered = error_detail.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "proxyconnect tcp",
+            "proxy error",
+            "socks connect tcp",
+            "connection refused",
+        )
+    )
+
+
 def process_is_alive(pid_text: str) -> bool:
     try:
         pid = int(pid_text.strip())
@@ -572,7 +585,8 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
             )
             responses_ok = response_ok(responses_payload)
         except urllib.error.HTTPError as exc:
-            error_detail = f"HTTP {exc.code}"
+            detail = exc.read().decode("utf-8", "ignore").strip()
+            error_detail = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"
         except urllib.error.URLError as exc:
             error_detail = str(exc.reason)
         except RuntimeErrorInfo:
@@ -617,8 +631,12 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         liveness = "degraded"
         severity = "recoverable"
         operator_action = "retry"
-        machine_error_code = "ATTESTATION_FAILED"
-        human_message = "Runtime attestation failed one or more checks."
+        if listener_ok and is_proxy_path_error(error_detail):
+            machine_error_code = "PROXY_PATH_BROKEN"
+            human_message = "Runtime attestation failed because the outbound proxy path is broken."
+        else:
+            machine_error_code = "ATTESTATION_FAILED"
+            human_message = "Runtime attestation failed one or more checks."
         ok = False
 
     attestation = {

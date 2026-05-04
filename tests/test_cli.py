@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ProbeHandler(BaseHTTPRequestHandler):
     response_text = "OK"
+    response_status = 200
+    response_payload: object | None = None
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/v1/models":
@@ -32,9 +34,19 @@ class ProbeHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/responses":
             length = int(self.headers.get("Content-Length", "0"))
             _ = self.rfile.read(length)
-            body = json.dumps({"output_text": self.response_text}).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
+            payload = (
+                {"output_text": self.response_text}
+                if self.response_payload is None
+                else self.response_payload
+            )
+            if isinstance(payload, (dict, list)):
+                body = json.dumps(payload).encode("utf-8")
+                content_type = "application/json"
+            else:
+                body = str(payload).encode("utf-8")
+                content_type = "text/plain"
+            self.send_response(self.response_status)
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -352,11 +364,54 @@ class CliTests(unittest.TestCase):
             thread.join()
             server.server_close()
             ProbeHandler.response_text = "OK"
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertFalse(payload["attestation"]["responses_ok"])
+
+    def test_healthcheck_classifies_proxy_path_failure(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(payload["liveness"], "degraded")
+        self.assertIn("proxyconnect tcp", payload["last_error"])
 
     def test_healthcheck_reconciles_effective_mode_mismatch_to_stable(self) -> None:
         stable_port = free_port()
@@ -830,7 +885,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(payload["effective_mode"], "managed")
         self.assertIn("Connection refused", payload["last_error"])
 
