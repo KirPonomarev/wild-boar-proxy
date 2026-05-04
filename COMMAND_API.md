@@ -110,6 +110,35 @@ files. That is a success condition for this contour, not a defect.
 
 `stable repair --dry-run --json` remains non-mutating.
 
+`stable repair --apply --json` may mutate only:
+
+- `<managed_dir>/stable-repair-target/codex-*.json`
+
+It may also use process-local transaction scratch under companion-managed data:
+
+- `<managed_dir>/.stable-repair-stage-*`
+- `<managed_dir>/.stable-repair-backup-*`
+
+These scratch directories are ephemeral transaction mechanics, not persisted
+contract surfaces. They must be removed before the command returns on success
+or rollback.
+
+Successful apply means approved target inventory reconciliation only.
+It does not imply:
+
+- runtime switch success
+- engine inventory redirection
+- stable runtime health improvement
+
+Apply-time field rules:
+
+- eligible registry `auth_ref` files are policy-authorized copy inputs only
+- source files remain non-mutating inputs
+- observed-source drift fields remain observation only
+- prune authority is limited to unauthorized `codex-*.json` entries already
+  inside the approved control-owned target inventory
+- basename preservation is exact; no rename or dedup logic is implied
+
 It must expose explicit machine-readable separation between:
 
 - observed stable inventory reporting
@@ -138,3 +167,5 @@ Field meaning rules:
   target inventory
 - `would_change` must reflect future target reconciliation work, not merely
   observed-source drift
+- apply blocker paths for missing source files or basename collisions must be
+  machine-readable and must not fall back to implicit rename logic

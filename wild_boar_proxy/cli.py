@@ -16,6 +16,7 @@ from .runtime import (
     run_healthcheck,
     run_launch_smoke,
     run_onboard,
+    run_stable_repair_apply,
     run_stable_repair_dry_run,
     run_stable_target_switch_contract,
     run_sync,
@@ -37,7 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     stable = subparsers.add_parser("stable")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
     stable_repair = stable_subparsers.add_parser("repair")
-    stable_repair.add_argument("--dry-run", action="store_true", required=True)
+    stable_repair_mode = stable_repair.add_mutually_exclusive_group(required=True)
+    stable_repair_mode.add_argument("--dry-run", action="store_true")
+    stable_repair_mode.add_argument("--apply", action="store_true")
     stable_repair.add_argument("--json", action="store_true", required=True)
     stable_target = stable_subparsers.add_parser("target")
     stable_target_subparsers = stable_target.add_subparsers(
@@ -123,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "status":
             return emit_json(summarize_status(paths))
         if args.command == "stable" and args.stable_command == "repair":
+            if args.apply:
+                return emit_json(run_stable_repair_apply(paths))
             return emit_json(run_stable_repair_dry_run(paths))
         if (
             args.command == "stable"

@@ -147,12 +147,23 @@ directory:
 That directory may remain empty of `codex-*.json` auth files until a later
 repair contour opens inventory-population behavior.
 
-`stable repair --dry-run --json` does not introduce a new persisted repair
-metadata file in this contour.
+`stable repair --dry-run --json` and `stable repair --apply --json` do not
+introduce a new persisted repair metadata file in this contour.
 
 Its repair authority and target reconciliation contract remain command-packet
-surfaces only until a later repair-apply implementation contour opens real
-mutation behavior.
+surfaces, while repair apply mutates only the approved control-owned target
+inventory entries:
+
+- `stable-repair-target/codex-*.json`
+
+The apply transaction may create ephemeral sibling scratch directories under
+`managed/`:
+
+- `.stable-repair-stage-*`
+- `.stable-repair-backup-*`
+
+These are process-local transaction mechanics only. They are not persisted
+state surfaces and must not remain after success or rollback.
 
 ## Write-surface ownership
 

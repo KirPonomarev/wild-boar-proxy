@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -457,6 +458,20 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
         "claim_blockers": claim_blockers if ambiguous else [],
         "next_action": "inspect_registry_identity" if ambiguous else "none",
     }
+
+
+def stable_repair_registry_identity_requires_block(
+    registry_identity: dict[str, Any]
+) -> bool:
+    return any(
+        registry_identity.get(field)
+        for field in (
+            "duplicate_backend_ids",
+            "missing_auth_refs",
+            "empty_auth_ref_backends",
+            "invalid_auth_basenames",
+        )
+    )
 
 
 def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -1108,18 +1123,206 @@ def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def hash_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def list_target_inventory_entries(path: Path) -> list[str]:
+    if not path.is_dir():
+        return []
+    return sorted(entry.name for entry in path.iterdir())
+
+
+def snapshot_target_inventory_state(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"exists": False, "entries": {}, "non_auth_entries": []}
+    if not path.is_dir():
+        return {"exists": True, "kind": "not_dir", "entries": {}, "non_auth_entries": []}
+    entries = {}
+    non_auth_entries = []
+    for entry in sorted(path.iterdir(), key=lambda item: item.name):
+        if entry.is_file() and entry.name.startswith("codex-") and entry.suffix == ".json":
+            entries[entry.name] = hash_file(entry)
+        else:
+            non_auth_entries.append(entry.name)
+    return {"exists": True, "kind": "dir", "entries": entries, "non_auth_entries": non_auth_entries}
+
+
+def detect_target_inventory_changed_files(
+    before: dict[str, Any], after: dict[str, Any], target_dir: Path
+) -> list[str]:
+    changed: list[str] = []
+    if before.get("exists") != after.get("exists"):
+        changed.append(str(target_dir))
+    before_entries = before.get("entries", {})
+    after_entries = after.get("entries", {})
+    for name in sorted(set(before_entries) | set(after_entries)):
+        if before_entries.get(name) != after_entries.get(name):
+            changed.append(str(target_dir / name))
+    for name in sorted(set(before.get("non_auth_entries", [])) | set(after.get("non_auth_entries", []))):
+        changed.append(str(target_dir / name))
+    return changed
+
+
+def snapshot_stable_repair_guard_surfaces(
+    paths: RuntimePaths, source_paths: list[Path]
+) -> dict[str, Any]:
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    observed_inventory = {}
+    if stable_auth_dir.is_dir():
+        observed_inventory = {
+            path.name: hash_file(path)
+            for path in sorted(stable_auth_dir.glob("codex-*.json"))
+        }
+    source_file_digests = {
+        str(path): hash_file(path)
+        for path in sorted(source_paths, key=lambda item: str(item))
+        if path.is_file()
+    }
+    return {
+        "registry": paths.registry_file.read_text(encoding="utf-8"),
+        "state": paths.state_file.read_text(encoding="utf-8"),
+        "stable_config": paths.stable_config.read_text(encoding="utf-8"),
+        "config_toml": paths.config_toml.read_text(encoding="utf-8"),
+        "runtime_mode": paths.runtime_mode_file.read_text(encoding="utf-8"),
+        "runtime_effective_mode": paths.runtime_effective_mode_file.read_text(
+            encoding="utf-8"
+        ),
+        "approved_repair_target_reference": snapshot_path_state(
+            paths.repair_target_reference_file
+        ),
+        "target_switch_transaction_metadata": snapshot_path_state(
+            paths.target_switch_transaction_file
+        ),
+        "observed_inventory_source": inventory_source,
+        "observed_inventory": observed_inventory,
+        "source_file_digests": source_file_digests,
+    }
+
+
+def build_stable_repair_source_map(
+    transaction_plan: dict[str, Any],
+) -> dict[str, Path]:
+    source_inputs = transaction_plan.get("registry_source_inputs", {}).get(
+        "eligible_registry_auth_refs", []
+    )
+    missing_inputs = transaction_plan.get("registry_source_inputs", {}).get(
+        "source_copy_missing_auth_refs", []
+    )
+    collision_inputs = transaction_plan.get("registry_source_inputs", {}).get(
+        "source_copy_basename_collisions", []
+    )
+    if missing_inputs:
+        raise RuntimeErrorInfo(
+            "Stable repair apply blocked by missing eligible source auth file.",
+            machine_error_code="REPAIR_SOURCE_AUTH_REF_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if collision_inputs:
+        raise RuntimeErrorInfo(
+            "Stable repair apply blocked by source basename collision.",
+            machine_error_code="REPAIR_SOURCE_BASENAME_COLLISION",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+
+    return {
+        str(item.get("auth_basename")): Path(str(item.get("auth_ref"))).expanduser()
+        for item in source_inputs
+    }
+
+
+def verify_stable_repair_target_inventory(
+    target_dir: Path, source_map: dict[str, Path]
+) -> None:
+    if not target_dir.is_dir():
+        raise RuntimeErrorInfo(
+            "Stable repair apply verification failed because the target inventory is missing.",
+            machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    unexpected_entries = [
+        entry.name
+        for entry in sorted(target_dir.iterdir(), key=lambda item: item.name)
+        if not (entry.is_file() and entry.name in source_map)
+    ]
+    if unexpected_entries:
+        raise RuntimeErrorInfo(
+            "Stable repair apply verification failed because target inventory contains unexpected entries.",
+            machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    actual_names = sorted(path.name for path in target_dir.glob("codex-*.json"))
+    expected_names = sorted(source_map)
+    if actual_names != expected_names:
+        raise RuntimeErrorInfo(
+            "Stable repair apply verification failed because target inventory set is not exact.",
+            machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    for basename, source_path in source_map.items():
+        if (target_dir / basename).read_bytes() != source_path.read_bytes():
+            raise RuntimeErrorInfo(
+                "Stable repair apply verification failed because a target file does not match its source bytes.",
+                machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+                severity="recoverable",
+                operator_action="user_action",
+            )
+
+
+def verify_stable_repair_apply_result(
+    paths: RuntimePaths, source_map: dict[str, Path], guard_before: dict[str, Any]
+) -> None:
+    verify_stable_repair_target_inventory(paths.repair_target_inventory_dir, source_map)
+    if snapshot_stable_repair_guard_surfaces(paths, list(source_map.values())) != guard_before:
+        raise RuntimeErrorInfo(
+            "Stable repair apply verification failed because forbidden or source surfaces changed.",
+            machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+
+
+def stage_stable_repair_inventory(stage_dir: Path, source_map: dict[str, Path]) -> None:
+    for basename, source_path in source_map.items():
+        shutil.copy2(source_path, stage_dir / basename)
+
+
+def remove_tree_if_exists(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+
+
+def rollback_stable_repair_apply(
+    *,
+    target_dir: Path,
+    stage_dir: Path,
+    backup_dir: Path | None,
+) -> None:
+    remove_tree_if_exists(stage_dir)
+    if backup_dir and backup_dir.exists():
+        remove_tree_if_exists(target_dir)
+        backup_dir.replace(target_dir)
+        return
+    remove_tree_if_exists(target_dir)
+
+
 def build_stable_repair_transaction_plan(
     paths: RuntimePaths,
     registry: dict[str, Any],
     policy_drift: dict[str, Any],
     lock_preflight: dict[str, Any],
+    *,
+    mode: str = "dry_run",
 ) -> dict[str, Any]:
     backends = registry.get("backends") or []
-    mapped_backends = {
-        auth_basename: backend
-        for backend in backends
-        if (auth_basename := get_auth_basename(backend.get("auth_ref")))
-    }
     stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
     observed_inventory = (
         sorted(path.name for path in stable_auth_dir.glob("codex-*.json"))
@@ -1135,7 +1338,10 @@ def build_stable_repair_transaction_plan(
     target_inventory_set = set(target_inventory)
     eligible_registry_auth_refs = []
     observed_source_matching_allowed_auths = []
-    for auth_basename, backend in sorted(mapped_backends.items()):
+    for backend in backends:
+        auth_basename = get_auth_basename(backend.get("auth_ref"))
+        if not auth_basename:
+            continue
         allowed, _ = is_stable_auth_allowed(backend)
         if not allowed:
             continue
@@ -1224,7 +1430,11 @@ def build_stable_repair_transaction_plan(
     elif lock_preflight.get("status") == "stale":
         blocked_reasons.append(
             {
-                "machine_error_code": "STABLE_REPAIR_DRY_RUN_BLOCKED",
+                "machine_error_code": (
+                    "STABLE_REPAIR_APPLY_BLOCKED"
+                    if mode == "apply"
+                    else "STABLE_REPAIR_DRY_RUN_BLOCKED"
+                ),
                 "reason": "stale_lock_file_present",
                 "holder_pid": lock_preflight.get("holder_pid"),
             }
@@ -1234,13 +1444,38 @@ def build_stable_repair_transaction_plan(
             "machine_error_code": "REPAIR_SOURCE_AUTH_REF_MISSING",
             "backend_id": item.get("backend_id"),
             "auth_basename": item.get("auth_basename"),
+                "reason": item.get("reason"),
+            }
+        for item in source_copy_missing_auth_refs
+    )
+    source_copy_basename_collisions = []
+    source_collision_map: dict[str, list[dict[str, Any]]] = {}
+    for item in eligible_registry_auth_refs:
+        basename = str(item.get("auth_basename") or "")
+        if basename:
+            source_collision_map.setdefault(basename, []).append(item)
+    for auth_basename, items in sorted(source_collision_map.items()):
+        if len(items) < 2:
+            continue
+        source_copy_basename_collisions.append(
+            {
+                "auth_basename": auth_basename,
+                "backend_ids": [item.get("backend_id") for item in items],
+                "auth_refs": [item.get("auth_ref") for item in items],
+                "reason": "eligible_registry_auth_ref_basename_collision",
+            }
+        )
+    blocked_reasons.extend(
+        {
+            "machine_error_code": "REPAIR_SOURCE_BASENAME_COLLISION",
+            "auth_basename": item.get("auth_basename"),
             "reason": item.get("reason"),
         }
-        for item in source_copy_missing_auth_refs
+        for item in source_copy_basename_collisions
     )
 
     return {
-        "mode": "dry_run",
+        "mode": mode,
         "snapshot_required": True,
         "lock_required": True,
         "lock_preflight": lock_preflight,
@@ -1248,6 +1483,7 @@ def build_stable_repair_transaction_plan(
         "registry_source_inputs": {
             "eligible_registry_auth_refs": eligible_registry_auth_refs,
             "source_copy_missing_auth_refs": source_copy_missing_auth_refs,
+            "source_copy_basename_collisions": source_copy_basename_collisions,
         },
         "repair_observation": {
             "status": policy_drift.get("status", "unknown"),
@@ -1275,6 +1511,252 @@ def build_stable_repair_transaction_plan(
     }
 
 
+def run_stable_repair_apply(paths: RuntimePaths) -> dict[str, Any]:
+    registry = read_json(paths.registry_file)
+    registry_identity = get_registry_identity(registry)
+    policy_drift = get_stable_policy_drift(paths, registry)
+    lock_preflight = get_lock_preflight(paths)
+    transaction_plan = build_stable_repair_transaction_plan(
+        paths, registry, policy_drift, lock_preflight, mode="apply"
+    )
+
+    if stable_repair_registry_identity_requires_block(registry_identity):
+        transaction_plan["blocked_reasons"].append(
+            {
+                "machine_error_code": "REGISTRY_IDENTITY_AMBIGUOUS",
+                "reason": "registry_identity_ambiguous",
+            }
+        )
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by ambiguous registry identity.",
+            machine_error_code="REGISTRY_IDENTITY_AMBIGUOUS",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_registry_identity",
+            },
+        )
+
+    if lock_preflight.get("status") == "held":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by mutation lock.",
+            machine_error_code="LOCK_HELD",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "retry_after_lock_released",
+            },
+        )
+
+    if lock_preflight.get("status") == "stale":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by stale mutation lock.",
+            machine_error_code="STABLE_REPAIR_APPLY_BLOCKED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_stale_lock",
+            },
+        )
+
+    target_surface = transaction_plan.get("repair_target_contract_surface", {})
+    approved_target = target_surface.get("approved_repair_target_reference", {})
+    if approved_target.get("status") != "materialized_aligned":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked because the approved repair target is not active.",
+            machine_error_code="STABLE_REPAIR_TARGET_NOT_READY",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_target_switch_contract",
+            },
+        )
+
+    if paths.repair_target_inventory_dir.exists() and not paths.repair_target_inventory_dir.is_dir():
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by invalid target inventory directory.",
+            machine_error_code="STABLE_REPAIR_INVALID_TARGET_DIR",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_target_inventory",
+            },
+        )
+
+    before_target = snapshot_target_inventory_state(paths.repair_target_inventory_dir)
+    if before_target.get("non_auth_entries"):
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair apply blocked by unexpected non-auth target inventory entries.",
+            machine_error_code="STABLE_REPAIR_UNEXPECTED_TARGET_ENTRY",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_target_inventory",
+            },
+        )
+
+    target_plan = transaction_plan.get("target_reconciliation_plan", {})
+    target_would_add = target_plan.get("target_would_add", [])
+    target_would_prune = target_plan.get("target_would_prune", [])
+    if not target_would_add and not target_would_prune:
+        return build_command_payload(
+            ok=True,
+            human_message="Stable repair apply found the approved target inventory already aligned.",
+            machine_error_code="STABLE_REPAIR_ALREADY_ALIGNED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+
+    try:
+        source_map = build_stable_repair_source_map(transaction_plan)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_transaction_plan",
+            },
+            exit_code=exc.exit_code,
+        )
+
+    guard_before = snapshot_stable_repair_guard_surfaces(paths, list(source_map.values()))
+    stage_dir = Path(
+        tempfile.mkdtemp(prefix=".stable-repair-stage-", dir=str(paths.managed_dir))
+    )
+    backup_dir: Path | None = None
+    try:
+        with serialized_lock(paths):
+            stage_stable_repair_inventory(stage_dir, source_map)
+            verify_stable_repair_target_inventory(stage_dir, source_map)
+            if paths.repair_target_inventory_dir.exists():
+                backup_dir = paths.managed_dir / (
+                    f".stable-repair-backup-{os.getpid()}-{time.time_ns()}"
+                )
+                paths.repair_target_inventory_dir.replace(backup_dir)
+            stage_dir.replace(paths.repair_target_inventory_dir)
+            verify_stable_repair_apply_result(paths, source_map, guard_before)
+    except Exception as exc:
+        rollback_stable_repair_apply(
+            target_dir=paths.repair_target_inventory_dir,
+            stage_dir=stage_dir,
+            backup_dir=backup_dir,
+        )
+        if isinstance(exc, RuntimeErrorInfo):
+            return build_command_payload(
+                ok=False,
+                human_message=exc.message,
+                machine_error_code=exc.machine_error_code,
+                liveness="unknown",
+                severity=exc.severity,
+                operator_action=exc.operator_action,
+                changed_files=[],
+                extra={
+                    "command_mode": "apply",
+                    "would_change": False,
+                    "transaction_plan": transaction_plan,
+                    "next_action": "inspect_transaction_plan",
+                },
+                exit_code=exc.exit_code,
+            )
+        return build_command_payload(
+            ok=False,
+            human_message=f"Stable repair apply failed: {exc}",
+            machine_error_code="STABLE_REPAIR_APPLY_FAILED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "next_action": "inspect_transaction_plan",
+            },
+        )
+    finally:
+        remove_tree_if_exists(stage_dir)
+        if backup_dir and backup_dir.exists():
+            remove_tree_if_exists(backup_dir)
+
+    after_target = snapshot_target_inventory_state(paths.repair_target_inventory_dir)
+    changed_files = detect_target_inventory_changed_files(
+        before_target, after_target, paths.repair_target_inventory_dir
+    )
+    post_apply_plan = build_stable_repair_transaction_plan(
+        paths,
+        registry,
+        get_stable_policy_drift(paths, registry),
+        get_lock_preflight(paths),
+        mode="apply",
+    )
+    return build_command_payload(
+        ok=True,
+        human_message="Stable repair apply completed on the approved target inventory.",
+        machine_error_code="STABLE_REPAIR_APPLIED",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "command_mode": "apply",
+            "would_change": False,
+            "transaction_plan": post_apply_plan,
+            "next_action": "none",
+        },
+    )
+
+
 def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
     registry = read_json(paths.registry_file)
     registry_identity = get_registry_identity(registry)
@@ -1284,7 +1766,7 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
         paths, registry, policy_drift, lock_preflight
     )
 
-    if registry_identity.get("status") != "clear":
+    if stable_repair_registry_identity_requires_block(registry_identity):
         transaction_plan["blocked_reasons"].append(
             {
                 "machine_error_code": "REGISTRY_IDENTITY_AMBIGUOUS",

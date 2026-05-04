@@ -7,8 +7,11 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+from wild_boar_proxy import runtime as runtime_mod
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +70,9 @@ def free_port() -> int:
 
 class CliTests(unittest.TestCase):
     def setUp(self) -> None:
+        ProbeHandler.response_text = "OK"
+        ProbeHandler.response_status = 200
+        ProbeHandler.response_payload = None
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
         self.profile_dir = root / "profile"
@@ -280,6 +286,9 @@ class CliTests(unittest.TestCase):
             json.dumps(sorted(path.name for path in repair_target_dir.iterdir()))
             if repair_target_dir.is_dir()
             else "__MISSING__"
+        )
+        snapshot[f"DIR_GLOB:{self.managed_dir}/.stable-repair-*"] = json.dumps(
+            sorted(path.name for path in self.managed_dir.glob(".stable-repair-*"))
         )
         for path in sorted(self.stable_dir.glob("codex-*.json")):
             snapshot[str(path)] = path.read_text(encoding="utf-8")
@@ -1692,6 +1701,310 @@ class CliTests(unittest.TestCase):
                 self.assertNotIn("declared_write_surfaces", payload)
                 self.assertNotIn("forbidden_surfaces", payload)
                 self.assertNotIn("verify_scope", payload)
+
+    def test_stable_repair_apply_copies_eligible_sources_into_target_inventory_only(
+        self,
+    ) -> None:
+        source_a = self.profile_dir / "sources" / "codex-a.json"
+        source_b = self.profile_dir / "sources" / "codex-b.json"
+        source_a.parent.mkdir(parents=True, exist_ok=True)
+        source_a.write_text('{"token":"a"}', encoding="utf-8")
+        source_b.write_text('{"token":"b"}', encoding="utf-8")
+        observed_unknown = self.stable_dir / "codex-observed.json"
+        observed_unknown.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                **registry["backends"][0],
+                "id": "backend-a",
+                "auth_ref": str(source_a),
+            },
+            {
+                **registry["backends"][0],
+                "id": "backend-b",
+                "auth_ref": str(source_b),
+            },
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        guard_paths = [
+            self.managed_dir / "backend-registry.json",
+            self.managed_dir / "supervisor-state.json",
+            self.managed_dir / "approved-repair-target.json",
+            self.managed_dir / "target-switch-transaction.json",
+            self.profile_dir / "config.toml",
+            self.profile_dir / "runtime-mode.txt",
+            self.profile_dir / "runtime-effective-mode.txt",
+            self.stable_dir / "config.yaml",
+        ]
+        guard_before = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in guard_paths
+        }
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_APPLIED")
+        self.assertEqual(payload["command_mode"], "apply")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(
+            sorted(payload["changed_files"]),
+            sorted(
+                [
+                    str(self.managed_dir / "stable-repair-target" / "codex-a.json"),
+                    str(self.managed_dir / "stable-repair-target" / "codex-b.json"),
+                ]
+            ),
+        )
+        self.assertEqual(
+            (self.managed_dir / "stable-repair-target" / "codex-a.json").read_text(
+                encoding="utf-8"
+            ),
+            '{"token":"a"}',
+        )
+        self.assertEqual(
+            (self.managed_dir / "stable-repair-target" / "codex-b.json").read_text(
+                encoding="utf-8"
+            ),
+            '{"token":"b"}',
+        )
+        self.assertEqual(source_a.read_text(encoding="utf-8"), '{"token":"a"}')
+        self.assertEqual(source_b.read_text(encoding="utf-8"), '{"token":"b"}')
+        self.assertTrue(observed_unknown.exists())
+        self.assertEqual(
+            sorted(path.name for path in self.managed_dir.glob(".stable-repair-*")),
+            [],
+        )
+        guard_after = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in guard_paths
+        }
+        self.assertEqual(guard_before, guard_after)
+
+    def test_stable_repair_apply_prunes_unauthorized_target_entries_only(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"token":"fresh"}', encoding="utf-8")
+        observed_unknown = self.stable_dir / "codex-observed.json"
+        observed_unknown.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        target_dir = self.managed_dir / "stable-repair-target"
+        (target_dir / "codex-active.json").write_text('{"token":"stale"}', encoding="utf-8")
+        (target_dir / "codex-extra.json").write_text('{"token":"extra"}', encoding="utf-8")
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_APPLIED")
+        self.assertEqual(
+            sorted(payload["changed_files"]),
+            sorted(
+                [
+                    str(target_dir / "codex-active.json"),
+                    str(target_dir / "codex-extra.json"),
+                ]
+            ),
+        )
+        self.assertEqual(
+            (target_dir / "codex-active.json").read_text(encoding="utf-8"),
+            '{"token":"fresh"}',
+        )
+        self.assertFalse((target_dir / "codex-extra.json").exists())
+        self.assertTrue(observed_unknown.exists())
+        self.assertEqual(
+            sorted(path.name for path in self.managed_dir.glob(".stable-repair-*")),
+            [],
+        )
+
+    def test_stable_repair_apply_blocks_missing_source_without_mutation(self) -> None:
+        missing_auth = self.profile_dir / "sources" / "codex-missing.json"
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(missing_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "REPAIR_SOURCE_AUTH_REF_MISSING")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+
+    def test_stable_repair_dry_run_and_apply_report_basename_collision(self) -> None:
+        source_a = self.profile_dir / "sources-a" / "codex-shared.json"
+        source_b = self.profile_dir / "sources-b" / "codex-shared.json"
+        source_a.parent.mkdir(parents=True, exist_ok=True)
+        source_b.parent.mkdir(parents=True, exist_ok=True)
+        source_a.write_text('{"token":"a"}', encoding="utf-8")
+        source_b.write_text('{"token":"b"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                **registry["backends"][0],
+                "id": "backend-a",
+                "auth_ref": str(source_a),
+            },
+            {
+                **registry["backends"][0],
+                "id": "backend-b",
+                "auth_ref": str(source_b),
+            },
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        dry_run = self.run_cli("stable", "repair", "--dry-run", "--json")
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        dry_payload = json.loads(dry_run.stdout)
+        self.assertEqual(
+            dry_payload["transaction_plan"]["registry_source_inputs"][
+                "source_copy_basename_collisions"
+            ],
+            [
+                {
+                    "auth_basename": "codex-shared.json",
+                    "backend_ids": ["backend-a", "backend-b"],
+                    "auth_refs": [str(source_a), str(source_b)],
+                    "reason": "eligible_registry_auth_ref_basename_collision",
+                }
+            ],
+        )
+        self.assertIn(
+            {
+                "machine_error_code": "REPAIR_SOURCE_BASENAME_COLLISION",
+                "auth_basename": "codex-shared.json",
+                "reason": "eligible_registry_auth_ref_basename_collision",
+            },
+            dry_payload["transaction_plan"]["blocked_reasons"],
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "REPAIR_SOURCE_BASENAME_COLLISION")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+
+    def test_stable_repair_apply_blocks_held_lock_without_mutation(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        (self.managed_dir / "wild-boar-proxy.lock").write_text(
+            f"{os.getpid()}\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+        self.assertEqual(payload["transaction_plan"]["mode"], "apply")
+
+    def test_stable_repair_apply_blocks_stale_lock_without_mutation(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        (self.managed_dir / "wild-boar-proxy.lock").write_text(
+            "not-a-pid\n", encoding="utf-8"
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_APPLY_BLOCKED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+        self.assertEqual(payload["transaction_plan"]["mode"], "apply")
+
+    def test_stable_repair_apply_reports_already_aligned_without_mutation(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"token":"steady"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        (self.managed_dir / "stable-repair-target" / "codex-active.json").write_text(
+            '{"token":"steady"}',
+            encoding="utf-8",
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "repair", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_ALREADY_ALIGNED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+
+    def test_stable_repair_apply_rolls_back_on_verification_failure(self) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"token":"repair"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.verify_stable_repair_apply_result",
+                side_effect=runtime_mod.RuntimeErrorInfo(
+                    "forced verify failure",
+                    machine_error_code="STABLE_REPAIR_VERIFICATION_FAILED",
+                    severity="recoverable",
+                    operator_action="user_action",
+                ),
+            ):
+                payload = runtime_mod.run_stable_repair_apply(paths)
+        after = self.state_snapshot()
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_VERIFICATION_FAILED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+        self.assertEqual(
+            sorted(path.name for path in self.managed_dir.glob(".stable-repair-*")),
+            [],
+        )
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
