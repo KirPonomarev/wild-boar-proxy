@@ -358,6 +358,32 @@ def get_auth_basename(auth_ref: Any) -> str:
     return Path(str(auth_ref or "")).name
 
 
+def get_stable_auth_inventory_source(paths: RuntimePaths) -> tuple[Path, dict[str, Any]]:
+    auth_dir_value = read_yaml_value(paths.stable_config, "auth-dir")
+    if auth_dir_value:
+        auth_dir_path = Path(auth_dir_value).expanduser()
+        if auth_dir_path.is_absolute():
+            path_resolution = "expanduser" if str(auth_dir_value).startswith("~") else "absolute"
+            scan_path = auth_dir_path
+        else:
+            path_resolution = "stable_config_parent"
+            scan_path = paths.stable_config.parent / auth_dir_path
+        return scan_path, {
+            "source": "auth-dir",
+            "path": auth_dir_value,
+            "path_resolution": path_resolution,
+            "exists": scan_path.is_dir(),
+        }
+
+    scan_path = paths.stable_config.parent
+    return scan_path, {
+        "source": "stable_config_parent",
+        "path": str(paths.stable_config.parent),
+        "path_resolution": "fallback",
+        "exists": scan_path.is_dir(),
+    }
+
+
 def get_backend_identifier(backend: dict[str, Any], index: int) -> str:
     backend_id = backend.get("id")
     if backend_id:
@@ -462,7 +488,7 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         for backend in backends
         if backend.get("pool") == "active" and backend.get("enabled", True) is not False
     )
-    stable_auth_dir = paths.stable_config.parent
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
     claim_blockers = [
         "stable-15-proved",
         "active-only-traffic",
@@ -475,6 +501,7 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
             "configured_active_count": configured_active_count,
             "allowed_stable_auth_count": len(allowed_auths),
             "stable_auth_inventory_count": 0,
+            "stable_auth_inventory_source": inventory_source,
             "disallowed_configured_auths": [],
             "missing_auths": [],
             "unknown_auths": [],
@@ -526,6 +553,7 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         "configured_active_count": configured_active_count,
         "allowed_stable_auth_count": len(allowed_auths),
         "stable_auth_inventory_count": len(inventory),
+        "stable_auth_inventory_source": inventory_source,
         "disallowed_configured_auths": disallowed_configured_auths,
         "missing_auths": missing_auths,
         "unknown_auths": unknown_auths,

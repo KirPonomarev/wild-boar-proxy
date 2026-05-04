@@ -697,6 +697,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["policy_drift"]["status"], "clear")
         self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
         self.assertEqual(payload["policy_drift"]["missing_auths"], [])
+        self.assertEqual(
+            payload["policy_drift"]["stable_auth_inventory_source"]["source"],
+            "stable_config_parent",
+        )
+        self.assertEqual(
+            payload["policy_drift"]["stable_auth_inventory_source"]["path_resolution"],
+            "fallback",
+        )
+        self.assertTrue(payload["policy_drift"]["stable_auth_inventory_source"]["exists"])
         self.assertEqual(payload["registry_identity_summary"]["status"], "clear")
         self.assertEqual(payload["registry_identity_summary"]["machine_error_code"], "OK")
         self.assertEqual(payload["claim_gate"]["status"], "clear")
@@ -765,6 +774,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
         self.assertEqual(drift["stable_auth_inventory_count"], 1)
         self.assertEqual(drift["allowed_stable_auth_count"], 0)
+        self.assertEqual(drift["stable_auth_inventory_source"]["source"], "stable_config_parent")
+        self.assertEqual(drift["stable_auth_inventory_source"]["path_resolution"], "fallback")
+        self.assertTrue(drift["stable_auth_inventory_source"]["exists"])
         self.assertEqual(
             drift["disallowed_configured_auths"][0]["backend_id"],
             "reserve-backend",
@@ -832,6 +844,193 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["claim_gate"]["status"], "blocked")
         self.assertEqual(payload["claim_gate"]["sources"], ["policy_drift"])
+
+    def test_status_uses_stable_auth_dir_for_policy_drift_inventory(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        auth_dir = self.temp_dir.name and Path(self.temp_dir.name) / "stable-auth-dir"
+        auth_dir.mkdir()
+        active_auth = auth_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "clear")
+        self.assertEqual(drift["stable_auth_inventory_count"], 1)
+        self.assertEqual(drift["stable_auth_inventory_source"]["source"], "auth-dir")
+        self.assertEqual(drift["stable_auth_inventory_source"]["path"], str(auth_dir))
+        self.assertEqual(drift["stable_auth_inventory_source"]["path_resolution"], "absolute")
+        self.assertTrue(drift["stable_auth_inventory_source"]["exists"])
+
+    def test_status_reports_drift_from_stable_auth_dir_inventory(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        auth_dir = Path(self.temp_dir.name) / "stable-auth-dir"
+        auth_dir.mkdir()
+        stable_auth = auth_dir / "codex-reserve.json"
+        stable_auth.write_text("{}", encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                "id": "reserve-backend",
+                "label": "Reserve Backend",
+                "pool": "reserve",
+                "status": "healthy",
+                "manual_hold": True,
+                "auth_ref": str(stable_auth),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            }
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "detected")
+        self.assertEqual(drift["stable_auth_inventory_source"]["source"], "auth-dir")
+        self.assertEqual(
+            drift["disallowed_configured_auths"][0]["auth_basename"],
+            "codex-reserve.json",
+        )
+
+    def test_status_resolves_relative_stable_auth_dir_from_config_parent(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        auth_dir = self.stable_dir / "auth"
+        auth_dir.mkdir()
+        active_auth = auth_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\nport: 8318\nauth-dir: \"auth\"\n",
+            encoding="utf-8",
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        source = payload["policy_drift"]["stable_auth_inventory_source"]
+        self.assertEqual(source["source"], "auth-dir")
+        self.assertEqual(source["path"], "auth")
+        self.assertEqual(source["path_resolution"], "stable_config_parent")
+        self.assertTrue(source["exists"])
+
+    def test_status_reports_unknown_when_stable_auth_dir_is_missing(self) -> None:
+        missing_dir = self.stable_dir / "missing-auth"
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{missing_dir}"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("status", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "unknown")
+        self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT_UNKNOWN")
+        self.assertEqual(drift["stable_auth_inventory_source"]["source"], "auth-dir")
+        self.assertFalse(drift["stable_auth_inventory_source"]["exists"])
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
