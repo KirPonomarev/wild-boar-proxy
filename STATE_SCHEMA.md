@@ -124,12 +124,10 @@ Current canonical `activation_outcome` values:
 - `observed_source_selected`
 - `observed_source_fallback`
 
-The recovery contract fixes that later deterministic stable recovery may
-refresh this same snapshot topic through the serialized runtime-state mutation
-path.
-No current deterministic stable recovery call site writes this snapshot outside
-`launch smoke`, and that future reuse does not require a separate persisted
-recovery snapshot by default.
+Deterministic stable recovery may refresh this same snapshot topic through the
+serialized runtime-state mutation path.
+The current recovery owner path in `healthcheck --json` reuses this snapshot
+surface and does not require a separate persisted recovery snapshot by default.
 
 ## Mode files
 
@@ -208,15 +206,15 @@ It is:
 - not runtime truth state
 - not diagnostics state
 
-It may remain absent until the serialized stable-runtime consumer activation
-path materializes it inside the current `launch smoke` seam.
+It may remain absent until a serialized stable-runtime consumer activation or
+deterministic recovery path materializes it inside the current bounded launcher
+seam.
 
 The generated config is handed to activation only through the narrow
 launcher-scoped `WBP_STABLE_CONFIG` override contract.
 That handoff must not become a generic config-routing surface.
-If later deterministic stable recovery reuses this artifact, it must
-regenerate it per recovery attempt rather than treating a stale artifact as
-authoritative truth.
+Deterministic stable recovery must regenerate this artifact per approved-target
+attempt rather than treating a stale artifact as authoritative truth.
 
 ## Write-surface ownership
 

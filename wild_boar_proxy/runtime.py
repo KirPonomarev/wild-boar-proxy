@@ -140,6 +140,21 @@ class RuntimePaths:
         )
 
 
+@dataclass(frozen=True)
+class StableRuntimeLaunchAttempt:
+    desired_kind: str
+    observed_path: Path
+    activation_attempted: bool
+    generated_config_regenerated: bool
+    activation_method: str
+    selected_config_file: str
+    selected_source_kind: str
+    selected_source_path: str
+    launcher_exit_code: int
+    stdout: str
+    stderr: str
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1204,6 +1219,107 @@ def build_stable_runtime_consumer_snapshot_payload(
         "activation_outcome": activation_outcome,
         "fallback_reason": fallback_reason,
         "observed_at_utc": now_iso(),
+    }
+
+
+def emit_subprocess_output(*, stdout: str, stderr: str) -> None:
+    if stderr:
+        sys.stderr.write(stderr)
+    if stdout:
+        sys.stderr.write(stdout)
+
+
+def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
+    return [
+        paths.config_toml,
+        paths.state_file,
+        paths.runtime_effective_mode_file,
+        paths.stable_runtime_generated_config_file,
+        managed_pid_path(paths),
+    ]
+
+
+def run_stable_runtime_launcher_attempt(
+    paths: RuntimePaths,
+    selection: dict[str, Any],
+) -> StableRuntimeLaunchAttempt:
+    desired_kind = str(selection["desired_kind"])
+    observed_path = Path(selection["observed_path"])
+    launcher_env = sanitized_env()
+    launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(paths.stable_config)
+    activation_attempted = False
+    generated_config_regenerated = False
+    activation_method = "baseline_stable_config"
+    selected_config_file = str(paths.stable_config)
+    selected_source_kind = "observed_stable_inventory_source"
+    selected_source_path = str(observed_path)
+    with serialized_lock(paths):
+        if desired_kind == "approved_repair_target":
+            write_text_atomic(
+                paths.stable_runtime_generated_config_file,
+                build_generated_stable_runtime_config_text(paths),
+            )
+            launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
+                paths.stable_runtime_generated_config_file
+            )
+            activation_attempted = True
+            generated_config_regenerated = True
+            activation_method = "process_local_env_override"
+            selected_config_file = str(paths.stable_runtime_generated_config_file)
+            selected_source_kind = "approved_repair_target"
+            selected_source_path = str(paths.repair_target_inventory_dir)
+        result = subprocess.run(
+            [str(paths.launcher_script), "smoke"],
+            capture_output=True,
+            text=True,
+            env=launcher_env,
+            check=False,
+        )
+    return StableRuntimeLaunchAttempt(
+        desired_kind=desired_kind,
+        observed_path=observed_path,
+        activation_attempted=activation_attempted,
+        generated_config_regenerated=generated_config_regenerated,
+        activation_method=activation_method,
+        selected_config_file=selected_config_file,
+        selected_source_kind=selected_source_kind,
+        selected_source_path=selected_source_path,
+        launcher_exit_code=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
+
+
+def build_deterministic_stable_recovery_result(
+    *,
+    delegated_from_status: bool,
+    attempted: bool,
+    outcome: str,
+    selected_source_kind: str,
+    selected_source_path: str,
+    generated_config_regenerated: bool,
+    snapshot_refreshed: bool,
+    fallback_reason: str,
+    live_runtime_observation_confirmed: bool,
+) -> dict[str, Any]:
+    if not attempted:
+        status = "not_invoked"
+    elif outcome == "recovery_failed_before_stable_healthy":
+        status = "failed"
+    else:
+        status = "completed"
+    return {
+        "status": status,
+        "owner_command_surface": "healthcheck --json",
+        "delegated_from_status": delegated_from_status,
+        "attempted": attempted,
+        "outcome": outcome,
+        "selected_source_kind": selected_source_kind,
+        "selected_source_path": selected_source_path,
+        "generated_config_regenerated": generated_config_regenerated,
+        "snapshot_refreshed": snapshot_refreshed,
+        "fallback_reason": fallback_reason,
+        "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
     }
 
 
@@ -2385,6 +2501,31 @@ def reconcile_stable_fallback(
     return read_json(paths.state_file, required=False)
 
 
+def reconcile_stable_recovery_success(
+    paths: RuntimePaths,
+    state: dict[str, Any],
+    *,
+    stable_endpoint: str,
+) -> dict[str, Any]:
+    stable_state = dict(state)
+    stable_state["status"] = "healthy"
+    stable_state["last_error"] = ""
+    stable_state["effective_mode"] = "stable"
+    stable_state["selected_backend_ids"] = []
+    stable_state["healthy_count"] = 1
+    stable_state["degraded_count"] = 0
+    stable_state["down_count"] = 0
+    stable_state["last_sync_at"] = now_iso()
+
+    with serialized_lock(paths):
+        write_json_atomic(paths.state_file, stable_state)
+        write_text_atomic(paths.runtime_effective_mode_file, "stable")
+        write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
+        managed_pid_path(paths).unlink(missing_ok=True)
+
+    return read_json(paths.state_file, required=False)
+
+
 @contextmanager
 def serialized_lock(paths: RuntimePaths):
     paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -2438,15 +2579,24 @@ def build_command_payload(
     return payload
 
 
-def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
+def summarize_status(
+    paths: RuntimePaths, health_payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
     desired_mode = get_desired_mode(paths)
-    health_payload = run_healthcheck(paths)
+    health_payload = health_payload or run_healthcheck(paths)
     registry = read_json(paths.registry_file)
     policy_drift = get_stable_policy_drift(paths, registry)
     state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
         paths, registry, policy_drift, state, health_payload
     )
+    recovery_result = health_payload.get("deterministic_stable_recovery_result")
+    if isinstance(recovery_result, dict):
+        stable_runtime_consumer = dict(stable_runtime_consumer)
+        stable_runtime_consumer["deterministic_stable_recovery_result"] = {
+            **recovery_result,
+            "delegated_from_status": True,
+        }
     registry_identity = get_registry_identity(registry)
     current_proxy_url = state.get("current_proxy_url", "")
     pool_summary = {
@@ -2471,7 +2621,7 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
         liveness=str(health_payload["liveness"]),
         severity=str(health_payload["severity"]),
         operator_action=str(health_payload["operator_action"]),
-        changed_files=[],
+        changed_files=list(health_payload.get("changed_files") or []),
         exit_code=int(health_payload["exit_code"]),
         extra={
             "desired_mode": desired_mode,
@@ -2494,7 +2644,10 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     )
 
 
-def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
+def run_healthcheck(
+    paths: RuntimePaths, model: str | None = None, *, allow_recovery: bool = True
+) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -2533,6 +2686,70 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
         configured_base_url = read_toml_string(paths.config_toml, "base_url")
         listener_ok = socket_is_listening(host, port)
+
+    recovery_result: dict[str, Any] | None = None
+    if allow_recovery:
+        recovery_result = build_deterministic_stable_recovery_result(
+            delegated_from_status=False,
+            attempted=False,
+            outcome="not_invoked",
+            selected_source_kind="",
+            selected_source_path="",
+            generated_config_regenerated=False,
+            snapshot_refreshed=False,
+            fallback_reason="",
+            live_runtime_observation_confirmed=False,
+        )
+    recovery_attempt: StableRuntimeLaunchAttempt | None = None
+    if allow_recovery:
+        reported_effective_mode = reconcile_effective_mode_for_reporting(
+            effective_mode, listener_ok=listener_ok
+        )
+        _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+        if reported_effective_mode == "stable" and not listener_ok:
+            registry = read_json(paths.registry_file)
+            policy_drift = get_stable_policy_drift(paths, registry)
+            selection = get_stable_runtime_consumer_selection_context(
+                paths, registry, policy_drift
+            )
+            recovery_attempt = run_stable_runtime_launcher_attempt(paths, selection)
+            emit_subprocess_output(
+                stdout=recovery_attempt.stdout, stderr=recovery_attempt.stderr
+            )
+            state = read_json(paths.state_file, required=False)
+            effective_mode = get_effective_mode(paths, state)
+            host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+            configured_base_url = read_toml_string(paths.config_toml, "base_url")
+            listener_ok = socket_is_listening(host, port)
+            reported_effective_mode = reconcile_effective_mode_for_reporting(
+                effective_mode, listener_ok=listener_ok
+            )
+            _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+            if reported_effective_mode == "stable" and not listener_ok:
+                error_message = state.get("last_error", "")
+                if not error_message:
+                    if recovery_attempt.launcher_exit_code != 0:
+                        error_message = (
+                            "Deterministic stable recovery launcher exited "
+                            f"{recovery_attempt.launcher_exit_code}; listener is not "
+                            f"reachable at {reported_endpoint}."
+                        )
+                    else:
+                        error_message = (
+                            "Listener is not reachable at "
+                            f"{reported_endpoint} after deterministic stable recovery attempt."
+                        )
+                state = reconcile_stable_fallback(
+                    paths,
+                    state,
+                    stable_endpoint=reported_endpoint,
+                    error_message=error_message,
+                    stable_listener_ok=False,
+                )
+                effective_mode = get_effective_mode(paths, state)
+                host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                listener_ok = socket_is_listening(host, port)
 
     models_ok = False
     responses_ok = False
@@ -2617,6 +2834,91 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
             human_message = "Runtime attestation failed one or more checks."
         ok = False
 
+    snapshot_payload: dict[str, Any] | None = None
+    if recovery_attempt is not None:
+        recovery_outcome = "recovery_failed_before_stable_healthy"
+        recovery_selected_kind = (
+            "approved_repair_target"
+            if recovery_attempt.activation_attempted
+            else "observed_stable_inventory_source"
+        )
+        recovery_selected_path = (
+            str(paths.repair_target_inventory_dir)
+            if recovery_attempt.activation_attempted
+            else str(recovery_attempt.observed_path)
+        )
+        fallback_reason = ""
+        snapshot_refreshed = False
+        live_runtime_observation_confirmed = ok and reported_effective_mode == "stable"
+        if live_runtime_observation_confirmed:
+            state = reconcile_stable_recovery_success(
+                paths, state, stable_endpoint=reported_endpoint
+            )
+            if (
+                recovery_attempt.activation_attempted
+                and recovery_attempt.launcher_exit_code == 0
+            ):
+                recovery_outcome = "approved_target_recovered"
+                snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                    activation_method="process_local_env_override",
+                    selected_config_file=str(paths.stable_runtime_generated_config_file),
+                    selected_source_kind="approved_repair_target",
+                    selected_source_path=str(paths.repair_target_inventory_dir),
+                    activation_outcome=STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME,
+                    fallback_reason="",
+                )
+                recovery_selected_kind = "approved_repair_target"
+                recovery_selected_path = str(paths.repair_target_inventory_dir)
+            else:
+                recovery_outcome = "observed_source_fallback_recovered"
+                if recovery_attempt.activation_attempted:
+                    fallback_reason = (
+                        "launcher_exit_nonzero"
+                        if recovery_attempt.launcher_exit_code != 0
+                        else "approved_target_recovery_unproven"
+                    )
+                    snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                        activation_method="process_local_env_override",
+                        selected_config_file=str(
+                            paths.stable_runtime_generated_config_file
+                        ),
+                        selected_source_kind="observed_stable_inventory_source",
+                        selected_source_path=str(recovery_attempt.observed_path),
+                        activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
+                        fallback_reason=fallback_reason,
+                    )
+                else:
+                    snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                        activation_method="baseline_stable_config",
+                        selected_config_file=str(paths.stable_config),
+                        selected_source_kind="observed_stable_inventory_source",
+                        selected_source_path=str(recovery_attempt.observed_path),
+                        activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
+                        fallback_reason="",
+                    )
+                recovery_selected_kind = "observed_stable_inventory_source"
+                recovery_selected_path = str(recovery_attempt.observed_path)
+            if snapshot_payload is not None:
+                write_stable_runtime_consumer_snapshot(paths, snapshot_payload)
+                snapshot_refreshed = True
+        else:
+            fallback_reason = (
+                "launcher_exit_nonzero"
+                if recovery_attempt.launcher_exit_code != 0
+                else "stable_listener_unreachable_after_recovery"
+            )
+        recovery_result = build_deterministic_stable_recovery_result(
+            delegated_from_status=False,
+            attempted=True,
+            outcome=recovery_outcome,
+            selected_source_kind=recovery_selected_kind,
+            selected_source_path=recovery_selected_path,
+            generated_config_regenerated=recovery_attempt.generated_config_regenerated,
+            snapshot_refreshed=snapshot_refreshed,
+            fallback_reason=fallback_reason,
+            live_runtime_observation_confirmed=live_runtime_observation_confirmed,
+        )
+
     attestation = {
         "listener_ok": listener_ok,
         "models_ok": models_ok,
@@ -2642,6 +2944,10 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
+    if recovery_result is not None:
+        extra["deterministic_stable_recovery_result"] = recovery_result
+
+    changed_files = detect_changed_files(before, runtime_write_surface_candidates(paths))
 
     return build_command_payload(
         ok=ok,
@@ -2650,7 +2956,7 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
         liveness=liveness,
         severity=severity,
         operator_action=operator_action,
-        changed_files=[],
+        changed_files=changed_files,
         extra=extra,
     )
 
@@ -2713,6 +3019,7 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, int]:
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
+        managed_pid_path(paths),
     ]
     result: dict[Path, int] = {}
     for candidate in candidates:
@@ -2725,6 +3032,8 @@ def detect_changed_files(before: dict[Path, int], after_paths: list[Path]) -> li
     changed: list[str] = []
     for candidate in after_paths:
         if not candidate.exists():
+            if candidate in before:
+                changed.append(str(candidate))
             continue
         after = candidate.stat().st_mtime_ns
         if before.get(candidate) != after:
@@ -2753,48 +3062,31 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
     selection = get_stable_runtime_consumer_selection_context(
         paths, registry, policy_drift
     )
-    desired_kind = str(selection["desired_kind"])
-    observed_path = Path(selection["observed_path"])
     before = snapshot_known_files(paths)
-    launcher_env = sanitized_env()
-    activation_attempted = False
-    with serialized_lock(paths):
-        if desired_kind == "approved_repair_target":
-            write_text_atomic(
-                paths.stable_runtime_generated_config_file,
-                build_generated_stable_runtime_config_text(paths),
-            )
-            launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
-                paths.stable_runtime_generated_config_file
-            )
-            activation_attempted = True
-        result = subprocess.run(
-            [str(paths.launcher_script), "smoke"],
-            capture_output=True,
-            text=True,
-            env=launcher_env,
-            check=False,
-        )
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-    if result.stdout:
-        sys.stderr.write(result.stdout)
+    attempt = run_stable_runtime_launcher_attempt(paths, selection)
+    emit_subprocess_output(stdout=attempt.stdout, stderr=attempt.stderr)
     stabilization_seconds = get_launch_stabilization_seconds()
-    health_payload = run_healthcheck(paths)
+    health_payload = run_healthcheck(paths, allow_recovery=False)
     if (
-        result.returncode == 0
+        attempt.launcher_exit_code == 0
         and health_payload["status"] == "ok"
         and str(health_payload["effective_mode"]) == "managed"
         and stabilization_seconds > 0
     ):
         time.sleep(stabilization_seconds)
-        health_payload = run_healthcheck(paths)
+        health_payload = run_healthcheck(paths, allow_recovery=False)
+        if (
+            health_payload["status"] != "ok"
+            and str(health_payload["effective_mode"]) == "managed"
+        ):
+            time.sleep(min(0.1, stabilization_seconds))
+            health_payload = run_healthcheck(paths, allow_recovery=False)
     snapshot_payload: dict[str, Any] | None = None
     if (
         health_payload["status"] == "ok"
         and str(health_payload["effective_mode"]) == "stable"
     ):
-        if activation_attempted and result.returncode == 0:
+        if attempt.activation_attempted and attempt.launcher_exit_code == 0:
             snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
                 activation_method="process_local_env_override",
                 selected_config_file=str(paths.stable_runtime_generated_config_file),
@@ -2803,16 +3095,16 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
                 activation_outcome=STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME,
                 fallback_reason="",
             )
-        elif activation_attempted:
+        elif attempt.activation_attempted:
             snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
                 activation_method="process_local_env_override",
                 selected_config_file=str(paths.stable_runtime_generated_config_file),
                 selected_source_kind="observed_stable_inventory_source",
-                selected_source_path=str(observed_path),
+                selected_source_path=str(attempt.observed_path),
                 activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
                 fallback_reason=(
                     "launcher_exit_nonzero"
-                    if result.returncode != 0
+                    if attempt.launcher_exit_code != 0
                     else "approved_target_activation_unproven"
                 ),
             )
@@ -2821,7 +3113,7 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
                 activation_method="baseline_stable_config",
                 selected_config_file=str(paths.stable_config),
                 selected_source_kind="observed_stable_inventory_source",
-                selected_source_path=str(observed_path),
+                selected_source_path=str(attempt.observed_path),
                 activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
                 fallback_reason="",
             )
@@ -2829,23 +3121,16 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
         write_stable_runtime_consumer_snapshot(paths, snapshot_payload)
     changed_files = detect_changed_files(
         before,
-        [
-            paths.config_toml,
-            paths.registry_file,
-            paths.state_file,
-            paths.managed_config_file,
-            paths.runtime_effective_mode_file,
-            paths.stable_runtime_generated_config_file,
-        ],
+        runtime_write_surface_candidates(paths),
     )
-    status_payload = summarize_status(paths)
+    status_payload = summarize_status(paths, health_payload=health_payload)
     desired_mode = str(status_payload["desired_mode"])
     effective_mode = str(status_payload["effective_mode"])
-    launch_ok = result.returncode == 0 and status_payload["status"] == "ok"
+    launch_ok = attempt.launcher_exit_code == 0 and status_payload["status"] == "ok"
     if launch_ok:
         machine_error_code = "OK"
         human_message = "Launcher smoke completed."
-    elif result.returncode != 0:
+    elif attempt.launcher_exit_code != 0:
         machine_error_code = "LAUNCHER_EXIT_NONZERO"
         human_message = "Launcher smoke exited non-zero."
     else:
@@ -2870,10 +3155,14 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             "attestation_summary": status_payload.get("attestation_summary", {}),
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",
-            "launcher_exit_code": result.returncode,
+            "launcher_exit_code": attempt.launcher_exit_code,
             "stabilization_seconds": stabilization_seconds,
         },
-        exit_code=result.returncode if result.returncode != 0 else status_payload["exit_code"],
+        exit_code=(
+            attempt.launcher_exit_code
+            if attempt.launcher_exit_code != 0
+            else status_payload["exit_code"]
+        ),
     )
 
 
@@ -2907,6 +3196,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             paths.managed_config_file,
             paths.config_toml,
             paths.runtime_effective_mode_file,
+            managed_pid_path(paths),
         ],
     )
     state = read_json(paths.state_file, required=False)

@@ -40,18 +40,23 @@
   `launch smoke` seam
 - generated stable runtime config materialization must not rewrite baseline
   stable config in place
-- the recovery contract fixes that later deterministic stable recovery must
-  reuse the same generated config path, `WBP_STABLE_CONFIG` handoff, and
-  snapshot topic unless a later blocker proves otherwise
-- the recovery contract fixes that later deterministic stable recovery must
-  regenerate generated config per attempt and must not treat a stale generated
-  config artifact as authoritative truth
+- deterministic stable recovery now reuses the same generated config path,
+  `WBP_STABLE_CONFIG` handoff, and snapshot topic through the bounded
+  `healthcheck --json` owner path
+- deterministic stable recovery must regenerate generated config per
+  approved-target attempt and must not treat a stale generated config artifact
+  as authoritative truth
+- `launch smoke --json` must not pretend to own the deterministic stable
+  recovery lane or echo its result surface
 - approved-target activation success must remain separately observable from a
   healthy observed-source fallback
 - fallback from approved target to observed stable source must be explicit and
   machine-readable
 - desired stable runtime consumer source must never be reported as effective
   before successful live activation evidence
+- top-level healthcheck and status truth must continue to describe final live
+  runtime state, while deterministic stable recovery outcome remains a separate
+  recovery-attempt surface
 
 ## Safety rules
 

@@ -298,45 +298,102 @@ class CliTests(unittest.TestCase):
         return snapshot
 
     def write_recording_stable_launcher(
-        self, path: Path, *, exit_code: int = 0
+        self, path: Path, *, exit_code: int = 0, start_server: bool = False
     ) -> Path:
+        server_block = ""
+        if start_server:
+            server_block = (
+                "python3 - <<'PY' >/dev/null 2>&1 &\n"
+                "import json\n"
+                "import os\n"
+                "import threading\n"
+                "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
+                "from pathlib import Path\n"
+                "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
+                "port = 8318\n"
+                "for raw_line in stable_config.read_text().splitlines():\n"
+                "    line = raw_line.strip()\n"
+                "    if line.startswith('port:'):\n"
+                "        port = int(line.split(':', 1)[1].strip().strip('\"'))\n"
+                "        break\n"
+                "class Handler(BaseHTTPRequestHandler):\n"
+                "    count = 0\n"
+                "    def do_GET(self):\n"
+                "        if self.path == '/v1/models':\n"
+                "            body = json.dumps({'data': [{'id': 'gpt-5.4'}]}).encode('utf-8')\n"
+                "            self.send_response(200)\n"
+                "            self.send_header('Content-Type', 'application/json')\n"
+                "            self.send_header('Content-Length', str(len(body)))\n"
+                "            self.end_headers()\n"
+                "            self.wfile.write(body)\n"
+                "            Handler.count += 1\n"
+                "            if Handler.count >= 2:\n"
+                "                threading.Thread(target=self.server.shutdown, daemon=True).start()\n"
+                "            return\n"
+                "        self.send_error(404)\n"
+                "    def do_POST(self):\n"
+                "        if self.path == '/v1/responses':\n"
+                "            length = int(self.headers.get('Content-Length', '0'))\n"
+                "            _ = self.rfile.read(length)\n"
+                "            body = json.dumps({'output_text': 'OK'}).encode('utf-8')\n"
+                "            self.send_response(200)\n"
+                "            self.send_header('Content-Type', 'application/json')\n"
+                "            self.send_header('Content-Length', str(len(body)))\n"
+                "            self.end_headers()\n"
+                "            self.wfile.write(body)\n"
+                "            Handler.count += 1\n"
+                "            if Handler.count >= 2:\n"
+                "                threading.Thread(target=self.server.shutdown, daemon=True).start()\n"
+                "            return\n"
+                "        self.send_error(404)\n"
+                "    def log_message(self, fmt, *args):\n"
+                "        return\n"
+                "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+                "server.serve_forever()\n"
+                "server.server_close()\n"
+                "PY\n"
+                "sleep 0.1\n"
+            )
         path.write_text(
-            "#!/bin/sh\n"
-            "mode=\"$1\"\n"
-            "[ \"$mode\" = smoke ] || exit 7\n"
-            "printf 'stable\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
-            "python3 - <<'PY'\n"
-            "import json\n"
-            "import os\n"
-            "from pathlib import Path\n"
-            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
-            "state = json.loads(state_path.read_text())\n"
-            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
-            "port = '8318'\n"
-            "auth_dir = ''\n"
-            "for raw_line in stable_config.read_text().splitlines():\n"
-            "    line = raw_line.strip()\n"
-            "    if line.startswith('port:'):\n"
-            "        port = line.split(':', 1)[1].strip().strip('\"')\n"
-            "    if line.startswith('auth-dir:'):\n"
-            "        auth_dir = line.split(':', 1)[1].strip().strip('\"')\n"
-            "state['effective_mode'] = 'stable'\n"
-            "state['status'] = 'healthy'\n"
-            "state['last_error'] = ''\n"
-            "state['launcher_stable_config'] = str(stable_config)\n"
-            "state['launcher_auth_dir'] = auth_dir\n"
-            "state_path.write_text(json.dumps(state) + '\\n')\n"
-            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
-            "lines = config_path.read_text().splitlines()\n"
-            "out = []\n"
-            "for line in lines:\n"
-            "    if line.strip().startswith('base_url = '):\n"
-            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
-            "    else:\n"
-            "        out.append(line)\n"
-            "config_path.write_text('\\n'.join(out) + '\\n')\n"
-            "PY\n"
-            f"exit {exit_code}\n",
+            (
+                "#!/bin/sh\n"
+                "mode=\"$1\"\n"
+                "[ \"$mode\" = smoke ] || exit 7\n"
+                "printf 'stable\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
+                + server_block
+                + "python3 - <<'PY'\n"
+                "import json\n"
+                "import os\n"
+                "from pathlib import Path\n"
+                "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+                "state = json.loads(state_path.read_text())\n"
+                "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
+                "port = '8318'\n"
+                "auth_dir = ''\n"
+                "for raw_line in stable_config.read_text().splitlines():\n"
+                "    line = raw_line.strip()\n"
+                "    if line.startswith('port:'):\n"
+                "        port = line.split(':', 1)[1].strip().strip('\"')\n"
+                "    if line.startswith('auth-dir:'):\n"
+                "        auth_dir = line.split(':', 1)[1].strip().strip('\"')\n"
+                "state['effective_mode'] = 'stable'\n"
+                "state['status'] = 'healthy'\n"
+                "state['last_error'] = ''\n"
+                "state['launcher_stable_config'] = str(stable_config)\n"
+                "state['launcher_auth_dir'] = auth_dir\n"
+                "state_path.write_text(json.dumps(state) + '\\n')\n"
+                "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+                "lines = config_path.read_text().splitlines()\n"
+                "out = []\n"
+                "for line in lines:\n"
+                "    if line.strip().startswith('base_url = '):\n"
+                "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+                "    else:\n"
+                "        out.append(line)\n"
+                "config_path.write_text('\\n'.join(out) + '\\n')\n"
+                "PY\n"
+                f"exit {exit_code}\n"
+            ),
             encoding="utf-8",
         )
         path.chmod(0o755)
@@ -678,6 +735,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
         self.assertIn("reconciled to", payload["last_error"])
+        self.assertIn(
+            str(self.managed_dir / "managed-proxy.pid"),
+            payload["changed_files"],
+        )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["status"], "failed")
         self.assertEqual(state["effective_mode"], "stable")
@@ -730,6 +791,178 @@ class CliTests(unittest.TestCase):
         self.assertEqual(state["effective_mode"], "stable")
         self.assertEqual(state["selected_backend_ids"], [])
         self.assertFalse((self.managed_dir / "managed-proxy.pid").exists())
+
+    def test_healthcheck_owner_path_recovers_approved_target_and_reports_changed_files(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nlabel: stable\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-healthcheck-recover.sh",
+            start_server=True,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertTrue(payload["attestation"]["listener_ok"])
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["status"], "completed")
+        self.assertEqual(recovery["owner_command_surface"], "healthcheck --json")
+        self.assertFalse(recovery["delegated_from_status"])
+        self.assertEqual(recovery["outcome"], "approved_target_recovered")
+        self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
+        self.assertEqual(
+            recovery["selected_source_path"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        self.assertTrue(recovery["generated_config_regenerated"])
+        self.assertTrue(recovery["snapshot_refreshed"])
+        self.assertTrue(recovery["live_runtime_observation_confirmed"])
+        self.assertIn(
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+            payload["changed_files"],
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["launcher_stable_config"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertEqual(state["healthy_count"], 1)
+        self.assertEqual(state["down_count"], 0)
+        self.assertEqual(
+            state["stable_runtime_consumer_snapshot"]["activation_outcome"],
+            "approved_target_activated",
+        )
+
+    def test_healthcheck_owner_path_reports_observed_source_fallback_recovery(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-healthcheck-fallback.sh",
+            exit_code=9,
+            start_server=True,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(recovery["status"], "completed")
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["outcome"], "observed_source_fallback_recovered")
+        self.assertEqual(
+            recovery["selected_source_kind"], "observed_stable_inventory_source"
+        )
+        self.assertEqual(recovery["fallback_reason"], "launcher_exit_nonzero")
+        self.assertTrue(recovery["generated_config_regenerated"])
+        self.assertTrue(recovery["snapshot_refreshed"])
+        self.assertTrue(recovery["live_runtime_observation_confirmed"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["healthy_count"], 1)
+        self.assertEqual(state["down_count"], 0)
+        self.assertEqual(
+            state["stable_runtime_consumer_snapshot"]["activation_outcome"],
+            "observed_source_fallback",
+        )
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
+
+    def test_healthcheck_owner_path_reports_failed_recovery_without_greenwashing_state(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-healthcheck-failed.sh",
+            exit_code=9,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(recovery["status"], "failed")
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["outcome"], "recovery_failed_before_stable_healthy")
+        self.assertEqual(recovery["fallback_reason"], "launcher_exit_nonzero")
+        self.assertTrue(recovery["generated_config_regenerated"])
+        self.assertFalse(recovery["snapshot_refreshed"])
+        self.assertFalse(recovery["live_runtime_observation_confirmed"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["status"], "failed")
+        self.assertNotIn("stable_runtime_consumer_snapshot", state)
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -2321,6 +2554,66 @@ class CliTests(unittest.TestCase):
             "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
         )
 
+    def test_status_delegates_deterministic_stable_recovery_result_and_changed_files(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-status-recovery.sh",
+            start_server=True,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "status", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotIn("deterministic_stable_recovery_result", payload)
+        recovery = payload["stable_runtime_consumer"][
+            "deterministic_stable_recovery_result"
+        ]
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(recovery["status"], "completed")
+        self.assertTrue(recovery["delegated_from_status"])
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["outcome"], "approved_target_recovered")
+        self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
+        self.assertIn(
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+            payload["changed_files"],
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+        self.assertEqual(
+            payload["stable_runtime_consumer"]["effective_stable_runtime_consumer_source"][
+                "source_kind"
+            ],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
+
     def test_launch_smoke_reports_stable_runtime_consumer_contract(self) -> None:
         stable_port = free_port()
         (self.stable_dir / "config.yaml").write_text(
@@ -2380,6 +2673,7 @@ class CliTests(unittest.TestCase):
                 "status_delegates_to_owner"
             ]
         )
+        self.assertNotIn("deterministic_stable_recovery_result", consumer)
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
         self,
@@ -3018,6 +3312,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-ran")
+
+    def test_sync_does_not_expose_deterministic_stable_recovery_result(self) -> None:
+        result = self.run_cli("sync", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertNotIn("deterministic_stable_recovery_result", payload)
+
+    def test_sync_reports_managed_pid_deletion_in_changed_files(self) -> None:
+        pid_path = self.managed_dir / "managed-proxy.pid"
+        pid_path.write_text("999999\n", encoding="utf-8")
+        sync_script = self.profile_dir / "sync-deletes-managed-pid.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            f"rm -f '{pid_path}'\n"
+            "echo sync-removed-pid >&2\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        result = self.run_cli_with_env({"WBP_SYNC_SCRIPT": str(sync_script)}, "sync", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn(str(pid_path), payload["changed_files"])
+        self.assertEqual(result.stderr.strip(), "sync-removed-pid")
 
     def test_sync_reports_config_toml_change_when_external_sync_promotes_base_url(self) -> None:
         port = free_port()

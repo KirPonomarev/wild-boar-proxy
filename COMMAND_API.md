@@ -236,12 +236,18 @@ Field meaning rules:
   `observed_source_selected`
 - approved-target activation success and observed-source fallback must remain
   separately distinguishable in machine-readable output
-- the recovery contract fixes that later deterministic stable recovery must
-  reuse the same generated config path, `WBP_STABLE_CONFIG` handoff, and
-  snapshot topic; current recovery implementation outside `launch smoke` is
-  not opened by this contour
-- the recovery contract fixes that later deterministic stable recovery must
-  regenerate generated config per attempt and must not treat a stale generated
+- deterministic stable recovery in the owner path now reuses the same generated
+  config path, `WBP_STABLE_CONFIG` handoff, and snapshot topic through
+  `healthcheck --json`
+- deterministic stable recovery in the owner path must regenerate generated
+  config per approved-target attempt and must not treat a stale generated
   config artifact as authoritative truth
-- any pre-existing launch-seam writes outside the generated config and snapshot
-  surfaces must remain visible in `changed_files`
+- `healthcheck --json` may expose top-level
+  `deterministic_stable_recovery_result`
+- `status --json` may expose nested
+  `stable_runtime_consumer.deterministic_stable_recovery_result`
+- `launch smoke --json` must not surface deterministic stable recovery result as
+  if it owned the healthcheck recovery lane
+- `sync --json` must not expose deterministic stable recovery as an owner lane
+- owner-path writes across fallback reconciliation, generated-config
+  materialization, and snapshot refresh must remain visible in `changed_files`
