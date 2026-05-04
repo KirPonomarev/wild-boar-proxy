@@ -172,7 +172,8 @@ Field meaning rules:
 
 ## Additional stable-runtime consumer contract surface
 
-The current stable-runtime consumer contour does not open activation behavior.
+The current stable-runtime consumer line now exposes a narrow activation path
+only through `launch smoke --json`.
 
 It must expose explicit machine-readable separation between:
 
@@ -220,3 +221,15 @@ Field meaning rules:
 - `stable-runtime-config.generated.yaml` is a generated control artifact, not a
   truth surface
 - silent fallback from approved target to observed source is forbidden
+- when desired source is the approved repair target, `launch smoke --json` may:
+  - materialize `stable-runtime-config.generated.yaml`
+  - pass it through the launcher-scoped `WBP_STABLE_CONFIG` override
+  - write `stable_runtime_consumer_snapshot` with outcome
+    `approved_target_activated` or `observed_source_fallback`
+- when desired source remains the observed stable inventory source, `launch
+  smoke --json` may write `stable_runtime_consumer_snapshot` with outcome
+  `observed_source_selected`
+- approved-target activation success and observed-source fallback must remain
+  separately distinguishable in machine-readable output
+- any pre-existing launch-seam writes outside the generated config and snapshot
+  surfaces must remain visible in `changed_files`

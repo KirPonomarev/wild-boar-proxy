@@ -118,6 +118,12 @@ Required fields if materialized:
 - `fallback_reason`
 - `observed_at_utc`
 
+Current canonical `activation_outcome` values:
+
+- `approved_target_activated`
+- `observed_source_selected`
+- `observed_source_fallback`
+
 ## Mode files
 
 - `runtime-mode.txt` stores desired mode
@@ -195,11 +201,10 @@ It is:
 - not runtime truth state
 - not diagnostics state
 
-In this contour it may remain absent.
-Its later materialization belongs only to the serialized stable-runtime
-consumer activation path.
+It may remain absent until the serialized stable-runtime consumer activation
+path materializes it inside the current `launch smoke` seam.
 
-The generated config is handed to later activation only through the narrow
+The generated config is handed to activation only through the narrow
 launcher-scoped `WBP_STABLE_CONFIG` override contract.
 That handoff must not become a generic config-routing surface.
 

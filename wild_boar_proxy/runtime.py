@@ -651,6 +651,9 @@ APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
 STABLE_RUNTIME_GENERATED_CONFIG_METHOD = "control_owned_generated_config"
 STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV = "WBP_STABLE_CONFIG"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC = "stable_runtime_consumer_snapshot"
+STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME = "approved_target_activated"
+STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME = "observed_source_selected"
+STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME = "observed_source_fallback"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS = [
     "schema_version",
     "activation_method",
@@ -904,11 +907,10 @@ def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:
     }
 
 
-def build_stable_runtime_consumer_contract(
+def get_stable_runtime_consumer_selection_context(
     paths: RuntimePaths,
     registry: dict[str, Any],
     policy_drift: dict[str, Any],
-    state: dict[str, Any],
 ) -> dict[str, Any]:
     observed_path, observed_source = get_stable_auth_inventory_source(paths)
     approved_target = get_approved_repair_target_reference(paths)
@@ -943,43 +945,121 @@ def build_stable_runtime_consumer_contract(
         if approved_target_ready
         else "approved_target_not_ready_for_runtime_consumption"
     )
+    return {
+        "observed_path": observed_path,
+        "observed_source": observed_source,
+        "approved_target": approved_target,
+        "target_plan": target_plan,
+        "approved_target_ready": approved_target_ready,
+        "desired_path": desired_path,
+        "desired_kind": desired_kind,
+        "desired_status": desired_status,
+        "desired_reason": desired_reason,
+    }
+
+
+def get_valid_stable_runtime_consumer_snapshot(
+    state: dict[str, Any],
+) -> dict[str, Any] | None:
+    snapshot = state.get(STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC)
+    if not isinstance(snapshot, dict):
+        return None
+    if not all(field in snapshot for field in STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS):
+        return None
+    return snapshot
+
+
+def build_stable_runtime_consumer_contract(
+    paths: RuntimePaths,
+    registry: dict[str, Any],
+    policy_drift: dict[str, Any],
+    state: dict[str, Any],
+    health_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    selection = get_stable_runtime_consumer_selection_context(paths, registry, policy_drift)
+    observed_path = Path(selection["observed_path"])
+    observed_source = dict(selection["observed_source"])
+    approved_target = dict(selection["approved_target"])
+    desired_path = Path(selection["desired_path"])
+    desired_kind = str(selection["desired_kind"])
+    desired_status = str(selection["desired_status"])
+    desired_reason = str(selection["desired_reason"])
+    approved_target_ready = bool(selection["approved_target_ready"])
+    effective_kind = "observed_stable_inventory_source"
+    effective_path = observed_path
+    effective_status = "observed_source_active"
+    effective_reason = "stable_runtime_observation_still_points_to_observed_source"
     effective_matches_approved_target = (
-        approved_target_ready
-        and observed_path == paths.repair_target_inventory_dir
+        approved_target_ready and observed_path == paths.repair_target_inventory_dir
     )
-    effective_kind = (
-        "approved_repair_target"
-        if effective_matches_approved_target
-        else "observed_stable_inventory_source"
+    if effective_matches_approved_target:
+        effective_kind = "approved_repair_target"
+        effective_path = paths.repair_target_inventory_dir
+        effective_status = "approved_target_active_by_observation"
+        effective_reason = "stable_runtime_observation_matches_approved_target"
+    live_stable_runtime_ok = bool(health_payload) and (
+        health_payload.get("status") == "ok"
+        and str(health_payload.get("effective_mode")) == "stable"
     )
-    effective_path = (
-        paths.repair_target_inventory_dir
-        if effective_matches_approved_target
-        else observed_path
-    )
-    effective_status = (
-        "approved_target_active_by_observation"
-        if effective_matches_approved_target
-        else "observed_source_active"
-    )
-    effective_reason = (
-        "stable_runtime_observation_matches_approved_target"
-        if effective_matches_approved_target
-        else "stable_runtime_observation_still_points_to_observed_source"
-    )
+    snapshot = get_valid_stable_runtime_consumer_snapshot(state)
+    if live_stable_runtime_ok and snapshot:
+        snapshot_selected_kind = str(snapshot.get("selected_source_kind"))
+        snapshot_selected_path = Path(str(snapshot.get("selected_source_path")))
+        snapshot_outcome = str(snapshot.get("activation_outcome"))
+        if (
+            snapshot_outcome == STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME
+            and snapshot_selected_kind == "approved_repair_target"
+            and snapshot_selected_path == paths.repair_target_inventory_dir
+            and str(snapshot.get("activation_method")) == "process_local_env_override"
+            and str(snapshot.get("selected_config_file"))
+            == str(paths.stable_runtime_generated_config_file)
+        ):
+            effective_kind = "approved_repair_target"
+            effective_path = paths.repair_target_inventory_dir
+            effective_status = "approved_target_active_by_activation_evidence"
+            effective_reason = (
+                "live_runtime_ok_and_activation_evidence_confirm_approved_target"
+            )
+        elif snapshot_selected_kind == "observed_stable_inventory_source" and snapshot_outcome in {
+            STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
+            STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
+        }:
+            effective_kind = "observed_stable_inventory_source"
+            effective_path = snapshot_selected_path
+            if snapshot_outcome == STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME:
+                effective_status = "observed_source_active_by_fallback_evidence"
+                effective_reason = "live_runtime_ok_and_fallback_evidence_confirm_observed_source"
+            else:
+                effective_status = "observed_source_active_by_selection_evidence"
+                effective_reason = "live_runtime_ok_and_selection_evidence_confirm_observed_source"
     desired_matches_effective = (
         desired_kind == effective_kind and desired_path == effective_path
     )
-    if desired_kind == "approved_repair_target" and not desired_matches_effective:
+    if desired_matches_effective:
+        readiness_status = "aligned"
+        readiness_code = "OK"
+        readiness_reason = "desired_consumer_source_matches_effective_observation"
+        readiness_next_step = "none"
+    elif (
+        snapshot
+        and str(snapshot.get("activation_outcome"))
+        == STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME
+        and effective_kind == "observed_stable_inventory_source"
+    ):
+        readiness_status = "fallback_active"
+        readiness_code = "STABLE_RUNTIME_CONSUMER_FALLBACK_ACTIVE"
+        readiness_reason = "approved_target_activation_did_not_complete_and_observed_source_fallback_is_active"
+        readiness_next_step = "investigate_activation_gap"
+    elif desired_kind == "approved_repair_target":
         readiness_status = "activation_pending"
         readiness_code = "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
         readiness_reason = "desired_consumer_source_differs_from_effective_observation"
         readiness_next_step = "activation_contour"
     else:
-        readiness_status = "aligned"
-        readiness_code = "OK"
-        readiness_reason = "desired_consumer_source_matches_effective_observation"
-        readiness_next_step = "none"
+        readiness_status = "mismatch"
+        readiness_code = "STABLE_RUNTIME_CONSUMER_EFFECTIVE_DESIRED_MISMATCH"
+        readiness_reason = "effective_consumer_source_differs_from_current_desired_selection"
+        readiness_next_step = "inspect_runtime_consumer_state"
     return {
         "status": "contract_ready",
         "observed_stable_inventory_source": observed_source,
@@ -1026,6 +1106,59 @@ def build_stable_runtime_consumer_contract(
             "reason": readiness_reason,
             "next_step": readiness_next_step,
         },
+    }
+
+
+def build_generated_stable_runtime_config_text(paths: RuntimePaths) -> str:
+    if not paths.stable_config.exists():
+        raise RuntimeErrorInfo(
+            f"Missing stable config: {paths.stable_config}",
+            machine_error_code="MISSING_STABLE_CONFIG",
+            operator_action="user_action",
+        )
+    auth_dir_line = f'auth-dir: "{paths.repair_target_inventory_dir}"'
+    lines = paths.stable_config.read_text(encoding="utf-8").splitlines()
+    rewritten: list[str] = []
+    replaced = False
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if stripped.startswith("auth-dir:"):
+            rewritten.append(auth_dir_line)
+            replaced = True
+        else:
+            rewritten.append(raw_line)
+    if not replaced:
+        rewritten.append(auth_dir_line)
+    return "\n".join(rewritten)
+
+
+def write_stable_runtime_consumer_snapshot(
+    paths: RuntimePaths, snapshot: dict[str, Any]
+) -> None:
+    with serialized_lock(paths):
+        state = read_json(paths.state_file, required=False)
+        state[STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC] = snapshot
+        write_json_atomic(paths.state_file, state)
+
+
+def build_stable_runtime_consumer_snapshot_payload(
+    *,
+    activation_method: str,
+    selected_config_file: str,
+    selected_source_kind: str,
+    selected_source_path: str,
+    activation_outcome: str,
+    fallback_reason: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "activation_method": activation_method,
+        "selected_config_file": selected_config_file,
+        "selected_source_kind": selected_source_kind,
+        "selected_source_path": selected_source_path,
+        "activation_outcome": activation_outcome,
+        "fallback_reason": fallback_reason,
+        "observed_at_utc": now_iso(),
     }
 
 
@@ -2267,7 +2400,7 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
     policy_drift = get_stable_policy_drift(paths, registry)
     state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
-        paths, registry, policy_drift, state
+        paths, registry, policy_drift, state, health_payload
     )
     registry_identity = get_registry_identity(registry)
     current_proxy_url = state.get("current_proxy_url", "")
@@ -2570,20 +2703,85 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             machine_error_code="MISSING_LAUNCHER_SCRIPT",
             operator_action="user_action",
         )
+    registry = read_json(paths.registry_file)
+    policy_drift = get_stable_policy_drift(paths, registry)
+    selection = get_stable_runtime_consumer_selection_context(
+        paths, registry, policy_drift
+    )
+    desired_kind = str(selection["desired_kind"])
+    observed_path = Path(selection["observed_path"])
     before = snapshot_known_files(paths)
+    launcher_env = sanitized_env()
+    activation_attempted = False
     with serialized_lock(paths):
+        if desired_kind == "approved_repair_target":
+            write_text_atomic(
+                paths.stable_runtime_generated_config_file,
+                build_generated_stable_runtime_config_text(paths),
+            )
+            launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
+                paths.stable_runtime_generated_config_file
+            )
+            activation_attempted = True
         result = subprocess.run(
             [str(paths.launcher_script), "smoke"],
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=launcher_env,
             check=False,
         )
     if result.stderr:
         sys.stderr.write(result.stderr)
     if result.stdout:
         sys.stderr.write(result.stdout)
-
+    stabilization_seconds = get_launch_stabilization_seconds()
+    health_payload = run_healthcheck(paths)
+    if (
+        result.returncode == 0
+        and health_payload["status"] == "ok"
+        and str(health_payload["effective_mode"]) == "managed"
+        and stabilization_seconds > 0
+    ):
+        time.sleep(stabilization_seconds)
+        health_payload = run_healthcheck(paths)
+    snapshot_payload: dict[str, Any] | None = None
+    if (
+        health_payload["status"] == "ok"
+        and str(health_payload["effective_mode"]) == "stable"
+    ):
+        if activation_attempted and result.returncode == 0:
+            snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                activation_method="process_local_env_override",
+                selected_config_file=str(paths.stable_runtime_generated_config_file),
+                selected_source_kind="approved_repair_target",
+                selected_source_path=str(paths.repair_target_inventory_dir),
+                activation_outcome=STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME,
+                fallback_reason="",
+            )
+        elif activation_attempted:
+            snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                activation_method="process_local_env_override",
+                selected_config_file=str(paths.stable_runtime_generated_config_file),
+                selected_source_kind="observed_stable_inventory_source",
+                selected_source_path=str(observed_path),
+                activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME,
+                fallback_reason=(
+                    "launcher_exit_nonzero"
+                    if result.returncode != 0
+                    else "approved_target_activation_unproven"
+                ),
+            )
+        else:
+            snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
+                activation_method="baseline_stable_config",
+                selected_config_file=str(paths.stable_config),
+                selected_source_kind="observed_stable_inventory_source",
+                selected_source_path=str(observed_path),
+                activation_outcome=STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME,
+                fallback_reason="",
+            )
+    if snapshot_payload is not None:
+        write_stable_runtime_consumer_snapshot(paths, snapshot_payload)
     changed_files = detect_changed_files(
         before,
         [
@@ -2592,18 +2790,10 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             paths.state_file,
             paths.managed_config_file,
             paths.runtime_effective_mode_file,
+            paths.stable_runtime_generated_config_file,
         ],
     )
     status_payload = summarize_status(paths)
-    stabilization_seconds = get_launch_stabilization_seconds()
-    if (
-        result.returncode == 0
-        and status_payload["status"] == "ok"
-        and str(status_payload["effective_mode"]) == "managed"
-        and stabilization_seconds > 0
-    ):
-        time.sleep(stabilization_seconds)
-        status_payload = summarize_status(paths)
     desired_mode = str(status_payload["desired_mode"])
     effective_mode = str(status_payload["effective_mode"])
     launch_ok = result.returncode == 0 and status_payload["status"] == "ok"

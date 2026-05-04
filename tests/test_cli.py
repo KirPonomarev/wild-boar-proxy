@@ -265,6 +265,7 @@ class CliTests(unittest.TestCase):
             self.managed_dir / "supervisor-state.json",
             self.managed_dir / "approved-repair-target.json",
             self.managed_dir / "target-switch-transaction.json",
+            self.managed_dir / "stable-runtime-config.generated.yaml",
             self.profile_dir / "config.toml",
             self.profile_dir / "runtime-mode.txt",
             self.profile_dir / "runtime-effective-mode.txt",
@@ -295,6 +296,51 @@ class CliTests(unittest.TestCase):
         for path in sorted(repair_target_dir.glob("codex-*.json")):
             snapshot[str(path)] = path.read_text(encoding="utf-8")
         return snapshot
+
+    def write_recording_stable_launcher(
+        self, path: Path, *, exit_code: int = 0
+    ) -> Path:
+        path.write_text(
+            "#!/bin/sh\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "printf 'stable\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "state = json.loads(state_path.read_text())\n"
+            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
+            "port = '8318'\n"
+            "auth_dir = ''\n"
+            "for raw_line in stable_config.read_text().splitlines():\n"
+            "    line = raw_line.strip()\n"
+            "    if line.startswith('port:'):\n"
+            "        port = line.split(':', 1)[1].strip().strip('\"')\n"
+            "    if line.startswith('auth-dir:'):\n"
+            "        auth_dir = line.split(':', 1)[1].strip().strip('\"')\n"
+            "state['effective_mode'] = 'stable'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state['launcher_stable_config'] = str(stable_config)\n"
+            "state['launcher_auth_dir'] = auth_dir\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+            "lines = config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('base_url = '):\n"
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "PY\n"
+            f"exit {exit_code}\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
 
     def test_mode_set_updates_desired_mode(self) -> None:
         result = self.run_cli("mode", "set", "stable", "--json")
@@ -433,12 +479,13 @@ class CliTests(unittest.TestCase):
 
     def test_healthcheck_reports_reprobe_failure_for_proxy_path_failure(self) -> None:
         port = free_port()
+        candidate_port = free_port()
         ProbeHandler.response_status = 500
         ProbeHandler.response_payload = {
             "error": {
                 "message": (
                     'Post "https://chatgpt.com/backend-api/codex/responses": '
-                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                    f"proxyconnect tcp: dial tcp 127.0.0.1:{candidate_port}: connect: connection refused"
                 )
             }
         }
@@ -451,6 +498,7 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
+        state["current_proxy_url"] = f"http://127.0.0.1:{candidate_port}"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -471,7 +519,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
-        self.assertIn("http://127.0.0.1:10808", payload["proxy_reprobe"]["candidates"])
+        self.assertIn(
+            f"http://127.0.0.1:{candidate_port}", payload["proxy_reprobe"]["candidates"]
+        )
         self.assertIn("proxyconnect tcp", payload["last_error"])
 
     def test_healthcheck_reports_working_reprobe_candidate_without_greenwash(self) -> None:
@@ -2259,10 +2309,231 @@ class CliTests(unittest.TestCase):
             "observed_stable_inventory_source",
         )
         self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"], True
+        )
+        self.assertEqual(
             consumer["launcher_handoff_contract"]["env_var"], "WBP_STABLE_CONFIG"
         )
         self.assertEqual(
-            consumer["activation_evidence_surface"]["status"], "declared_not_materialized"
+            consumer["activation_evidence_surface"]["status"], "snapshot_present"
+        )
+        self.assertEqual(
+            consumer["activation_evidence_surface"]["current_snapshot"][
+                "activation_outcome"
+            ],
+            "observed_source_selected",
+        )
+        self.assertEqual(
+            consumer["activation_evidence_surface"]["current_snapshot"][
+                "selected_source_kind"
+            ],
+            "observed_stable_inventory_source",
+        )
+
+    def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nlabel: stable\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-launch-activation.sh"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "launch", "smoke", "--json"
+            )
+            status_result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        evidence = consumer["activation_evidence_surface"]
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertTrue(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"], "OK"
+        )
+        self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertEqual(
+            evidence["current_snapshot"]["activation_outcome"],
+            "approved_target_activated",
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_config_file"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_source_path"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        generated_text = (
+            self.managed_dir / "stable-runtime-config.generated.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
+        self.assertIn(f"port: {stable_port}", generated_text)
+        self.assertIn("label: stable", generated_text)
+        self.assertIn(
+            f'auth-dir: "{self.managed_dir / "stable-repair-target"}"',
+            generated_text,
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["launcher_stable_config"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertEqual(
+            state["launcher_auth_dir"], str(self.managed_dir / "stable-repair-target")
+        )
+        self.assertIn(
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+            payload["changed_files"],
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+        status_payload = json.loads(status_result.stdout)
+        self.assertEqual(
+            status_payload["stable_runtime_consumer"][
+                "effective_stable_runtime_consumer_source"
+            ]["source_kind"],
+            "approved_repair_target",
+        )
+
+    def test_launch_smoke_records_conservative_observed_source_fallback_when_launcher_exits_nonzero_during_approved_target_attempt(
+        self,
+    ) -> None:
+        source_auth = self.stable_dir / "codex-active.json"
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        baseline_text = (
+            f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "{self.stable_dir}"\n'
+        )
+        (self.stable_dir / "config.yaml").write_text(baseline_text, encoding="utf-8")
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-launch-fallback.sh",
+            exit_code=9,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "launch", "smoke", "--json"
+            )
+            status_result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 9, result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        payload = json.loads(result.stdout)
+        consumer = payload["stable_runtime_consumer"]
+        evidence = consumer["activation_evidence_surface"]
+        self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
+        self.assertEqual(
+            consumer["desired_stable_runtime_consumer_source"]["source_kind"],
+            "approved_repair_target",
+        )
+        self.assertEqual(
+            consumer["effective_stable_runtime_consumer_source"]["source_kind"],
+            "observed_stable_inventory_source",
+        )
+        self.assertFalse(
+            consumer["effective_stable_runtime_consumer_source"]["matches_desired"]
+        )
+        self.assertEqual(
+            consumer["consumer_activation_readiness"]["machine_error_code"],
+            "STABLE_RUNTIME_CONSUMER_FALLBACK_ACTIVE",
+        )
+        self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertEqual(
+            evidence["current_snapshot"]["activation_outcome"],
+            "observed_source_fallback",
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["fallback_reason"], "launcher_exit_nonzero"
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_config_file"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertEqual(
+            evidence["current_snapshot"]["selected_source_kind"],
+            "observed_stable_inventory_source",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["launcher_stable_config"],
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+        self.assertEqual(
+            (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
+        )
+        self.assertIn(
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+            payload["changed_files"],
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+        status_payload = json.loads(status_result.stdout)
+        self.assertEqual(
+            status_payload["stable_runtime_consumer"][
+                "effective_stable_runtime_consumer_source"
+            ]["source_kind"],
+            "observed_stable_inventory_source",
         )
 
     def test_stable_runtime_consumer_contract_does_not_leak_to_unrelated_json_surfaces(
@@ -2980,9 +3251,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
-        self.assertEqual(payload["effective_mode"], "managed")
-        self.assertIn("Connection refused", payload["last_error"])
+        self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertIn("Listener is not reachable", payload["last_error"])
 
 
 if __name__ == "__main__":

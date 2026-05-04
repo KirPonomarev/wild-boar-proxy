@@ -32,6 +32,12 @@
   `WBP_STABLE_CONFIG` override, not a generic config-routing surface
 - runtime-state activation evidence may be cached as snapshot evidence, but
   snapshot evidence alone must not flip effective stable runtime consumer truth
+- the current stable-runtime activation implementation is limited to the
+  `launch smoke` seam
+- generated stable runtime config materialization must not rewrite baseline
+  stable config in place
+- approved-target activation success must remain separately observable from a
+  healthy observed-source fallback
 - fallback from approved target to observed stable source must be explicit and
   machine-readable
 - desired stable runtime consumer source must never be reported as effective
