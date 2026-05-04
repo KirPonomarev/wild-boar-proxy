@@ -372,7 +372,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertFalse(payload["attestation"]["responses_ok"])
 
-    def test_healthcheck_classifies_proxy_path_failure(self) -> None:
+    def test_healthcheck_reports_reprobe_failure_for_proxy_path_failure(self) -> None:
         port = free_port()
         ProbeHandler.response_status = 500
         ProbeHandler.response_payload = {
@@ -409,9 +409,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
+        self.assertEqual(payload["liveness"], "degraded")
+        self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
+        self.assertIn("http://127.0.0.1:10808", payload["proxy_reprobe"]["candidates"])
+        self.assertIn("proxyconnect tcp", payload["last_error"])
+
+    def test_healthcheck_reports_working_reprobe_candidate_without_greenwash(self) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        server_thread_started = False
+        try:
+            thread.start()
+            server_thread_started = True
+            env = self.env()
+            env["WBP_PROXY_REPROBE_CANDIDATES"] = (
+                f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
+            )
+            result = subprocess.run(
+                ["python3", "-m", "wild_boar_proxy", "healthcheck", "--json"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            candidate_socket.close()
+            server.shutdown()
+            if server_thread_started:
+                thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(payload["liveness"], "degraded")
-        self.assertIn("proxyconnect tcp", payload["last_error"])
+        self.assertTrue(payload["proxy_reprobe"]["found_candidate"])
+        self.assertEqual(
+            payload["proxy_reprobe"]["working_candidate"],
+            f"http://127.0.0.1:{candidate_port}",
+        )
+        self.assertFalse(payload["attestation"]["responses_ok"])
 
     def test_healthcheck_reconciles_effective_mode_mismatch_to_stable(self) -> None:
         stable_port = free_port()
@@ -965,7 +1033,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["effective_mode"], "managed")
         self.assertIn("Connection refused", payload["last_error"])
 
