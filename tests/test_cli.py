@@ -563,6 +563,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertNotIn("policy_drift", payload)
+        self.assertNotIn("registry_identity", payload)
         self.assertTrue(payload["attestation"]["listener_ok"])
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
@@ -694,6 +695,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["attestation_summary"]["status"], "ok")
         self.assertEqual(payload["policy_drift"]["status"], "clear")
         self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
+        self.assertEqual(payload["policy_drift"]["missing_auths"], [])
 
     def test_status_reports_stable_policy_drift_without_greenwash(self) -> None:
         port = free_port()
@@ -763,7 +765,59 @@ class CliTests(unittest.TestCase):
             drift["disallowed_configured_auths"][0]["auth_basename"],
             "codex-reserve.json",
         )
+        self.assertEqual(drift["missing_auths"], [])
         self.assertIn("stable-15-proved", drift["claim_blockers"])
+
+    def test_status_reports_missing_allowed_stable_auth_drift(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        missing_auth = self.stable_dir / "codex-missing.json"
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(missing_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "detected")
+        self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
+        self.assertEqual(drift["missing_auths"][0]["backend_id"], "backend-a")
+        self.assertEqual(
+            drift["missing_auths"][0]["auth_basename"],
+            "codex-missing.json",
+        )
+        self.assertEqual(
+            drift["missing_auths"][0]["reason"],
+            "auth_ref_not_in_stable_inventory",
+        )
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
@@ -853,6 +907,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         drift = payload["policy_drift"]
         self.assertEqual(drift["status"], "detected")
+        self.assertEqual(drift["missing_auths"], [])
         reasons_by_backend = {
             item["backend_id"]: item["reason"]
             for item in drift["disallowed_configured_auths"]
@@ -939,6 +994,82 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["accounts"][0]["id"], "backend-a")
+        self.assertEqual(payload["registry_identity"]["status"], "clear")
+        self.assertEqual(payload["registry_identity"]["machine_error_code"], "OK")
+        self.assertEqual(payload["registry_identity"]["next_action"], "none")
+
+    def test_accounts_list_reports_duplicate_backend_id_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        duplicate = dict(registry["backends"][0])
+        duplicate["auth_ref"] = "/tmp/b.json"
+        registry["backends"].append(duplicate)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertEqual(identity["duplicate_backend_ids"], ["backend-a"])
+        self.assertIn("stable-15-proved", identity["claim_blockers"])
+
+    def test_accounts_list_reports_duplicate_auth_basename_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = "/tmp/one/codex-duplicate.json"
+        duplicate = dict(registry["backends"][0])
+        duplicate["id"] = "backend-b"
+        duplicate["auth_ref"] = "/tmp/two/codex-duplicate.json"
+        registry["backends"].append(duplicate)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["duplicate_auth_basenames"], ["codex-duplicate.json"])
+
+    def test_accounts_list_reports_missing_auth_ref_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        del registry["backends"][0]["auth_ref"]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["missing_auth_refs"], ["backend-a"])
+
+    def test_accounts_list_reports_empty_auth_ref_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = "   "
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["empty_auth_ref_backends"], ["backend-a"])
+
+    def test_accounts_list_reports_invalid_auth_basename_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = "/"
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["invalid_auth_basenames"], ["backend-a"])
 
     def test_diagnostics_export_creates_bundle(self) -> None:
         result = self.run_cli("diagnostics", "export", "--json")
