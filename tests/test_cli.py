@@ -2123,6 +2123,46 @@ class CliTests(unittest.TestCase):
         self.assertFalse(
             effective_truth["activation_evidence_snapshot_alone_sufficient"]
         )
+        recovery_contract = consumer["deterministic_stable_recovery_contract"]
+        self.assertEqual(recovery_contract["status"], "contract_ready")
+        self.assertEqual(
+            recovery_contract["entry_owner"], "healthcheck_live_attestation_path"
+        )
+        self.assertEqual(
+            recovery_contract["owner_command_surface"], "healthcheck --json"
+        )
+        self.assertTrue(recovery_contract["status_delegates_to_owner"])
+        self.assertTrue(recovery_contract["sync_hidden_owner_forbidden"])
+        self.assertFalse(recovery_contract["new_generic_cli_default"])
+        self.assertEqual(
+            recovery_contract["shared_activation_mechanics"]["status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["generated_config_regeneration_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            recovery_contract["generated_config_regeneration_policy"],
+            "regenerate_each_recovery_attempt",
+        )
+        self.assertFalse(recovery_contract["stale_generated_config_authoritative"])
+        self.assertEqual(
+            recovery_contract["snapshot_refresh_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(recovery_contract["snapshot_refresh_after_stable_live_outcome"])
+        self.assertFalse(recovery_contract["snapshot_schema_widening_required"])
+        self.assertFalse(
+            recovery_contract["new_persisted_recovery_metadata_required"]
+        )
+        self.assertEqual(
+            recovery_contract["approved_target_recovery_outcome"], "separate"
+        )
+        self.assertEqual(
+            recovery_contract["observed_source_fallback_recovery_outcome"], "separate"
+        )
+        self.assertEqual(recovery_contract["recovery_failure_outcome"], "separate")
         self.assertEqual(
             consumer["baseline_stable_config_surface"]["config_file"],
             str(self.stable_dir / "config.yaml"),
@@ -2328,6 +2368,17 @@ class CliTests(unittest.TestCase):
                 "selected_source_kind"
             ],
             "observed_stable_inventory_source",
+        )
+        self.assertEqual(
+            consumer["deterministic_stable_recovery_contract"][
+                "owner_command_surface"
+            ],
+            "healthcheck --json",
+        )
+        self.assertTrue(
+            consumer["deterministic_stable_recovery_contract"][
+                "status_delegates_to_owner"
+            ]
         )
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
@@ -2543,6 +2594,7 @@ class CliTests(unittest.TestCase):
             ("healthcheck", "--json"),
             ("accounts", "list", "--json"),
             ("stable", "repair", "--dry-run", "--json"),
+            ("sync", "--json"),
         ):
             with self.subTest(args=args):
                 result = self.run_cli(*args)

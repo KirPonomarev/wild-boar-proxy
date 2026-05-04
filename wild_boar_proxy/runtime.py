@@ -907,6 +907,48 @@ def build_stable_runtime_effective_truth_contract() -> dict[str, Any]:
     }
 
 
+def build_deterministic_stable_recovery_contract(
+    paths: RuntimePaths,
+) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "entry_owner": "healthcheck_live_attestation_path",
+        "owner_command_surface": "healthcheck --json",
+        "status_delegates_to_owner": True,
+        "sync_hidden_owner_forbidden": True,
+        "new_generic_cli_default": False,
+        "eligible_failure_lanes": [
+            "managed_preflight_failure",
+            "stable_service_disabled",
+            "explicit_stable_recovery_lane",
+        ],
+        "failure_taxonomy_redesign_forbidden": True,
+        "shared_activation_mechanics": {
+            "status": "contract_fixed_not_implemented",
+            "reuse_existing_launch_smoke_activation_helper": True,
+            "generated_config_file": str(paths.stable_runtime_generated_config_file),
+            "handoff_env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
+            "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+        },
+        "generated_config_regeneration_status": "contract_fixed_not_implemented",
+        "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+        "generated_config_derivation_source": (
+            "current_baseline_stable_config_plus_current_approved_target_reference"
+        ),
+        "stale_generated_config_authoritative": False,
+        "generated_config_existence_alone_sufficient": False,
+        "snapshot_refresh_status": "contract_fixed_not_implemented",
+        "snapshot_refresh_after_stable_live_outcome": True,
+        "snapshot_schema_widening_required": False,
+        "new_persisted_recovery_metadata_required": False,
+        "approved_target_recovery_outcome": "separate",
+        "observed_source_fallback_recovery_outcome": "separate",
+        "recovery_failure_outcome": "separate",
+        "live_runtime_observation_required": True,
+        "mode_truth_redefinition_forbidden": True,
+    }
+
+
 def get_stable_runtime_consumer_selection_context(
     paths: RuntimePaths,
     registry: dict[str, Any],
@@ -1100,6 +1142,9 @@ def build_stable_runtime_consumer_contract(
             "desired_source_remains_visible": True,
             "effective_source_must_report_fallback": True,
         },
+        "deterministic_stable_recovery_contract": (
+            build_deterministic_stable_recovery_contract(paths)
+        ),
         "consumer_activation_readiness": {
             "status": readiness_status,
             "machine_error_code": readiness_code,

@@ -32,10 +32,20 @@
   `WBP_STABLE_CONFIG` override, not a generic config-routing surface
 - runtime-state activation evidence may be cached as snapshot evidence, but
   snapshot evidence alone must not flip effective stable runtime consumer truth
+- deterministic stable recovery entry is owned by the live attestation and
+  fallback-reconciliation path exposed through `healthcheck --json`
+- `status --json` may delegate to that owner path and must report its outcome
+  honestly; it is not a separate recovery owner
 - the current stable-runtime activation implementation is limited to the
   `launch smoke` seam
 - generated stable runtime config materialization must not rewrite baseline
   stable config in place
+- the recovery contract fixes that later deterministic stable recovery must
+  reuse the same generated config path, `WBP_STABLE_CONFIG` handoff, and
+  snapshot topic unless a later blocker proves otherwise
+- the recovery contract fixes that later deterministic stable recovery must
+  regenerate generated config per attempt and must not treat a stale generated
+  config artifact as authoritative truth
 - approved-target activation success must remain separately observable from a
   healthy observed-source fallback
 - fallback from approved target to observed stable source must be explicit and

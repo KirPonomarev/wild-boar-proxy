@@ -202,6 +202,7 @@ Required contract fields:
 - `stable_runtime_consumer.effective_truth_contract`
 - `stable_runtime_consumer.baseline_stable_config_surface`
 - `stable_runtime_consumer.fallback_contract`
+- `stable_runtime_consumer.deterministic_stable_recovery_contract`
 - `stable_runtime_consumer.consumer_activation_readiness`
 
 Field meaning rules:
@@ -220,6 +221,10 @@ Field meaning rules:
 - baseline stable config remains an engine-adjacent observation surface
 - `stable-runtime-config.generated.yaml` is a generated control artifact, not a
   truth surface
+- deterministic stable recovery entry is owned by the live attestation and
+  fallback-reconciliation path exposed through `healthcheck --json`
+- `status --json` may delegate to that owner path and must report its outcome
+  honestly; it must not pretend to be a separate recovery owner
 - silent fallback from approved target to observed source is forbidden
 - when desired source is the approved repair target, `launch smoke --json` may:
   - materialize `stable-runtime-config.generated.yaml`
@@ -231,5 +236,12 @@ Field meaning rules:
   `observed_source_selected`
 - approved-target activation success and observed-source fallback must remain
   separately distinguishable in machine-readable output
+- the recovery contract fixes that later deterministic stable recovery must
+  reuse the same generated config path, `WBP_STABLE_CONFIG` handoff, and
+  snapshot topic; current recovery implementation outside `launch smoke` is
+  not opened by this contour
+- the recovery contract fixes that later deterministic stable recovery must
+  regenerate generated config per attempt and must not treat a stale generated
+  config artifact as authoritative truth
 - any pre-existing launch-seam writes outside the generated config and snapshot
   surfaces must remain visible in `changed_files`

@@ -124,6 +124,13 @@ Current canonical `activation_outcome` values:
 - `observed_source_selected`
 - `observed_source_fallback`
 
+The recovery contract fixes that later deterministic stable recovery may
+refresh this same snapshot topic through the serialized runtime-state mutation
+path.
+No current deterministic stable recovery call site writes this snapshot outside
+`launch smoke`, and that future reuse does not require a separate persisted
+recovery snapshot by default.
+
 ## Mode files
 
 - `runtime-mode.txt` stores desired mode
@@ -207,6 +214,9 @@ path materializes it inside the current `launch smoke` seam.
 The generated config is handed to activation only through the narrow
 launcher-scoped `WBP_STABLE_CONFIG` override contract.
 That handoff must not become a generic config-routing surface.
+If later deterministic stable recovery reuses this artifact, it must
+regenerate it per recovery attempt rather than treating a stale artifact as
+authoritative truth.
 
 ## Write-surface ownership
 
