@@ -678,6 +678,11 @@ def mode_get(paths: RuntimePaths) -> dict[str, Any]:
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
+    host, port, _ = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
     return build_command_payload(
         ok=True,
         human_message="Mode values are available.",
@@ -688,7 +693,7 @@ def mode_get(paths: RuntimePaths) -> dict[str, Any]:
         changed_files=[],
         extra={
             "desired_mode": desired_mode,
-            "effective_mode": effective_mode,
+            "effective_mode": reported_effective_mode,
         },
     )
 

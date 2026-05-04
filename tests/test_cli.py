@@ -745,6 +745,22 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-promoted")
 
+    def test_mode_get_reports_stable_when_managed_listener_is_absent(self) -> None:
+        (self.profile_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("mode", "get", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["desired_mode"], "stable")
+        self.assertEqual(payload["effective_mode"], "stable")
+
     def test_mode_set_respects_serialized_lock(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
