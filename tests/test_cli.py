@@ -237,6 +237,11 @@ class CliTests(unittest.TestCase):
         )
 
     def test_status_reports_listener_down_when_managed_port_is_absent(self) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli("status", "--json")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
@@ -244,7 +249,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["next_action"], "retry")
         self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+
+    def test_status_reloads_reconciled_state_after_healthcheck(self) -> None:
+        stable_port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(payload["pool_summary"]["selected_backend_ids"], [])
 
     def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
         stable_port = free_port()
@@ -330,26 +358,25 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertFalse(payload["attestation"]["responses_ok"])
 
-    def test_healthcheck_detects_effective_mode_mismatch(self) -> None:
-        port = free_port()
+    def test_healthcheck_reconciles_effective_mode_mismatch_to_stable(self) -> None:
+        stable_port = free_port()
         ProbeHandler.response_text = "OK"
-        (self.managed_dir / "managed-config.yaml").write_text(
-            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n", encoding="utf-8"
         )
         (self.profile_dir / "config.toml").write_text(
-            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
             encoding="utf-8",
         )
         (self.profile_dir / "runtime-effective-mode.txt").write_text(
             "stable\n", encoding="utf-8"
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        state["managed_port"] = port
         state["effective_mode"] = "managed"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
-        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -358,21 +385,116 @@ class CliTests(unittest.TestCase):
             server.shutdown()
             thread.join()
             server.server_close()
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["status"], "error")
-        self.assertFalse(payload["attestation"]["effective_mode_match"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertTrue(payload["attestation"]["effective_mode_match"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["selected_backend_ids"], [])
 
     def test_healthcheck_reconciles_managed_listener_loss_for_reporting(self) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli("healthcheck", "--json")
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
         self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
-        self.assertFalse(payload["attestation"]["effective_mode_match"])
-        self.assertFalse(payload["attestation"]["base_url_match"])
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertTrue(payload["attestation"]["effective_mode_match"])
+        self.assertTrue(payload["attestation"]["base_url_match"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["selected_backend_ids"], [])
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(encoding="utf-8").strip(),
+            "stable",
+        )
+
+    def test_healthcheck_auto_reconciles_to_healthy_stable_when_listener_is_live(self) -> None:
+        stable_port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        (self.managed_dir / "managed-proxy.pid").write_text("999999\n", encoding="utf-8")
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertTrue(payload["attestation"]["listener_ok"])
+        self.assertTrue(payload["attestation"]["base_url_match"])
+        self.assertTrue(payload["attestation"]["effective_mode_match"])
+        self.assertIn("reconciled to", payload["last_error"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["selected_backend_ids"], [])
+        self.assertFalse((self.managed_dir / "managed-proxy.pid").exists())
+        effective_mode_text = (
+            self.profile_dir / "runtime-effective-mode.txt"
+        ).read_text(encoding="utf-8").strip()
+        self.assertEqual(
+            effective_mode_text,
+            "stable",
+        )
+        self.assertEqual(
+            (self.profile_dir / "config.toml").read_text(encoding="utf-8").split('base_url = "', 1)[1].split('"', 1)[0],
+            f"http://127.0.0.1:{stable_port}/v1",
+        )
+
+    def test_healthcheck_reconciles_stable_artifact_with_stale_managed_state(self) -> None:
+        stable_port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "managed-proxy.pid").write_text("999999\n", encoding="utf-8")
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertTrue(payload["attestation"]["effective_mode_match"])
+        self.assertTrue(payload["attestation"]["base_url_match"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["effective_mode"], "stable")
+        self.assertEqual(state["selected_backend_ids"], [])
+        self.assertFalse((self.managed_dir / "managed-proxy.pid").exists())
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -612,6 +734,11 @@ class CliTests(unittest.TestCase):
 
     def test_launch_smoke_requires_managed_stability_window(self) -> None:
         port = free_port()
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
         one_shot_launcher = self.profile_dir / "codex-custom-launch-one-shot.sh"
         one_shot_launcher.write_text(
             "#!/bin/sh\n"
