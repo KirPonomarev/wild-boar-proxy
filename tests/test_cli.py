@@ -1239,6 +1239,61 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "inspect_stale_lock")
         self.assertEqual(payload["transaction_plan"]["lock_preflight"]["status"], "stale")
 
+    def test_stable_target_switch_dry_run_returns_contract_without_mutation(self) -> None:
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "target", "switch", "--dry-run", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "TARGET_SWITCH_CONTRACT_READY")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["command_mode"], "dry_run")
+        self.assertEqual(payload["operator_action"], "user_action")
+        self.assertEqual(payload["next_action"], "review_target_switch_contract")
+        self.assertTrue(payload["write_surface_declared"])
+        self.assertEqual(payload["target_surface"]["status"], "declared_review_only")
+        self.assertEqual(
+            payload["declared_write_surfaces"],
+            [
+                "approved_control_target_reference_surface",
+                "target_switch_transaction_metadata",
+            ],
+        )
+        self.assertIn("~/.cli-proxy-api", payload["forbidden_surfaces"])
+        self.assertEqual(
+            payload["transaction_phases"],
+            ["snapshot", "stage", "verify", "switch", "rollback"],
+        )
+        self.assertEqual(
+            payload["verify_scope"],
+            [
+                "target_reference_correctness",
+                "switch_completion_only",
+                "transaction_completeness",
+            ],
+        )
+        self.assertFalse(payload["target_surface"]["mode_set_is_target_switch"])
+
+    def test_stable_target_switch_apply_returns_blocker_without_mutation(self) -> None:
+        before = self.state_snapshot()
+        result = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "TARGET_SWITCH_NOT_IMPLEMENTED")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["command_mode"], "apply")
+        self.assertEqual(payload["operator_action"], "user_action")
+        self.assertTrue(payload["write_surface_declared"])
+        self.assertIn("~/.cli-proxy-api", payload["forbidden_surfaces"])
+        self.assertEqual(payload["next_action"], "inspect_target_switch_contract")
+
     def test_stable_repair_dry_run_does_not_leak_to_other_json_surfaces(self) -> None:
         for args in (
             ("status", "--json"),
@@ -1250,6 +1305,22 @@ class CliTests(unittest.TestCase):
                 payload = json.loads(result.stdout)
                 self.assertNotIn("transaction_plan", payload)
                 self.assertNotIn("would_change", payload)
+
+    def test_stable_target_switch_does_not_leak_to_other_json_surfaces(self) -> None:
+        for args in (
+            ("status", "--json"),
+            ("healthcheck", "--json"),
+            ("accounts", "list", "--json"),
+            ("stable", "repair", "--dry-run", "--json"),
+        ):
+            with self.subTest(args=args):
+                result = self.run_cli(*args)
+                payload = json.loads(result.stdout)
+                self.assertNotIn("target_surface", payload)
+                self.assertNotIn("write_surface_declared", payload)
+                self.assertNotIn("declared_write_surfaces", payload)
+                self.assertNotIn("forbidden_surfaces", payload)
+                self.assertNotIn("verify_scope", payload)
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()

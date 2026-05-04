@@ -604,6 +604,65 @@ def get_lock_preflight(paths: RuntimePaths) -> dict[str, Any]:
     }
 
 
+TARGET_SWITCH_TRANSACTION_PHASES = ["snapshot", "stage", "verify", "switch", "rollback"]
+TARGET_SWITCH_VERIFY_SCOPE = [
+    "target_reference_correctness",
+    "switch_completion_only",
+    "transaction_completeness",
+]
+TARGET_SWITCH_FORBIDDEN_SURFACES = [
+    "~/.cli-proxy-api",
+    "engine_baseline_auth_storage",
+    "backend-registry.json",
+    "supervisor-state.json",
+]
+TARGET_SWITCH_DECLARED_WRITE_SURFACES = [
+    "approved_control_target_reference_surface",
+    "target_switch_transaction_metadata",
+]
+
+
+def run_stable_target_switch_contract(
+    paths: RuntimePaths, *, apply: bool
+) -> dict[str, Any]:
+    inventory_source = get_stable_auth_inventory_source(paths)[1]
+    extra = {
+        "command_mode": "apply" if apply else "dry_run",
+        "target_surface": {
+            "status": "declared_review_only",
+            "current_inventory_source": inventory_source,
+            "mode_set_is_target_switch": False,
+        },
+        "write_surface_declared": True,
+        "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+        "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+        "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+        "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+    }
+    if apply:
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply is declared but not implemented.",
+            machine_error_code="TARGET_SWITCH_NOT_IMPLEMENTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={**extra, "next_action": "inspect_target_switch_contract"},
+        )
+
+    return build_command_payload(
+        ok=True,
+        human_message="Target switch contract is declared for review only; activation is not implemented.",
+        machine_error_code="TARGET_SWITCH_CONTRACT_READY",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="user_action",
+        changed_files=[],
+        extra={**extra, "next_action": "review_target_switch_contract"},
+    )
+
+
 def build_stable_repair_transaction_plan(
     paths: RuntimePaths,
     registry: dict[str, Any],
