@@ -591,6 +591,236 @@ def get_claim_gate(
     }
 
 
+def get_lock_preflight(paths: RuntimePaths) -> dict[str, Any]:
+    if not paths.lock_file.exists():
+        return {"status": "available", "machine_error_code": "OK", "holder_pid": None}
+
+    holder = read_text(paths.lock_file)
+    alive = bool(holder and process_is_alive(holder))
+    return {
+        "status": "held" if alive else "stale",
+        "machine_error_code": "LOCK_HELD" if alive else "STALE_LOCK_FILE",
+        "holder_pid": holder or None,
+    }
+
+
+def build_stable_repair_transaction_plan(
+    paths: RuntimePaths,
+    registry: dict[str, Any],
+    policy_drift: dict[str, Any],
+    lock_preflight: dict[str, Any],
+) -> dict[str, Any]:
+    backends = registry.get("backends") or []
+    mapped_backends = {
+        auth_basename: backend
+        for backend in backends
+        if (auth_basename := get_auth_basename(backend.get("auth_ref")))
+    }
+    stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+    inventory = (
+        sorted(path.name for path in stable_auth_dir.glob("codex-*.json"))
+        if stable_auth_dir.is_dir()
+        else []
+    )
+    inventory_set = set(inventory)
+    allowed_auths = []
+    would_keep = []
+    for auth_basename, backend in sorted(mapped_backends.items()):
+        allowed, _ = is_stable_auth_allowed(backend)
+        if not allowed:
+            continue
+        item = {
+            "backend_id": backend.get("id"),
+            "auth_basename": auth_basename,
+            "pool": backend.get("pool"),
+            "status": backend.get("status"),
+        }
+        allowed_auths.append(item)
+        if auth_basename in inventory_set:
+            would_keep.append(item)
+
+    would_remove = [
+        {
+            "auth_basename": auth_basename,
+            "reason": "auth_not_in_registry",
+        }
+        for auth_basename in policy_drift.get("unknown_auths", [])
+    ]
+    would_remove.extend(
+        {
+            "backend_id": item.get("backend_id"),
+            "auth_basename": item.get("auth_basename"),
+            "reason": item.get("reason", "auth_not_allowed_by_registry_policy"),
+        }
+        for item in policy_drift.get("disallowed_configured_auths", [])
+    )
+    would_add = [
+        {
+            "backend_id": item.get("backend_id"),
+            "auth_basename": item.get("auth_basename"),
+            "reason": item.get("reason", "auth_ref_not_in_stable_inventory"),
+        }
+        for item in policy_drift.get("missing_auths", [])
+    ]
+
+    blocked_reasons = []
+    if lock_preflight.get("status") == "held":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "LOCK_HELD",
+                "reason": "mutation_lock_held",
+                "holder_pid": lock_preflight.get("holder_pid"),
+            }
+        )
+    elif lock_preflight.get("status") == "stale":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "STABLE_REPAIR_DRY_RUN_BLOCKED",
+                "reason": "stale_lock_file_present",
+                "holder_pid": lock_preflight.get("holder_pid"),
+            }
+        )
+
+    return {
+        "mode": "dry_run",
+        "snapshot_required": True,
+        "lock_required": True,
+        "lock_preflight": lock_preflight,
+        "stable_auth_inventory_source": policy_drift.get("stable_auth_inventory_source", {}),
+        "allowed_auths": allowed_auths,
+        "disallowed_auths": policy_drift.get("disallowed_configured_auths", []),
+        "missing_auths": policy_drift.get("missing_auths", []),
+        "unknown_auths": policy_drift.get("unknown_auths", []),
+        "would_add": would_add,
+        "would_remove": sorted(would_remove, key=lambda item: item.get("auth_basename") or ""),
+        "would_keep": would_keep,
+        "blocked_reasons": blocked_reasons,
+    }
+
+
+def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
+    registry = read_json(paths.registry_file)
+    registry_identity = get_registry_identity(registry)
+    policy_drift = get_stable_policy_drift(paths, registry)
+    lock_preflight = get_lock_preflight(paths)
+    transaction_plan = build_stable_repair_transaction_plan(
+        paths, registry, policy_drift, lock_preflight
+    )
+
+    if registry_identity.get("status") != "clear":
+        transaction_plan["blocked_reasons"].append(
+            {
+                "machine_error_code": "REGISTRY_IDENTITY_AMBIGUOUS",
+                "reason": "registry_identity_ambiguous",
+            }
+        )
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair dry-run blocked by ambiguous registry identity.",
+            machine_error_code="REGISTRY_IDENTITY_AMBIGUOUS",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_registry_identity",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+                "registry_identity": registry_identity,
+            },
+        )
+
+    if lock_preflight.get("status") == "held":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair dry-run blocked by mutation lock.",
+            machine_error_code="LOCK_HELD",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "next_action": "retry_after_lock_released",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+
+    if lock_preflight.get("status") == "stale":
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair dry-run blocked by stale mutation lock.",
+            machine_error_code="STABLE_REPAIR_DRY_RUN_BLOCKED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_stale_lock",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+
+    if policy_drift.get("status") == "unknown":
+        inventory_source = policy_drift.get("stable_auth_inventory_source", {})
+        machine_error_code = (
+            "STABLE_AUTH_DIR_MISSING"
+            if inventory_source.get("exists") is False
+            else "STABLE_POLICY_DRIFT_UNKNOWN"
+        )
+        transaction_plan["blocked_reasons"].append(
+            {
+                "machine_error_code": machine_error_code,
+                "reason": "stable_auth_inventory_unavailable",
+            }
+        )
+        return build_command_payload(
+            ok=False,
+            human_message="Stable repair dry-run blocked by unavailable stable auth inventory.",
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_stable_policy_drift",
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+
+    if policy_drift.get("status") == "clear":
+        return build_command_payload(
+            ok=True,
+            human_message="Stable repair dry-run completed; no repair needed.",
+            machine_error_code="STABLE_REPAIR_NOT_NEEDED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "would_change": False,
+                "transaction_plan": transaction_plan,
+            },
+        )
+
+    return build_command_payload(
+        ok=True,
+        human_message="Stable repair dry-run completed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="user_action",
+        changed_files=[],
+        extra={
+            "next_action": "review_transaction_plan",
+            "would_change": True,
+            "transaction_plan": transaction_plan,
+        },
+    )
+
+
 def response_ok(payload: dict[str, Any]) -> bool:
     def iter_strings(value: Any) -> list[str]:
         if isinstance(value, str):

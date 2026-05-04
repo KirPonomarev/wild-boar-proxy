@@ -16,6 +16,7 @@ from .runtime import (
     run_healthcheck,
     run_launch_smoke,
     run_onboard,
+    run_stable_repair_dry_run,
     run_sync,
     summarize_status,
 )
@@ -31,6 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status")
     status.add_argument("--json", action="store_true", required=True)
+
+    stable = subparsers.add_parser("stable")
+    stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
+    stable_repair = stable_subparsers.add_parser("repair")
+    stable_repair.add_argument("--dry-run", action="store_true", required=True)
+    stable_repair.add_argument("--json", action="store_true", required=True)
 
     sync = subparsers.add_parser("sync")
     sync.add_argument("--json", action="store_true", required=True)
@@ -103,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_healthcheck(paths, args.model))
         if args.command == "status":
             return emit_json(summarize_status(paths))
+        if args.command == "stable" and args.stable_command == "repair":
+            return emit_json(run_stable_repair_dry_run(paths))
         if args.command == "sync":
             return emit_json(run_sync(paths, args.model))
         if args.command == "launch" and args.launch_command == "smoke":
