@@ -98,7 +98,19 @@ Optional fields currently supported by the local contour:
 - `probe_port`
 - `last_proxy_discovery_at`
 - `last_full_deep_probe_at`
+- `last_known_good_proxy_url`
+- `last_known_good_proxy_observed_at`
 - `stable_runtime_consumer_snapshot`
+
+If `last_known_good_proxy_url` and `last_known_good_proxy_observed_at` are
+materialized, they are:
+
+- control-layer runtime-state history
+- bounded reprobe input only
+- separate from `current_proxy_url`
+- not final runtime truth without live checks
+- not by themselves sufficient to change live `status`, `liveness`,
+  `machine_error_code`, `endpoint`, or `current_proxy_url`
 
 If `stable_runtime_consumer_snapshot` is materialized, it is:
 

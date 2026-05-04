@@ -548,6 +548,30 @@ class CliTests(unittest.TestCase):
             "STABLE_SERVICE_DISABLED",
         )
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        last_known_good_contract = payload["last_known_good_proxy_contract"]
+        self.assertEqual(last_known_good_contract["status"], "contract_ready")
+        self.assertEqual(last_known_good_contract["owner_command_surface"], "healthcheck --json")
+        self.assertEqual(
+            last_known_good_contract["candidate_input_priority"],
+            [
+                "WBP_PROXY_REPROBE_CANDIDATES",
+                "last_known_good_proxy_url",
+                "current_proxy_url",
+            ],
+        )
+        self.assertTrue(last_known_good_contract["current_proxy_url_reuse_forbidden"])
+        self.assertFalse(last_known_good_contract["historical_truth_promotes_live_truth"])
+        self.assertEqual(
+            last_known_good_contract["state_fields"],
+            ["last_known_good_proxy_url", "last_known_good_proxy_observed_at"],
+        )
+        last_known_good = payload["last_known_good_proxy"]
+        self.assertEqual(last_known_good["status"], "declared_not_materialized")
+        self.assertEqual(last_known_good["proxy_url"], "")
+        self.assertEqual(last_known_good["observed_at_utc"], "")
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertFalse(last_known_good["eligible_for_bounded_reprobe"])
         recovery_result = payload["deterministic_stable_recovery_result"]
         self.assertEqual(recovery_result["status"], "not_invoked")
         self.assertEqual(recovery_result["entry_lane"], "not_invoked")
@@ -1226,6 +1250,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
         self.assertFalse(recovery["live_runtime_observation_confirmed"])
+
+    def test_healthcheck_reports_materialized_last_known_good_proxy_separately_from_current_proxy_url(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        last_known_good = payload["last_known_good_proxy"]
+        self.assertEqual(last_known_good["status"], "materialized")
+        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
+        self.assertEqual(
+            last_known_good["observed_at_utc"], "2026-05-05T00:00:00+00:00"
+        )
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -2734,6 +2803,26 @@ class CliTests(unittest.TestCase):
             "LISTENER_DOWN",
         )
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        last_known_good_contract = payload["last_known_good_proxy_contract"]
+        self.assertEqual(last_known_good_contract["status"], "contract_ready")
+        self.assertEqual(
+            last_known_good_contract["state_fields"],
+            ["last_known_good_proxy_url", "last_known_good_proxy_observed_at"],
+        )
+        self.assertEqual(
+            last_known_good_contract["candidate_input_priority"],
+            [
+                "WBP_PROXY_REPROBE_CANDIDATES",
+                "last_known_good_proxy_url",
+                "current_proxy_url",
+            ],
+        )
+        self.assertFalse(last_known_good_contract["historical_truth_promotes_live_truth"])
+        last_known_good = payload["last_known_good_proxy"]
+        self.assertEqual(last_known_good["status"], "declared_not_materialized")
+        self.assertEqual(last_known_good["proxy_url"], "")
+        self.assertFalse(last_known_good["eligible_for_bounded_reprobe"])
         self.assertEqual(
             recovery_contract["approved_target_recovery_outcome"], "separate"
         )
@@ -3031,6 +3120,9 @@ class CliTests(unittest.TestCase):
                 "top_level_truth_boundaries"
             ]["launch_smoke_owner_lane_fields_forbidden"]
         )
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertNotIn("last_known_good_proxy", payload)
+        self.assertNotIn("last_known_good_proxy_contract", payload)
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
 
     def test_status_delegates_stable_service_disabled_lane_without_becoming_owner(
@@ -3073,6 +3165,52 @@ class CliTests(unittest.TestCase):
         self.assertTrue(recovery["delegated_from_status"])
         self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
+
+    def test_status_reports_materialized_last_known_good_proxy_without_owner_transfer(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        last_known_good = payload["last_known_good_proxy"]
+        self.assertEqual(last_known_good["status"], "materialized")
+        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertEqual(
+            payload["last_known_good_proxy_contract"]["owner_command_surface"],
+            "healthcheck --json",
+        )
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
         self,
@@ -3717,6 +3855,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertNotIn("deterministic_stable_recovery_result", payload)
+        self.assertNotIn("last_known_good_proxy", payload)
+        self.assertNotIn("last_known_good_proxy_contract", payload)
 
     def test_sync_reports_managed_pid_deletion_in_changed_files(self) -> None:
         pid_path = self.managed_dir / "managed-proxy.pid"

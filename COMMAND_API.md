@@ -263,5 +263,12 @@ Field meaning rules:
   required for `stable_service_disabled` packet truth by default
 - owner-path writes across fallback reconciliation, generated-config
   materialization, and snapshot refresh must remain visible in `changed_files`
-- last-known-good outbound proxy persistence remains a separate runtime-hardening
-  lane and is not part of the stable-service-disabled contract contour
+- owner-path packets may expose top-level `last_known_good_proxy_contract`
+- owner-path packets may expose top-level `last_known_good_proxy`
+  with an honest materialization status such as `declared_not_materialized`
+- `status --json` may expose the same `last_known_good_proxy` readout only as
+  delegated reporting
+- `current_proxy_url` remains separate from persisted
+  `last_known_good_proxy.proxy_url`
+- persisted last-known-good proxy truth must never by itself change top-level
+  `status`, `liveness`, `machine_error_code`, `endpoint`, or `current_proxy_url`

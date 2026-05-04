@@ -669,6 +669,8 @@ STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC = "stable_runtime_consumer_snapshot"
 STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME = "approved_target_activated"
 STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME = "observed_source_selected"
 STABLE_RUNTIME_OBSERVED_SOURCE_FALLBACK_OUTCOME = "observed_source_fallback"
+LAST_KNOWN_GOOD_PROXY_URL_FIELD = "last_known_good_proxy_url"
+LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD = "last_known_good_proxy_observed_at"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS = [
     "schema_version",
     "activation_method",
@@ -1023,6 +1025,71 @@ def build_deterministic_stable_recovery_contract(
         "live_runtime_observation_required": True,
         "mode_truth_redefinition_forbidden": True,
         "last_known_good_proxy_persistence_in_scope": False,
+    }
+
+
+def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "owner_command_surface": "healthcheck --json",
+        "status_delegates_to_owner": True,
+        "sync_owner_forbidden": True,
+        "launch_smoke_owner_forbidden": True,
+        "state_file": str(paths.state_file),
+        "state_fields": [
+            LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+        ],
+        "current_proxy_url_field": "current_proxy_url",
+        "current_proxy_url_reuse_forbidden": True,
+        "separate_metadata_file_default": False,
+        "write_owner": "serialized_healthcheck_owner_path",
+        "write_path_status": "contract_fixed_not_implemented",
+        "refresh_requires_positive_managed_proxy_proof": True,
+        "refresh_from_candidate_liveness_alone_forbidden": True,
+        "refresh_from_current_proxy_url_alone_forbidden": True,
+        "failed_reprobe_clears_persisted_value": False,
+        "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            "current_proxy_url",
+        ],
+        "candidate_inputs_bounded_local_only": True,
+        "candidate_input_deduped_after_filter": True,
+        "changed_files_visibility_required": True,
+        "historical_truth_promotes_live_truth": False,
+    }
+
+
+def build_last_known_good_proxy_surface(
+    paths: RuntimePaths, state: dict[str, Any], current_proxy_url: str
+) -> dict[str, Any]:
+    proxy_url = str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or "")
+    observed_at_utc = str(state.get(LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD) or "")
+    materialized = bool(proxy_url or observed_at_utc)
+    shape_valid = bool(proxy_url and observed_at_utc)
+    bounded_local_candidate = bool(proxy_url) and parse_local_proxy_candidate(proxy_url) is not None
+    if shape_valid and bounded_local_candidate:
+        status = "materialized"
+    elif materialized and shape_valid:
+        status = "materialized_unusable"
+    elif materialized:
+        status = "materialized_shape_invalid"
+    else:
+        status = "declared_not_materialized"
+    return {
+        "status": status,
+        "state_file": str(paths.state_file),
+        "state_fields": [
+            LAST_KNOWN_GOOD_PROXY_URL_FIELD,
+            LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD,
+        ],
+        "proxy_url": proxy_url,
+        "observed_at_utc": observed_at_utc,
+        "matches_current_proxy_url": bool(proxy_url) and proxy_url == current_proxy_url,
+        "eligible_for_bounded_reprobe": status == "materialized",
+        "current_proxy_url_separate": True,
+        "final_live_truth_without_live_checks": False,
     }
 
 
@@ -2664,7 +2731,17 @@ def summarize_status(
             "delegated_from_status": True,
         }
     registry_identity = get_registry_identity(registry)
-    current_proxy_url = state.get("current_proxy_url", "")
+    current_proxy_url = str(
+        health_payload.get("current_proxy_url", state.get("current_proxy_url", ""))
+    )
+    last_known_good_proxy_contract = health_payload.get("last_known_good_proxy_contract")
+    if not isinstance(last_known_good_proxy_contract, dict):
+        last_known_good_proxy_contract = build_last_known_good_proxy_contract(paths)
+    last_known_good_proxy = health_payload.get("last_known_good_proxy")
+    if not isinstance(last_known_good_proxy, dict):
+        last_known_good_proxy = build_last_known_good_proxy_surface(
+            paths, state, current_proxy_url
+        )
     pool_summary = {
         "active": int(state.get("active_count", 0) or 0),
         "reserve": int(state.get("reserve_count", 0) or 0),
@@ -2694,6 +2771,8 @@ def summarize_status(
             "effective_mode": health_payload["effective_mode"],
             "endpoint": health_payload["endpoint"],
             "current_proxy_url": current_proxy_url,
+            "last_known_good_proxy_contract": last_known_good_proxy_contract,
+            "last_known_good_proxy": last_known_good_proxy,
             "pool_summary": pool_summary,
             "policy_drift": policy_drift,
             "stable_runtime_consumer": stable_runtime_consumer,
@@ -3018,10 +3097,12 @@ def run_healthcheck(
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": "healthcheck --json",
     }
+    current_proxy_url = str(state.get("current_proxy_url", ""))
     extra = {
         "desired_mode": desired_mode,
         "effective_mode": reported_effective_mode,
         "endpoint": reported_endpoint,
+        "current_proxy_url": current_proxy_url,
         "attestation": attestation,
         "last_error": error_detail
         or (
@@ -3032,6 +3113,10 @@ def run_healthcheck(
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
+    extra["last_known_good_proxy_contract"] = build_last_known_good_proxy_contract(paths)
+    extra["last_known_good_proxy"] = build_last_known_good_proxy_surface(
+        paths, state, current_proxy_url
+    )
     extra["deterministic_stable_recovery_contract"] = (
         build_deterministic_stable_recovery_contract(paths)
     )

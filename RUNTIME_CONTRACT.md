@@ -69,8 +69,16 @@
   separate from `PROXY_PATH_BROKEN` and `PROXY_REPROBE_FAILED`
 - no new persisted recovery metadata file or snapshot-schema widening is
   required for stable-service-disabled packet truth by default
-- last-known-good outbound proxy persistence remains a separate runtime-hardening
-  lane and is not reopened by this contour
+- owner-path proxy packets may expose top-level
+  `last_known_good_proxy_contract`
+- owner-path proxy packets may expose top-level `last_known_good_proxy`
+  with an honest materialization status such as `declared_not_materialized`
+- `status --json` may report the same last-known-good proxy surface only as
+  delegated readout
+- persisted last-known-good proxy truth must remain separate from
+  `current_proxy_url`
+- persisted last-known-good proxy truth must never by itself change top-level
+  live runtime truth
 
 ## Safety rules
 
