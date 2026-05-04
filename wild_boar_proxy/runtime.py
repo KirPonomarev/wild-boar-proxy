@@ -938,7 +938,7 @@ def build_deterministic_stable_recovery_contract(
             "explicit_stable_recovery_lane",
         ],
         "entry_lane_surface": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "field": "deterministic_stable_recovery_result.entry_lane",
             "nested_recovery_surface": True,
             "top_level_machine_error_code_separate": True,
@@ -969,7 +969,7 @@ def build_deterministic_stable_recovery_contract(
         "snapshot_schema_widening_required": False,
         "new_persisted_recovery_metadata_required": False,
         "stable_service_disabled_classification": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "classification_surface": "deterministic_stable_recovery_result.entry_lane",
             "control_layer_classification": True,
             "persisted_engine_state_flag": False,
@@ -986,7 +986,7 @@ def build_deterministic_stable_recovery_contract(
             "overclassification_forbidden": True,
         },
         "re_enable_method_contract": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "owner_path_scope": "bounded_control_layer_recovery_action",
             "owner_command_surface": "healthcheck --json",
             "reuse_private_launch_smoke_helper_allowed": True,
@@ -1013,7 +1013,7 @@ def build_deterministic_stable_recovery_contract(
             "sync_owner_lane_forbidden": True,
         },
         "top_level_machine_error_code_rules": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
             "stable_service_disabled_requires_final_unhealthy": True,
             "ok_after_successful_reenable": "OK",
@@ -1356,7 +1356,9 @@ def build_deterministic_stable_recovery_result(
     *,
     delegated_from_status: bool,
     attempted: bool,
+    entry_lane: str,
     outcome: str,
+    re_enable_method: str,
     selected_source_kind: str,
     selected_source_path: str,
     generated_config_regenerated: bool,
@@ -1375,7 +1377,9 @@ def build_deterministic_stable_recovery_result(
         "owner_command_surface": "healthcheck --json",
         "delegated_from_status": delegated_from_status,
         "attempted": attempted,
+        "entry_lane": entry_lane,
         "outcome": outcome,
+        "re_enable_method": re_enable_method,
         "selected_source_kind": selected_source_kind,
         "selected_source_path": selected_source_path,
         "generated_config_regenerated": generated_config_regenerated,
@@ -2721,6 +2725,7 @@ def run_healthcheck(
         effective_mode, listener_ok=listener_ok
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    managed_preflight_failure_candidate = effective_mode == "managed" and not listener_ok
 
     stale_managed_residue = (
         state_effective_mode not in {None, "", "stable"}
@@ -2754,7 +2759,9 @@ def run_healthcheck(
         recovery_result = build_deterministic_stable_recovery_result(
             delegated_from_status=False,
             attempted=False,
+            entry_lane="not_invoked",
             outcome="not_invoked",
+            re_enable_method="",
             selected_source_kind="",
             selected_source_path="",
             generated_config_regenerated=False,
@@ -2898,7 +2905,13 @@ def run_healthcheck(
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
+        recovery_entry_lane = (
+            "managed_preflight_failure"
+            if managed_preflight_failure_candidate
+            else "stable_service_disabled"
+        )
         recovery_outcome = "recovery_failed_before_stable_healthy"
+        re_enable_method = "bounded_healthcheck_owner_retry"
         recovery_selected_kind = (
             "approved_repair_target"
             if recovery_attempt.activation_attempted
@@ -2972,7 +2985,9 @@ def run_healthcheck(
         recovery_result = build_deterministic_stable_recovery_result(
             delegated_from_status=False,
             attempted=True,
+            entry_lane=recovery_entry_lane,
             outcome=recovery_outcome,
+            re_enable_method=re_enable_method,
             selected_source_kind=recovery_selected_kind,
             selected_source_path=recovery_selected_path,
             generated_config_regenerated=recovery_attempt.generated_config_regenerated,
@@ -2980,6 +2995,17 @@ def run_healthcheck(
             fallback_reason=fallback_reason,
             live_runtime_observation_confirmed=live_runtime_observation_confirmed,
         )
+        if (
+            not live_runtime_observation_confirmed
+            and recovery_entry_lane == "stable_service_disabled"
+            and not listener_ok
+            and machine_error_code == "LISTENER_DOWN"
+        ):
+            machine_error_code = "STABLE_SERVICE_DISABLED"
+            human_message = (
+                "Stable service did not re-enable through the bounded healthcheck "
+                f"recovery lane; listener is not reachable at {reported_endpoint}."
+            )
 
     attestation = {
         "listener_ok": listener_ok,

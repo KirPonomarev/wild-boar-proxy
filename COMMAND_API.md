@@ -248,9 +248,10 @@ Field meaning rules:
   `deterministic_stable_recovery_result`
 - `status --json` may expose nested
   `stable_runtime_consumer.deterministic_stable_recovery_result`
-- `deterministic_stable_recovery_result.entry_lane` and top-level
-  `STABLE_SERVICE_DISABLED` packet rules are currently contract-fixed but not yet
-  implemented
+- owner-path packets now emit `deterministic_stable_recovery_result.entry_lane`
+- top-level `STABLE_SERVICE_DISABLED` may be emitted only when:
+  - the same packet proves `entry_lane = stable_service_disabled`
+  - final live runtime truth remains unhealthy
 - absent positive evidence for the narrower disabled-service lane, the system
   must stay on generic `LISTENER_DOWN`
 - `stable_service_disabled` classification must remain separate from

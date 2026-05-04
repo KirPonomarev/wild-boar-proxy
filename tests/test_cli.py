@@ -421,6 +421,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
         self.assertEqual(payload["liveness"], "down")
+        recovery = payload["stable_runtime_consumer"][
+            "deterministic_stable_recovery_result"
+        ]
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
         self.assertEqual(payload["next_action"], "retry")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
@@ -463,8 +467,12 @@ class CliTests(unittest.TestCase):
         result = self.run_cli("status", "--json")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
         self.assertEqual(payload["liveness"], "down")
+        recovery = payload["stable_runtime_consumer"][
+            "deterministic_stable_recovery_result"
+        ]
+        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
 
     def test_healthcheck_returns_attestation(self) -> None:
         port = free_port()
@@ -504,7 +512,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery_contract["owner_command_surface"], "healthcheck --json")
         self.assertEqual(
             recovery_contract["entry_lane_surface"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertEqual(
             recovery_contract["entry_lane_surface"]["field"],
@@ -516,7 +524,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["stable_service_disabled_classification"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertTrue(
             recovery_contract["stable_service_disabled_classification"][
@@ -531,7 +539,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["top_level_machine_error_code_rules"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertEqual(
             recovery_contract["top_level_machine_error_code_rules"][
@@ -542,6 +550,8 @@ class CliTests(unittest.TestCase):
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
         recovery_result = payload["deterministic_stable_recovery_result"]
         self.assertEqual(recovery_result["status"], "not_invoked")
+        self.assertEqual(recovery_result["entry_lane"], "not_invoked")
+        self.assertEqual(recovery_result["re_enable_method"], "")
 
     def test_healthcheck_rejects_not_ok_probe(self) -> None:
         port = free_port()
@@ -740,6 +750,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertTrue(payload["attestation"]["effective_mode_match"])
         self.assertTrue(payload["attestation"]["base_url_match"])
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["effective_mode"], "stable")
         self.assertEqual(state["selected_backend_ids"], [])
@@ -871,6 +885,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["status"], "completed")
         self.assertEqual(recovery["owner_command_surface"], "healthcheck --json")
         self.assertFalse(recovery["delegated_from_status"])
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "approved_target_recovered")
         self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
         self.assertEqual(
@@ -940,6 +956,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(recovery["status"], "completed")
         self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "observed_source_fallback_recovered")
         self.assertEqual(
             recovery["selected_source_kind"], "observed_stable_inventory_source"
@@ -993,6 +1011,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(recovery["status"], "failed")
         self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "recovery_failed_before_stable_healthy")
         self.assertEqual(recovery["fallback_reason"], "launcher_exit_nonzero")
         self.assertTrue(recovery["generated_config_regenerated"])
@@ -1005,6 +1025,207 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             (self.stable_dir / "config.yaml").read_text(encoding="utf-8"), baseline_text
         )
+
+    def test_healthcheck_owner_path_emits_stable_service_disabled_on_failed_stable_reenable(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
+        state["status"] = "failed"
+        state["last_error"] = ""
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-healthcheck-stable-disabled-failed.sh",
+            exit_code=9,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
+        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
+        self.assertEqual(recovery["status"], "failed")
+        self.assertTrue(recovery["attempted"])
+        self.assertFalse(recovery["live_runtime_observation_confirmed"])
+
+    def test_healthcheck_owner_path_emits_stable_service_disabled_lane_on_successful_stable_reenable(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
+        state["status"] = "failed"
+        state["last_error"] = ""
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-healthcheck-stable-disabled-success.sh",
+            start_server=True,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
+        self.assertEqual(recovery["status"], "completed")
+        self.assertTrue(recovery["attempted"])
+        self.assertTrue(recovery["live_runtime_observation_confirmed"])
+
+    def test_healthcheck_stable_service_disabled_lane_does_not_clobber_attestation_failure(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
+        state["status"] = "failed"
+        state["last_error"] = ""
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        launcher = self.profile_dir / "codex-custom-healthcheck-stable-disabled-attestation-failed.sh"
+        launcher.write_text(
+            "#!/bin/sh\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "printf 'stable\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
+            "python3 - <<'PY' >/dev/null 2>&1 &\n"
+            "import json\n"
+            "import os\n"
+            "import threading\n"
+            "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n"
+            "from pathlib import Path\n"
+            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
+            "port = 8318\n"
+            "for raw_line in stable_config.read_text().splitlines():\n"
+            "    line = raw_line.strip()\n"
+            "    if line.startswith('port:'):\n"
+            "        port = int(line.split(':', 1)[1].strip().strip('\"'))\n"
+            "        break\n"
+            "class Handler(BaseHTTPRequestHandler):\n"
+            "    count = 0\n"
+            "    def do_GET(self):\n"
+            "        if self.path == '/v1/models':\n"
+            "            body = json.dumps({'data': [{'id': 'gpt-5.4'}]}).encode('utf-8')\n"
+            "            self.send_response(200)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            Handler.count += 1\n"
+            "            if Handler.count >= 2:\n"
+            "                threading.Thread(target=self.server.shutdown, daemon=True).start()\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "    def do_POST(self):\n"
+            "        if self.path == '/v1/responses':\n"
+            "            length = int(self.headers.get('Content-Length', '0'))\n"
+            "            _ = self.rfile.read(length)\n"
+            "            body = json.dumps({'output_text': 'NOT OK'}).encode('utf-8')\n"
+            "            self.send_response(200)\n"
+            "            self.send_header('Content-Type', 'application/json')\n"
+            "            self.send_header('Content-Length', str(len(body)))\n"
+            "            self.end_headers()\n"
+            "            self.wfile.write(body)\n"
+            "            Handler.count += 1\n"
+            "            if Handler.count >= 2:\n"
+            "                threading.Thread(target=self.server.shutdown, daemon=True).start()\n"
+            "            return\n"
+            "        self.send_error(404)\n"
+            "    def log_message(self, fmt, *args):\n"
+            "        return\n"
+            "server = ThreadingHTTPServer(('127.0.0.1', port), Handler)\n"
+            "server.serve_forever()\n"
+            "server.server_close()\n"
+            "PY\n"
+            "sleep 0.1\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "state = json.loads(state_path.read_text())\n"
+            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
+            "port = '8318'\n"
+            "for raw_line in stable_config.read_text().splitlines():\n"
+            "    line = raw_line.strip()\n"
+            "    if line.startswith('port:'):\n"
+            "        port = line.split(':', 1)[1].strip().strip('\"')\n"
+            "state['effective_mode'] = 'stable'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+            "lines = config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('base_url = '):\n"
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "PY\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "healthcheck", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        recovery = payload["deterministic_stable_recovery_result"]
+        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
+        self.assertFalse(recovery["live_runtime_observation_confirmed"])
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -2424,7 +2645,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(recovery_contract["stale_generated_config_authoritative"])
         self.assertEqual(
             recovery_contract["entry_lane_surface"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertEqual(
             recovery_contract["entry_lane_surface"]["field"],
@@ -2445,7 +2666,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["stable_service_disabled_classification"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertTrue(
             recovery_contract["stable_service_disabled_classification"][
@@ -2470,7 +2691,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["re_enable_method_contract"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertTrue(
             recovery_contract["re_enable_method_contract"][
@@ -2498,7 +2719,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["top_level_machine_error_code_rules"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertEqual(
             recovery_contract["top_level_machine_error_code_rules"][
@@ -2716,6 +2937,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["status"], "completed")
         self.assertTrue(recovery["delegated_from_status"])
         self.assertTrue(recovery["attempted"])
+        self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "approved_target_recovered")
         self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
         self.assertIn(
@@ -2801,7 +3024,7 @@ class CliTests(unittest.TestCase):
             consumer["deterministic_stable_recovery_contract"]["entry_lane_surface"][
                 "status"
             ],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertTrue(
             consumer["deterministic_stable_recovery_contract"][
@@ -2809,6 +3032,47 @@ class CliTests(unittest.TestCase):
             ]["launch_smoke_owner_lane_fields_forbidden"]
         )
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
+
+    def test_status_delegates_stable_service_disabled_lane_without_becoming_owner(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
+        state["status"] = "failed"
+        state["last_error"] = ""
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-status-stable-disabled-failed.sh",
+            exit_code=9,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "status", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STABLE_SERVICE_DISABLED")
+        self.assertNotIn("deterministic_stable_recovery_result", payload)
+        recovery = payload["stable_runtime_consumer"][
+            "deterministic_stable_recovery_result"
+        ]
+        self.assertTrue(recovery["delegated_from_status"])
+        self.assertEqual(recovery["entry_lane"], "stable_service_disabled")
+        self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
         self,

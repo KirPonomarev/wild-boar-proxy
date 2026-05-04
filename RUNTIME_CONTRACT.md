@@ -59,10 +59,12 @@
 - top-level healthcheck and status truth must continue to describe final live
   runtime state, while deterministic stable recovery outcome remains a separate
   recovery-attempt surface
-- `deterministic_stable_recovery_result.entry_lane` and top-level
-  `STABLE_SERVICE_DISABLED` packet rules are contract-fixed before
-  implementation; absent positive evidence, final listener failure stays on
-  conservative `LISTENER_DOWN`
+- owner-path packets emit `deterministic_stable_recovery_result.entry_lane`
+- top-level `STABLE_SERVICE_DISABLED` is valid only when:
+  - the same packet proves `entry_lane = stable_service_disabled`
+  - final live runtime truth remains unhealthy
+- absent positive evidence, final listener failure stays on conservative
+  `LISTENER_DOWN`
 - `stable_service_disabled` remains a control-layer classification and must stay
   separate from `PROXY_PATH_BROKEN` and `PROXY_REPROBE_FAILED`
 - no new persisted recovery metadata file or snapshot-schema widening is
