@@ -564,6 +564,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertNotIn("policy_drift", payload)
         self.assertNotIn("registry_identity", payload)
+        self.assertNotIn("claim_gate", payload)
         self.assertTrue(payload["attestation"]["listener_ok"])
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
@@ -696,6 +697,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["policy_drift"]["status"], "clear")
         self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
         self.assertEqual(payload["policy_drift"]["missing_auths"], [])
+        self.assertEqual(payload["registry_identity_summary"]["status"], "clear")
+        self.assertEqual(payload["registry_identity_summary"]["machine_error_code"], "OK")
+        self.assertEqual(payload["claim_gate"]["status"], "clear")
+        self.assertEqual(payload["claim_gate"]["machine_error_code"], "OK")
+        self.assertEqual(payload["claim_gate"]["blocked_claims"], [])
+        self.assertEqual(payload["claim_gate"]["sources"], [])
+        self.assertEqual(payload["claim_gate"]["next_action"], "none")
 
     def test_status_reports_stable_policy_drift_without_greenwash(self) -> None:
         port = free_port()
@@ -767,6 +775,10 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(drift["missing_auths"], [])
         self.assertIn("stable-15-proved", drift["claim_blockers"])
+        self.assertEqual(payload["claim_gate"]["status"], "blocked")
+        self.assertEqual(payload["claim_gate"]["machine_error_code"], "CLAIM_GATE_BLOCKED")
+        self.assertIn("stable-15-proved", payload["claim_gate"]["blocked_claims"])
+        self.assertEqual(payload["claim_gate"]["sources"], ["policy_drift"])
 
     def test_status_reports_missing_allowed_stable_auth_drift(self) -> None:
         port = free_port()
@@ -818,6 +830,8 @@ class CliTests(unittest.TestCase):
             drift["missing_auths"][0]["reason"],
             "auth_ref_not_in_stable_inventory",
         )
+        self.assertEqual(payload["claim_gate"]["status"], "blocked")
+        self.assertEqual(payload["claim_gate"]["sources"], ["policy_drift"])
 
     def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
         port = free_port()
@@ -952,6 +966,148 @@ class CliTests(unittest.TestCase):
         self.assertEqual(drift["unknown_auths"], ["codex-unknown.json"])
         self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
 
+    def test_status_claim_gate_blocks_registry_identity_ambiguity_without_full_dump(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        duplicate = dict(registry["backends"][0])
+        duplicate["id"] = "backend-b"
+        duplicate["auth_ref"] = "/tmp/other/codex-active.json"
+        registry["backends"].append(duplicate)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["policy_drift"]["status"], "clear")
+        self.assertEqual(payload["registry_identity_summary"]["status"], "ambiguous")
+        self.assertEqual(
+            payload["registry_identity_summary"]["machine_error_code"],
+            "REGISTRY_IDENTITY_AMBIGUOUS",
+        )
+        self.assertEqual(payload["claim_gate"]["status"], "blocked")
+        self.assertEqual(payload["claim_gate"]["sources"], ["registry_identity"])
+        self.assertNotIn("duplicate_backend_ids", payload["registry_identity_summary"])
+        self.assertNotIn("duplicate_auth_basenames", payload["registry_identity_summary"])
+
+    def test_status_claim_gate_reports_both_blocking_sources(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        stable_auth = self.stable_dir / "codex-reserve.json"
+        stable_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                "id": "reserve-backend",
+                "label": "Reserve Backend",
+                "pool": "reserve",
+                "status": "healthy",
+                "manual_hold": True,
+                "auth_ref": str(stable_auth),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+            {
+                "id": "active-backend-a",
+                "label": "Active Backend A",
+                "pool": "active",
+                "status": "healthy",
+                "manual_hold": False,
+                "auth_ref": "/tmp/one/codex-duplicate.json",
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+            {
+                "id": "active-backend-b",
+                "label": "Active Backend B",
+                "pool": "active",
+                "status": "healthy",
+                "manual_hold": False,
+                "auth_ref": "/tmp/two/codex-duplicate.json",
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["policy_drift"]["status"], "detected")
+        self.assertEqual(payload["registry_identity_summary"]["status"], "ambiguous")
+        self.assertEqual(payload["claim_gate"]["status"], "blocked")
+        self.assertEqual(
+            payload["claim_gate"]["sources"],
+            ["policy_drift", "registry_identity"],
+        )
+
     def test_status_does_not_greenwash_failed_attestation(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "NOT OK"
@@ -987,6 +1143,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertEqual(payload["attestation_summary"]["status"], "error")
+        self.assertIn("claim_gate", payload)
+        self.assertNotEqual(payload["machine_error_code"], payload["claim_gate"]["machine_error_code"])
 
     def test_accounts_list_returns_registry_snapshot(self) -> None:
         result = self.run_cli("accounts", "list", "--json")
@@ -997,6 +1155,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["registry_identity"]["status"], "clear")
         self.assertEqual(payload["registry_identity"]["machine_error_code"], "OK")
         self.assertEqual(payload["registry_identity"]["next_action"], "none")
+        self.assertNotIn("claim_gate", payload)
 
     def test_accounts_list_reports_duplicate_backend_id_identity_ambiguity(self) -> None:
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
