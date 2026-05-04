@@ -1052,6 +1052,62 @@ def run_stable_target_switch_contract(
     )
 
 
+def build_stable_repair_apply_authority(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "source_of_copy_authority": {
+            "source_kind": "eligible_registry_auth_refs",
+            "policy_input_surface": "backend-registry.json",
+            "source_files_mutable": False,
+            "registry_auth_ref_source_mutation_authority": False,
+            "observed_source_delete_authority": False,
+            "engine_owned_delete_authority": False,
+        },
+        "target_mutation_authority": {
+            "target_identity": APPROVED_REPAIR_TARGET_IDENTITY,
+            "target_kind": APPROVED_REPAIR_TARGET_KIND,
+            "inventory_dir": str(paths.repair_target_inventory_dir),
+            "write_scope": "approved_target_inventory_only",
+            "exactness": "exact_approved_set",
+            "prune_authority": "control_owned_target_entries_only",
+        },
+        "field_mapping": {
+            "observed_source_fields": [
+                "observed_source_matching_allowed_auths",
+                "observed_source_disallowed_auths",
+                "observed_source_missing_allowed_auths",
+                "observed_source_unknown_auths",
+            ],
+            "target_reconciliation_fields": [
+                "target_would_add",
+                "target_would_prune",
+                "target_would_keep",
+            ],
+        },
+    }
+
+
+def build_repair_target_contract_surface(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "approved_repair_target_reference": get_approved_repair_target_reference(paths),
+        "target_switch_transaction_metadata_surface": (
+            get_target_switch_transaction_metadata_surface(paths)
+        ),
+    }
+
+
+def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
+    auth_ref = Path(str(backend.get("auth_ref"))).expanduser()
+    return {
+        "backend_id": backend.get("id"),
+        "auth_basename": get_auth_basename(backend.get("auth_ref")),
+        "auth_ref": str(auth_ref),
+        "source_exists": auth_ref.is_file(),
+        "pool": backend.get("pool"),
+        "status": backend.get("status"),
+    }
+
+
 def build_stable_repair_transaction_plan(
     paths: RuntimePaths,
     registry: dict[str, Any],
@@ -1065,50 +1121,95 @@ def build_stable_repair_transaction_plan(
         if (auth_basename := get_auth_basename(backend.get("auth_ref")))
     }
     stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
-    inventory = (
+    observed_inventory = (
         sorted(path.name for path in stable_auth_dir.glob("codex-*.json"))
         if stable_auth_dir.is_dir()
         else []
     )
-    inventory_set = set(inventory)
-    allowed_auths = []
-    would_keep = []
+    observed_inventory_set = set(observed_inventory)
+    target_inventory = (
+        sorted(path.name for path in paths.repair_target_inventory_dir.glob("codex-*.json"))
+        if paths.repair_target_inventory_dir.is_dir()
+        else []
+    )
+    target_inventory_set = set(target_inventory)
+    eligible_registry_auth_refs = []
+    observed_source_matching_allowed_auths = []
     for auth_basename, backend in sorted(mapped_backends.items()):
         allowed, _ = is_stable_auth_allowed(backend)
         if not allowed:
             continue
-        item = {
-            "backend_id": backend.get("id"),
-            "auth_basename": auth_basename,
-            "pool": backend.get("pool"),
-            "status": backend.get("status"),
-        }
-        allowed_auths.append(item)
-        if auth_basename in inventory_set:
-            would_keep.append(item)
+        item = build_registry_source_input_item(backend)
+        eligible_registry_auth_refs.append(item)
+        if auth_basename in observed_inventory_set:
+            observed_source_matching_allowed_auths.append(item)
 
-    would_remove = [
+    observed_source_unknown_auths = [
         {
             "auth_basename": auth_basename,
             "reason": "auth_not_in_registry",
         }
         for auth_basename in policy_drift.get("unknown_auths", [])
     ]
-    would_remove.extend(
+    observed_source_disallowed_auths = [
         {
             "backend_id": item.get("backend_id"),
             "auth_basename": item.get("auth_basename"),
+            "pool": item.get("pool"),
+            "manual_hold": item.get("manual_hold"),
+            "status": item.get("status"),
+            "enabled": item.get("enabled", True),
             "reason": item.get("reason", "auth_not_allowed_by_registry_policy"),
         }
         for item in policy_drift.get("disallowed_configured_auths", [])
-    )
-    would_add = [
+    ]
+    observed_source_missing_allowed_auths = [
         {
             "backend_id": item.get("backend_id"),
             "auth_basename": item.get("auth_basename"),
+            "pool": item.get("pool"),
+            "manual_hold": item.get("manual_hold"),
+            "status": item.get("status"),
+            "enabled": item.get("enabled", True),
             "reason": item.get("reason", "auth_ref_not_in_stable_inventory"),
         }
         for item in policy_drift.get("missing_auths", [])
+    ]
+    source_copy_missing_auth_refs = [
+        {
+            "backend_id": item.get("backend_id"),
+            "auth_basename": item.get("auth_basename"),
+            "auth_ref": item.get("auth_ref"),
+            "reason": "eligible_registry_auth_ref_missing_on_disk",
+        }
+        for item in eligible_registry_auth_refs
+        if item.get("source_exists") is False
+    ]
+    target_would_keep = [
+        item
+        for item in eligible_registry_auth_refs
+        if item.get("auth_basename") in target_inventory_set
+    ]
+    target_would_add = [
+        {
+            **item,
+            "reason": "eligible_registry_auth_ref_missing_from_target_inventory",
+        }
+        for item in eligible_registry_auth_refs
+        if item.get("auth_basename") not in target_inventory_set
+    ]
+    eligible_target_auths = {
+        item.get("auth_basename")
+        for item in eligible_registry_auth_refs
+        if item.get("auth_basename")
+    }
+    target_would_prune = [
+        {
+            "auth_basename": auth_basename,
+            "reason": "not_authorized_for_control_owned_target",
+        }
+        for auth_basename in target_inventory
+        if auth_basename not in eligible_target_auths
     ]
 
     blocked_reasons = []
@@ -1128,24 +1229,48 @@ def build_stable_repair_transaction_plan(
                 "holder_pid": lock_preflight.get("holder_pid"),
             }
         )
+    blocked_reasons.extend(
+        {
+            "machine_error_code": "REPAIR_SOURCE_AUTH_REF_MISSING",
+            "backend_id": item.get("backend_id"),
+            "auth_basename": item.get("auth_basename"),
+            "reason": item.get("reason"),
+        }
+        for item in source_copy_missing_auth_refs
+    )
 
     return {
         "mode": "dry_run",
         "snapshot_required": True,
         "lock_required": True,
         "lock_preflight": lock_preflight,
-        "stable_auth_inventory_source": policy_drift.get("stable_auth_inventory_source", {}),
-        "approved_repair_target_reference": get_approved_repair_target_reference(paths),
-        "target_switch_transaction_metadata_surface": (
-            get_target_switch_transaction_metadata_surface(paths)
-        ),
-        "allowed_auths": allowed_auths,
-        "disallowed_auths": policy_drift.get("disallowed_configured_auths", []),
-        "missing_auths": policy_drift.get("missing_auths", []),
-        "unknown_auths": policy_drift.get("unknown_auths", []),
-        "would_add": would_add,
-        "would_remove": sorted(would_remove, key=lambda item: item.get("auth_basename") or ""),
-        "would_keep": would_keep,
+        "repair_apply_authority": build_stable_repair_apply_authority(paths),
+        "registry_source_inputs": {
+            "eligible_registry_auth_refs": eligible_registry_auth_refs,
+            "source_copy_missing_auth_refs": source_copy_missing_auth_refs,
+        },
+        "repair_observation": {
+            "status": policy_drift.get("status", "unknown"),
+            "machine_error_code": policy_drift.get("machine_error_code", "UNKNOWN"),
+            "stable_auth_inventory_source": policy_drift.get(
+                "stable_auth_inventory_source", {}
+            ),
+            "observed_source_matching_allowed_auths": observed_source_matching_allowed_auths,
+            "observed_source_disallowed_auths": observed_source_disallowed_auths,
+            "observed_source_missing_allowed_auths": (
+                observed_source_missing_allowed_auths
+            ),
+            "observed_source_unknown_auths": observed_source_unknown_auths,
+        },
+        "repair_target_contract_surface": build_repair_target_contract_surface(paths),
+        "target_reconciliation_plan": {
+            "target_exactness": "exact_approved_set",
+            "target_inventory_dir": str(paths.repair_target_inventory_dir),
+            "target_inventory_entries": target_inventory,
+            "target_would_add": target_would_add,
+            "target_would_prune": target_would_prune,
+            "target_would_keep": target_would_keep,
+        },
         "blocked_reasons": blocked_reasons,
     }
 
@@ -1214,35 +1339,10 @@ def run_stable_repair_dry_run(paths: RuntimePaths) -> dict[str, Any]:
             },
         )
 
-    if policy_drift.get("status") == "unknown":
-        inventory_source = policy_drift.get("stable_auth_inventory_source", {})
-        machine_error_code = (
-            "STABLE_AUTH_DIR_MISSING"
-            if inventory_source.get("exists") is False
-            else "STABLE_POLICY_DRIFT_UNKNOWN"
-        )
-        transaction_plan["blocked_reasons"].append(
-            {
-                "machine_error_code": machine_error_code,
-                "reason": "stable_auth_inventory_unavailable",
-            }
-        )
-        return build_command_payload(
-            ok=False,
-            human_message="Stable repair dry-run blocked by unavailable stable auth inventory.",
-            machine_error_code=machine_error_code,
-            liveness="unknown",
-            severity="recoverable",
-            operator_action="user_action",
-            changed_files=[],
-            extra={
-                "next_action": "inspect_stable_policy_drift",
-                "would_change": False,
-                "transaction_plan": transaction_plan,
-            },
-        )
-
-    if policy_drift.get("status") == "clear":
+    target_plan = transaction_plan.get("target_reconciliation_plan", {})
+    target_would_add = target_plan.get("target_would_add", [])
+    target_would_prune = target_plan.get("target_would_prune", [])
+    if not target_would_add and not target_would_prune:
         return build_command_payload(
             ok=True,
             human_message="Stable repair dry-run completed; no repair needed.",

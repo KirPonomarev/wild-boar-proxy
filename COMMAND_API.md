@@ -105,3 +105,36 @@ It does not imply:
 
 The materialized target directory may remain empty of `codex-*.json` auth
 files. That is a success condition for this contour, not a defect.
+
+## Additional stable-repair contract surface
+
+`stable repair --dry-run --json` remains non-mutating.
+
+It must expose explicit machine-readable separation between:
+
+- observed stable inventory reporting
+- registry source-copy inputs
+- approved repair-target contract surface
+- future target reconciliation plan
+- repair apply authority
+
+Required stable-repair contract groups:
+
+- `transaction_plan.repair_observation`
+- `transaction_plan.registry_source_inputs`
+- `transaction_plan.repair_target_contract_surface`
+- `transaction_plan.target_reconciliation_plan`
+- `transaction_plan.repair_apply_authority`
+- `transaction_plan.blocked_reasons`
+
+Field meaning rules:
+
+- observed-source fields must not silently imply delete authority over the
+  observed stable inventory source
+- registry `auth_ref` source files may be policy inputs for future repair apply,
+  but this dry-run contract does not grant mutation authority over those source
+  files
+- target reconciliation fields must describe only the approved control-owned
+  target inventory
+- `would_change` must reflect future target reconciliation work, not merely
+  observed-source drift

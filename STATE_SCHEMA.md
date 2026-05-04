@@ -147,6 +147,13 @@ directory:
 That directory may remain empty of `codex-*.json` auth files until a later
 repair contour opens inventory-population behavior.
 
+`stable repair --dry-run --json` does not introduce a new persisted repair
+metadata file in this contour.
+
+Its repair authority and target reconciliation contract remain command-packet
+surfaces only until a later repair-apply implementation contour opens real
+mutation behavior.
+
 ## Write-surface ownership
 
 - `backend-registry.json` may be mutated only by the serialized account-state

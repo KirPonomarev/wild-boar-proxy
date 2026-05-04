@@ -1082,13 +1082,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual(drift["stable_auth_inventory_source"]["source"], "auth-dir")
         self.assertFalse(drift["stable_auth_inventory_source"]["exists"])
 
-    def test_stable_repair_dry_run_reports_not_needed_without_mutation(self) -> None:
+    def test_stable_repair_dry_run_reports_not_needed_when_target_matches_eligible_registry_auths(
+        self,
+    ) -> None:
         active_auth = self.stable_dir / "codex-active.json"
         active_auth.write_text("{}", encoding="utf-8")
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
         registry["backends"][0]["auth_ref"] = str(active_auth)
         (self.managed_dir / "backend-registry.json").write_text(
             json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        (self.managed_dir / "stable-repair-target" / "codex-active.json").write_text(
+            "{}",
+            encoding="utf-8",
         )
         before = self.state_snapshot()
         result = self.run_cli("stable", "repair", "--dry-run", "--json")
@@ -1106,9 +1114,28 @@ class CliTests(unittest.TestCase):
         self.assertTrue(plan["snapshot_required"])
         self.assertTrue(plan["lock_required"])
         self.assertEqual(plan["lock_preflight"]["status"], "available")
-        self.assertEqual(plan["would_add"], [])
-        self.assertEqual(plan["would_remove"], [])
-        self.assertEqual(plan["would_keep"][0]["auth_basename"], "codex-active.json")
+        self.assertEqual(
+            plan["repair_observation"]["observed_source_matching_allowed_auths"][0][
+                "auth_basename"
+            ],
+            "codex-active.json",
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_add"],
+            [],
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_prune"],
+            [],
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_keep"][0]["auth_basename"],
+            "codex-active.json",
+        )
+        self.assertEqual(
+            plan["repair_apply_authority"]["target_mutation_authority"]["exactness"],
+            "exact_approved_set",
+        )
 
     def test_stable_repair_dry_run_reports_disallowed_auth_plan(self) -> None:
         stable_auth = self.stable_dir / "codex-reserve.json"
@@ -1140,14 +1167,25 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(before, after)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["machine_error_code"], "OK")
-        self.assertTrue(payload["would_change"])
-        self.assertEqual(payload["next_action"], "review_transaction_plan")
+        self.assertEqual(payload["machine_error_code"], "STABLE_REPAIR_NOT_NEEDED")
+        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["next_action"], "none")
         self.assertEqual(payload["changed_files"], [])
         plan = payload["transaction_plan"]
-        self.assertEqual(plan["disallowed_auths"][0]["auth_basename"], "codex-reserve.json")
-        self.assertEqual(plan["would_remove"][0]["auth_basename"], "codex-reserve.json")
-        self.assertEqual(plan["would_add"], [])
+        self.assertEqual(
+            plan["repair_observation"]["observed_source_disallowed_auths"][0][
+                "auth_basename"
+            ],
+            "codex-reserve.json",
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_add"],
+            [],
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_prune"],
+            [],
+        )
 
     def test_stable_repair_dry_run_reports_missing_allowed_auth_plan(self) -> None:
         missing_auth = self.stable_dir / "codex-missing.json"
@@ -1165,9 +1203,30 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["would_change"])
         self.assertEqual(payload["changed_files"], [])
         plan = payload["transaction_plan"]
-        self.assertEqual(plan["missing_auths"][0]["auth_basename"], "codex-missing.json")
-        self.assertEqual(plan["would_add"][0]["auth_basename"], "codex-missing.json")
-        self.assertEqual(plan["would_remove"], [])
+        self.assertEqual(
+            plan["repair_observation"]["observed_source_missing_allowed_auths"][0][
+                "auth_basename"
+            ],
+            "codex-missing.json",
+        )
+        self.assertEqual(
+            plan["registry_source_inputs"]["source_copy_missing_auth_refs"][0][
+                "auth_basename"
+            ],
+            "codex-missing.json",
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_add"][0]["auth_basename"],
+            "codex-missing.json",
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_add"][0]["source_exists"],
+            False,
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_prune"],
+            [],
+        )
 
     def test_stable_repair_dry_run_blocks_ambiguous_registry(self) -> None:
         auth_a = self.stable_dir / "codex-a.json"
@@ -1205,8 +1264,17 @@ class CliTests(unittest.TestCase):
             "REGISTRY_IDENTITY_AMBIGUOUS",
         )
 
-    def test_stable_repair_dry_run_blocks_missing_stable_auth_dir(self) -> None:
+    def test_stable_repair_dry_run_reports_observed_source_missing_dir_without_blocking(
+        self,
+    ) -> None:
         missing_dir = self.stable_dir / "missing-auth"
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
         (self.stable_dir / "config.yaml").write_text(
             "host: 127.0.0.1\n"
             "port: 8318\n"
@@ -1216,14 +1284,58 @@ class CliTests(unittest.TestCase):
         before = self.state_snapshot()
         result = self.run_cli("stable", "repair", "--dry-run", "--json")
         after = self.state_snapshot()
-        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(before, after)
-        self.assertEqual(payload["machine_error_code"], "STABLE_AUTH_DIR_MISSING")
-        self.assertFalse(payload["would_change"])
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertTrue(payload["would_change"])
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(
+            payload["transaction_plan"]["repair_observation"]["status"], "unknown"
+        )
         self.assertFalse(
-            payload["transaction_plan"]["stable_auth_inventory_source"]["exists"]
+            payload["transaction_plan"]["repair_observation"][
+                "stable_auth_inventory_source"
+            ]["exists"]
+        )
+        self.assertEqual(
+            payload["transaction_plan"]["target_reconciliation_plan"]["target_would_add"][
+                0
+            ]["auth_basename"],
+            "codex-active.json",
+        )
+
+    def test_stable_repair_dry_run_keeps_unknown_source_auths_out_of_target_prune_lane(
+        self,
+    ) -> None:
+        active_auth = self.stable_dir / "codex-active.json"
+        unknown_auth = self.stable_dir / "codex-unknown.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        unknown_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            "port: 8318\n"
+            f'auth-dir: "{self.stable_dir}"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        plan = payload["transaction_plan"]
+        self.assertEqual(
+            plan["repair_observation"]["observed_source_unknown_auths"][0][
+                "auth_basename"
+            ],
+            "codex-unknown.json",
+        )
+        self.assertEqual(
+            plan["target_reconciliation_plan"]["target_would_prune"],
+            [],
         )
 
     def test_stable_repair_dry_run_blocks_held_lock_without_mutation(self) -> None:
@@ -1491,8 +1603,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         plan = payload["transaction_plan"]
-        self.assertEqual(plan["stable_auth_inventory_source"]["source"], "stable_config_parent")
-        approved_target = plan["approved_repair_target_reference"]
+        self.assertEqual(
+            plan["repair_observation"]["stable_auth_inventory_source"]["source"],
+            "stable_config_parent",
+        )
+        approved_target = plan["repair_target_contract_surface"][
+            "approved_repair_target_reference"
+        ]
         self.assertEqual(
             approved_target["target_identity"], "companion_managed_stable_auth_inventory"
         )
@@ -1505,14 +1622,27 @@ class CliTests(unittest.TestCase):
             str(self.managed_dir / "approved-repair-target.json"),
         )
         self.assertEqual(approved_target["status"], "fixed_not_materialized")
-        transaction_surface = plan["target_switch_transaction_metadata_surface"]
+        transaction_surface = plan["repair_target_contract_surface"][
+            "target_switch_transaction_metadata_surface"
+        ]
         self.assertEqual(
             transaction_surface["transaction_file"],
             str(self.managed_dir / "target-switch-transaction.json"),
         )
+        authority = plan["repair_apply_authority"]
         self.assertNotEqual(
-            plan["stable_auth_inventory_source"]["path"],
+            plan["repair_observation"]["stable_auth_inventory_source"]["path"],
             approved_target["inventory_dir"],
+        )
+        self.assertFalse(
+            authority["source_of_copy_authority"]["observed_source_delete_authority"]
+        )
+        self.assertFalse(
+            authority["source_of_copy_authority"]["engine_owned_delete_authority"]
+        )
+        self.assertEqual(
+            authority["target_mutation_authority"]["write_scope"],
+            "approved_target_inventory_only",
         )
 
     def test_stable_repair_dry_run_reports_materialized_approved_target_after_apply(self) -> None:
@@ -1523,10 +1653,15 @@ class CliTests(unittest.TestCase):
         payload = json.loads(repair.stdout)
         plan = payload["transaction_plan"]
         self.assertEqual(
-            plan["approved_repair_target_reference"]["status"], "materialized_aligned"
+            plan["repair_target_contract_surface"]["approved_repair_target_reference"][
+                "status"
+            ],
+            "materialized_aligned",
         )
         self.assertEqual(
-            plan["target_switch_transaction_metadata_surface"]["status"],
+            plan["repair_target_contract_surface"][
+                "target_switch_transaction_metadata_surface"
+            ]["status"],
             "materialized_aligned",
         )
 
