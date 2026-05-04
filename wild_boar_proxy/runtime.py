@@ -354,6 +354,98 @@ def get_selected_backends_digest(state: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def get_auth_basename(auth_ref: Any) -> str:
+    return Path(str(auth_ref or "")).name
+
+
+def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
+    reasons = []
+    if backend.get("enabled", True) is False:
+        reasons.append("disabled")
+    if backend.get("pool") != "active":
+        reasons.append("pool_not_active")
+    if bool(backend.get("manual_hold")):
+        reasons.append("manual_hold")
+    if str(backend.get("status", "")).lower() in {"down", "fatal", "retired"}:
+        reasons.append("status_not_allowed")
+    if not backend.get("auth_ref"):
+        reasons.append("missing_auth_ref")
+    return not reasons, reasons
+
+
+def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> dict[str, Any]:
+    backends = registry.get("backends") or []
+    mapped_backends = {
+        auth_basename: backend
+        for backend in backends
+        if (auth_basename := get_auth_basename(backend.get("auth_ref")))
+    }
+    allowed_auths = set()
+    for auth_basename, backend in mapped_backends.items():
+        allowed, _ = is_stable_auth_allowed(backend)
+        if allowed:
+            allowed_auths.add(auth_basename)
+
+    configured_active_count = sum(
+        1
+        for backend in backends
+        if backend.get("pool") == "active" and backend.get("enabled", True) is not False
+    )
+    stable_auth_dir = paths.stable_config.parent
+    claim_blockers = [
+        "stable-15-proved",
+        "active-only-traffic",
+        "pool-participation-correct",
+    ]
+    if not stable_auth_dir.is_dir():
+        return {
+            "status": "unknown",
+            "machine_error_code": "STABLE_POLICY_DRIFT_UNKNOWN",
+            "configured_active_count": configured_active_count,
+            "allowed_stable_auth_count": len(allowed_auths),
+            "stable_auth_inventory_count": 0,
+            "disallowed_configured_auths": [],
+            "unknown_auths": [],
+            "claim_blockers": claim_blockers[:2],
+            "next_action": "inspect_stable_policy_drift",
+        }
+
+    inventory = sorted(path.name for path in stable_auth_dir.glob("codex-*.json"))
+    disallowed_configured_auths = []
+    unknown_auths = []
+    for auth_basename in inventory:
+        backend = mapped_backends.get(auth_basename)
+        if backend is None:
+            unknown_auths.append(auth_basename)
+            continue
+        allowed, reasons = is_stable_auth_allowed(backend)
+        if not allowed:
+            disallowed_configured_auths.append(
+                {
+                    "backend_id": backend.get("id"),
+                    "auth_basename": auth_basename,
+                    "pool": backend.get("pool"),
+                    "manual_hold": bool(backend.get("manual_hold")),
+                    "status": backend.get("status"),
+                    "enabled": backend.get("enabled", True),
+                    "reason": ",".join(reasons),
+                }
+            )
+
+    detected = bool(disallowed_configured_auths or unknown_auths)
+    return {
+        "status": "detected" if detected else "clear",
+        "machine_error_code": "STABLE_POLICY_DRIFT" if detected else "OK",
+        "configured_active_count": configured_active_count,
+        "allowed_stable_auth_count": len(allowed_auths),
+        "stable_auth_inventory_count": len(inventory),
+        "disallowed_configured_auths": disallowed_configured_auths,
+        "unknown_auths": unknown_auths,
+        "claim_blockers": claim_blockers if detected else [],
+        "next_action": "inspect_stable_policy_drift" if detected else "none",
+    }
+
+
 def response_ok(payload: dict[str, Any]) -> bool:
     def iter_strings(value: Any) -> list[str]:
         if isinstance(value, str):
@@ -580,6 +672,7 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
             "endpoint": health_payload["endpoint"],
             "current_proxy_url": current_proxy_url,
             "pool_summary": pool_summary,
+            "policy_drift": get_stable_policy_drift(paths, registry),
             "last_error": health_payload.get("last_error", state.get("last_error", "")),
             "attestation_summary": {
                 "status": health_payload["status"],

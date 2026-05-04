@@ -562,6 +562,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertNotIn("policy_drift", payload)
         self.assertTrue(payload["attestation"]["listener_ok"])
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
@@ -654,6 +655,13 @@ class CliTests(unittest.TestCase):
     def test_status_uses_live_attestation_for_green_state(self) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"
+        active_auth = self.stable_dir / "codex-active.json"
+        active_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(active_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
         (self.managed_dir / "managed-config.yaml").write_text(
             f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
         )
@@ -684,6 +692,210 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["liveness"], "healthy")
         self.assertEqual(payload["attestation_summary"]["status"], "ok")
+        self.assertEqual(payload["policy_drift"]["status"], "clear")
+        self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
+
+    def test_status_reports_stable_policy_drift_without_greenwash(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        stable_auth = self.stable_dir / "codex-reserve.json"
+        stable_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                "id": "reserve-backend",
+                "label": "Reserve Backend",
+                "pool": "reserve",
+                "status": "healthy",
+                "manual_hold": True,
+                "auth_ref": str(stable_auth),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            }
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["liveness"], "healthy")
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "detected")
+        self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
+        self.assertEqual(drift["stable_auth_inventory_count"], 1)
+        self.assertEqual(drift["allowed_stable_auth_count"], 0)
+        self.assertEqual(
+            drift["disallowed_configured_auths"][0]["backend_id"],
+            "reserve-backend",
+        )
+        self.assertEqual(
+            drift["disallowed_configured_auths"][0]["auth_basename"],
+            "codex-reserve.json",
+        )
+        self.assertIn("stable-15-proved", drift["claim_blockers"])
+
+    def test_status_reports_disabled_retired_down_stable_auth_drift(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        stable_auths = {
+            "disabled-backend": self.stable_dir / "codex-disabled.json",
+            "retired-backend": self.stable_dir / "codex-retired.json",
+            "down-backend": self.stable_dir / "codex-down.json",
+        }
+        for stable_auth in stable_auths.values():
+            stable_auth.write_text("{}", encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"] = [
+            {
+                "id": "disabled-backend",
+                "label": "Disabled Backend",
+                "pool": "active",
+                "status": "healthy",
+                "enabled": False,
+                "manual_hold": False,
+                "auth_ref": str(stable_auths["disabled-backend"]),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+            {
+                "id": "retired-backend",
+                "label": "Retired Backend",
+                "pool": "retired",
+                "status": "retired",
+                "manual_hold": False,
+                "auth_ref": str(stable_auths["retired-backend"]),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+            {
+                "id": "down-backend",
+                "label": "Down Backend",
+                "pool": "active",
+                "status": "down",
+                "manual_hold": False,
+                "auth_ref": str(stable_auths["down-backend"]),
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+        ]
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "detected")
+        reasons_by_backend = {
+            item["backend_id"]: item["reason"]
+            for item in drift["disallowed_configured_auths"]
+        }
+        self.assertIn("disabled", reasons_by_backend["disabled-backend"])
+        self.assertIn("pool_not_active", reasons_by_backend["retired-backend"])
+        self.assertIn("status_not_allowed", reasons_by_backend["down-backend"])
+
+    def test_status_reports_unknown_stable_auth_as_policy_drift(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.stable_dir / "codex-unknown.json").write_text("{}", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        drift = payload["policy_drift"]
+        self.assertEqual(drift["status"], "detected")
+        self.assertEqual(drift["unknown_auths"], ["codex-unknown.json"])
+        self.assertEqual(drift["machine_error_code"], "STABLE_POLICY_DRIFT")
 
     def test_status_does_not_greenwash_failed_attestation(self) -> None:
         port = free_port()
