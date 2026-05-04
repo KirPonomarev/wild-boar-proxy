@@ -68,14 +68,15 @@ The current target-switch contour exposes:
 - `stable target switch --dry-run --json`
 - `stable target switch --apply --json`
 
-These are currently contract and reporting surfaces, not execution surfaces.
+`--dry-run` remains a contract and reporting surface.
+`--apply` is now a narrow control-layer write surface.
 
 They must remain strict JSON and expose explicit machine-readable separation
 between:
 
 - current observed stable inventory source
 - approved repair-target reference
-- reserved target-switch transaction metadata surface
+- target-switch transaction metadata surface
 
 Current required target-switch contract fields:
 
@@ -88,6 +89,19 @@ Current required target-switch contract fields:
 - `transaction_phases`
 - `verify_scope`
 
-Until the later switch-apply implementation contour opens real mutation
-behavior, `stable target switch --apply --json` remains a non-mutating blocker
-path.
+`stable target switch --apply --json` may materialize only:
+
+- `<managed_dir>/stable-repair-target`
+- `<managed_dir>/approved-repair-target.json`
+- `<managed_dir>/target-switch-transaction.json`
+
+Successful apply means control-layer target activation only.
+It does not imply:
+
+- runtime switch success
+- engine inventory redirection
+- repair success
+- stable runtime health improvement
+
+The materialized target directory may remain empty of `codex-*.json` auth
+files. That is a success condition for this contour, not a defect.

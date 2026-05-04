@@ -632,9 +632,129 @@ APPROVED_REPAIR_TARGET_IDENTITY = "companion_managed_stable_auth_inventory"
 APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
 
 
-def get_approved_repair_target_reference(paths: RuntimePaths) -> dict[str, Any]:
+def read_json_if_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    return read_json(path)
+
+
+def build_approved_repair_target_file_payload(paths: RuntimePaths) -> dict[str, Any]:
     return {
-        "status": "fixed_not_materialized",
+        "schema_version": APPROVED_REPAIR_TARGET_SCHEMA_VERSION,
+        "target_identity": APPROVED_REPAIR_TARGET_IDENTITY,
+        "target_kind": APPROVED_REPAIR_TARGET_KIND,
+        "inventory_dir": str(paths.repair_target_inventory_dir),
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+    }
+
+
+def build_target_switch_transaction_file_payload(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "schema_version": TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION,
+        "transaction_status": "applied",
+        "target_identity": APPROVED_REPAIR_TARGET_IDENTITY,
+        "target_kind": APPROVED_REPAIR_TARGET_KIND,
+        "inventory_dir": str(paths.repair_target_inventory_dir),
+        "reference_file": str(paths.repair_target_reference_file),
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+    }
+
+
+def get_target_switch_materialization_status(paths: RuntimePaths) -> str:
+    expected_reference = build_approved_repair_target_file_payload(paths)
+    expected_transaction = build_target_switch_transaction_file_payload(paths)
+    approved_target = read_json_if_file(paths.repair_target_reference_file)
+    transaction_surface = read_json_if_file(paths.target_switch_transaction_file)
+    if (
+        paths.repair_target_inventory_dir.is_dir()
+        and approved_target == expected_reference
+        and transaction_surface == expected_transaction
+    ):
+        return "applied_control_target_reference"
+    return "declared_review_only"
+
+
+def snapshot_candidate_paths(candidates: list[Path]) -> dict[Path, int]:
+    result: dict[Path, int] = {}
+    for candidate in candidates:
+        if candidate.exists():
+            result[candidate] = candidate.stat().st_mtime_ns
+    return result
+
+
+def snapshot_target_switch_guard_surfaces(paths: RuntimePaths) -> dict[str, Any]:
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    stable_inventory = {}
+    if stable_auth_dir.is_dir():
+        stable_inventory = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted(stable_auth_dir.glob("codex-*.json"))
+        }
+    return {
+        "registry": paths.registry_file.read_text(encoding="utf-8"),
+        "state": paths.state_file.read_text(encoding="utf-8"),
+        "stable_config": paths.stable_config.read_text(encoding="utf-8"),
+        "config_toml": paths.config_toml.read_text(encoding="utf-8"),
+        "runtime_mode": paths.runtime_mode_file.read_text(encoding="utf-8"),
+        "runtime_effective_mode": paths.runtime_effective_mode_file.read_text(
+            encoding="utf-8"
+        ),
+        "observed_inventory_source": inventory_source,
+        "stable_inventory": stable_inventory,
+    }
+
+
+def snapshot_path_state(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"state": "missing"}
+    if path.is_dir():
+        return {"state": "dir"}
+    return {"state": "file", "text": path.read_text(encoding="utf-8")}
+
+
+def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
+    state = snapshot.get("state")
+    if state == "missing":
+        if path.is_file() or path.is_symlink():
+            path.unlink(missing_ok=True)
+        return
+    if state == "dir":
+        path.mkdir(parents=True, exist_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(str(snapshot.get("text", "")), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def rollback_target_switch_apply(
+    paths: RuntimePaths,
+    *,
+    reference_snapshot: dict[str, Any],
+    transaction_snapshot: dict[str, Any],
+    target_dir_preexisted: bool,
+) -> None:
+    restore_path_state(paths.repair_target_reference_file, reference_snapshot)
+    restore_path_state(paths.target_switch_transaction_file, transaction_snapshot)
+    if (
+        not target_dir_preexisted
+        and paths.repair_target_inventory_dir.is_dir()
+        and not any(paths.repair_target_inventory_dir.iterdir())
+    ):
+        paths.repair_target_inventory_dir.rmdir()
+
+
+def get_approved_repair_target_reference(paths: RuntimePaths) -> dict[str, Any]:
+    expected = build_approved_repair_target_file_payload(paths)
+    materialized = read_json_if_file(paths.repair_target_reference_file)
+    return {
+        "status": (
+            "materialized_aligned"
+            if materialized == expected and paths.repair_target_inventory_dir.is_dir()
+            else "fixed_not_materialized"
+        ),
         "schema_version": APPROVED_REPAIR_TARGET_SCHEMA_VERSION,
         "target_identity": APPROVED_REPAIR_TARGET_IDENTITY,
         "target_kind": APPROVED_REPAIR_TARGET_KIND,
@@ -650,8 +770,14 @@ def get_approved_repair_target_reference(paths: RuntimePaths) -> dict[str, Any]:
 def get_target_switch_transaction_metadata_surface(
     paths: RuntimePaths,
 ) -> dict[str, Any]:
+    expected = build_target_switch_transaction_file_payload(paths)
+    materialized = read_json_if_file(paths.target_switch_transaction_file)
     return {
-        "status": "reserved_not_materialized",
+        "status": (
+            "materialized_aligned"
+            if materialized == expected
+            else "reserved_not_materialized"
+        ),
         "schema_version": TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION,
         "transaction_file": str(paths.target_switch_transaction_file),
         "ownership": "control_layer",
@@ -660,42 +786,263 @@ def get_target_switch_transaction_metadata_surface(
     }
 
 
-def run_stable_target_switch_contract(
-    paths: RuntimePaths, *, apply: bool
-) -> dict[str, Any]:
+def build_target_switch_surface_context(paths: RuntimePaths) -> dict[str, Any]:
     inventory_source = get_stable_auth_inventory_source(paths)[1]
     approved_target = get_approved_repair_target_reference(paths)
     transaction_metadata_surface = get_target_switch_transaction_metadata_surface(paths)
-    extra = {
-        "command_mode": "apply" if apply else "dry_run",
-        "target_surface": {
-            "status": "declared_review_only",
-            "observed_stable_inventory_source": inventory_source,
-            "approved_repair_target_reference": approved_target,
-            "target_switch_transaction_metadata_surface": transaction_metadata_surface,
-            "mode_set_is_target_switch": False,
+    return {
+        "status": get_target_switch_materialization_status(paths),
+        "observed_stable_inventory_source": inventory_source,
+        "approved_repair_target_reference": approved_target,
+        "target_switch_transaction_metadata_surface": transaction_metadata_surface,
+        "mode_set_is_target_switch": False,
+    }
+
+
+def run_stable_target_switch_apply(paths: RuntimePaths) -> dict[str, Any]:
+    lock_preflight = get_lock_preflight(paths)
+    if lock_preflight.get("status") == "held":
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply blocked by mutation lock.",
+            machine_error_code="LOCK_HELD",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "next_action": "retry_after_lock_released",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+    if lock_preflight.get("status") == "stale":
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply blocked by stale mutation lock.",
+            machine_error_code="TARGET_SWITCH_APPLY_BLOCKED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_stale_lock",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+
+    if paths.repair_target_inventory_dir.exists() and not paths.repair_target_inventory_dir.is_dir():
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply blocked by invalid approved target directory.",
+            machine_error_code="TARGET_SWITCH_INVALID_TARGET_DIR",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_target_switch_contract",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+    if paths.repair_target_inventory_dir.is_dir() and any(
+        paths.repair_target_inventory_dir.glob("codex-*.json")
+    ):
+        return build_command_payload(
+            ok=False,
+            human_message="Target switch apply blocked because the approved target inventory already contains auth files.",
+            machine_error_code="TARGET_SWITCH_DIR_NOT_EMPTY",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_target_switch_contract",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+
+    expected_reference = build_approved_repair_target_file_payload(paths)
+    expected_transaction = build_target_switch_transaction_file_payload(paths)
+    already_aligned = (
+        paths.repair_target_inventory_dir.is_dir()
+        and read_json_if_file(paths.repair_target_reference_file) == expected_reference
+        and read_json_if_file(paths.target_switch_transaction_file) == expected_transaction
+    )
+    if already_aligned:
+        return build_command_payload(
+            ok=True,
+            human_message="Target switch apply found the approved target already active.",
+            machine_error_code="TARGET_SWITCH_ALREADY_ACTIVE",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+
+    guard_before = snapshot_target_switch_guard_surfaces(paths)
+    before = snapshot_candidate_paths(
+        [
+            paths.repair_target_inventory_dir,
+            paths.repair_target_reference_file,
+            paths.target_switch_transaction_file,
+        ]
+    )
+    reference_snapshot = snapshot_path_state(paths.repair_target_reference_file)
+    transaction_snapshot = snapshot_path_state(paths.target_switch_transaction_file)
+    target_dir_preexisted = paths.repair_target_inventory_dir.exists()
+
+    try:
+        with serialized_lock(paths):
+            paths.repair_target_inventory_dir.mkdir(parents=True, exist_ok=True)
+            write_json_atomic(paths.repair_target_reference_file, expected_reference)
+            write_json_atomic(paths.target_switch_transaction_file, expected_transaction)
+            if snapshot_target_switch_guard_surfaces(paths) != guard_before:
+                raise RuntimeErrorInfo(
+                    "Target switch apply verification failed because forbidden surfaces changed.",
+                    machine_error_code="TARGET_SWITCH_VERIFICATION_FAILED",
+                    severity="recoverable",
+                    operator_action="user_action",
+                )
+            if read_json(paths.repair_target_reference_file) != expected_reference:
+                raise RuntimeErrorInfo(
+                    "Target switch apply verification failed for approved target reference.",
+                    machine_error_code="TARGET_SWITCH_VERIFICATION_FAILED",
+                    severity="recoverable",
+                    operator_action="user_action",
+                )
+            if read_json(paths.target_switch_transaction_file) != expected_transaction:
+                raise RuntimeErrorInfo(
+                    "Target switch apply verification failed for transaction metadata.",
+                    machine_error_code="TARGET_SWITCH_VERIFICATION_FAILED",
+                    severity="recoverable",
+                    operator_action="user_action",
+                )
+    except Exception as exc:
+        rollback_target_switch_apply(
+            paths,
+            reference_snapshot=reference_snapshot,
+            transaction_snapshot=transaction_snapshot,
+            target_dir_preexisted=target_dir_preexisted,
+        )
+        if isinstance(exc, RuntimeErrorInfo):
+            return build_command_payload(
+                ok=False,
+                human_message=exc.message,
+                machine_error_code=exc.machine_error_code,
+                liveness="unknown",
+                severity=exc.severity,
+                operator_action=exc.operator_action,
+                changed_files=[],
+                extra={
+                    "next_action": exc.operator_action,
+                    "command_mode": "apply",
+                    "target_surface": build_target_switch_surface_context(paths),
+                    "write_surface_declared": True,
+                    "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                    "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                    "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                    "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+                },
+                exit_code=exc.exit_code,
+            )
+        return build_command_payload(
+            ok=False,
+            human_message=f"Target switch apply failed: {exc}",
+            machine_error_code="TARGET_SWITCH_APPLY_FAILED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "next_action": "inspect_target_switch_contract",
+                "command_mode": "apply",
+                "target_surface": build_target_switch_surface_context(paths),
+                "write_surface_declared": True,
+                "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+                "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+                "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+                "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
+            },
+        )
+
+    changed_files = detect_changed_files(
+        before,
+        [
+            paths.repair_target_inventory_dir,
+            paths.repair_target_reference_file,
+            paths.target_switch_transaction_file,
+        ],
+    )
+    return build_command_payload(
+        ok=True,
+        human_message="Target switch apply completed on approved control-layer surfaces.",
+        machine_error_code="TARGET_SWITCH_APPLIED",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "command_mode": "apply",
+            "target_surface": build_target_switch_surface_context(paths),
+            "write_surface_declared": True,
+            "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
+            "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
+            "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
+            "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
         },
+    )
+
+
+def run_stable_target_switch_contract(
+    paths: RuntimePaths, *, apply: bool
+) -> dict[str, Any]:
+    if apply:
+        return run_stable_target_switch_apply(paths)
+    extra = {
+        "command_mode": "dry_run",
+        "target_surface": build_target_switch_surface_context(paths),
         "write_surface_declared": True,
         "declared_write_surfaces": TARGET_SWITCH_DECLARED_WRITE_SURFACES,
         "forbidden_surfaces": TARGET_SWITCH_FORBIDDEN_SURFACES,
         "transaction_phases": TARGET_SWITCH_TRANSACTION_PHASES,
         "verify_scope": TARGET_SWITCH_VERIFY_SCOPE,
     }
-    if apply:
-        return build_command_payload(
-            ok=False,
-            human_message="Target switch apply is declared but not implemented.",
-            machine_error_code="TARGET_SWITCH_NOT_IMPLEMENTED",
-            liveness="unknown",
-            severity="recoverable",
-            operator_action="user_action",
-            changed_files=[],
-            extra={**extra, "next_action": "inspect_target_switch_contract"},
-        )
-
     return build_command_payload(
         ok=True,
-        human_message="Target switch contract is declared for review only; activation is not implemented.",
+        human_message="Target switch contract surface is available.",
         machine_error_code="TARGET_SWITCH_CONTRACT_READY",
         liveness="unknown",
         severity="recoverable",

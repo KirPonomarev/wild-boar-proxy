@@ -123,24 +123,29 @@ Required fields once materialized:
 - `target_kind`
 - `inventory_dir`
 - `ownership`
+- `location_scope`
 
-Optional fields currently reserved:
+`target-switch-transaction.json` is the control-layer transaction metadata
+surface for the serialized target-switch apply path.
 
-- `updated_at`
+Required fields once materialized:
 
-`target-switch-transaction.json` is a reserved control metadata surface for a
-future serialized target-switch transaction path.
+- `schema_version`
+- `transaction_status`
+- `target_identity`
+- `target_kind`
+- `inventory_dir`
+- `reference_file`
+- `ownership`
+- `location_scope`
 
-At this contour only:
+The target-switch apply path may also materialize the approved empty inventory
+directory:
 
-- file identity
-- file location
-- ownership
+- `stable-repair-target/`
 
-are fixed.
-
-Detailed execution and rollback schema for that file is deferred to the later
-switch-apply implementation contour.
+That directory may remain empty of `codex-*.json` auth files until a later
+repair contour opens inventory-population behavior.
 
 ## Write-surface ownership
 
@@ -152,9 +157,9 @@ switch-apply implementation contour.
 - `runtime-effective-mode.txt` may be mutated only by successful live
   preflight, fallback, or recovery completion
 - `approved-repair-target.json` may be mutated only by the serialized
-  target-switch selection path once that write path is opened
+  target-switch selection path
 - `target-switch-transaction.json` may be mutated only by the serialized
-  target-switch transaction path once that write path is opened
+  target-switch transaction path
 
 Every mutating path must declare which of these surfaces it writes before the
 write begins.
