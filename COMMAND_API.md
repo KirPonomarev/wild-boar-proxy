@@ -60,3 +60,34 @@ Every command response must include all required fields on both success and fail
 - `recoverable`
 - `needs_user_action`
 - `fatal`
+
+## Additional target-switch contract surface
+
+The current target-switch contour exposes:
+
+- `stable target switch --dry-run --json`
+- `stable target switch --apply --json`
+
+These are currently contract and reporting surfaces, not execution surfaces.
+
+They must remain strict JSON and expose explicit machine-readable separation
+between:
+
+- current observed stable inventory source
+- approved repair-target reference
+- reserved target-switch transaction metadata surface
+
+Current required target-switch contract fields:
+
+- `target_surface.status`
+- `target_surface.observed_stable_inventory_source`
+- `target_surface.approved_repair_target_reference`
+- `target_surface.target_switch_transaction_metadata_surface`
+- `declared_write_surfaces`
+- `forbidden_surfaces`
+- `transaction_phases`
+- `verify_scope`
+
+Until the later switch-apply implementation contour opens real mutation
+behavior, `stable target switch --apply --json` remains a non-mutating blocker
+path.

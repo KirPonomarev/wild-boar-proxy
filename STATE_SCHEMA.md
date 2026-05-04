@@ -104,6 +104,44 @@ Optional fields currently supported by the local contour:
 - `runtime-mode.txt` stores desired mode
 - `runtime-effective-mode.txt` stores actual mode after preflight
 
+## Control metadata
+
+`approved-repair-target.json` is the control-layer truth surface for the
+approved repair-target reference.
+
+It is not:
+
+- lifecycle registry truth
+- runtime health truth
+- supervisor runtime state
+- effective-mode truth
+
+Required fields once materialized:
+
+- `schema_version`
+- `target_identity`
+- `target_kind`
+- `inventory_dir`
+- `ownership`
+
+Optional fields currently reserved:
+
+- `updated_at`
+
+`target-switch-transaction.json` is a reserved control metadata surface for a
+future serialized target-switch transaction path.
+
+At this contour only:
+
+- file identity
+- file location
+- ownership
+
+are fixed.
+
+Detailed execution and rollback schema for that file is deferred to the later
+switch-apply implementation contour.
+
 ## Write-surface ownership
 
 - `backend-registry.json` may be mutated only by the serialized account-state
@@ -113,6 +151,10 @@ Optional fields currently supported by the local contour:
 - `runtime-mode.txt` may be mutated only by the mode-selection path
 - `runtime-effective-mode.txt` may be mutated only by successful live
   preflight, fallback, or recovery completion
+- `approved-repair-target.json` may be mutated only by the serialized
+  target-switch selection path once that write path is opened
+- `target-switch-transaction.json` may be mutated only by the serialized
+  target-switch transaction path once that write path is opened
 
 Every mutating path must declare which of these surfaces it writes before the
 write begins.

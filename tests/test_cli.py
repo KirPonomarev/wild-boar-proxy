@@ -237,11 +237,28 @@ class CliTests(unittest.TestCase):
             check=False,
         )
 
+    def run_cli_with_env(
+        self, env_overrides: dict[str, str], *args: str
+    ) -> subprocess.CompletedProcess[str]:
+        env = self.env()
+        env.update(env_overrides)
+        return subprocess.run(
+            ["python3", "-m", "wild_boar_proxy", *args],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
     def state_snapshot(self) -> dict[str, str]:
+        repair_target_dir = self.managed_dir / "stable-repair-target"
         paths = [
             self.stable_dir / "config.yaml",
             self.managed_dir / "backend-registry.json",
             self.managed_dir / "supervisor-state.json",
+            self.managed_dir / "approved-repair-target.json",
+            self.managed_dir / "target-switch-transaction.json",
             self.profile_dir / "config.toml",
             self.profile_dir / "runtime-mode.txt",
             self.profile_dir / "runtime-effective-mode.txt",
@@ -251,7 +268,14 @@ class CliTests(unittest.TestCase):
             for path in paths
             if path.exists()
         }
+        snapshot[f"DIR:{repair_target_dir}"] = (
+            json.dumps(sorted(path.name for path in repair_target_dir.iterdir()))
+            if repair_target_dir.is_dir()
+            else "__MISSING__"
+        )
         for path in sorted(self.stable_dir.glob("codex-*.json")):
+            snapshot[str(path)] = path.read_text(encoding="utf-8")
+        for path in sorted(repair_target_dir.glob("codex-*.json")):
             snapshot[str(path)] = path.read_text(encoding="utf-8")
         return snapshot
 
@@ -1256,6 +1280,36 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["write_surface_declared"])
         self.assertEqual(payload["target_surface"]["status"], "declared_review_only")
         self.assertEqual(
+            payload["target_surface"]["observed_stable_inventory_source"]["source"],
+            "stable_config_parent",
+        )
+        approved_target = payload["target_surface"]["approved_repair_target_reference"]
+        self.assertEqual(
+            approved_target["target_identity"], "companion_managed_stable_auth_inventory"
+        )
+        self.assertEqual(approved_target["target_kind"], "control_owned_inventory_path")
+        self.assertEqual(
+            approved_target["inventory_dir"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        self.assertEqual(
+            approved_target["reference_file"],
+            str(self.managed_dir / "approved-repair-target.json"),
+        )
+        self.assertEqual(approved_target["ownership"], "control_layer")
+        self.assertFalse(approved_target["reference_file_exists"])
+        self.assertFalse(approved_target["inventory_dir_exists"])
+        transaction_surface = payload["target_surface"][
+            "target_switch_transaction_metadata_surface"
+        ]
+        self.assertEqual(
+            transaction_surface["transaction_file"],
+            str(self.managed_dir / "target-switch-transaction.json"),
+        )
+        self.assertEqual(transaction_surface["status"], "reserved_not_materialized")
+        self.assertEqual(transaction_surface["ownership"], "control_layer")
+        self.assertFalse(transaction_surface["transaction_file_exists"])
+        self.assertEqual(
             payload["declared_write_surfaces"],
             [
                 "approved_control_target_reference_surface",
@@ -1291,8 +1345,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["command_mode"], "apply")
         self.assertEqual(payload["operator_action"], "user_action")
         self.assertTrue(payload["write_surface_declared"])
+        approved_target = payload["target_surface"]["approved_repair_target_reference"]
+        self.assertEqual(
+            approved_target["reference_file"],
+            str(self.managed_dir / "approved-repair-target.json"),
+        )
         self.assertIn("~/.cli-proxy-api", payload["forbidden_surfaces"])
         self.assertEqual(payload["next_action"], "inspect_target_switch_contract")
+
+    def test_stable_target_switch_contract_ignores_override_alias_attempts(self) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_REPAIR_TARGET_INVENTORY_DIR": str(self.stable_dir),
+                "WBP_REPAIR_TARGET_REFERENCE_FILE": str(
+                    self.managed_dir / "backend-registry.json"
+                ),
+                "WBP_TARGET_SWITCH_TRANSACTION_FILE": str(
+                    self.managed_dir / "supervisor-state.json"
+                ),
+            },
+            "stable",
+            "target",
+            "switch",
+            "--dry-run",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        approved_target = payload["target_surface"]["approved_repair_target_reference"]
+        self.assertEqual(
+            approved_target["inventory_dir"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        self.assertEqual(
+            approved_target["reference_file"],
+            str(self.managed_dir / "approved-repair-target.json"),
+        )
+        transaction_surface = payload["target_surface"][
+            "target_switch_transaction_metadata_surface"
+        ]
+        self.assertEqual(
+            transaction_surface["transaction_file"],
+            str(self.managed_dir / "target-switch-transaction.json"),
+        )
+
+    def test_stable_repair_dry_run_reports_approved_target_separately(self) -> None:
+        result = self.run_cli("stable", "repair", "--dry-run", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        plan = payload["transaction_plan"]
+        self.assertEqual(plan["stable_auth_inventory_source"]["source"], "stable_config_parent")
+        approved_target = plan["approved_repair_target_reference"]
+        self.assertEqual(
+            approved_target["target_identity"], "companion_managed_stable_auth_inventory"
+        )
+        self.assertEqual(
+            approved_target["inventory_dir"],
+            str(self.managed_dir / "stable-repair-target"),
+        )
+        self.assertEqual(
+            approved_target["reference_file"],
+            str(self.managed_dir / "approved-repair-target.json"),
+        )
+        transaction_surface = plan["target_switch_transaction_metadata_surface"]
+        self.assertEqual(
+            transaction_surface["transaction_file"],
+            str(self.managed_dir / "target-switch-transaction.json"),
+        )
+        self.assertNotEqual(
+            plan["stable_auth_inventory_source"]["path"],
+            approved_target["inventory_dir"],
+        )
 
     def test_stable_repair_dry_run_does_not_leak_to_other_json_surfaces(self) -> None:
         for args in (

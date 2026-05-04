@@ -54,6 +54,9 @@ class RuntimePaths:
     accounts_bin: Path
     onboard_bin: Path
     lock_file: Path
+    repair_target_inventory_dir: Path
+    repair_target_reference_file: Path
+    target_switch_transaction_file: Path
 
     @classmethod
     def from_env(cls) -> "RuntimePaths":
@@ -127,6 +130,9 @@ class RuntimePaths:
                     "WBP_LOCK_FILE", str(managed_dir / "wild-boar-proxy.lock")
                 )
             ).expanduser(),
+            repair_target_inventory_dir=managed_dir / "stable-repair-target",
+            repair_target_reference_file=managed_dir / "approved-repair-target.json",
+            target_switch_transaction_file=managed_dir / "target-switch-transaction.json",
         )
 
 
@@ -620,17 +626,53 @@ TARGET_SWITCH_DECLARED_WRITE_SURFACES = [
     "approved_control_target_reference_surface",
     "target_switch_transaction_metadata",
 ]
+APPROVED_REPAIR_TARGET_SCHEMA_VERSION = 1
+TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION = 1
+APPROVED_REPAIR_TARGET_IDENTITY = "companion_managed_stable_auth_inventory"
+APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
+
+
+def get_approved_repair_target_reference(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "status": "fixed_not_materialized",
+        "schema_version": APPROVED_REPAIR_TARGET_SCHEMA_VERSION,
+        "target_identity": APPROVED_REPAIR_TARGET_IDENTITY,
+        "target_kind": APPROVED_REPAIR_TARGET_KIND,
+        "inventory_dir": str(paths.repair_target_inventory_dir),
+        "reference_file": str(paths.repair_target_reference_file),
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+        "reference_file_exists": paths.repair_target_reference_file.exists(),
+        "inventory_dir_exists": paths.repair_target_inventory_dir.is_dir(),
+    }
+
+
+def get_target_switch_transaction_metadata_surface(
+    paths: RuntimePaths,
+) -> dict[str, Any]:
+    return {
+        "status": "reserved_not_materialized",
+        "schema_version": TARGET_SWITCH_TRANSACTION_METADATA_SCHEMA_VERSION,
+        "transaction_file": str(paths.target_switch_transaction_file),
+        "ownership": "control_layer",
+        "location_scope": "companion_managed_data",
+        "transaction_file_exists": paths.target_switch_transaction_file.exists(),
+    }
 
 
 def run_stable_target_switch_contract(
     paths: RuntimePaths, *, apply: bool
 ) -> dict[str, Any]:
     inventory_source = get_stable_auth_inventory_source(paths)[1]
+    approved_target = get_approved_repair_target_reference(paths)
+    transaction_metadata_surface = get_target_switch_transaction_metadata_surface(paths)
     extra = {
         "command_mode": "apply" if apply else "dry_run",
         "target_surface": {
             "status": "declared_review_only",
-            "current_inventory_source": inventory_source,
+            "observed_stable_inventory_source": inventory_source,
+            "approved_repair_target_reference": approved_target,
+            "target_switch_transaction_metadata_surface": transaction_metadata_surface,
             "mode_set_is_target_switch": False,
         },
         "write_surface_declared": True,
@@ -746,6 +788,10 @@ def build_stable_repair_transaction_plan(
         "lock_required": True,
         "lock_preflight": lock_preflight,
         "stable_auth_inventory_source": policy_drift.get("stable_auth_inventory_source", {}),
+        "approved_repair_target_reference": get_approved_repair_target_reference(paths),
+        "target_switch_transaction_metadata_surface": (
+            get_target_switch_transaction_metadata_surface(paths)
+        ),
         "allowed_auths": allowed_auths,
         "disallowed_auths": policy_drift.get("disallowed_configured_auths", []),
         "missing_auths": policy_drift.get("missing_auths", []),
