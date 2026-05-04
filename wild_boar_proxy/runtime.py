@@ -859,6 +859,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             paths.registry_file,
             paths.state_file,
             paths.managed_config_file,
+            paths.config_toml,
             paths.runtime_effective_mode_file,
         ],
     )

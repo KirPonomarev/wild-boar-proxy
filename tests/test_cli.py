@@ -681,6 +681,70 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-ran")
 
+    def test_sync_reports_config_toml_change_when_external_sync_promotes_base_url(self) -> None:
+        port = free_port()
+        sync_script = self.profile_dir / "sync-promotes-base-url.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY' >/dev/null 2>&1 &\n"
+            "import os\n"
+            "import socket\n"
+            "import time\n"
+            "port = int(os.environ['WBP_TEST_MANAGED_PORT'])\n"
+            "sock = socket.socket()\n"
+            "sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n"
+            "sock.bind(('127.0.0.1', port))\n"
+            "sock.listen(1)\n"
+            "time.sleep(10)\n"
+            "sock.close()\n"
+            "PY\n"
+            "sleep 0.1\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "port = os.environ['WBP_TEST_MANAGED_PORT']\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state['effective_mode'] = 'managed'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state['managed_port'] = int(port)\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "Path(os.environ['WBP_RUNTIME_EFFECTIVE_MODE_FILE']).write_text('managed\\n')\n"
+            "Path(os.environ['WBP_MANAGED_CONFIG_FILE']).write_text(f'host: 127.0.0.1\\nport: {port}\\n')\n"
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+            "lines = config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('base_url = '):\n"
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "PY\n"
+            "echo sync-promoted >&2\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        env = self.env()
+        env["WBP_SYNC_SCRIPT"] = str(sync_script)
+        env["WBP_TEST_MANAGED_PORT"] = str(port)
+        result = subprocess.run(
+            ["python3", "-m", "wild_boar_proxy", "sync", "--json"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertEqual(result.stderr.strip(), "sync-promoted")
+
     def test_mode_set_respects_serialized_lock(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
