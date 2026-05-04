@@ -224,6 +224,26 @@ def write_text_atomic(path: Path, value: str) -> None:
     tmp_path.replace(path)
 
 
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    write_text_atomic(path, json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def write_toml_string_atomic(path: Path, key: str, value: str) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    updated = False
+    pattern = re.compile(rf"^{re.escape(key)}\s*=")
+    rewritten: list[str] = []
+    for raw_line in lines:
+        if pattern.match(raw_line.strip()):
+            rewritten.append(f'{key} = "{value}"')
+            updated = True
+        else:
+            rewritten.append(raw_line)
+    if not updated:
+        rewritten.append(f'{key} = "{value}"')
+    write_text_atomic(path, "\n".join(rewritten))
+
+
 def read_api_key(path: Path) -> str:
     data = read_json(path)
     api_key = data.get("OPENAI_API_KEY")
@@ -364,6 +384,37 @@ def process_is_alive(pid_text: str) -> bool:
         return False
 
 
+def managed_pid_path(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "managed-proxy.pid"
+
+
+def reconcile_stable_fallback(
+    paths: RuntimePaths,
+    state: dict[str, Any],
+    *,
+    stable_endpoint: str,
+    error_message: str,
+    stable_listener_ok: bool,
+) -> dict[str, Any]:
+    stable_state = dict(state)
+    stable_state["status"] = "failed"
+    stable_state["last_error"] = error_message
+    stable_state["effective_mode"] = "stable"
+    stable_state["selected_backend_ids"] = []
+    stable_state["healthy_count"] = 1 if stable_listener_ok else 0
+    stable_state["degraded_count"] = 0
+    stable_state["down_count"] = 1
+    stable_state["last_sync_at"] = now_iso()
+
+    with serialized_lock(paths):
+        write_json_atomic(paths.state_file, stable_state)
+        write_text_atomic(paths.runtime_effective_mode_file, "stable")
+        write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
+        managed_pid_path(paths).unlink(missing_ok=True)
+
+    return read_json(paths.state_file, required=False)
+
+
 @contextmanager
 def serialized_lock(paths: RuntimePaths):
     paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -418,9 +469,10 @@ def build_command_payload(
 
 
 def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
+    desired_mode = get_desired_mode(paths)
+    health_payload = run_healthcheck(paths)
     registry = read_json(paths.registry_file)
     state = read_json(paths.state_file, required=False)
-    desired_mode = get_desired_mode(paths)
     current_proxy_url = state.get("current_proxy_url", "")
     pool_summary = {
         "active": int(state.get("active_count", 0) or 0),
@@ -432,7 +484,6 @@ def summarize_status(paths: RuntimePaths) -> dict[str, Any]:
         "selected_backend_ids": state.get("selected_backend_ids") or [],
         "backend_count": len(registry.get("backends") or []),
     }
-    health_payload = run_healthcheck(paths)
 
     return build_command_payload(
         ok=health_payload["status"] == "ok",
@@ -471,6 +522,39 @@ def run_healthcheck(paths: RuntimePaths, model: str | None = None) -> dict[str, 
     host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
     configured_base_url = read_toml_string(paths.config_toml, "base_url")
     listener_ok = socket_is_listening(host, port)
+    state_effective_mode = state.get("effective_mode")
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+
+    stale_managed_residue = (
+        state_effective_mode not in {None, "", "stable"}
+        or bool(state.get("selected_backend_ids"))
+        or managed_pid_path(paths).exists()
+        or configured_base_url != reported_endpoint
+    )
+    if reported_effective_mode == "stable" and stale_managed_residue:
+        stable_host, stable_port, _ = get_endpoint(paths, "stable")
+        stable_listener_ok = socket_is_listening(stable_host, stable_port)
+        error_message = state.get("last_error", "")
+        if not error_message and effective_mode == "managed" and not listener_ok:
+            error_message = (
+                f"Listener is not reachable at {attestation_endpoint}; "
+                f"effective endpoint is reconciled to {reported_endpoint}."
+            )
+        state = reconcile_stable_fallback(
+            paths,
+            state,
+            stable_endpoint=reported_endpoint,
+            error_message=error_message,
+            stable_listener_ok=stable_listener_ok,
+        )
+        effective_mode = get_effective_mode(paths, state)
+        host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+        configured_base_url = read_toml_string(paths.config_toml, "base_url")
+        listener_ok = socket_is_listening(host, port)
+
     models_ok = False
     responses_ok = False
     model_name = model or get_model(paths)
