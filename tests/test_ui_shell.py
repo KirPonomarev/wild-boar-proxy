@@ -496,6 +496,50 @@ class AccountMutationTests(unittest.TestCase):
                 runner, ("accounts", "release", "backend-a", "--json")
             )
 
+    def test_run_account_retire_and_refresh_uses_accounts_list_then_status(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "retire", "backend-a", "--json"): command_payload(
+                    human_message="Account retired."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(
+                    accounts=[
+                        {
+                            "id": "backend-a",
+                            "label": "Backend A",
+                            "pool": "retired",
+                            "manual_hold": False,
+                            "status": "healthy",
+                            "fail_count": 0,
+                            "success_count": 3,
+                            "last_success": "2026-05-05T10:00:00+00:00",
+                            "last_error": "",
+                            "cooldown_until": None,
+                            "notes": "",
+                        }
+                    ]
+                ),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_account_mutation_and_refresh(
+            runner, ("accounts", "retire", "backend-a", "--json")
+        )
+
+        self.assertEqual(action_payload["human_message"], "Account retired.")
+        self.assertEqual(runtime_snapshot.overall_state, "ok")
+        self.assertEqual(account_snapshot.retired_count, 1)
+        self.assertEqual(account_snapshot.accounts[0].pool, "retired")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "retire", "backend-a", "--json"),
+                ("accounts", "list", "--json"),
+                ("status", "--json"),
+            ],
+        )
+
 
 class UiDispatchTests(unittest.TestCase):
     def test_run_validate_action_delegates_to_account_check_alias(self) -> None:
@@ -617,8 +661,21 @@ class UiDispatchTests(unittest.TestCase):
             "release",
         )
 
-    def test_retire_action_is_not_exposed_in_wave_1g(self) -> None:
-        self.assertFalse(hasattr(MinimalCompanionShell, "run_retire_action"))
+    def test_run_retire_action_maps_to_generic_mutation_handler(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_mutation_action = mock.Mock()
+
+        shell.run_retire_action()
+
+        shell._run_account_mutation_action.assert_called_once_with(
+            "Retire",
+            "Retire selected account with terminal no-return semantics?",
+            "retire",
+        )
+
+    def test_no_restore_or_reactivate_affordance_is_exposed(self) -> None:
+        self.assertFalse(hasattr(MinimalCompanionShell, "run_restore_action"))
+        self.assertFalse(hasattr(MinimalCompanionShell, "run_reactivate_action"))
 
 
 class MainTests(unittest.TestCase):

@@ -560,6 +560,9 @@ class MinimalCompanionShell:
         ttk.Button(account_actions, text="Release", command=self.run_release_action).pack(
             side="left", padx=(8, 0)
         )
+        ttk.Button(account_actions, text="Retire", command=self.run_retire_action).pack(
+            side="left", padx=(8, 0)
+        )
 
         columns = (
             "id",
@@ -786,6 +789,13 @@ class MinimalCompanionShell:
             "Release",
             "Release selected held account back to reserve semantics?",
             "release",
+        )
+
+    def run_retire_action(self) -> None:
+        self._run_account_mutation_action(
+            "Retire",
+            "Retire selected account with terminal no-return semantics?",
+            "retire",
         )
 
     def _run_account_mutation_action(
