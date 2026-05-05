@@ -308,6 +308,7 @@ Any operation that changes active routing, registry, mode, or managed state must
    - `mode set managed`
    - `policy stage set`
    - `rollout rotation inspect`
+   - `rollout evidence capture 16`
    - `rollout stage prove 10`
    - `rollout stage prove 15`
    - `rollout stage advance 15`
@@ -761,6 +762,12 @@ They may support a claim, but they are not substitutes for local runtime attesta
 - `STATE_SERIALIZATION_GATE`
 - `FALLBACK_DRILL_GATE`
 - `SCALE_EVIDENCE_PACKET_GATE`
+
+`SCALE_EVIDENCE_PACKET_GATE` is owned by
+`rollout evidence capture 16 --json` for the observed 16-account field contour.
+This surface may produce only `field_evidence_observed_only`.
+It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
+`pilot_ready`, or `production_ready`.
 
 ## Implementation Order
 

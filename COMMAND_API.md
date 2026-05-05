@@ -24,6 +24,7 @@ All operator commands must support `--json`.
 - `mode set managed --json`
 - `policy stage set <10|15|20> --json`
 - `rollout rotation inspect --json`
+- `rollout evidence capture 16 --json`
 - `rollout stage prove 10 --json`
 - `rollout stage prove 15 --json`
 - `rollout stage advance 15 <id> --json`
@@ -390,6 +391,98 @@ Rotation evidence `machine_error_code` values include:
 - lifecycle mutation under `accounts ... --json`
 - policy mutation under `policy stage set ... --json`
 - runtime-health ownership in `healthcheck --json`
+
+## Additional scale evidence packet surface
+
+`rollout evidence capture 16 --json` is the owner surface for the
+16-account field evidence packet gate.
+
+It may aggregate existing machine evidence, but it is not a new runtime truth
+engine.
+It must not create a `stable_16_proved`, `stable_20_proved`, `scale_complete`,
+`pilot_ready`, or `production_ready` claim.
+
+The only successful claim scope for this contour is:
+
+- `field_evidence_observed_only`
+
+`rollout evidence capture 16 --json` may expose a nested
+`scale_evidence_packet_result` surface.
+Required fields include:
+
+- `schema_version`
+- `claim_target`
+- `claim_scope`
+- `packet_status`
+- `observed_at_utc`
+- `commit_hash`
+- `runtime_version`
+- `environment_note`
+- `runtime_attestation_status`
+- `rotation_evidence_status`
+- `fallback_readiness_status`
+- `pool_counts_status`
+- `diagnostics_redaction_status`
+- `selected_backend_snapshot_status`
+- `accounts_summary_status`
+- `pool_counts`
+- `selected_backend_snapshot_summary`
+- `accounts_summary`
+- `runtime_attestation_summary`
+- `rotation_evidence_summary`
+- `fallback_readiness_summary`
+- `diagnostics_bundle_summary`
+- `blocked_reasons`
+- `final_outcome`
+
+Allowed `claim_target`:
+
+- `16`
+
+Allowed `packet_status` values:
+
+- `complete`
+- `incomplete`
+- `contradicted`
+- `unsafe_to_claim`
+
+Allowed `final_outcome` values:
+
+- `field_evidence_packet_complete`
+- `field_evidence_packet_incomplete`
+- `field_evidence_packet_contradicted`
+- `field_evidence_packet_unsafe_to_claim`
+
+The command may write a redacted evidence bundle to a temp/export directory.
+It must not write:
+
+- `backend-registry.json`
+- `supervisor-state.json`
+- runtime mode or effective-mode files
+- `selected_backend_snapshot`
+- active/reserve/retired lifecycle state
+- proxy adoption state
+- last-known-good proxy state
+
+Any delegated healthcheck must be non-mutating:
+
+- no recovery write
+- no stable fallback write
+- no current-proxy auto-adoption
+- no last-known-good proxy write
+- no stable repair apply
+
+The evidence packet must treat runtime attestation, rotation evidence, fallback
+readiness, accounts summary, and diagnostics redaction as separate axes.
+It must not infer selected backend participation from registry active ids,
+registry active counts, or pool policy.
+
+`diagnostics_redaction_status=failed` or any runtime write-surface mutation
+must produce `packet_status=unsafe_to_claim`.
+Contradicted rotation evidence or ambiguous registry identity must produce
+`packet_status=contradicted`.
+Missing, stale, or insufficient evidence must produce
+`packet_status=incomplete`.
 
 ## Additional stage-proof owner surfaces
 

@@ -49,6 +49,9 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
+SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
+SCALE_EVIDENCE_FIELD_TARGET = "16"
+SCALE_EVIDENCE_CLAIM_SCOPE = "field_evidence_observed_only"
 SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
 SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
@@ -3888,6 +3891,7 @@ def run_healthcheck(
     allow_recovery: bool = True,
     allow_last_known_good_proxy_write: bool = True,
     allow_current_proxy_auto_adoption: bool = True,
+    allow_stable_fallback_write: bool = True,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     state = read_json(paths.state_file, required=False)
@@ -3909,7 +3913,11 @@ def run_healthcheck(
         or managed_pid_path(paths).exists()
         or configured_base_url != reported_endpoint
     )
-    if reported_effective_mode == "stable" and stale_managed_residue:
+    if (
+        allow_stable_fallback_write
+        and reported_effective_mode == "stable"
+        and stale_managed_residue
+    ):
         stable_host, stable_port, _ = get_endpoint(paths, "stable")
         stable_listener_ok = socket_is_listening(stable_host, stable_port)
         error_message = state.get("last_error", "")
@@ -5410,6 +5418,474 @@ def summarize_stable_10_rollback_readiness(
         "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
         "reason": reason,
     }
+
+
+def get_repo_commit_hash() -> str:
+    repo_root = Path(__file__).resolve().parents[1]
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    commit_hash = result.stdout.strip()
+    return commit_hash if re.fullmatch(r"[0-9a-fA-F]{40}", commit_hash) else ""
+
+
+def redact_url_credentials(value: str) -> str:
+    try:
+        parsed = urllib.parse.urlsplit(value)
+    except ValueError:
+        return value
+    if not parsed.scheme or not parsed.netloc or "@" not in parsed.netloc:
+        return value
+    host = parsed.hostname or ""
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    redacted_netloc = f"[redacted]@{host}{port}"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, redacted_netloc, parsed.path, parsed.query, parsed.fragment)
+    )
+
+
+def redact_sensitive_string(value: str) -> str:
+    value = redact_url_credentials(value)
+    value = re.sub(r"sk-[A-Za-z0-9_-]+", "[redacted-token]", value)
+    value = re.sub(
+        r"(?i)authorization:\s*bearer\s+[A-Za-z0-9._~+/=-]+",
+        "[redacted-header]",
+        value,
+    )
+    return value
+
+
+def redact_evidence_value(value: Any, key: str = "") -> Any:
+    normalized_key = key.lower()
+    if normalized_key == "auth_ref":
+        return Path(str(value or "")).name
+    if normalized_key == "notes" and value:
+        return "[redacted]"
+    if any(
+        token in normalized_key
+        for token in (
+            "api_key",
+            "apikey",
+            "authorization",
+            "bearer",
+            "password",
+            "secret",
+            "token",
+            "cookie",
+        )
+    ):
+        return "[redacted]"
+    if isinstance(value, dict):
+        return {str(item_key): redact_evidence_value(item_value, str(item_key)) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [redact_evidence_value(item, key) for item in value]
+    if isinstance(value, str):
+        return redact_sensitive_string(value)
+    return value
+
+
+def redacted_json_has_secret_leak(payload: Any) -> bool:
+    encoded = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+    forbidden_patterns = [
+        r"sk-[A-Za-z0-9_-]+",
+        r"OPENAI_API_KEY",
+        r"(?i)authorization:\s*bearer\s+[A-Za-z0-9._~+/=-]+",
+        r"://[^/\\s:@]+:[^/\\s@]+@",
+    ]
+    return any(re.search(pattern, encoded) for pattern in forbidden_patterns)
+
+
+def write_json_artifact(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def export_scale_evidence_bundle(
+    paths: RuntimePaths,
+    *,
+    packet_result: dict[str, Any],
+    registry: dict[str, Any],
+    state: dict[str, Any],
+    health_payload: dict[str, Any],
+    status_payload: dict[str, Any],
+    accounts_payload: dict[str, Any],
+    rotation_payload: dict[str, Any],
+    fallback_readiness: dict[str, Any],
+) -> dict[str, Any]:
+    export_dir = Path(tempfile.mkdtemp(prefix="wild-boar-proxy-scale-evidence-"))
+    redacted_registry = redact_evidence_value(registry)
+    redacted_state = redact_evidence_value(state)
+    redacted_packet = redact_evidence_value(packet_result)
+    redacted_evidence = redact_evidence_value(
+        {
+            "healthcheck_summary": health_payload,
+            "status_summary": status_payload,
+            "accounts_summary": accounts_payload,
+            "rotation_summary": rotation_payload,
+            "fallback_readiness_summary": fallback_readiness,
+        }
+    )
+    metadata = {
+        "schema_version": SCALE_EVIDENCE_PACKET_SCHEMA_VERSION,
+        "generated_at_utc": now_iso(),
+        "attestation_source": "rollout evidence capture 16 --json",
+        "claim_scope": SCALE_EVIDENCE_CLAIM_SCOPE,
+    }
+    bundle_payload = {
+        "packet": redacted_packet,
+        "registry": redacted_registry,
+        "state": redacted_state,
+        "evidence": redacted_evidence,
+        "metadata": metadata,
+    }
+    redaction_ok = not redacted_json_has_secret_leak(bundle_payload)
+
+    registry_artifact = export_dir / "backend-registry.redacted.json"
+    state_artifact = export_dir / "supervisor-state.redacted.json"
+    evidence_artifact = export_dir / "evidence-summary.redacted.json"
+    metadata_artifact = export_dir / "metadata.json"
+    packet_artifact = export_dir / "evidence-packet.json"
+    runtime_mode_artifact = export_dir / "runtime-mode.txt"
+    runtime_effective_mode_artifact = export_dir / "runtime-effective-mode.txt"
+    write_json_artifact(registry_artifact, redacted_registry)
+    write_json_artifact(state_artifact, redacted_state)
+    write_json_artifact(evidence_artifact, redacted_evidence)
+    write_json_artifact(metadata_artifact, metadata)
+    write_json_artifact(packet_artifact, redacted_packet)
+    runtime_mode_artifact.write_text(
+        read_text(paths.runtime_mode_file, default="stable") + "\n", encoding="utf-8"
+    )
+    runtime_effective_mode_artifact.write_text(
+        read_text(paths.runtime_effective_mode_file, default="stable") + "\n",
+        encoding="utf-8",
+    )
+    artifact_paths = [
+        registry_artifact,
+        state_artifact,
+        evidence_artifact,
+        metadata_artifact,
+        packet_artifact,
+        runtime_mode_artifact,
+        runtime_effective_mode_artifact,
+    ]
+
+    return {
+        "status": "exported" if redaction_ok else "redaction_failed",
+        "bundle_path": str(export_dir),
+        "artifact_paths": [str(path) for path in artifact_paths],
+        "file_count": len(list(export_dir.iterdir())),
+        "redaction_status": "passed" if redaction_ok else "failed",
+        "forbidden_content_detected": not redaction_ok,
+    }
+
+
+def summarize_scale_evidence_accounts(accounts_payload: dict[str, Any]) -> dict[str, Any]:
+    accounts = accounts_payload.get("accounts") or []
+    lifecycle_counts = {"active": 0, "reserve": 0, "retired": 0}
+    status_counts: dict[str, int] = {}
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        pool = str(account.get("pool", ""))
+        if pool in lifecycle_counts:
+            lifecycle_counts[pool] += 1
+        status = str(account.get("status", "unknown") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    registry_identity = accounts_payload.get("registry_identity", {})
+    return {
+        "account_count": len(accounts),
+        "lifecycle_counts": lifecycle_counts,
+        "status_counts": status_counts,
+        "registry_identity_status": (
+            registry_identity.get("status")
+            if isinstance(registry_identity, dict)
+            else "unknown"
+        ),
+    }
+
+
+def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, Any]:
+    if target != SCALE_EVIDENCE_FIELD_TARGET:
+        return build_command_payload(
+            ok=False,
+            human_message=f"Scale evidence capture target {target} is not supported.",
+            machine_error_code="SCALE_EVIDENCE_TARGET_UNSUPPORTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "scale_evidence_packet_result": {
+                    "schema_version": SCALE_EVIDENCE_PACKET_SCHEMA_VERSION,
+                    "claim_target": str(target),
+                    "claim_scope": SCALE_EVIDENCE_CLAIM_SCOPE,
+                    "packet_status": "unsafe_to_claim",
+                    "observed_at_utc": now_iso(),
+                    "blocked_reasons": [
+                        {
+                            "machine_error_code": "SCALE_EVIDENCE_TARGET_UNSUPPORTED",
+                            "reason": "unsupported_claim_target",
+                        }
+                    ],
+                    "final_outcome": "field_evidence_packet_unsafe_to_claim",
+                }
+            },
+        )
+
+    write_candidates = runtime_write_surface_candidates(paths) + [paths.runtime_mode_file]
+    before = snapshot_path_states(write_candidates)
+    registry = read_json(paths.registry_file)
+    state = read_json(paths.state_file, required=False)
+    observed_at_utc = now_iso()
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=False,
+    )
+    status_payload = summarize_status(paths, health_payload=health_payload)
+    accounts_payload = list_accounts(paths)
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    fallback_readiness = summarize_stable_10_rollback_readiness(
+        health_payload, status_payload
+    )
+    runtime_changed_files = detect_changed_files_by_state(before, write_candidates)
+    pool_counts = summarize_registry_pool_counts(registry)
+    accounts_summary = summarize_scale_evidence_accounts(accounts_payload)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+    selected_snapshot_status = str(
+        rotation_result.get("selected_backend_snapshot_validation_status", "unknown")
+    )
+    selected_snapshot_compatibility = str(
+        rotation_result.get("selected_backend_snapshot_compatibility", "unknown")
+    )
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    runtime_attestation_status = (
+        "passed" if health_payload.get("status") == "ok" else "failed"
+    )
+    fallback_readiness_status = str(fallback_readiness.get("status", "failed"))
+    pool_counts_status = (
+        "matched_16"
+        if int(pool_counts.get("active", 0) or 0) == 16
+        and coerce_nonnegative_int(state.get("active_count")) == 16
+        else "not_matched_16"
+    )
+    accounts_summary_status = (
+        "clear"
+        if accounts_summary.get("registry_identity_status") == "clear"
+        else "ambiguous"
+    )
+    commit_hash = get_repo_commit_hash()
+    runtime_version = str(state.get("version", state.get("schema_version", "unknown")))
+
+    blocked_reasons: list[dict[str, Any]] = []
+    if runtime_changed_files:
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_RUNTIME_MUTATION_DETECTED",
+                "reason": "runtime_write_surface_changed",
+                "changed_files": runtime_changed_files,
+            }
+        )
+    if runtime_attestation_status != "passed":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_ATTESTATION_INCOMPLETE",
+                "reason": "runtime_attestation_not_passed",
+            }
+        )
+    if rotation_status == "contradicted":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_ROTATION_CONTRADICTED",
+                "reason": "rotation_evidence_contradicted",
+            }
+        )
+    elif rotation_status != "available":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_ROTATION_INCOMPLETE",
+                "reason": f"rotation_evidence_{rotation_status}",
+            }
+        )
+    if fallback_readiness_status != "ready":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_FALLBACK_INCOMPLETE",
+                "reason": "fallback_readiness_not_ready",
+            }
+        )
+    if pool_counts_status != "matched_16":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_POOL_COUNTS_INCOMPLETE",
+                "reason": "active_pool_not_observed_as_16",
+            }
+        )
+    if accounts_summary_status != "clear":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_REGISTRY_CONTRADICTED",
+                "reason": "registry_identity_not_clear",
+            }
+        )
+    if selected_snapshot_status not in {"valid", "legacy"}:
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_SELECTED_SNAPSHOT_INCOMPLETE",
+                "reason": "selected_backend_snapshot_not_valid_or_legacy_compatible",
+            }
+        )
+    if not commit_hash:
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_COMMIT_HASH_MISSING",
+                "reason": "commit_hash_unavailable",
+            }
+        )
+
+    packet_result: dict[str, Any] = {
+        "schema_version": SCALE_EVIDENCE_PACKET_SCHEMA_VERSION,
+        "claim_target": SCALE_EVIDENCE_FIELD_TARGET,
+        "claim_scope": SCALE_EVIDENCE_CLAIM_SCOPE,
+        "packet_status": "pending",
+        "observed_at_utc": observed_at_utc,
+        "commit_hash": commit_hash,
+        "runtime_version": runtime_version,
+        "environment_note": "local_mac_control_layer_evidence_packet",
+        "runtime_attestation_status": runtime_attestation_status,
+        "rotation_evidence_status": rotation_status,
+        "fallback_readiness_status": fallback_readiness_status,
+        "pool_counts_status": pool_counts_status,
+        "diagnostics_redaction_status": "pending",
+        "selected_backend_snapshot_status": selected_snapshot_status,
+        "accounts_summary_status": accounts_summary_status,
+        "pool_counts": pool_counts,
+        "selected_backend_snapshot_summary": {
+            "status": selected_snapshot_status,
+            "compatibility": selected_snapshot_compatibility,
+            "source": rotation_result.get("evidence_source"),
+            "source_class": rotation_result.get("evidence_source_class"),
+            "freshness": rotation_result.get("evidence_freshness"),
+            "selected_backends_digest": rotation_result.get("selected_backends_digest"),
+            "selected_backend_count": len(rotation_result.get("selected_backend_ids") or []),
+        },
+        "accounts_summary": accounts_summary,
+        "runtime_attestation_summary": {
+            "status": health_payload.get("status"),
+            "machine_error_code": health_payload.get("machine_error_code"),
+            "effective_mode": health_payload.get("effective_mode"),
+            "attestation": health_payload.get("attestation", {}),
+        },
+        "rotation_evidence_summary": {
+            "status": rotation_payload.get("status"),
+            "machine_error_code": rotation_payload.get("machine_error_code"),
+            "participation_status": rotation_status,
+            "evidence_status": rotation_result.get("evidence_status"),
+            "evidence_reason": rotation_result.get("evidence_reason"),
+            "active_pool_count_agreement_status": rotation_result.get(
+                "active_pool_count_agreement_status"
+            ),
+        },
+        "fallback_readiness_summary": fallback_readiness,
+        "diagnostics_bundle_summary": {},
+        "blocked_reasons": blocked_reasons,
+        "final_outcome": "pending",
+    }
+
+    bundle_summary = export_scale_evidence_bundle(
+        paths,
+        packet_result=packet_result,
+        registry=registry,
+        state=state,
+        health_payload=health_payload,
+        status_payload=status_payload,
+        accounts_payload=accounts_payload,
+        rotation_payload=rotation_payload,
+        fallback_readiness=fallback_readiness,
+    )
+    packet_result["diagnostics_redaction_status"] = str(
+        bundle_summary.get("redaction_status", "failed")
+    )
+    packet_result["diagnostics_bundle_summary"] = bundle_summary
+    if packet_result["diagnostics_redaction_status"] != "passed":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_REDACTION_FAILED",
+                "reason": "diagnostics_bundle_redaction_failed",
+            }
+        )
+
+    if any(
+        reason.get("machine_error_code")
+        in {
+            "SCALE_EVIDENCE_RUNTIME_MUTATION_DETECTED",
+            "SCALE_EVIDENCE_REDACTION_FAILED",
+        }
+        for reason in blocked_reasons
+    ):
+        packet_status = "unsafe_to_claim"
+        final_outcome = "field_evidence_packet_unsafe_to_claim"
+        machine_error_code = "SCALE_EVIDENCE_UNSAFE_TO_CLAIM"
+    elif any(
+        reason.get("machine_error_code")
+        in {
+            "SCALE_EVIDENCE_ROTATION_CONTRADICTED",
+            "SCALE_EVIDENCE_REGISTRY_CONTRADICTED",
+        }
+        for reason in blocked_reasons
+    ):
+        packet_status = "contradicted"
+        final_outcome = "field_evidence_packet_contradicted"
+        machine_error_code = "SCALE_EVIDENCE_CONTRADICTED"
+    elif blocked_reasons:
+        packet_status = "incomplete"
+        final_outcome = "field_evidence_packet_incomplete"
+        machine_error_code = "SCALE_EVIDENCE_INCOMPLETE"
+    else:
+        packet_status = "complete"
+        final_outcome = "field_evidence_packet_complete"
+        machine_error_code = "OK"
+
+    packet_result["packet_status"] = packet_status
+    packet_result["final_outcome"] = final_outcome
+    packet_artifact_path = Path(str(bundle_summary["bundle_path"])) / "evidence-packet.json"
+    write_json_artifact(
+        packet_artifact_path,
+        redact_evidence_value(packet_result),
+    )
+    artifact_paths = list(bundle_summary.get("artifact_paths") or [])
+    if str(packet_artifact_path) not in artifact_paths:
+        artifact_paths.append(str(packet_artifact_path))
+    bundle_summary["artifact_paths"] = artifact_paths
+
+    ok = packet_status == "complete"
+    return build_command_payload(
+        ok=ok,
+        human_message=(
+            "16-account field evidence packet is complete."
+            if ok
+            else "16-account field evidence packet is not complete."
+        ),
+        machine_error_code=machine_error_code,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none" if ok else "user_action",
+        changed_files=artifact_paths,
+        extra={"scale_evidence_packet_result": packet_result},
+    )
 
 
 def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:

@@ -25,6 +25,7 @@ from .runtime import (
     run_policy_stage_set,
     run_promote,
     run_release,
+    run_rollout_evidence_capture,
     run_rollout_rotation_inspect,
     run_rollout_stage_advance,
     run_rollout_stage_prove,
@@ -141,6 +142,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
     rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+    rollout_evidence = rollout_subparsers.add_parser("evidence")
+    rollout_evidence_subparsers = rollout_evidence.add_subparsers(
+        dest="rollout_evidence_command", required=True
+    )
+    rollout_evidence_capture = rollout_evidence_subparsers.add_parser("capture")
+    rollout_evidence_capture.add_argument("value")
+    rollout_evidence_capture.add_argument("--json", action="store_true", required=True)
     rollout_stage = rollout_subparsers.add_parser("stage")
     rollout_stage_subparsers = rollout_stage.add_subparsers(
         dest="rollout_stage_command", required=True
@@ -238,6 +246,12 @@ def main(argv: list[str] | None = None) -> int:
             and args.rollout_rotation_command == "inspect"
         ):
             return emit_json(run_rollout_rotation_inspect(paths))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "evidence"
+            and args.rollout_evidence_command == "capture"
+        ):
+            return emit_json(run_rollout_evidence_capture(paths, args.value))
         if (
             args.command == "rollout"
             and args.rollout_command == "stage"

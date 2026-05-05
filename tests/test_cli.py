@@ -668,6 +668,11 @@ class CliTests(unittest.TestCase):
     ) -> None:
         self.configure_stage_proof_fixture(15, selected_backend_ids=selected_backend_ids)
 
+    def configure_scale_evidence_fixture(
+        self, *, selected_backend_ids: list[str] | None = None
+    ) -> None:
+        self.configure_stage_proof_fixture(16, selected_backend_ids=selected_backend_ids)
+
     def configure_managed_runtime_probe(self, port: int) -> None:
         (self.managed_dir / "managed-config.yaml").write_text(
             f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
@@ -7114,6 +7119,265 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proof["rollback_readiness_status"], "failed")
         self.assertEqual(proof["final_outcome"], "rollback_readiness_failed")
         self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+
+    def test_rollout_evidence_capture_16_reports_complete_packet(self) -> None:
+        self.configure_scale_evidence_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            before = self.state_snapshot()
+            result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+            after = self.state_snapshot()
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(len(payload["changed_files"]), 7)
+        bundle_path = Path(
+            payload["scale_evidence_packet_result"]["diagnostics_bundle_summary"][
+                "bundle_path"
+            ]
+        )
+        self.assertTrue(bundle_path.is_dir())
+        self.assertTrue((bundle_path / "evidence-packet.json").is_file())
+        self.assertEqual(
+            sorted(payload["changed_files"]),
+            sorted(
+                str(path)
+                for path in [
+                    bundle_path / "backend-registry.redacted.json",
+                    bundle_path / "supervisor-state.redacted.json",
+                    bundle_path / "evidence-summary.redacted.json",
+                    bundle_path / "metadata.json",
+                    bundle_path / "evidence-packet.json",
+                    bundle_path / "runtime-mode.txt",
+                    bundle_path / "runtime-effective-mode.txt",
+                ]
+            ),
+        )
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["claim_target"], "16")
+        self.assertEqual(packet["claim_scope"], "field_evidence_observed_only")
+        self.assertEqual(packet["packet_status"], "complete")
+        self.assertEqual(packet["final_outcome"], "field_evidence_packet_complete")
+        self.assertEqual(packet["runtime_attestation_status"], "passed")
+        self.assertEqual(packet["rotation_evidence_status"], "available")
+        self.assertEqual(packet["fallback_readiness_status"], "ready")
+        self.assertEqual(packet["pool_counts_status"], "matched_16")
+        self.assertEqual(packet["diagnostics_redaction_status"], "passed")
+        self.assertEqual(packet["blocked_reasons"], [])
+        self.assertEqual(before, after)
+
+    def test_rollout_evidence_capture_16_reports_attestation_incomplete(self) -> None:
+        self.configure_scale_evidence_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        after = self.state_snapshot()
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SCALE_EVIDENCE_INCOMPLETE")
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["packet_status"], "incomplete")
+        self.assertEqual(packet["runtime_attestation_status"], "failed")
+        self.assertEqual(packet["final_outcome"], "field_evidence_packet_incomplete")
+        self.assertIn(
+            "SCALE_EVIDENCE_ATTESTATION_INCOMPLETE",
+            [item["machine_error_code"] for item in packet["blocked_reasons"]],
+        )
+        self.assertEqual(before, after)
+
+    def test_rollout_evidence_capture_16_reports_rotation_stale_incomplete(
+        self,
+    ) -> None:
+        self.configure_scale_evidence_fixture()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids_observed_at"] = "2026-05-03T00:00:00+00:00"
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SCALE_EVIDENCE_INCOMPLETE")
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["rotation_evidence_status"], "stale")
+        self.assertEqual(packet["packet_status"], "incomplete")
+        self.assertIn(
+            "SCALE_EVIDENCE_ROTATION_INCOMPLETE",
+            [item["machine_error_code"] for item in packet["blocked_reasons"]],
+        )
+
+    def test_rollout_evidence_capture_16_reports_rotation_contradicted(self) -> None:
+        self.configure_scale_evidence_fixture(
+            selected_backend_ids=["backend-00", "backend-ghost"]
+        )
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SCALE_EVIDENCE_CONTRADICTED")
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["packet_status"], "contradicted")
+        self.assertEqual(packet["rotation_evidence_status"], "contradicted")
+        self.assertEqual(
+            packet["final_outcome"], "field_evidence_packet_contradicted"
+        )
+
+    def test_rollout_evidence_capture_16_reports_snapshot_digest_contradicted(
+        self,
+    ) -> None:
+        self.configure_scale_evidence_fixture()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_snapshot"] = self.build_selected_backend_snapshot(
+            ["backend-00", "backend-01"],
+            selected_backends_digest="bad-digest",
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SCALE_EVIDENCE_CONTRADICTED")
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["packet_status"], "contradicted")
+        self.assertEqual(packet["selected_backend_snapshot_status"], "invalid")
+
+    def test_rollout_evidence_capture_16_reports_redaction_failure_unsafe(
+        self,
+    ) -> None:
+        self.configure_scale_evidence_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch(
+                "wild_boar_proxy.runtime.redacted_json_has_secret_leak",
+                return_value=True,
+            ):
+                with mock.patch.dict(os.environ, self.env(), clear=False):
+                    paths = runtime_mod.RuntimePaths.from_env()
+                    payload = runtime_mod.run_rollout_evidence_capture(paths, "16")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(
+            payload["machine_error_code"], "SCALE_EVIDENCE_UNSAFE_TO_CLAIM"
+        )
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["packet_status"], "unsafe_to_claim")
+        self.assertEqual(packet["diagnostics_redaction_status"], "failed")
+
+    def test_rollout_evidence_capture_16_redacts_bundle_secrets(self) -> None:
+        self.configure_scale_evidence_fixture()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10808"
+        state["last_error"] = "Authorization: Bearer sk-testsecret"
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["notes"] = "private operator note"
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        bundle_path = Path(
+            payload["scale_evidence_packet_result"]["diagnostics_bundle_summary"][
+                "bundle_path"
+            ]
+        )
+        bundle_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(bundle_path.glob("*.json"))
+        )
+        self.assertNotIn("user:pass", bundle_text)
+        self.assertNotIn("sk-testsecret", bundle_text)
+        self.assertNotIn("private operator note", bundle_text)
+        self.assertIn("[redacted]", bundle_text)
+
+    def test_rollout_evidence_capture_16_rejects_unsupported_target_as_json(
+        self,
+    ) -> None:
+        result = self.run_cli("rollout", "evidence", "capture", "20", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "SCALE_EVIDENCE_TARGET_UNSUPPORTED"
+        )
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["claim_target"], "20")
+        self.assertEqual(packet["packet_status"], "unsafe_to_claim")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_rollout_evidence_capture_16_does_not_write_stable_fallback(
+        self,
+    ) -> None:
+        self.configure_scale_evidence_fixture()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["effective_mode"] = "managed"
+        state["selected_backend_ids"] = ["backend-00", "backend-01"]
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "evidence", "capture", "16", "--json")
+        after = self.state_snapshot()
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["packet_status"], "incomplete")
+        self.assertNotIn(
+            "SCALE_EVIDENCE_RUNTIME_MUTATION_DETECTED",
+            [item["machine_error_code"] for item in packet["blocked_reasons"]],
+        )
+        self.assertEqual(before, after)
 
     def test_rollout_stage_prove_15_reports_success_with_bounded_delegated_evidence(
         self,
