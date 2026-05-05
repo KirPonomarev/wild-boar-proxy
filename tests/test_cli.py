@@ -172,51 +172,16 @@ class CliTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.sync_script.chmod(0o755)
-        self.launcher_script = self.profile_dir / "codex-custom-launch.sh"
-        self.launcher_script.write_text(
-            "#!/bin/sh\n"
-            "mode=\"$1\"\n"
-            "[ \"$mode\" = smoke ] || exit 7\n"
-            "printf 'stable\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
-            "python3 - <<'PY'\n"
-            "import json\n"
-            "import os\n"
-            "from pathlib import Path\n"
-            "path = Path(os.environ['WBP_STATE_FILE'])\n"
-            "data = json.loads(path.read_text())\n"
-            "data['effective_mode'] = 'stable'\n"
-            "data['status'] = 'healthy'\n"
-            "data['last_error'] = ''\n"
-            "path.write_text(json.dumps(data) + '\\n')\n"
-            "PY\n"
-            "python3 - <<'PY'\n"
-            "import os\n"
-            "from pathlib import Path\n"
-            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])\n"
-            "port = '8318'\n"
-            "for raw_line in stable_config.read_text().splitlines():\n"
-            "    line = raw_line.strip()\n"
-            "    if line.startswith('port:'):\n"
-            "        port = line.split(':', 1)[1].strip().strip('\"')\n"
-            "        break\n"
-            "path = Path(os.environ['WBP_CONFIG_TOML'])\n"
-            "lines = path.read_text().splitlines()\n"
-            "out = []\n"
-            "for line in lines:\n"
-            "    if line.strip().startswith('base_url = '):\n"
-            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
-            "    else:\n"
-            "        out.append(line)\n"
-            "path.write_text('\\n'.join(out) + '\\n')\n"
-            "PY\n",
-            encoding="utf-8",
+        self.default_launcher_script = (
+            self.profile_dir / runtime_mod.DEFAULT_LAUNCHER_SCRIPT_NAME
         )
-        self.launcher_script.chmod(0o755)
+        self.launcher_script = self.profile_dir / "codex-custom-launch-override.sh"
+        self.write_recording_stable_launcher(self.launcher_script)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def env(self) -> dict[str, str]:
+    def env(self, *, include_launcher_override: bool = True) -> dict[str, str]:
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT)
         env["WBP_PROFILE_DIR"] = str(self.profile_dir)
@@ -228,25 +193,33 @@ class CliTests(unittest.TestCase):
         env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(
             self.profile_dir / "runtime-effective-mode.txt"
         )
-        env["WBP_LAUNCHER_SCRIPT"] = str(self.launcher_script)
+        if include_launcher_override:
+            env["WBP_LAUNCHER_SCRIPT"] = str(self.launcher_script)
+        else:
+            env.pop("WBP_LAUNCHER_SCRIPT", None)
         env["WBP_LAUNCH_STABILIZATION_SECONDS"] = "0"
         env["WBP_SYNC_SCRIPT"] = str(self.sync_script)
         return env
 
-    def run_cli(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_cli(
+        self, *args: str, include_launcher_override: bool = True
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             ["python3", "-m", "wild_boar_proxy", *args],
             cwd=ROOT,
-            env=self.env(),
+            env=self.env(include_launcher_override=include_launcher_override),
             text=True,
             capture_output=True,
             check=False,
         )
 
     def run_cli_with_env(
-        self, env_overrides: dict[str, str], *args: str
+        self,
+        env_overrides: dict[str, str],
+        *args: str,
+        include_launcher_override: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        env = self.env()
+        env = self.env(include_launcher_override=include_launcher_override)
         env.update(env_overrides)
         return subprocess.run(
             ["python3", "-m", "wild_boar_proxy", *args],
@@ -634,7 +607,10 @@ class CliTests(unittest.TestCase):
             "contract_fixed_not_implemented",
         )
         launcher_consumer = current_proxy_adoption_contract["launcher_consumer_contract"]
-        self.assertEqual(launcher_consumer["status"], "contract_fixed_not_implemented")
+        self.assertEqual(
+            launcher_consumer["status"],
+            "repo_owned_default_consumer_provisioning_available",
+        )
         self.assertEqual(
             launcher_consumer["launcher_protocol_scope"],
             "bounded_launcher_smoke_seam",
@@ -645,14 +621,26 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(launcher_consumer["repo_owned_default_consumer_provisioned"])
         self.assertTrue(launcher_consumer["path_presence_not_capability_proof"])
+        self.assertTrue(launcher_consumer["repo_managed_marker_required_for_refresh"])
+        self.assertFalse(launcher_consumer["repo_managed_marker_present"])
+        self.assertFalse(launcher_consumer["repo_managed_marker_valid"])
+        self.assertFalse(launcher_consumer["repo_managed_marker_recognized"])
+        self.assertTrue(launcher_consumer["default_path_non_clobber_required"])
         external_launcher = current_proxy_adoption_contract["external_launcher_path_surface"]
         self.assertEqual(external_launcher["status"], "path_present")
         self.assertEqual(external_launcher["env_var"], "WBP_LAUNCHER_SCRIPT")
         self.assertTrue(external_launcher["exists"])
         self.assertEqual(
             external_launcher["role"],
-            "external_launcher_executable_path_surface",
+            "launcher_executable_path_surface",
         )
+        self.assertEqual(
+            external_launcher["path_kind"],
+            "explicit_external_override",
+        )
+        self.assertFalse(external_launcher["repo_managed_marker_present"])
+        self.assertFalse(external_launcher["repo_managed_marker_valid"])
+        self.assertFalse(external_launcher["repo_managed_marker_recognized"])
         self.assertTrue(
             external_launcher["consumer_capability_by_path_presence_forbidden"]
         )
@@ -669,7 +657,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(engine_local_routing["current_engine_consumption_claimed"])
         self.assertEqual(
             current_proxy_adoption_contract["launcher_consumer_status"],
-            "contract_fixed_not_implemented",
+            "repo_owned_default_consumer_provisioning_available",
         )
         self.assertEqual(
             current_proxy_adoption_contract["external_launcher_readiness_status"],
@@ -3194,7 +3182,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             current_proxy_adoption_contract["launcher_consumer_status"],
-            "contract_fixed_not_implemented",
+            "repo_owned_default_consumer_provisioning_available",
         )
         self.assertEqual(
             current_proxy_adoption_contract["launcher_protocol_scope"],
@@ -3211,9 +3199,25 @@ class CliTests(unittest.TestCase):
             current_proxy_adoption_contract["external_launcher_path_surface"]["env_var"],
             "WBP_LAUNCHER_SCRIPT",
         )
+        self.assertEqual(
+            current_proxy_adoption_contract["external_launcher_path_surface"][
+                "path_kind"
+            ],
+            "explicit_external_override",
+        )
         self.assertTrue(
             current_proxy_adoption_contract["external_launcher_path_surface"][
                 "consumer_capability_by_path_presence_forbidden"
+            ]
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract["external_launcher_path_surface"][
+                "repo_managed_marker_valid"
+            ]
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract["external_launcher_path_surface"][
+                "repo_managed_marker_recognized"
             ]
         )
         self.assertTrue(
@@ -4585,6 +4589,225 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "MISSING_LAUNCHER_SCRIPT")
+
+    def test_status_reports_default_launcher_provisioning_available_before_materialization(
+        self,
+    ) -> None:
+        result = self.run_cli("status", "--json", include_launcher_override=False)
+        payload = json.loads(result.stdout)
+        contract = payload["current_proxy_adoption_contract"]
+        self.assertEqual(
+            contract["launcher_consumer_status"],
+            "repo_owned_default_consumer_provisioning_available",
+        )
+        self.assertEqual(
+            contract["external_launcher_readiness_status"],
+            "default_path_missing_repo_consumer_unprovisioned",
+        )
+        self.assertFalse(contract["repo_owned_default_consumer_provisioned"])
+        self.assertEqual(
+            contract["external_launcher_path_surface"]["path_kind"],
+            "default_owned_provisioning_target",
+        )
+        self.assertFalse(
+            contract["external_launcher_path_surface"]["repo_managed_marker_present"]
+        )
+        self.assertFalse(
+            contract["external_launcher_path_surface"]["repo_managed_marker_valid"]
+        )
+        self.assertFalse(
+            contract["external_launcher_path_surface"][
+                "repo_managed_marker_recognized"
+            ]
+        )
+
+    def test_launch_smoke_materializes_repo_owned_default_launcher_when_default_path_is_absent(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        self.assertFalse(self.default_launcher_script.exists())
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli(
+                "launch",
+                "smoke",
+                "--json",
+                include_launcher_override=False,
+            )
+            status_result = self.run_cli(
+                "status",
+                "--json",
+                include_launcher_override=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(self.default_launcher_script.exists())
+        self.assertIn(
+            runtime_mod.REPO_MANAGED_DEFAULT_LAUNCHER_MARKER,
+            self.default_launcher_script.read_text(encoding="utf-8"),
+        )
+        self.assertIn(str(self.default_launcher_script), payload["changed_files"])
+        self.assertNotIn("current_proxy_adoption_contract", payload)
+        status_payload = json.loads(status_result.stdout)
+        contract = status_payload["current_proxy_adoption_contract"]
+        self.assertTrue(contract["repo_owned_default_consumer_provisioned"])
+        self.assertEqual(
+            contract["external_launcher_readiness_status"],
+            "default_path_provisioned_repo_managed",
+        )
+        self.assertTrue(
+            contract["external_launcher_path_surface"]["repo_managed_marker_present"]
+        )
+        self.assertTrue(
+            contract["external_launcher_path_surface"]["repo_managed_marker_valid"]
+        )
+        self.assertTrue(
+            contract["external_launcher_path_surface"][
+                "repo_managed_marker_recognized"
+            ]
+        )
+
+    def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
+        original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"
+        self.default_launcher_script.write_text(original_text, encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+        result = self.run_cli(
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
+        )
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
+        self.assertEqual(
+            self.default_launcher_script.read_text(encoding="utf-8"),
+            original_text,
+        )
+        self.assertNotIn(str(self.default_launcher_script), payload["changed_files"])
+
+    def test_status_does_not_treat_invalid_marked_default_launcher_as_provisioned(
+        self,
+    ) -> None:
+        invalid_marked_text = (
+            "#!/bin/sh\n"
+            f"{runtime_mod.REPO_MANAGED_DEFAULT_LAUNCHER_MARKER}\n"
+            f"{runtime_mod.REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX}invalid\n"
+            "exit 0\n"
+        )
+        self.default_launcher_script.write_text(invalid_marked_text, encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+        result = self.run_cli("status", "--json", include_launcher_override=False)
+        payload = json.loads(result.stdout)
+        contract = payload["current_proxy_adoption_contract"]
+        self.assertFalse(contract["repo_owned_default_consumer_provisioned"])
+        self.assertEqual(
+            contract["external_launcher_readiness_status"],
+            "default_path_present_repo_marker_invalid",
+        )
+        self.assertTrue(
+            contract["external_launcher_path_surface"]["repo_managed_marker_present"]
+        )
+        self.assertFalse(
+            contract["external_launcher_path_surface"]["repo_managed_marker_valid"]
+        )
+        self.assertFalse(
+            contract["external_launcher_path_surface"][
+                "repo_managed_marker_recognized"
+            ]
+        )
+
+    def test_launch_smoke_does_not_overwrite_self_signed_unrecognized_default_launcher_file(
+        self,
+    ) -> None:
+        custom_payload = (
+            "set -eu\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n"
+        )
+        custom_text = runtime_mod.render_repo_owned_default_launcher_script_text(
+            custom_payload
+        )
+        self.default_launcher_script.write_text(custom_text + "\n", encoding="utf-8")
+        self.default_launcher_script.chmod(0o755)
+        result = self.run_cli(
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
+        )
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
+        self.assertEqual(
+            self.default_launcher_script.read_text(encoding="utf-8").rstrip("\n"),
+            custom_text.rstrip("\n"),
+        )
+        self.assertNotIn(str(self.default_launcher_script), payload["changed_files"])
+
+    def test_launch_smoke_repairs_exec_bit_for_recognized_default_launcher_file(
+        self,
+    ) -> None:
+        self.default_launcher_script.write_text(
+            runtime_mod.build_repo_owned_default_launcher_script_text() + "\n",
+            encoding="utf-8",
+        )
+        self.default_launcher_script.chmod(0o644)
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli(
+                "launch",
+                "smoke",
+                "--json",
+                include_launcher_override=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(os.access(self.default_launcher_script, os.X_OK))
+        self.assertIn(str(self.default_launcher_script), payload["changed_files"])
+
+    def test_launch_smoke_does_not_materialize_default_launcher_for_nondefault_override(
+        self,
+    ) -> None:
+        missing_override = self.profile_dir / "missing-custom-launch.sh"
+        self.assertFalse(self.default_launcher_script.exists())
+        result = self.run_cli_with_env(
+            {"WBP_LAUNCHER_SCRIPT": str(missing_override)},
+            "launch",
+            "smoke",
+            "--json",
+            include_launcher_override=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "MISSING_LAUNCHER_SCRIPT")
+        self.assertFalse(self.default_launcher_script.exists())
+        self.assertFalse(missing_override.exists())
 
     def test_launch_smoke_reports_nonzero_launcher_even_if_runtime_is_healthy(self) -> None:
         stable_port = free_port()

@@ -274,8 +274,17 @@ Field meaning rules:
 - that contract may expose an external launcher-path surface for
   `WBP_LAUNCHER_SCRIPT`, but launcher-path presence alone must not be treated as
   proof of current-proxy consumer capability
+- the default launcher path may be a bounded repo-owned provisioning target,
+  but a preexisting unmarked file at that path must not be silently overwritten
+- a repo-owned default launcher artifact may carry a narrow repo-managed marker
+  used only for safe refresh of that default-path artifact
 - that contract may expose a bounded launcher-consumer readiness surface and
-  must report protocol-fixed-but-unimplemented states honestly
+  must report:
+  - repo-owned default consumer provisioning availability
+  - default-path missing or provisioned state
+  - default-path ownership-unverified state
+  - explicit external override unverified state
+  honestly without implying current-proxy adoption readiness
 - that contract may allow a later launcher consumer to derive engine-local proxy
   env keys for the managed runtime child process only
 - any such derived proxy env keys remain engine-local routing inputs, not

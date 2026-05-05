@@ -38,6 +38,13 @@ class RuntimeErrorInfo(Exception):
         self.exit_code = exit_code
 
 
+DEFAULT_LAUNCHER_SCRIPT_NAME = "codex-custom-launch.sh"
+REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
+REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
+    "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
+)
+
+
 @dataclass(frozen=True)
 class RuntimePaths:
     profile_dir: Path
@@ -108,7 +115,8 @@ class RuntimePaths:
             ).expanduser(),
             launcher_script=Path(
                 os.environ.get(
-                    "WBP_LAUNCHER_SCRIPT", str(profile_dir / "codex-custom-launch.sh")
+                    "WBP_LAUNCHER_SCRIPT",
+                    str(profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME),
                 )
             ).expanduser(),
             sync_script=Path(
@@ -251,6 +259,11 @@ def write_text_atomic(path: Path, value: str) -> None:
     tmp_path.replace(path)
 
 
+def write_executable_text_atomic(path: Path, value: str) -> None:
+    write_text_atomic(path, value)
+    path.chmod(0o755)
+
+
 def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     write_text_atomic(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
@@ -334,6 +347,160 @@ def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str,
 
 def get_model(paths: RuntimePaths, fallback: str = "gpt-5.4") -> str:
     return read_toml_string(paths.config_toml, "model") or fallback
+
+
+def default_launcher_script_path(profile_dir: Path) -> Path:
+    return profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME
+
+
+def launcher_path_is_default(paths: RuntimePaths) -> bool:
+    return paths.launcher_script == default_launcher_script_path(paths.profile_dir)
+
+
+def compute_repo_managed_default_launcher_digest(script_payload: str) -> str:
+    return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
+
+
+def repo_managed_default_launcher_marker_present(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        header_lines = path.read_text(encoding="utf-8").splitlines()[:4]
+    except OSError:
+        return False
+    return REPO_MANAGED_DEFAULT_LAUNCHER_MARKER in header_lines
+
+
+def build_repo_owned_default_launcher_script_payload() -> str:
+    return "\n".join(
+        [
+            "set -eu",
+            'mode="$1"',
+            '[ "$mode" = smoke ] || exit 7',
+            'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
+            "  proxy_env() {",
+            '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' HTTPS_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' ALL_PROXY="$WBP_CURRENT_PROXY_URL"'
+            ' http_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' https_proxy="$WBP_CURRENT_PROXY_URL"'
+            ' all_proxy="$WBP_CURRENT_PROXY_URL" "$@"',
+            "  }",
+            "else",
+            "  proxy_env() {",
+            '    "$@"',
+            "  }",
+            "fi",
+            'printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
+            "proxy_env python3 - <<'PY'",
+            "import json",
+            "import os",
+            "from pathlib import Path",
+            "state_path = Path(os.environ['WBP_STATE_FILE'])",
+            "state = json.loads(state_path.read_text())",
+            "stable_config = Path(os.environ['WBP_STABLE_CONFIG'])",
+            "port = '8318'",
+            "auth_dir = ''",
+            "for raw_line in stable_config.read_text().splitlines():",
+            "    line = raw_line.strip()",
+            "    if line.startswith('port:'):",
+            "        port = line.split(':', 1)[1].strip().strip('\"')",
+            "    if line.startswith('auth-dir:'):",
+            "        auth_dir = line.split(':', 1)[1].strip().strip('\"')",
+            "state['effective_mode'] = 'stable'",
+            "state['status'] = 'healthy'",
+            "state['last_error'] = ''",
+            "state['launcher_stable_config'] = str(stable_config)",
+            "state['launcher_auth_dir'] = auth_dir",
+            "state_path.write_text(json.dumps(state) + '\\n')",
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])",
+            "lines = config_path.read_text().splitlines()",
+            "out = []",
+            "for line in lines:",
+            "    if line.strip().startswith('base_url = '):",
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')",
+            "    else:",
+            "        out.append(line)",
+            "config_path.write_text('\\n'.join(out) + '\\n')",
+            "PY",
+            "exit 0",
+        ]
+    )
+
+
+def render_repo_owned_default_launcher_script_text(script_payload: str) -> str:
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            REPO_MANAGED_DEFAULT_LAUNCHER_MARKER,
+            (
+                f"{REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX}"
+                f"{compute_repo_managed_default_launcher_digest(script_payload)}"
+            ),
+            script_payload,
+        ]
+    )
+
+
+def build_repo_owned_default_launcher_script_text() -> str:
+    return render_repo_owned_default_launcher_script_text(
+        build_repo_owned_default_launcher_script_payload()
+    )
+
+
+def repo_managed_default_launcher_payload_if_valid(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 4:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_DEFAULT_LAUNCHER_MARKER:
+        return None
+    digest_line = lines[2]
+    if not digest_line.startswith(REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(
+        REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX
+    )
+    script_payload = "\n".join(lines[3:])
+    if expected_digest != compute_repo_managed_default_launcher_digest(script_payload):
+        return None
+    return script_payload
+
+
+def repo_managed_default_launcher_signature_valid(path: Path) -> bool:
+    return repo_managed_default_launcher_payload_if_valid(path) is not None
+
+
+def repo_managed_default_launcher_payload_recognized(script_payload: str) -> bool:
+    return script_payload == build_repo_owned_default_launcher_script_payload()
+
+
+def repo_managed_default_launcher_recognized(path: Path) -> bool:
+    script_payload = repo_managed_default_launcher_payload_if_valid(path)
+    if script_payload is None:
+        return False
+    return repo_managed_default_launcher_payload_recognized(script_payload)
+
+
+def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
+    if not launcher_path_is_default(paths):
+        return
+    expected_text = build_repo_owned_default_launcher_script_text()
+    if not paths.launcher_script.exists():
+        write_executable_text_atomic(paths.launcher_script, expected_text)
+        return
+    if not repo_managed_default_launcher_recognized(paths.launcher_script):
+        return
+    current_text = paths.launcher_script.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(paths.launcher_script, expected_text)
+        return
+    if not os.access(paths.launcher_script, os.X_OK):
+        paths.launcher_script.chmod(0o755)
 
 
 def get_desired_mode(paths: RuntimePaths) -> str:
@@ -1065,6 +1232,47 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
 
 def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]:
     launcher_path_exists = paths.launcher_script.exists()
+    launcher_path_is_default_target = launcher_path_is_default(paths)
+    repo_managed_marker_present = (
+        launcher_path_exists
+        and launcher_path_is_default_target
+        and repo_managed_default_launcher_marker_present(paths.launcher_script)
+    )
+    repo_managed_signature_valid = (
+        launcher_path_exists
+        and launcher_path_is_default_target
+        and repo_managed_default_launcher_signature_valid(paths.launcher_script)
+    )
+    repo_managed_payload_recognized = (
+        launcher_path_exists
+        and launcher_path_is_default_target
+        and repo_managed_default_launcher_recognized(paths.launcher_script)
+    )
+    if launcher_path_is_default_target:
+        if repo_managed_payload_recognized:
+            external_launcher_readiness_status = "default_path_provisioned_repo_managed"
+        elif repo_managed_signature_valid:
+            external_launcher_readiness_status = (
+                "default_path_present_repo_marker_unrecognized"
+            )
+        elif repo_managed_marker_present:
+            external_launcher_readiness_status = "default_path_present_repo_marker_invalid"
+        elif launcher_path_exists:
+            external_launcher_readiness_status = (
+                "default_path_present_ownership_unverified"
+            )
+        else:
+            external_launcher_readiness_status = (
+                "default_path_missing_repo_consumer_unprovisioned"
+            )
+    elif launcher_path_exists:
+        external_launcher_readiness_status = (
+            "external_script_path_present_consumer_capability_unverified"
+        )
+    else:
+        external_launcher_readiness_status = (
+            "external_script_path_missing_consumer_capability_unverified"
+        )
     handoff_carrier_contract = {
         "status": "contract_ready",
         "env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
@@ -1080,22 +1288,35 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "env_var": "WBP_LAUNCHER_SCRIPT",
         "resolved_path": str(paths.launcher_script),
         "exists": launcher_path_exists,
-        "role": "external_launcher_executable_path_surface",
+        "role": "launcher_executable_path_surface",
+        "path_kind": (
+            "default_owned_provisioning_target"
+            if launcher_path_is_default_target
+            else "explicit_external_override"
+        ),
+        "default_owned_provisioning_target": str(
+            default_launcher_script_path(paths.profile_dir)
+        ),
+        "repo_managed_marker_present": repo_managed_marker_present,
+        "repo_managed_marker_valid": repo_managed_signature_valid,
+        "repo_managed_marker_recognized": repo_managed_payload_recognized,
         "consumer_capability_by_path_presence_forbidden": True,
+        "provisioning_ownership_by_path_presence_forbidden": True,
         "truth_surface": False,
     }
     launcher_consumer_contract = {
-        "status": "contract_fixed_not_implemented",
+        "status": "repo_owned_default_consumer_provisioning_available",
         "launcher_protocol_scope": "bounded_launcher_smoke_seam",
-        "consumer_kind": "external_launcher_script",
+        "consumer_kind": "bounded_launcher_script",
         "handoff_carrier_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
-        "repo_owned_default_consumer_provisioned": False,
-        "external_launcher_readiness_status": (
-            "external_script_path_present_consumer_capability_unverified"
-            if launcher_path_exists
-            else "external_script_path_missing_consumer_capability_unverified"
-        ),
+        "repo_owned_default_consumer_provisioned": repo_managed_payload_recognized,
+        "external_launcher_readiness_status": external_launcher_readiness_status,
         "path_presence_not_capability_proof": True,
+        "repo_managed_marker_required_for_refresh": True,
+        "repo_managed_marker_present": repo_managed_marker_present,
+        "repo_managed_marker_valid": repo_managed_signature_valid,
+        "repo_managed_marker_recognized": repo_managed_payload_recognized,
+        "default_path_non_clobber_required": True,
         "owner_controlled_activation_only": True,
     }
     engine_local_proxy_routing_contract = {
@@ -1529,6 +1750,7 @@ def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
         paths.state_file,
         paths.runtime_effective_mode_file,
         paths.stable_runtime_generated_config_file,
+        paths.launcher_script,
         managed_pid_path(paths),
     ]
 
@@ -3371,7 +3593,7 @@ def mode_set(paths: RuntimePaths, mode: str) -> dict[str, Any]:
     )
 
 
-def snapshot_known_files(paths: RuntimePaths) -> dict[Path, int]:
+def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
     candidates = [
         paths.registry_file,
         paths.state_file,
@@ -3379,23 +3601,28 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, int]:
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
+        paths.launcher_script,
         managed_pid_path(paths),
     ]
-    result: dict[Path, int] = {}
+    result: dict[Path, tuple[int, int]] = {}
     for candidate in candidates:
         if candidate.exists():
-            result[candidate] = candidate.stat().st_mtime_ns
+            stat_result = candidate.stat()
+            result[candidate] = (stat_result.st_mtime_ns, stat_result.st_mode)
     return result
 
 
-def detect_changed_files(before: dict[Path, int], after_paths: list[Path]) -> list[str]:
+def detect_changed_files(
+    before: dict[Path, tuple[int, int]], after_paths: list[Path]
+) -> list[str]:
     changed: list[str] = []
     for candidate in after_paths:
         if not candidate.exists():
             if candidate in before:
                 changed.append(str(candidate))
             continue
-        after = candidate.stat().st_mtime_ns
+        stat_result = candidate.stat()
+        after = (stat_result.st_mtime_ns, stat_result.st_mode)
         if before.get(candidate) != after:
             changed.append(str(candidate))
     return changed
@@ -3411,6 +3638,8 @@ def get_launch_stabilization_seconds() -> float:
 
 
 def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    ensure_repo_owned_default_launcher_consumer(paths)
     if not paths.launcher_script.exists():
         raise RuntimeErrorInfo(
             f"Missing launcher script: {paths.launcher_script}",
@@ -3422,7 +3651,6 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
     selection = get_stable_runtime_consumer_selection_context(
         paths, registry, policy_drift
     )
-    before = snapshot_known_files(paths)
     attempt = run_stable_runtime_launcher_attempt(paths, selection)
     emit_subprocess_output(stdout=attempt.stdout, stderr=attempt.stderr)
     stabilization_seconds = get_launch_stabilization_seconds()
