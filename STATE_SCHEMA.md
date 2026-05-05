@@ -33,6 +33,12 @@ Required `pool_policy` fields:
 - `active_target`
 - `reserve_target`
 
+Current execution-wave meaning:
+
+- `active_min` is the lower policy floor for the managed active pool
+- `active_target` is the current staged active-pool ceiling for promotion truth
+- `reserve_target` is the minimum reserve floor that promotion must preserve
+
 Required backend fields:
 
 - `id`

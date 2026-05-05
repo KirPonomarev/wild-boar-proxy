@@ -1015,6 +1015,63 @@ def summarize_registry_identity(registry_identity: dict[str, Any]) -> dict[str, 
     }
 
 
+def coerce_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = int(value)
+        except ValueError:
+            return None
+        return parsed if parsed >= 0 else None
+    return None
+
+
+def summarize_promotion_pool_policy(registry: dict[str, Any]) -> dict[str, Any]:
+    policy = registry.get("pool_policy")
+    if not isinstance(policy, dict):
+        return {
+            "status": "invalid",
+            "machine_error_code": "POOL_POLICY_INVALID",
+            "reason": "pool_policy_missing_or_not_object",
+            "active_min": None,
+            "active_target": None,
+            "reserve_target": None,
+        }
+
+    active_min = coerce_nonnegative_int(policy.get("active_min"))
+    active_target = coerce_nonnegative_int(policy.get("active_target"))
+    reserve_target = coerce_nonnegative_int(policy.get("reserve_target"))
+    if active_min is None or active_target is None or reserve_target is None:
+        return {
+            "status": "invalid",
+            "machine_error_code": "POOL_POLICY_INVALID",
+            "reason": "pool_policy_fields_invalid",
+            "active_min": active_min,
+            "active_target": active_target,
+            "reserve_target": reserve_target,
+        }
+    if active_target < active_min:
+        return {
+            "status": "invalid",
+            "machine_error_code": "POOL_POLICY_INVALID",
+            "reason": "active_target_below_active_min",
+            "active_min": active_min,
+            "active_target": active_target,
+            "reserve_target": reserve_target,
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "reason": "pool_policy_valid",
+        "active_min": active_min,
+        "active_target": active_target,
+        "reserve_target": reserve_target,
+    }
+
+
 def get_claim_gate(
     policy_drift: dict[str, Any], registry_identity: dict[str, Any]
 ) -> dict[str, Any]:
@@ -6076,21 +6133,20 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             operator_action="user_action",
         )
     before = snapshot_known_files(paths)
-    before_registry = read_json(paths.registry_file)
-    before_state = read_json(paths.state_file, required=False)
     command = ["promote", backend_id]
-    backend_matches = get_registry_backends_by_id(before_registry, backend_id)
-    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    previous_pool = (
-        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
-    )
     promotion_result: dict[str, Any] = {
         "status": "owner_path_emitted",
         "attempted": True,
         "backend_id": backend_id,
         "precondition_status": "pending",
-        "previous_pool": previous_pool,
+        "previous_pool": "",
         "requested_pool": "active",
+        "pool_policy_status": "pending",
+        "pool_policy_observed": None,
+        "active_pool_count_before": None,
+        "active_target_observed": None,
+        "reserve_count_before": None,
+        "reserve_target_observed": None,
         "rollback_point_captured": False,
         "routing_change_attempted": False,
         "routing_change_observed": False,
@@ -6181,58 +6237,109 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 extra=payload_extra,
             )
 
-    if not backend_matches:
-        promotion_result["precondition_status"] = "backend_missing"
-        promotion_result["final_outcome"] = "precondition_failed"
-        return build_promote_payload(
-            ok=False,
-            human_message="Promotion target backend does not exist.",
-            machine_error_code="PROMOTION_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if len(backend_matches) > 1:
-        promotion_result["precondition_status"] = "ambiguous_backend_id"
-        promotion_result["final_outcome"] = "precondition_failed"
-        return build_promote_payload(
-            ok=False,
-            human_message="Promotion target backend is ambiguous.",
-            machine_error_code="PROMOTION_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if bool(selected_backend.get("manual_hold", False)):
-        promotion_result["precondition_status"] = "backend_on_hold"
-        promotion_result["final_outcome"] = "precondition_failed"
-        return build_promote_payload(
-            ok=False,
-            human_message="Held backend cannot be promoted directly.",
-            machine_error_code="PROMOTION_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if previous_pool == "retired":
-        promotion_result["precondition_status"] = "backend_retired"
-        promotion_result["final_outcome"] = "precondition_failed"
-        return build_promote_payload(
-            ok=False,
-            human_message="Retired backend cannot be promoted.",
-            machine_error_code="PROMOTION_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    if previous_pool != "reserve":
-        promotion_result["precondition_status"] = "backend_not_reserve"
-        promotion_result["final_outcome"] = "precondition_failed"
-        return build_promote_payload(
-            ok=False,
-            human_message="Only reserve backends are eligible for promotion.",
-            machine_error_code="PROMOTION_PRECONDITION_FAILED",
-            operator_action="user_action",
-        )
-
-    promotion_result["precondition_status"] = "eligible_reserve_backend"
     with serialized_lock(paths):
+        before_registry = read_json(paths.registry_file)
+        before_state = read_json(paths.state_file, required=False)
+        backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+        selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+        previous_pool = (
+            str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+        )
+        promotion_result["previous_pool"] = previous_pool
+
+        if not backend_matches:
+            promotion_result["precondition_status"] = "backend_missing"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion target backend does not exist.",
+                machine_error_code="PROMOTION_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if len(backend_matches) > 1:
+            promotion_result["precondition_status"] = "ambiguous_backend_id"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion target backend is ambiguous.",
+                machine_error_code="PROMOTION_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if bool(selected_backend.get("manual_hold", False)):
+            promotion_result["precondition_status"] = "backend_on_hold"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Held backend cannot be promoted directly.",
+                machine_error_code="PROMOTION_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if previous_pool == "retired":
+            promotion_result["precondition_status"] = "backend_retired"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Retired backend cannot be promoted.",
+                machine_error_code="PROMOTION_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if previous_pool != "reserve":
+            promotion_result["precondition_status"] = "backend_not_reserve"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Only reserve backends are eligible for promotion.",
+                machine_error_code="PROMOTION_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        pool_policy = summarize_promotion_pool_policy(before_registry)
+        promotion_result["pool_policy_status"] = str(pool_policy.get("status", "invalid"))
+        promotion_result["pool_policy_observed"] = pool_policy
+        promotion_result["active_target_observed"] = pool_policy.get("active_target")
+        promotion_result["reserve_target_observed"] = pool_policy.get("reserve_target")
+        pool_counts_before = summarize_registry_pool_counts(before_registry)
+        promotion_result["active_pool_count_before"] = pool_counts_before.get("active", 0)
+        promotion_result["reserve_count_before"] = pool_counts_before.get("reserve", 0)
+        if pool_policy.get("status") != "ok":
+            promotion_result["precondition_status"] = "pool_policy_invalid"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion blocked because pool policy is invalid.",
+                machine_error_code="PROMOTION_POLICY_INVALID",
+                operator_action="user_action",
+            )
+
+        active_pool_count_before = int(promotion_result["active_pool_count_before"] or 0)
+        reserve_count_before = int(promotion_result["reserve_count_before"] or 0)
+        active_target = int(pool_policy["active_target"])
+        reserve_target = int(pool_policy["reserve_target"])
+        if active_pool_count_before >= active_target:
+            promotion_result["precondition_status"] = "active_target_reached"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion blocked because the staged active-pool target is already reached.",
+                machine_error_code="PROMOTION_POLICY_LIMIT_REACHED",
+                operator_action="user_action",
+            )
+
+        if reserve_count_before - 1 < reserve_target:
+            promotion_result["precondition_status"] = "reserve_target_would_be_violated"
+            promotion_result["final_outcome"] = "precondition_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion blocked because it would drop reserve below the staged reserve target.",
+                machine_error_code="PROMOTION_POLICY_LIMIT_REACHED",
+                operator_action="user_action",
+            )
+
+        promotion_result["precondition_status"] = "eligible_reserve_backend"
         validate_result = subprocess.run(
             [str(paths.accounts_bin), "validate", backend_id],
             capture_output=True,

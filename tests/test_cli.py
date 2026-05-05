@@ -145,7 +145,7 @@ class CliTests(unittest.TestCase):
                     "pool_policy": {
                         "active_min": 1,
                         "active_target": 2,
-                        "reserve_target": 1,
+                        "reserve_target": 0,
                     },
                     "backends": [
                         {
@@ -5809,6 +5809,11 @@ class CliTests(unittest.TestCase):
         promotion = payload["promotion_result"]
         self.assertEqual(promotion["precondition_status"], "eligible_reserve_backend")
         self.assertEqual(promotion["previous_pool"], "reserve")
+        self.assertEqual(promotion["pool_policy_status"], "ok")
+        self.assertEqual(promotion["active_target_observed"], 2)
+        self.assertEqual(promotion["reserve_target_observed"], 0)
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["reserve_count_before"], 1)
         self.assertTrue(promotion["rollback_point_captured"])
         self.assertTrue(promotion["routing_change_attempted"])
         self.assertTrue(promotion["routing_change_observed"])
@@ -5835,6 +5840,103 @@ class CliTests(unittest.TestCase):
         promotion = payload["promotion_result"]
         self.assertEqual(promotion["precondition_status"], "backend_not_reserve")
         self.assertFalse(promotion["rollback_point_captured"])
+        self.assertFalse(promotion["validate_attempted"])
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_blocks_when_active_target_is_already_reached(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"]["active_target"] = 1
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-target-blocked",
+                auth_ref="/tmp/codex-target-blocked.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "promote", "backend-target-blocked", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_POLICY_LIMIT_REACHED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "active_target_reached")
+        self.assertEqual(promotion["pool_policy_status"], "ok")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_target_observed"], 1)
+        self.assertFalse(promotion["validate_attempted"])
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_counts_held_active_backend_toward_active_target(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry["pool_policy"]["active_target"] = 1
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-held-active-counted",
+                auth_ref="/tmp/codex-held-active-counted.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "accounts", "promote", "backend-held-active-counted", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_POLICY_LIMIT_REACHED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "active_target_reached")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_target_observed"], 1)
+        self.assertFalse(promotion["validate_attempted"])
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_blocks_when_reserve_target_would_be_violated(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"]["reserve_target"] = 1
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-floor",
+                auth_ref="/tmp/codex-reserve-floor.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "promote", "backend-reserve-floor", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_POLICY_LIMIT_REACHED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(
+            promotion["precondition_status"], "reserve_target_would_be_violated"
+        )
+        self.assertEqual(promotion["reserve_count_before"], 1)
+        self.assertEqual(promotion["reserve_target_observed"], 1)
+        self.assertFalse(promotion["validate_attempted"])
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_rejects_invalid_pool_policy(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"]["active_target"] = "oops"
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-invalid-policy",
+                auth_ref="/tmp/codex-invalid-policy.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "promote", "backend-invalid-policy", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_POLICY_INVALID")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "pool_policy_invalid")
+        self.assertEqual(promotion["pool_policy_status"], "invalid")
         self.assertFalse(promotion["validate_attempted"])
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 

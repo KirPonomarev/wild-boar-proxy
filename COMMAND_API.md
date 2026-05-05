@@ -181,6 +181,9 @@ Successful owner packets must prove, machine-readably:
 
 - a unique eligible backend identity
 - `reserve` precondition truth
+- current `pool_policy` gate truth before routing-impacting promotion
+- promotion does not exceed the staged active-pool target
+- promotion does not drop reserve below the staged reserve target
 - a rollback point captured before routing-impacting mutation
 - post-promotion sync outcome
 - post-promotion status proof summary
@@ -195,6 +198,12 @@ Preferred fields include:
 - `precondition_status`
 - `previous_pool`
 - `requested_pool`
+- `pool_policy_status`
+- `pool_policy_observed`
+- `active_pool_count_before`
+- `active_target_observed`
+- `reserve_count_before`
+- `reserve_target_observed`
 - `rollback_point_captured`
 - `routing_change_attempted`
 - `routing_change_observed`
