@@ -238,7 +238,7 @@ class AccountPoolSnapshot:
 def build_runtime_snapshot(
     *,
     status_payload: dict[str, Any],
-    mode_payload: dict[str, Any],
+    mode_payload: dict[str, Any] | None = None,
 ) -> RuntimeSnapshot:
     require_fields(
         status_payload,
@@ -260,6 +260,11 @@ def build_runtime_snapshot(
         ),
         "status payload",
     )
+    if mode_payload is None:
+        mode_payload = {
+            "desired_mode": status_payload["desired_mode"],
+            "effective_mode": status_payload["effective_mode"],
+        }
     require_fields(mode_payload, ("desired_mode", "effective_mode"), "mode payload")
 
     desired_mode = str(mode_payload["desired_mode"])
@@ -417,6 +422,17 @@ def run_account_validate_and_refresh(
     return action_result.payload, snapshot
 
 
+def run_account_mutation_and_refresh(
+    runner: JsonCommandRunner, command: tuple[str, ...]
+) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
+    action_result = runner.run(*command)
+    accounts_payload = runner.run("accounts", "list", "--json").payload
+    status_payload = runner.run("status", "--json").payload
+    runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
+    account_snapshot = build_account_pool_snapshot(accounts_payload)
+    return action_result.payload, runtime_snapshot, account_snapshot
+
+
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
         self.root = root
@@ -530,6 +546,18 @@ class MinimalCompanionShell:
             side="left"
         )
         ttk.Button(account_actions, text="Recheck", command=self.run_recheck_action).pack(
+            side="left", padx=(8, 0)
+        )
+        ttk.Button(account_actions, text="Promote", command=self.run_promote_action).pack(
+            side="left", padx=(16, 0)
+        )
+        ttk.Button(account_actions, text="Demote", command=self.run_demote_action).pack(
+            side="left", padx=(8, 0)
+        )
+        ttk.Button(account_actions, text="Hold", command=self.run_hold_action).pack(
+            side="left", padx=(8, 0)
+        )
+        ttk.Button(account_actions, text="Release", command=self.run_release_action).pack(
             side="left", padx=(8, 0)
         )
 
@@ -732,6 +760,56 @@ class MinimalCompanionShell:
             daemon=True,
         ).start()
 
+    def run_promote_action(self) -> None:
+        self._run_account_mutation_action(
+            "Promote",
+            "Promote selected reserve account into active routing?",
+            "promote",
+        )
+
+    def run_demote_action(self) -> None:
+        self._run_account_mutation_action(
+            "Demote",
+            "Demote selected active account back to reserve?",
+            "demote",
+        )
+
+    def run_hold_action(self) -> None:
+        self._run_account_mutation_action(
+            "Hold",
+            "Place selected account on hold and isolate it from active routing?",
+            "hold",
+        )
+
+    def run_release_action(self) -> None:
+        self._run_account_mutation_action(
+            "Release",
+            "Release selected held account back to reserve semantics?",
+            "release",
+        )
+
+    def _run_account_mutation_action(
+        self,
+        label: str,
+        prompt: str,
+        subcommand: str,
+    ) -> None:
+        if self._busy:
+            return
+        backend_id = self._selected_account_id()
+        if backend_id is None:
+            messagebox.showinfo("Select account", "Select an account first.", parent=self.root)
+            return
+        if not messagebox.askyesno("Confirm action", prompt, parent=self.root):
+            return
+        self.set_busy(True)
+        self.banner_var.set(f"Running {label.lower()}...")
+        threading.Thread(
+            target=self._account_mutation_worker,
+            args=(("accounts", subcommand, backend_id, "--json"),),
+            daemon=True,
+        ).start()
+
     def _action_worker(self, command: tuple[str, ...]) -> None:
         try:
             action_payload, runtime_snapshot = run_mode_control_and_refresh(self.runner, command)
@@ -787,6 +865,26 @@ class MinimalCompanionShell:
             self.set_busy(False)
 
         self.root.after(0, apply)
+
+    def _account_mutation_worker(self, command: tuple[str, ...]) -> None:
+        try:
+            action_payload, runtime_snapshot, account_snapshot = run_account_mutation_and_refresh(
+                self.runner, command
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_refresh_results(
+                runtime_snapshot,
+                account_snapshot,
+                banner=banner,
+            ),
+        )
 
 
 def main() -> int:
