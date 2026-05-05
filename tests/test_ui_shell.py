@@ -8,12 +8,15 @@ import unittest
 from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
+    CLIENT_LAUNCH_RESULT_FIELDS,
     ONBOARDING_RESULT_FIELDS,
     AccountPoolSnapshot,
     JsonCommandRunner,
     MinimalCompanionShell,
     UiShellError,
     build_account_pool_snapshot,
+    build_client_launch_field_values,
+    classify_client_launch_rendered_state,
     build_onboarding_field_values,
     build_runtime_snapshot,
     format_onboarding_value,
@@ -24,6 +27,7 @@ from wild_boar_proxy.ui_shell import (
     run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
+    run_launch_client_and_refresh,
     run_mode_control_and_refresh,
     run_sync_and_refresh,
 )
@@ -77,6 +81,32 @@ def mode_payload(**overrides: object) -> dict[str, object]:
         human_message="Mode values are available.",
         desired_mode="managed",
         effective_mode="managed",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def launch_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Client launch dispatch observed.",
+        client_launch_result={
+            "status": "dispatch_requested",
+            "attempted": True,
+            "client_path": "/Applications/Signal.app/Contents/MacOS/Signal",
+            "client_path_kind": "absolute",
+            "runtime_precondition_checked": True,
+            "runtime_precondition_status": "passed",
+            "effective_mode_observed": "managed",
+            "endpoint_observed": "127.0.0.1:9999",
+            "profile_context": "default",
+            "env_sanitized": True,
+            "dispatch_method": "subprocess_popen",
+            "dispatch_attempted": True,
+            "dispatch_observed": "requested",
+            "dispatch_exit_code": 0,
+            "launch_claim_scope": "os_dispatch_only",
+            "final_outcome": "dispatch_requested",
+        },
     )
     payload.update(overrides)
     return payload
@@ -374,6 +404,134 @@ class ModeControlTests(unittest.TestCase):
                 ("mode", "get", "--json"),
             ],
         )
+
+
+class LaunchClientTests(unittest.TestCase):
+    def test_run_launch_client_and_refresh_uses_launch_then_status_only(self) -> None:
+        runner = FakeRunner(
+            {
+                (
+                    "launch",
+                    "client",
+                    "--client-path",
+                    "/Applications/Signal.app/Contents/MacOS/Signal",
+                    "--json",
+                ): launch_payload(),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        action_payload, snapshot = run_launch_client_and_refresh(
+            runner,
+            (
+                "launch",
+                "client",
+                "--client-path",
+                "/Applications/Signal.app/Contents/MacOS/Signal",
+                "--json",
+            ),
+        )
+
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(snapshot.overall_state, "ok")
+        self.assertEqual(
+            runner.calls,
+            [
+                (
+                    "launch",
+                    "client",
+                    "--client-path",
+                    "/Applications/Signal.app/Contents/MacOS/Signal",
+                    "--json",
+                ),
+                ("status", "--json"),
+            ],
+        )
+
+    def test_build_client_launch_field_values_rejects_non_object_nested_surface(self) -> None:
+        with self.assertRaisesRegex(UiShellError, "client_launch_result must be an object"):
+            build_client_launch_field_values(launch_payload(client_launch_result="broken"))
+
+    def test_classify_client_launch_rendered_state_accepts_bounded_dispatch_only(self) -> None:
+        field_values = build_client_launch_field_values(launch_payload())
+        rendered_state = classify_client_launch_rendered_state(
+            launch_payload(),
+            field_values,
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "bounded_dispatch_only")
+
+    def test_classify_client_launch_rendered_state_marks_precondition_failure(self) -> None:
+        payload = launch_payload(
+            status="error",
+            machine_error_code="CLIENT_LAUNCH_RUNTIME_PRECONDITION_FAILED",
+            client_launch_result={
+                "final_outcome": "runtime_precondition_failed",
+                "runtime_precondition_status": "failed",
+            },
+        )
+        field_values = build_client_launch_field_values(payload)
+        rendered_state = classify_client_launch_rendered_state(
+            payload,
+            field_values,
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "failure")
+
+    def test_classify_client_launch_rendered_state_marks_malformed_surface(self) -> None:
+        rendered_state = classify_client_launch_rendered_state(
+            launch_payload(),
+            {field: "" for field in CLIENT_LAUNCH_RESULT_FIELDS},
+            malformed=True,
+        )
+        self.assertEqual(rendered_state, "integration_failure")
+
+    def test_classify_client_launch_rendered_state_marks_top_level_integration_failure(self) -> None:
+        rendered_state = classify_client_launch_rendered_state(
+            command_payload(status="integration_failure"),
+            {field: "" for field in CLIENT_LAUNCH_RESULT_FIELDS},
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "integration_failure")
+
+    def test_classify_client_launch_rendered_state_rejects_contradictory_dispatch_payload(self) -> None:
+        payload = launch_payload(
+            client_launch_result={
+                "final_outcome": "dispatch_requested",
+                "launch_claim_scope": "os_dispatch_only",
+                "dispatch_observed": "requested",
+                "attempted": True,
+                "dispatch_attempted": False,
+                "runtime_precondition_status": "ok",
+            }
+        )
+        field_values = build_client_launch_field_values(payload)
+        rendered_state = classify_client_launch_rendered_state(
+            payload,
+            field_values,
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "unknown")
+
+    def test_classify_client_launch_rendered_state_rejects_nonzero_dispatch_exit(self) -> None:
+        payload = launch_payload(
+            client_launch_result={
+                "final_outcome": "dispatch_requested",
+                "launch_claim_scope": "os_dispatch_only",
+                "dispatch_observed": "requested",
+                "attempted": True,
+                "dispatch_attempted": True,
+                "runtime_precondition_status": "ok",
+                "dispatch_exit_code": 7,
+            }
+        )
+        field_values = build_client_launch_field_values(payload)
+        rendered_state = classify_client_launch_rendered_state(
+            payload,
+            field_values,
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "unknown")
 
 
 class AccountCheckTests(unittest.TestCase):
@@ -823,6 +981,107 @@ class UiDispatchTests(unittest.TestCase):
         )
         thread_instance.start.assert_called_once_with()
 
+    def test_run_launch_client_action_requires_path(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.launch_client_path_var = mock.Mock()
+        shell.launch_client_path_var.get.return_value = "   "
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_launch_client_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_launch_client_action_requires_absolute_path(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.launch_client_path_var = mock.Mock()
+        shell.launch_client_path_var.get.return_value = "Signal.app"
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_launch_client_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_launch_client_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.launch_client_path_var = mock.Mock()
+        shell.launch_client_path_var.get.return_value = "/Applications/Signal.app/Contents/MacOS/Signal"
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_launch_client_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_launch_client_action_wires_command(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.launch_client_path_var = mock.Mock()
+        shell.launch_client_path_var.get.return_value = "/Applications/Signal.app/Contents/MacOS/Signal"
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_launch_client_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._launch_client_worker)
+        self.assertEqual(
+            kwargs["args"][0],
+            (
+                "launch",
+                "client",
+                "--client-path",
+                "/Applications/Signal.app/Contents/MacOS/Signal",
+                "--json",
+            ),
+        )
+        thread_instance.start.assert_called_once_with()
+
+    def test_apply_launch_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.launch_command_status_var = mock.Mock()
+        shell.launch_command_exit_code_var = mock.Mock()
+        shell.launch_command_human_message_var = mock.Mock()
+        shell.launch_command_machine_error_var = mock.Mock()
+        shell.launch_command_changed_files_var = mock.Mock()
+        shell.launch_command_next_action_var = mock.Mock()
+        shell.launch_rendered_state_var = mock.Mock()
+        shell.launch_field_vars = {
+            field: mock.Mock() for field in CLIENT_LAUNCH_RESULT_FIELDS
+        }
+
+        shell._apply_launch_client_payload(launch_payload(client_launch_result="broken"))
+
+        shell.launch_command_status_var.set.assert_called_once_with("ok")
+        for field in CLIENT_LAUNCH_RESULT_FIELDS:
+            shell.launch_field_vars[field].set.assert_called_once_with("")
+
     def test_apply_onboarding_payload_blanks_fields_for_malformed_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell.onboarding_command_status_var = mock.Mock()
@@ -837,6 +1096,71 @@ class UiDispatchTests(unittest.TestCase):
         shell.onboarding_command_status_var.set.assert_called_once_with("ok")
         for field in ONBOARDING_RESULT_FIELDS:
             shell.onboarding_field_vars[field].set.assert_called_once_with("")
+
+    def test_apply_launch_client_payload_marks_malformed_surface_as_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.launch_command_status_var = mock.Mock()
+        shell.launch_command_exit_code_var = mock.Mock()
+        shell.launch_command_human_message_var = mock.Mock()
+        shell.launch_command_machine_error_var = mock.Mock()
+        shell.launch_command_changed_files_var = mock.Mock()
+        shell.launch_command_next_action_var = mock.Mock()
+        shell.launch_rendered_state_var = mock.Mock()
+        shell.launch_field_vars = {
+            field: mock.Mock() for field in CLIENT_LAUNCH_RESULT_FIELDS
+        }
+
+        shell._apply_launch_client_payload(launch_payload(client_launch_result="broken"))
+
+        shell.launch_rendered_state_var.set.assert_called_once_with("integration_failure")
+
+    def test_apply_launch_client_payload_marks_precondition_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.launch_command_status_var = mock.Mock()
+        shell.launch_command_exit_code_var = mock.Mock()
+        shell.launch_command_human_message_var = mock.Mock()
+        shell.launch_command_machine_error_var = mock.Mock()
+        shell.launch_command_changed_files_var = mock.Mock()
+        shell.launch_command_next_action_var = mock.Mock()
+        shell.launch_rendered_state_var = mock.Mock()
+        shell.launch_field_vars = {
+            field: mock.Mock() for field in CLIENT_LAUNCH_RESULT_FIELDS
+        }
+
+        shell._apply_launch_client_payload(
+            launch_payload(
+                status="error",
+                machine_error_code="CLIENT_LAUNCH_RUNTIME_PRECONDITION_FAILED",
+                client_launch_result={
+                    "runtime_precondition_status": "failed",
+                    "final_outcome": "runtime_precondition_failed",
+                },
+            )
+        )
+
+        shell.launch_rendered_state_var.set.assert_called_once_with("failure")
+
+    def test_apply_launch_client_payload_marks_top_level_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.launch_command_status_var = mock.Mock()
+        shell.launch_command_exit_code_var = mock.Mock()
+        shell.launch_command_human_message_var = mock.Mock()
+        shell.launch_command_machine_error_var = mock.Mock()
+        shell.launch_command_changed_files_var = mock.Mock()
+        shell.launch_command_next_action_var = mock.Mock()
+        shell.launch_rendered_state_var = mock.Mock()
+        shell.launch_field_vars = {
+            field: mock.Mock() for field in CLIENT_LAUNCH_RESULT_FIELDS
+        }
+
+        shell._apply_launch_client_payload(
+            command_payload(
+                status="integration_failure",
+                machine_error_code="UI_INTEGRATION_FAILURE",
+            )
+        )
+
+        shell.launch_rendered_state_var.set.assert_called_once_with("integration_failure")
 
     def test_apply_onboarding_payload_keeps_reserve_first_and_skipped_sync_visible(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)

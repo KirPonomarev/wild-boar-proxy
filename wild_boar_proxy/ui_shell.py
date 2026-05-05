@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -63,6 +64,24 @@ ONBOARDING_RESULT_FIELDS = (
     "external_command_exit_code",
     "external_command_status",
     "active_routing_changed",
+    "final_outcome",
+)
+CLIENT_LAUNCH_RESULT_FIELDS = (
+    "status",
+    "attempted",
+    "client_path",
+    "client_path_kind",
+    "runtime_precondition_checked",
+    "runtime_precondition_status",
+    "effective_mode_observed",
+    "endpoint_observed",
+    "profile_context",
+    "env_sanitized",
+    "dispatch_method",
+    "dispatch_attempted",
+    "dispatch_observed",
+    "dispatch_exit_code",
+    "launch_claim_scope",
     "final_outcome",
 )
 ACCOUNT_CAPACITY_TARGET = 20
@@ -417,6 +436,15 @@ def run_mode_control_and_refresh(
     return action_result.payload, snapshot
 
 
+def run_launch_client_and_refresh(
+    runner: JsonCommandRunner, command: tuple[str, ...]
+) -> tuple[dict[str, Any], RuntimeSnapshot]:
+    action_result = runner.run(*command)
+    status_payload = runner.run("status", "--json").payload
+    snapshot = build_runtime_snapshot(status_payload=status_payload)
+    return action_result.payload, snapshot
+
+
 def run_sync_and_refresh(
     runner: JsonCommandRunner,
 ) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
@@ -485,6 +513,59 @@ def build_onboarding_field_values(action_payload: dict[str, Any]) -> dict[str, s
     return result
 
 
+def build_client_launch_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in CLIENT_LAUNCH_RESULT_FIELDS}
+    launch_result = action_payload.get("client_launch_result")
+    if launch_result is None:
+        return result
+    if not isinstance(launch_result, dict):
+        raise UiShellError("client_launch_result must be an object when present")
+    for field in CLIENT_LAUNCH_RESULT_FIELDS:
+        if field in launch_result:
+            result[field] = format_onboarding_value(launch_result[field])
+    return result
+
+
+def classify_client_launch_rendered_state(
+    action_payload: dict[str, Any], field_values: dict[str, str], *, malformed: bool
+) -> str:
+    if malformed:
+        return "integration_failure"
+    command_status = str(action_payload.get("status", ""))
+    if command_status == "integration_failure":
+        return "integration_failure"
+    if command_status != "ok":
+        return "failure"
+    final_outcome = field_values.get("final_outcome", "")
+    claim_scope = field_values.get("launch_claim_scope", "")
+    dispatch_observed = field_values.get("dispatch_observed", "")
+    attempted = field_values.get("attempted", "")
+    dispatch_attempted = field_values.get("dispatch_attempted", "")
+    runtime_precondition_status = field_values.get("runtime_precondition_status", "")
+    dispatch_exit_code = field_values.get("dispatch_exit_code", "")
+    if (
+        final_outcome == "dispatch_requested"
+        and claim_scope == "os_dispatch_only"
+        and dispatch_observed in {"true", "requested"}
+        and attempted == "true"
+        and dispatch_attempted == "true"
+        and runtime_precondition_status in {"ok", "passed"}
+        and dispatch_exit_code in {"", "0", "null"}
+    ):
+        return "bounded_dispatch_only"
+    if final_outcome in {
+        "runtime_precondition_failed",
+        "client_path_missing",
+        "client_path_invalid",
+        "dispatch_failed",
+        "unsupported_launch_shape",
+    }:
+        return "failure"
+    if field_values.get("runtime_precondition_status", "") == "failed":
+        return "failure"
+    return "unknown"
+
+
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
         self.root = root
@@ -521,6 +602,18 @@ class MinimalCompanionShell:
         self.onboarding_field_vars = {
             field: StringVar(value="")
             for field in ONBOARDING_RESULT_FIELDS
+        }
+        self.launch_client_path_var = StringVar(value="")
+        self.launch_command_status_var = StringVar(value="")
+        self.launch_command_exit_code_var = StringVar(value="")
+        self.launch_command_human_message_var = StringVar(value="")
+        self.launch_command_machine_error_var = StringVar(value="")
+        self.launch_command_changed_files_var = StringVar(value="")
+        self.launch_command_next_action_var = StringVar(value="")
+        self.launch_rendered_state_var = StringVar(value="unknown")
+        self.launch_field_vars = {
+            field: StringVar(value="")
+            for field in CLIENT_LAUNCH_RESULT_FIELDS
         }
 
         self._build_layout()
@@ -589,6 +682,75 @@ class MinimalCompanionShell:
             text="Run Managed Sync",
             command=self.run_sync_action,
         ).pack(fill="x", pady=4)
+        launch_box = ttk.LabelFrame(controls_box, text="Launch Client", padding=8)
+        launch_box.pack(fill="x", pady=(8, 0))
+        launch_input = ttk.Frame(launch_box)
+        launch_input.pack(fill="x")
+        ttk.Label(launch_input, text="Client path:", width=10).pack(side="left")
+        ttk.Entry(launch_input, textvariable=self.launch_client_path_var).pack(
+            side="left",
+            fill="x",
+            expand=True,
+        )
+        ttk.Button(
+            launch_box,
+            text="Launch Client",
+            command=self.run_launch_client_action,
+        ).pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            launch_box,
+            "Rendered state",
+            self.launch_rendered_state_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Command status",
+            self.launch_command_status_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Exit code",
+            self.launch_command_exit_code_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Human message",
+            self.launch_command_human_message_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Machine error",
+            self.launch_command_machine_error_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Changed files",
+            self.launch_command_changed_files_var,
+        )
+        self._add_status_row(
+            launch_box,
+            "Next action",
+            self.launch_command_next_action_var,
+        )
+        for label, field in (
+            ("Launch status", "status"),
+            ("Attempted", "attempted"),
+            ("Client path", "client_path"),
+            ("Path kind", "client_path_kind"),
+            ("Precondition checked", "runtime_precondition_checked"),
+            ("Precondition status", "runtime_precondition_status"),
+            ("Effective mode", "effective_mode_observed"),
+            ("Endpoint", "endpoint_observed"),
+            ("Profile context", "profile_context"),
+            ("Env sanitized", "env_sanitized"),
+            ("Dispatch method", "dispatch_method"),
+            ("Dispatch attempted", "dispatch_attempted"),
+            ("Dispatch observed", "dispatch_observed"),
+            ("Dispatch exit code", "dispatch_exit_code"),
+            ("Claim scope", "launch_claim_scope"),
+            ("Final outcome", "final_outcome"),
+        ):
+            self._add_status_row(launch_box, label, self.launch_field_vars[field])
 
         onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
         onboarding_box.pack(fill="x", pady=(16, 0))
@@ -843,6 +1005,38 @@ class MinimalCompanionShell:
         self.banner_var.set("Running operator action...")
         threading.Thread(target=self._sync_worker, daemon=True).start()
 
+    def run_launch_client_action(self) -> None:
+        if self._busy:
+            return
+        client_path = self.launch_client_path_var.get().strip()
+        if not client_path:
+            messagebox.showinfo(
+                "Client path required",
+                "Enter absolute client path before launch.",
+                parent=self.root,
+            )
+            return
+        if not os.path.isabs(client_path):
+            messagebox.showinfo(
+                "Absolute path required",
+                "Enter an absolute client path before launch.",
+                parent=self.root,
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run bounded launch-client dispatch and refresh runtime truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running launch client...")
+        threading.Thread(
+            target=self._launch_client_worker,
+            args=(("launch", "client", "--client-path", client_path, "--json"),),
+            daemon=True,
+        ).start()
+
     def run_onboard_action(self) -> None:
         if self._busy:
             return
@@ -992,6 +1186,33 @@ class MinimalCompanionShell:
             ),
         )
 
+    def _launch_client_worker(self, command: tuple[str, ...]) -> None:
+        try:
+            action_payload, runtime_snapshot = run_launch_client_and_refresh(
+                self.runner, command
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_launch_client_results(
+                action_payload,
+                runtime_snapshot,
+                banner=banner,
+            ),
+        )
+
     def _account_check_worker(self, backend_id: str) -> None:
         try:
             action_payload, account_snapshot = run_account_validate_and_refresh(
@@ -1028,6 +1249,42 @@ class MinimalCompanionShell:
                 banner=banner,
             ),
         )
+
+    def _apply_launch_client_payload(self, action_payload: dict[str, Any]) -> None:
+        self.launch_command_status_var.set(str(action_payload.get("status", "")))
+        self.launch_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.launch_command_human_message_var.set(str(action_payload.get("human_message", "")))
+        self.launch_command_machine_error_var.set(str(action_payload.get("machine_error_code", "")))
+        self.launch_command_next_action_var.set(str(action_payload.get("next_action", "")))
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.launch_command_changed_files_var.set("")
+        else:
+            self.launch_command_changed_files_var.set(format_onboarding_value(changed_files_value))
+        malformed_surface = False
+        try:
+            field_values = build_client_launch_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in CLIENT_LAUNCH_RESULT_FIELDS}
+            malformed_surface = True
+        for field, value in field_values.items():
+            self.launch_field_vars[field].set(value)
+        rendered_state = classify_client_launch_rendered_state(
+            action_payload, field_values, malformed=malformed_surface
+        )
+        self.launch_rendered_state_var.set(rendered_state)
+
+    def _apply_launch_client_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_launch_client_payload(action_payload)
+        self._apply_runtime_snapshot(runtime_snapshot)
+        self.banner_var.set(banner)
+        self.set_busy(False)
 
     def _apply_onboarding_payload(self, action_payload: dict[str, Any]) -> None:
         self.onboarding_command_status_var.set(str(action_payload.get("status", "")))
