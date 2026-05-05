@@ -82,7 +82,7 @@ Live evidence lane does not authorize additional repo-write work by itself.
 - `rollout stage advance` lock coverage
 - detected-new-auth onboarding lane expansion
 
-### Recently closed contour
+### Recently closed contours
 
 Recently closed:
 
@@ -98,66 +98,70 @@ Closeout:
   - mismatch paths do not emit false success claims
 - the contour closed as tests-only
 
-### Current next contour
-
-The immediate next repo-write contour is:
+Recently closed:
 
 `Wave 1C Repo-Write: Rollout Stage Advance Lock Coverage`
 
-Purpose:
+Closeout:
 
-- close the remaining direct lock-coverage gap on the stage-advance owner
-  surfaces
-- prove fail-closed owner-surface behavior under held-lock conditions on
-  representative stage-advance branches
-- strengthen `STATE_SERIALIZATION_GATE` confidence on a delegated multi-step
-  mutating owner surface without claiming stage-proof completion, scale proof,
-  or broader rollout completion
-
-Scope:
-
-- tests first
-- direct coverage for:
+- direct owner-surface coverage was added for:
   - `rollout stage advance 15 <id> --json` from canonical source stage `10`
   - `rollout stage advance 20 <id> --json` from canonical requested stage `20`
     when target posture is not yet satisfied
-- prove observable owner-surface failure expectations only:
-  - `machine_error_code == LOCK_HELD`
-  - `changed_files == []`
-  - tracked state remains unchanged
-  - no committed control-layer mutation is observed in canonical write surfaces
-- do not assert absence of read-only delegated preflight or proof work unless
-  that fact is already surfaced machine-readably
-- allow a minimal runtime fix only if a new test reveals a real missing
-  serialized-path guard or fail-open behavior in the stage-advance owner
-  surface
+- the contour now proves:
+  - held-lock results emit non-success owner packets with `LOCK_HELD`
+  - `changed_files` remains empty under held-lock conditions
+  - tracked state remains unchanged under held-lock conditions
+  - no nested stage-advancement success surface is emitted after lock rejection
+- the contour closed as tests-only
 
-Acceptance:
+Recently closed:
 
-- direct lock-held coverage exists for two distinct stage-advance owner-flow
-  branches
-- held-lock results emit non-success owner packets with `LOCK_HELD`
-- no committed control-layer mutation is observed under held-lock conditions
-- no new truth surface is introduced
-- full local CLI suite remains green
-- the contour closes as tests-only unless a failing test proves a real defect
+`Wave 1C Repo-Write: Detected-New-Auth Onboarding Owner-Surface Coverage`
 
-Decision rule:
+Closeout:
 
-- if tests pass once added, close the contour as tests-only
-- if a new test reveals a real defect, fix only the control-layer
-  stage-advance lock-preflight or serialized-path defect in the same contour
-- if a fix would expand into stage-proof semantics, rollout-policy redesign,
-  engine-layer work, or live operational behavior, stop and open a separate
-  contour
+- direct owner-surface coverage was added for detected-new-auth onboarding:
+  - external onboard command non-zero exit with unique reserve backend and full
+    post-proof success
+  - `--no-sync` detected-new-auth path without sync overclaim
+  - status-proof failure without false `reserve_only_success`
+- the contour now proves:
+  - successful detected-new-auth packets do not infer final truth from external
+    command exit code alone
+  - skipped sync remains machine-visible as skipped
+  - status-proof failure stops success claims honestly
+- the contour closed as tests-only
 
-Explicitly deferred from this contour:
+### Repo-Write Lane Closeout Status
 
-- detected-new-auth onboarding lane expansion
-- exhaustive lock coverage across every remaining mutating command
-- stage-advance semantic expansion beyond held-lock behavior
-- live `rollout evidence capture 16 --json`
-- scale-to-20 proof claims
+The Wave 1C repo-write lane preferred candidates are closed.
+
+No known repo-authored execution-core delta remains in the preferred candidate
+set.
+
+This is not a claim that all of Wave 1C is fully complete. The live evidence
+lane remains separately gated and pending operator approval.
+
+Pending live evidence does not block repo-write handoff by itself.
+
+### Next Handoff Recommendation
+
+The next repo/product contour may move to:
+
+`Wave 1D Basic Companion UI Readiness`
+
+This handoff is readiness/spec work, not UI implementation.
+
+The first UI contour must:
+
+- consume existing strict JSON command surfaces as the truth source
+- preserve desired mode, effective mode, endpoint, health, and pool state as
+  read from existing command packets
+- avoid inventing a new truth surface
+- avoid UI polish, installer, packaging, legacy import, or scale proof work
+- stop and open a separate runtime-hardening contour if new evidence or tests
+  expose a real execution-core blocker
 
 ### Out of scope
 
@@ -266,13 +270,15 @@ Additional live-lane entry criteria:
 
 ## Handoff Rule
 
-Wave 1C closes only when one of these is true:
+Wave 1C repo-write handoff is allowed when one of these is true:
 
 1. remaining repo-authored execution-core deltas are closed or explicitly
    deferred with rationale, and the next contour can move to a basic companion
    UI contour
 2. live evidence or new tests expose a real blocker, and the next contour is a
    separate narrowly scoped runtime-hardening contour
+
+The repo-write lane currently satisfies condition 1.
 
 Live evidence pending operator approval is an allowed open item.
 It does not block repo-write closeout by itself.
