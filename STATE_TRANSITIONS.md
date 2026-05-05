@@ -23,6 +23,8 @@ It is a routing-blocking state derived from `manual_hold=true`.
 - `new auth -> reserve`
 - `reserve -> active` only after validate plus sync plus operator or policy
   decision
+- `active -> reserve` after explicit demote when the backend should leave active
+  routing without entering hold or retired
 - `active -> hold` when the backend degrades, becomes suspicious, or is placed
   on manual hold
 - `hold -> reserve` only after explicit release
@@ -59,6 +61,12 @@ No routing-impacting transition is complete if rollback data is missing.
 ## Transition notes
 
 - reserve-first onboarding is mandatory
+- demote is a narrow explicit `active -> reserve` lane only
+- demote must not operate on held backends; held backends use `release` only
+- demote must reject `retired` backends
+- demote on an already `reserve` backend is either:
+  reserve-only verified no-op success, or explicit proof failure
+- demote returns to `reserve` without setting `manual_hold`
 - manual hold is protective, not promotional
 - release from hold returns to `reserve`, not directly to `active`
 - retirement is terminal for automatic policy logic

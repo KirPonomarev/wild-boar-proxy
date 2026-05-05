@@ -219,6 +219,61 @@ Rollback proof is limited to control-layer state and companion-managed
 artifacts.
 It does not imply rollback of engine-internal routing behavior.
 
+## Additional demote owner surface
+
+`accounts demote <id> --json` is the owner surface for explicit
+active-to-reserve demotion truth.
+
+Demotion success must not be inferred from external demote subprocess exit
+code alone.
+Successful owner packets must prove, machine-readably:
+
+- a unique backend identity
+- explicit `active -> reserve` demote precondition truth
+- held backend rejection (`release` lane only)
+- retired backend rejection (no demote lane from `retired`)
+- already-reserve classification as either:
+  reserve-only verified no-op success, or explicit failure when reserve-only
+  proof is missing
+- a rollback point captured before any routing-impacting mutation
+- post-transition sync outcome when routing consequence changes
+- post-transition status proof summary when routing consequence changes
+- an explicit routing-consequence classification
+- strict single-packet JSON behavior even on command execution failure
+- truthful `changed_files` across registry/state/runtime write surfaces
+
+`accounts demote <id> --json` may expose a nested `demote_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `backend_id`
+- `precondition_status`
+- `previous_pool`
+- `previous_manual_hold`
+- `requested_transition`
+- `rollback_point_captured`
+- `routing_change_attempted`
+- `routing_change_observed`
+- `sync_attempted`
+- `sync_outcome`
+- `status_observed`
+- `rollback_attempted`
+- `rollback_outcome`
+- `external_command_exit_code`
+- `external_command_status`
+- `reserve_return_confirmed`
+- `final_outcome`
+
+Canonical demote outcomes include:
+
+- `backend_demoted_to_reserve`
+- `already_reserve`
+- `precondition_failed`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+- `demote_command_failed`
+
 ## Additional hold and release owner surfaces
 
 `accounts hold <id> --json` is the owner surface for protective isolation

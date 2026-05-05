@@ -4746,6 +4746,445 @@ def run_release(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     return run_protective_lifecycle_owner_path(paths, backend_id, action="release")
 
 
+def run_demote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    if not paths.accounts_bin.exists():
+        raise RuntimeErrorInfo(
+            f"Missing accounts command: {paths.accounts_bin}",
+            machine_error_code="MISSING_ACCOUNTS_BIN",
+            operator_action="user_action",
+        )
+
+    before = snapshot_known_files(paths)
+    command = ["demote", backend_id]
+    demote_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "backend_id": backend_id,
+        "precondition_status": "pending",
+        "previous_pool": "",
+        "previous_manual_hold": False,
+        "requested_transition": "demote_to_reserve",
+        "rollback_point_captured": False,
+        "routing_change_attempted": False,
+        "routing_change_observed": False,
+        "sync_attempted": False,
+        "sync_outcome": "not_attempted",
+        "status_observed": None,
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "external_command_exit_code": None,
+        "external_command_status": "not_invoked",
+        "reserve_return_confirmed": False,
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_demote_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str = "unknown",
+        severity: str = "recoverable",
+        operator_action: str = "none",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "command": command,
+            "demote_result": demote_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness=liveness,
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    with serialized_lock(paths):
+        before_registry = read_json(paths.registry_file)
+        before_state = read_json(paths.state_file, required=False)
+        before_routing_ids = routing_eligible_active_backend_ids(before_registry)
+        before_selected_backend_ids = selected_backend_ids_from_state(before_state)
+        backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+        selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+        previous_pool = (
+            str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+        )
+        previous_manual_hold = bool(
+            selected_backend.get("manual_hold", False)
+            if isinstance(selected_backend, dict)
+            else False
+        )
+        demote_result["previous_pool"] = previous_pool
+        demote_result["previous_manual_hold"] = previous_manual_hold
+
+        def rollback_after_failed_verification(
+            *,
+            human_message: str,
+            machine_error_code: str,
+            liveness: str,
+            operator_action: str,
+            exit_code: int | None,
+            extra: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            demote_result["rollback_attempted"] = True
+            try:
+                restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
+                demote_result["rollback_outcome"] = "completed"
+                demote_result["final_outcome"] = (
+                    "rollback_completed_after_failed_verification"
+                )
+                return build_demote_payload(
+                    ok=False,
+                    human_message=human_message,
+                    machine_error_code=machine_error_code,
+                    liveness=liveness,
+                    severity="recoverable",
+                    operator_action=operator_action,
+                    exit_code=exit_code,
+                    extra=extra,
+                )
+            except Exception as exc:  # noqa: BLE001
+                demote_result["rollback_outcome"] = "failed"
+                demote_result["final_outcome"] = "rollback_failed"
+                payload_extra = dict(extra or {})
+                payload_extra["rollback_error"] = str(exc)
+                return build_demote_payload(
+                    ok=False,
+                    human_message=f"{human_message} Rollback of control-layer demotion state failed.",
+                    machine_error_code="DEMOTE_ROLLBACK_FAILED",
+                    liveness=liveness,
+                    severity="fatal",
+                    operator_action="stop",
+                    exit_code=1,
+                    extra=payload_extra,
+                )
+
+        if not backend_matches:
+            demote_result["precondition_status"] = "backend_missing"
+            demote_result["final_outcome"] = "precondition_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Demotion target backend does not exist.",
+                machine_error_code="DEMOTE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if len(backend_matches) > 1:
+            demote_result["precondition_status"] = "ambiguous_backend_id"
+            demote_result["final_outcome"] = "precondition_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Demotion target backend is ambiguous.",
+                machine_error_code="DEMOTE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if previous_manual_hold:
+            demote_result["precondition_status"] = "backend_held"
+            demote_result["final_outcome"] = "precondition_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Held backend must use release, not demote.",
+                machine_error_code="DEMOTE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if previous_pool == "retired":
+            demote_result["precondition_status"] = "backend_retired"
+            demote_result["final_outcome"] = "precondition_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Retired backend is not eligible for demotion.",
+                machine_error_code="DEMOTE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        if previous_pool == "reserve":
+            demote_result["precondition_status"] = "already_reserve"
+            demote_result["reserve_return_confirmed"] = bool(
+                backend_id not in set(before_routing_ids)
+                and backend_id not in set(before_selected_backend_ids)
+            )
+            if not demote_result["reserve_return_confirmed"]:
+                demote_result["final_outcome"] = "precondition_failed"
+                return build_demote_payload(
+                    ok=False,
+                    human_message="Reserve backend does not satisfy reserve-only routing proof.",
+                    machine_error_code="DEMOTE_STATUS_FAILED",
+                    operator_action="user_action",
+                )
+            demote_result["rollback_outcome"] = "not_needed"
+            demote_result["final_outcome"] = "already_reserve"
+            return build_demote_payload(
+                ok=True,
+                human_message="Backend is already reserve with reserve-only routing proof.",
+                machine_error_code="OK",
+                operator_action="none",
+            )
+
+        if previous_pool != "active":
+            demote_result["precondition_status"] = "backend_not_active"
+            demote_result["final_outcome"] = "precondition_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Only active backends are eligible for demotion.",
+                machine_error_code="DEMOTE_PRECONDITION_FAILED",
+                operator_action="user_action",
+            )
+
+        demote_result["precondition_status"] = "eligible_active_backend_for_demote"
+        rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
+        demote_result["rollback_point_captured"] = True
+        try:
+            result = subprocess.run(
+                [str(paths.accounts_bin), *command],
+                capture_output=True,
+                text=True,
+                env=sanitized_env(),
+                check=False,
+            )
+        except OSError as exc:
+            demote_result["external_command_status"] = "exec_error"
+            demote_result["final_outcome"] = "demote_command_failed"
+            return build_demote_payload(
+                ok=False,
+                human_message="Demotion command could not be executed.",
+                machine_error_code="DEMOTE_COMMAND_EXEC_FAILED",
+                operator_action="user_action",
+                exit_code=1,
+                extra={"command_error": str(exc)},
+            )
+        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
+        demote_result["external_command_exit_code"] = int(result.returncode)
+        demote_result["external_command_status"] = (
+            "ok" if result.returncode == 0 else "nonzero"
+        )
+
+        try:
+            after_command_registry = read_json(paths.registry_file)
+            after_command_state = read_json(paths.state_file, required=False)
+        except Exception as exc:  # noqa: BLE001
+            demote_result["final_outcome"] = "demote_command_failed"
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Demotion command left unreadable control-layer state."
+                ),
+                machine_error_code="DEMOTE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+                extra={"command_error": str(exc)},
+            )
+
+        after_command_matches = get_registry_backends_by_id(
+            after_command_registry, backend_id
+        )
+        after_command_backend = (
+            after_command_matches[0] if len(after_command_matches) == 1 else None
+        )
+        after_routing_ids = routing_eligible_active_backend_ids(after_command_registry)
+        after_selected_backend_ids = selected_backend_ids_from_state(after_command_state)
+        after_command_pool = (
+            str(after_command_backend.get("pool", ""))
+            if isinstance(after_command_backend, dict)
+            else ""
+        )
+        demote_result["routing_change_attempted"] = bool(
+            before_routing_ids != after_routing_ids
+            or before_selected_backend_ids != after_selected_backend_ids
+            or (previous_pool == "active" and after_command_pool != "active")
+            or (previous_pool != "active" and after_command_pool == "active")
+        )
+
+        def fail_after_command(
+            *,
+            human_message: str,
+            machine_error_code: str,
+            liveness: str,
+            operator_action: str,
+            exit_code: int | None,
+            extra: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            return rollback_after_failed_verification(
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+
+        if len(after_command_matches) != 1:
+            demote_result["final_outcome"] = "demote_command_failed"
+            return fail_after_command(
+                human_message=(
+                    "Demotion did not leave a uniquely identifiable backend state."
+                ),
+                machine_error_code="DEMOTE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        after_command_hold = bool(after_command_backend.get("manual_hold", False))
+        lifecycle_verified = not after_command_hold and after_command_pool == "reserve"
+        if not lifecycle_verified:
+            demote_result["final_outcome"] = "demote_command_failed"
+            return fail_after_command(
+                human_message="Demotion command did not return the backend to reserve.",
+                machine_error_code="DEMOTE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+        if not demote_result["routing_change_attempted"]:
+            demote_result["reserve_return_confirmed"] = bool(
+                backend_id not in set(after_routing_ids)
+                and backend_id not in set(after_selected_backend_ids)
+            )
+
+        sync_payload: dict[str, Any] | None = None
+        status_payload: dict[str, Any] | None = None
+        if demote_result["routing_change_attempted"]:
+            demote_result["sync_attempted"] = True
+            try:
+                sync_payload = run_sync_for_owner_path_under_lock(paths)
+                demote_result["sync_outcome"] = (
+                    "ok" if sync_payload["status"] == "ok" else "failed"
+                )
+                if sync_payload["status"] != "ok":
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Demotion changed routing inputs, but managed sync verification failed."
+                        ),
+                        machine_error_code="DEMOTE_SYNC_FAILED",
+                        liveness=str(sync_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            sync_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(sync_payload.get("exit_code", 1) or 1),
+                        extra={
+                            "sync_result": {
+                                "command_status": sync_payload["status"],
+                                "machine_error_code": sync_payload["machine_error_code"],
+                                "exit_code": sync_payload["exit_code"],
+                            }
+                        },
+                    )
+
+                status_payload, status_observed = (
+                    observe_status_proof_for_owner_path_under_lock(paths)
+                )
+                demote_result["status_observed"] = status_observed
+                verified_registry = read_json(paths.registry_file)
+                verified_state = read_json(paths.state_file, required=False)
+                verified_matches = get_registry_backends_by_id(
+                    verified_registry, backend_id
+                )
+                verified_backend = (
+                    verified_matches[0] if len(verified_matches) == 1 else None
+                )
+                verified_selected_backend_ids = set(
+                    selected_backend_ids_from_state(verified_state)
+                )
+                verified_routing_ids = set(
+                    routing_eligible_active_backend_ids(verified_registry)
+                )
+                demote_result["routing_change_observed"] = bool(
+                    status_payload["status"] == "ok"
+                    and isinstance(verified_backend, dict)
+                    and not bool(verified_backend.get("manual_hold", False))
+                    and str(verified_backend.get("pool", "")) == "reserve"
+                    and backend_id not in verified_routing_ids
+                    and backend_id not in verified_selected_backend_ids
+                )
+                demote_result["reserve_return_confirmed"] = demote_result[
+                    "routing_change_observed"
+                ]
+                if (
+                    status_payload["status"] != "ok"
+                    or not demote_result["routing_change_observed"]
+                ):
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Demotion did not produce verified reserve-only routing removal after status proof."
+                        ),
+                        machine_error_code="DEMOTE_STATUS_FAILED",
+                        liveness=str(status_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            status_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(status_payload.get("exit_code", 1) or 1),
+                        extra={
+                            "sync_result": {
+                                "command_status": sync_payload["status"],
+                                "machine_error_code": sync_payload["machine_error_code"],
+                                "exit_code": sync_payload["exit_code"],
+                            }
+                        },
+                    )
+            except RuntimeErrorInfo as exc:
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Demotion post-command verification raised a runtime error."
+                    ),
+                    machine_error_code="DEMOTE_SYNC_FAILED",
+                    liveness="unknown",
+                    operator_action=exc.operator_action,
+                    exit_code=exc.exit_code,
+                    extra={"verification_error": str(exc)},
+                )
+            except Exception as exc:  # noqa: BLE001
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Demotion post-command verification raised an unexpected error."
+                    ),
+                    machine_error_code="DEMOTE_STATUS_FAILED",
+                    liveness="unknown",
+                    operator_action="retry",
+                    exit_code=1,
+                    extra={"verification_error": str(exc)},
+                )
+
+        demote_result["rollback_outcome"] = "not_needed"
+        demote_result["final_outcome"] = "backend_demoted_to_reserve"
+        success_extra: dict[str, Any] = {}
+        if sync_payload is not None:
+            success_extra["sync_result"] = {
+                "command_status": sync_payload["status"],
+                "machine_error_code": sync_payload["machine_error_code"],
+                "exit_code": sync_payload["exit_code"],
+            }
+        return build_demote_payload(
+            ok=True,
+            human_message=(
+                "Account demotion completed with rollback-safe reserve-only proof."
+                if result.returncode == 0 and demote_result["routing_change_attempted"]
+                else "Account demotion completed."
+                if result.returncode == 0
+                else "Account demotion completed with reserve-only proof after external demote exit non-zero."
+            ),
+            machine_error_code="OK",
+            liveness=(
+                str(status_payload.get("liveness", "unknown"))
+                if status_payload is not None
+                else "unknown"
+            ),
+            severity="recoverable",
+            operator_action="none",
+            extra=success_extra or None,
+        )
+
 def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(

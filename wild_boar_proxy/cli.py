@@ -13,6 +13,7 @@ from .runtime import (
     mode_get,
     mode_set,
     run_accounts_command,
+    run_demote,
     run_healthcheck,
     run_hold,
     run_launch_client,
@@ -164,17 +165,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "accounts" and args.accounts_command == "promote":
             return emit_json(run_promote(paths, args.id))
-        if args.command == "accounts" and args.accounts_command in {
-            "demote",
-        }:
-            return emit_json(
-                run_accounts_command(
-                    paths,
-                    [args.accounts_command, args.id],
-                    success_message=f"Account {args.accounts_command} completed.",
-                    failure_message=f"Account {args.accounts_command} failed.",
-                )
-            )
+        if args.command == "accounts" and args.accounts_command == "demote":
+            return emit_json(run_demote(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "hold":
             return emit_json(run_hold(paths, args.id, args.reason))
         if args.command == "accounts" and args.accounts_command == "release":

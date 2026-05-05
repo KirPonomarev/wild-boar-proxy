@@ -404,6 +404,29 @@ class CliTests(unittest.TestCase):
             "    if stderr_text:\n"
             "        print(stderr_text, file=sys.stderr)\n"
             "    raise SystemExit(int(os.environ.get('WBP_TEST_PROMOTE_EXIT_CODE', '0')))\n"
+            "if command == 'demote':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    updates = json.loads(os.environ.get('WBP_TEST_DEMOTE_BACKEND_UPDATES_JSON', '[]'))\n"
+            "    if not updates and backend_id:\n"
+            "        updates = [{'id': backend_id, 'pool': 'reserve', 'manual_hold': False}]\n"
+            "    updates_by_id = {str(item.get('id')): item for item in updates if item.get('id') is not None}\n"
+            "    if updates_by_id:\n"
+            "        for backend in registry.get('backends', []):\n"
+            "            update = updates_by_id.get(str(backend.get('id')))\n"
+            "            if update:\n"
+            "                backend.update(update)\n"
+            "        registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "        registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "    state_patch = json.loads(os.environ.get('WBP_TEST_DEMOTE_STATE_PATCH_JSON', '{}'))\n"
+            "    if state_patch:\n"
+            "        state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "        state = json.loads(state_path.read_text())\n"
+            "        state.update(state_patch)\n"
+            "        state_path.write_text(json.dumps(state) + '\\n')\n"
+            "    stderr_text = os.environ.get('WBP_TEST_DEMOTE_STDERR', 'demote-ran')\n"
+            "    if stderr_text:\n"
+            "        print(stderr_text, file=sys.stderr)\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_DEMOTE_EXIT_CODE', '0')))\n"
             "if command == 'hold':\n"
             "    backend_id = args[0] if args else ''\n"
             "    updates = json.loads(os.environ.get('WBP_TEST_HOLD_BACKEND_UPDATES_JSON', '[]'))\n"
@@ -6059,6 +6082,404 @@ class CliTests(unittest.TestCase):
         self.assertEqual(promotion["external_command_exit_code"], 7)
         self.assertEqual(promotion["external_command_status"], "nonzero")
         self.assertEqual(promotion["final_outcome"], "promoted_to_active")
+
+    def test_accounts_demote_demotes_active_backend_with_verified_reserve_only_proof(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-demote-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-demote-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "demote",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["precondition_status"], "eligible_active_backend_for_demote")
+        self.assertTrue(demote["rollback_point_captured"])
+        self.assertTrue(demote["routing_change_attempted"])
+        self.assertTrue(demote["routing_change_observed"])
+        self.assertTrue(demote["sync_attempted"])
+        self.assertEqual(demote["sync_outcome"], "ok")
+        self.assertTrue(demote["reserve_return_confirmed"])
+        self.assertEqual(demote["final_outcome"], "backend_demoted_to_reserve")
+        registry = json.loads(registry_path.read_text())
+        demoted = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertEqual(demoted["pool"], "reserve")
+        self.assertFalse(demoted["manual_hold"])
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_demote_already_reserve_backend_returns_verified_owner_noop(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-already-reserve",
+                auth_ref="/tmp/codex-already-reserve.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "demote", "backend-already-reserve", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["precondition_status"], "already_reserve")
+        self.assertEqual(demote["final_outcome"], "already_reserve")
+        self.assertFalse(demote["rollback_point_captured"])
+        self.assertFalse(demote["sync_attempted"])
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_demote_rejects_already_reserve_backend_without_reserve_only_proof(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-selected",
+                auth_ref="/tmp/codex-reserve-selected.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = ["backend-a", "backend-reserve-selected"]
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "demote", "backend-reserve-selected", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_STATUS_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["precondition_status"], "already_reserve")
+        self.assertEqual(demote["final_outcome"], "precondition_failed")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_demote_rejects_held_backend_precondition(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "demote", "backend-a", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_PRECONDITION_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["precondition_status"], "backend_held")
+        self.assertEqual(demote["final_outcome"], "precondition_failed")
+
+    def test_accounts_demote_rejects_retired_backend_precondition(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-demote",
+                auth_ref="/tmp/codex-retired-demote.json",
+                pool="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "demote", "backend-retired-demote", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_PRECONDITION_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["precondition_status"], "backend_retired")
+        self.assertEqual(demote["final_outcome"], "precondition_failed")
+
+    def test_accounts_demote_status_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        managed_pid_file = self.managed_dir / "managed-proxy.pid"
+        managed_pid_file.write_text("8989\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-demote-unverified.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 0,
+                "reserve_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-demote-unverified",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "demote",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_STATUS_FAILED")
+        demote = payload["demote_result"]
+        self.assertTrue(demote["routing_change_attempted"])
+        self.assertFalse(demote["routing_change_observed"])
+        self.assertTrue(demote["rollback_attempted"])
+        self.assertEqual(demote["rollback_outcome"], "completed")
+        self.assertEqual(
+            demote["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+        self.assertEqual(managed_pid_file.read_text(encoding="utf-8"), "8989\n")
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+
+    def test_accounts_demote_sync_failure_rolls_back(self) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        managed_pid_file = self.managed_dir / "managed-proxy.pid"
+        managed_pid_file.write_text("7373\n", encoding="utf-8")
+        sync_script = self.profile_dir / "sync-demote-fail.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "from pathlib import Path\n"
+            f"state_path = Path(r'{self.managed_dir / 'supervisor-state.json'}')\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state.update({\n"
+            "    'selected_backend_ids': [],\n"
+            "    'active_count': 0,\n"
+            "    'reserve_count': 1,\n"
+            "    'effective_mode': 'managed',\n"
+            "    'last_error': 'sync failed',\n"
+            "})\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            f"Path(r'{managed_pid_file}').unlink(missing_ok=True)\n"
+            "PY\n"
+            "echo sync-demote-fail >&2\n"
+            "exit 7\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(sync_script)},
+            "accounts",
+            "demote",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 7, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_SYNC_FAILED")
+        demote = payload["demote_result"]
+        self.assertTrue(demote["sync_attempted"])
+        self.assertEqual(demote["sync_outcome"], "failed")
+        self.assertTrue(demote["rollback_attempted"])
+        self.assertEqual(demote["rollback_outcome"], "completed")
+        self.assertEqual(
+            demote["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+        self.assertEqual(managed_pid_file.read_text(encoding="utf-8"), "7373\n")
+
+    def test_accounts_demote_external_nonzero_with_verified_reserve_state_still_succeeds(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-demote-nonzero.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-demote-nonzero",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_DEMOTE_EXIT_CODE": "7",
+                },
+                "accounts",
+                "demote",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["external_command_exit_code"], 7)
+        self.assertEqual(demote["external_command_status"], "nonzero")
+        self.assertTrue(demote["reserve_return_confirmed"])
+        self.assertEqual(demote["final_outcome"], "backend_demoted_to_reserve")
+        registry = json.loads(registry_path.read_text())
+        demoted = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertEqual(demoted["pool"], "reserve")
+
+    def test_accounts_demote_exec_failure_returns_single_json_owner_packet(
+        self,
+    ) -> None:
+        broken_accounts = self.bin_dir / "broken-accounts-demote"
+        broken_accounts.write_text(
+            "#!/definitely/missing-interpreter\n", encoding="utf-8"
+        )
+        broken_accounts.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(broken_accounts)},
+            "accounts",
+            "demote",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_COMMAND_EXEC_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["external_command_status"], "exec_error")
+        self.assertEqual(demote["final_outcome"], "demote_command_failed")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_demote_unreadable_post_command_state_rolls_back_with_owner_packet(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        broken_accounts = self.bin_dir / "broken-accounts-demote-state"
+        broken_accounts.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "registry_path = Path(os.environ['WBP_REGISTRY_FILE'])\n"
+            "registry = json.loads(registry_path.read_text())\n"
+            "for backend in registry.get('backends', []):\n"
+            "    if str(backend.get('id')) == 'backend-a':\n"
+            "        backend['pool'] = 'reserve'\n"
+            "        backend['manual_hold'] = False\n"
+            "registry_path.write_text('{broken-json\\n')\n"
+            "print('demote-broke-state', file=open('/dev/stderr', 'w'))\n"
+            "PY\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        broken_accounts.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(broken_accounts)},
+            "accounts",
+            "demote",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "DEMOTE_COMMAND_FAILED")
+        demote = payload["demote_result"]
+        self.assertEqual(demote["external_command_status"], "ok")
+        self.assertTrue(demote["rollback_attempted"])
+        self.assertEqual(demote["rollback_outcome"], "completed")
+        self.assertEqual(
+            demote["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
 
     def test_accounts_hold_applies_protective_hold_with_verified_routing_isolation(
         self,
