@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 # Wild Boar Proxy
 
 Wild Boar Proxy is an experimental companion control app for managed local account pools running on top of `CLIProxyAPI`.
@@ -37,3 +40,5 @@ current boundary.
 
 If you deploy a modified network-facing version of this software, plan to make
 the corresponding source available under the AGPL terms.
+
+See `NETWORK_SOURCE_OFFER.md` for the current minimum operator policy.
