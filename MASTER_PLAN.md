@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.7
-PLAN_DATE: 2026-05-04
+PLAN_VERSION: 1.8
+PLAN_DATE: 2026-05-05
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Ready for execution wave 1
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -17,7 +17,67 @@ We do not fork the host client.
 We do not build a second proxy engine.
 We build the managing layer: modes, policy, onboarding, diagnostics, recovery, and staged scaling.
 Architecture is designed for 20 accounts from day one.
-Operational proof of scale is staged: 10, then 12 to 15, then 20.
+The current contour has operational evidence of correct 16-account work.
+Formal scale proof remains staged and must be backed by runtime attestation, rotation evidence, and rollback readiness before any 20-account claim.
+
+## Field Evidence Status
+
+The project has field evidence that the current local contour works correctly with 16 accounts.
+This is above the formal stage-15 contour and materially lowers uncertainty for the 20-account architecture.
+It is not, by itself, a `STABLE_20_PROVED`, `SCALE_COMPLETE`, or `PILOT_READY` claim.
+
+The correct interpretation is:
+
+- 16-account operational evidence exists.
+- The formal proof contour must still capture machine-carried evidence.
+- Stage-20 remains a controlled rollout target, not an inferred outcome.
+- Fallback, rollback, and strict runtime truth rules remain mandatory.
+
+## Field Evidence Capture Requirements
+
+The 16-account field contour may be promoted from observation to formal evidence only when a redacted evidence packet exists.
+
+Required evidence artifacts:
+
+- `healthcheck --json`
+- `status --json`
+- `accounts list --json`
+- `rollout rotation inspect --json`
+- pool counts: active, reserve, retired, healthy, degraded, down
+- selected backend ids and rotation participation evidence
+- fallback readiness and deterministic stable recovery readiness
+- redacted diagnostics export
+- commit hash, observation date, and environment note
+
+Evidence packets must not include auth files, private tokens, raw unredacted logs, real account secrets, or private runtime dumps.
+
+## Canonicalization Rule
+
+This master plan becomes canonical only after the governing document revision is committed and pushed.
+A local-only edit is not a closed planning contour.
+
+Canonical closeout requires:
+
+- no uncommitted changes in governing documents
+- a commit hash that contains the accepted plan revision
+- a pushed branch or merged target branch visible on GitHub
+- a short closeout note that names the plan version and commit hash
+
+Until those conditions are true, the plan may guide work but must be treated as pending canonicalization.
+
+## Evidence Packet Acceptance Ownership
+
+The 16-account evidence packet is accepted by the Product and Platform Team.
+
+Responsibility split:
+
+- the operator captures field evidence from the real contour
+- the maintainer verifies machine fields, redaction, and reproducibility
+- the Product and Platform Team accepts or rejects the evidence packet
+
+An accepted evidence packet must state its scope.
+It may prove the observed 16-account contour.
+It must not silently upgrade the claim to `STABLE_20_PROVED`, `SCALE_COMPLETE`, or `PILOT_READY`.
 
 ## Product Strategy
 
@@ -142,6 +202,36 @@ Runtime contract, state contract, state transitions, failure model, and command 
 No new truth surface may be added unless it reduces ambiguity or removes a real blocker.
 The execution core must freeze before UI, installer, or package work becomes active.
 
+## Git Closeout Discipline
+
+Repo work must be synchronized to GitHub in the same closeout cycle as verification and commit.
+A local-only commit is not a closed execution contour.
+
+Execution closeout requires:
+
+- the relevant tests or documented verification pass
+- the diff is reviewed for scope and private-data safety
+- changes are committed with a focused message
+- the branch is pushed
+- the final closeout names the verification command, commit hash, and branch
+
+Do not mix unrelated execution, documentation, and packaging changes in one commit unless the contour cannot be split safely.
+
+## Real Runtime Config Protection Rule
+
+Development and tests must not mutate real `~/.codex-custom-cli`, `~/.cli-proxy-api`, auth, proxy, profile, or host-client config files unless an operator explicitly approves a live-runtime operation.
+
+Default development and automated verification must use isolated temporary paths through `WBP_PROFILE_DIR`, `WBP_MANAGED_DIR`, `WBP_STABLE_CONFIG`, and related `WBP_*` overrides.
+
+Any live-runtime operation must declare before execution:
+
+- the exact command
+- the exact real files or directories that may be read
+- the exact real files or directories that may be written
+- the rollback or backup expectation
+
+No live-runtime command may be treated as harmless merely because it emits JSON.
+
 ## Runtime Contract
 
 1. Stable endpoint is 8318.
@@ -163,7 +253,7 @@ The execution core must freeze before UI, installer, or package work becomes act
 
 ## Runtime Attestation V1
 
-No `healthy`, `PASS`, `alpha-ready`, `pilot-ready`, or `stable-10-proved` claim is valid without a machine-carried runtime attestation.
+No `healthy`, `PASS`, `alpha-ready`, `pilot-ready`, `stable-10-proved`, or `stable-15-proved` claim is valid without a machine-carried runtime attestation.
 
 Required attestation fields:
 
@@ -216,6 +306,13 @@ Any operation that changes active routing, registry, mode, or managed state must
    - `mode get`
    - `mode set stable`
    - `mode set managed`
+   - `policy stage set`
+   - `rollout rotation inspect`
+   - `rollout evidence capture 16`
+   - `rollout stage prove 10`
+   - `rollout stage prove 15`
+   - `rollout stage advance 15`
+   - `rollout stage advance 20`
    - `accounts list`
    - `accounts validate`
    - `accounts promote`
@@ -404,13 +501,29 @@ Acceptance: Architecture and data format do not need redesign when moving to 20 
 
 ### Workstream 05: Staged Pool Rollout
 
-Stage 1 proves stable 10.
-Stage 2 expands to 12 or 15.
-Stage 3 expands to 20.
+Stage 1 formalizes stable-10 proof.
+Stage 2 captures the observed 16-account contour as above-stage-15 field evidence.
+Stage 3 advances toward 20 through controlled updates and explicit rollback points.
 Every stage requires runtime attestation, healthcheck, runtime test, rotation log review, and rollback point.
 Any degrading account moves to reserve or hold.
 
-Acceptance: Each stage preserves stable fallback and avoids false healthy.
+Acceptance:
+
+- Each stage preserves stable fallback and avoids false healthy.
+- The 16-account field contour is documented with machine-carried evidence before it is used as a formal scale claim.
+- Stage-20 remains separately gated by bounded probing, rotation evidence, and rollback drills.
+
+Stage-20 stop conditions:
+
+- any false healthy or stale-green runtime claim
+- broken or unproven stable fallback
+- probe storm or unbounded probe concurrency
+- contradicted rotation evidence
+- degraded or down account count above the accepted rollout threshold
+- proxy-path truth ambiguity
+- missing rollback point
+- missing or invalid runtime attestation
+- any real config mutation outside an approved live-runtime operation
 
 ### Workstream 06: Companion UI
 
@@ -482,7 +595,7 @@ Acceptance: There is a short and clear notice about the external or bundled engi
 
 ### Workstream 10: QA And SRE
 
-Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, and stable service disabled then recovered.
+Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, 16-account evidence capture, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, and stable service disabled then recovered.
 Observability includes status report, machine error codes, diagnostics bundle, and runtime attestation.
 Pilot SLO includes launch success rate, onboarding success rate, managed health stability, and mean recovery time.
 
@@ -530,7 +643,8 @@ Explicitly out of scope:
 - No polished UI.
 - No installer.
 - No public package polish.
-- No staged scale beyond current stable pool.
+- No live staged scale execution beyond the current stable pool.
+- Freezing command API surfaces for controlled rollout does not itself prove or execute scale.
 - No generic CLIProxy management features.
 
 Acceptance:
@@ -561,9 +675,10 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 
 1. Alpha gate includes runtime attestation, strict JSON command API, stable fallback, single-writer state mutation, and 20-account registry capacity.
 2. Closed beta gate includes onboarding, diagnostics, stable 10-account pool, and staged rollout plan to 20.
-3. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.
-4. Scale gate includes staged rollout to 20.
-5. Experimental external package gate requires no private runtime data, working checksums, and a basic README.
+3. Scale-prep gate includes documented 16-account field evidence with machine-carried attestation, rotation evidence, fallback readiness, and no stale-green behavior.
+4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.
+5. Scale gate includes controlled staged rollout to 20.
+6. Experimental external package gate requires no private runtime data, working checksums, and a basic README.
 
 ## Pilot Entry Criteria
 
@@ -587,12 +702,13 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 
 ## Scale To 20 Criteria
 
-1. 20 accounts are registered across active and reserve lifecycle.
-2. Bounded probing works without request storm.
-3. Staged promotion to 20 passes through rollback points.
-4. Rotation logs show participation of the expanded active pool.
-5. Failing accounts are isolated to reserve or hold.
-6. Stable fallback remains operational.
+1. The observed 16-account contour is documented with a redacted evidence packet.
+2. 20 accounts are registered across active and reserve lifecycle.
+3. Bounded probing works without request storm.
+4. Staged promotion to 20 passes through rollback points.
+5. Rotation logs show participation of the expanded active pool.
+6. Failing accounts are isolated to reserve or hold.
+7. Stable fallback remains operational.
 
 ## Rollback Matrix
 
@@ -617,6 +733,7 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 7. Probe storm at higher pool sizes.
 8. Duplicate account_id inside the pool.
 9. Local outbound proxy drift after VPN, Cisco, or network environment change.
+10. Field success may outrun formal machine-carried proof.
 
 ## Risk Mitigation
 
@@ -631,6 +748,7 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 9. Separate proof stages for 10, 15, and 20.
 10. No UI growth before execution core freeze.
 11. Bounded reprobe of live proxy candidates plus last-known-good proxy persistence.
+12. No scale claim without an evidence packet, runtime attestation, rotation evidence, and rollback readiness.
 
 ## Network-Dependent Evidence Rule
 
@@ -643,30 +761,41 @@ They may support a claim, but they are not substitutes for local runtime attesta
 - `STRICT_JSON_COMMAND_API_GATE`
 - `STATE_SERIALIZATION_GATE`
 - `FALLBACK_DRILL_GATE`
+- `SCALE_EVIDENCE_PACKET_GATE`
+
+`SCALE_EVIDENCE_PACKET_GATE` is owned by
+`rollout evidence capture 16 --json` for the observed 16-account field contour.
+This surface may produce only `field_evidence_observed_only`.
+It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
+`pilot_ready`, or `production_ready`.
 
 ## Implementation Order
 
 1. Freeze execution core.
 2. Freeze state schema and state transitions.
 3. Freeze command API.
-4. Upgrade registry and probing architecture for 20-account capacity.
-5. Finish runtime hardening.
-6. Productize onboarding.
-7. Build basic companion UI.
-8. Add diagnostics export.
-9. Add installer and legacy import.
-10. Prepare experimental package.
-11. Run alpha.
-12. Prove stable 10.
-13. Expand by updates toward 15 and then 20.
+4. Close the current stage-20 command API work.
+5. Capture the 16-account evidence packet.
+6. Upgrade registry and probing architecture for 20-account capacity.
+7. Finish runtime hardening.
+8. Productize onboarding.
+9. Build basic companion UI.
+10. Add diagnostics export.
+11. Add installer and legacy import.
+12. Prepare experimental package.
+13. Run alpha.
+14. Prove stable 10.
+15. Consolidate observed 16-account evidence.
+16. Expand by controlled updates toward 20.
 
 ## Estimate
 
 Pilot readiness is 5 to 7 weeks with tight scope control.
 Proof of 20-account operation is a separate staged milestone after pilot-base stabilization.
+The observed 16-account contour lowers scale uncertainty but does not remove the need for formal stage-20 proof.
 
 ## Final Verdict
 
 This plan is executable and practical if used as a governing document rather than a single giant TODO list.
 Execution begins with one narrow wave: execution core, runtime truth, state, and command API first.
-The strongest version of the plan is the one that protects the boundary with CLIProxy, keeps staged scaling honest, forbids stale-green behavior, serializes state mutation, hardens proxy-path resilience against network-environment drift, and blocks UI polish from outrunning runtime truth.
+The strongest version of the plan is the one that protects the boundary with CLIProxy, keeps staged scaling honest, converts the observed 16-account contour into machine-carried evidence, forbids stale-green behavior, serializes state mutation, hardens proxy-path resilience against network-environment drift, and blocks UI polish from outrunning runtime truth.

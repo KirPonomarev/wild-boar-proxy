@@ -16,10 +16,23 @@ from .runtime import (
     mode_get,
     mode_set,
     run_accounts_command,
+    run_demote,
     run_healthcheck,
+    run_hold,
+    run_launch_client,
     run_launch_smoke,
     run_onboard,
+    run_policy_stage_set,
+    run_promote,
+    run_release,
+    run_rollout_evidence_capture,
+    run_rollout_rotation_inspect,
+    run_rollout_stage_advance,
+    run_rollout_stage_prove,
+    run_retire,
+    run_stable_repair_apply,
     run_stable_repair_dry_run,
+    run_stable_target_switch_contract,
     run_sync,
     summarize_status,
 )
@@ -39,8 +52,21 @@ def build_parser() -> argparse.ArgumentParser:
     stable = subparsers.add_parser("stable")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
     stable_repair = stable_subparsers.add_parser("repair")
-    stable_repair.add_argument("--dry-run", action="store_true", required=True)
+    stable_repair_mode = stable_repair.add_mutually_exclusive_group(required=True)
+    stable_repair_mode.add_argument("--dry-run", action="store_true")
+    stable_repair_mode.add_argument("--apply", action="store_true")
     stable_repair.add_argument("--json", action="store_true", required=True)
+    stable_target = stable_subparsers.add_parser("target")
+    stable_target_subparsers = stable_target.add_subparsers(
+        dest="stable_target_command", required=True
+    )
+    stable_target_switch = stable_target_subparsers.add_parser("switch")
+    stable_target_switch_mode = stable_target_switch.add_mutually_exclusive_group(
+        required=True
+    )
+    stable_target_switch_mode.add_argument("--dry-run", action="store_true")
+    stable_target_switch_mode.add_argument("--apply", action="store_true")
+    stable_target_switch.add_argument("--json", action="store_true", required=True)
 
     sync = subparsers.add_parser("sync")
     sync.add_argument("--json", action="store_true", required=True)
@@ -50,6 +76,9 @@ def build_parser() -> argparse.ArgumentParser:
     launch_subparsers = launch.add_subparsers(dest="launch_command", required=True)
     launch_smoke = launch_subparsers.add_parser("smoke")
     launch_smoke.add_argument("--json", action="store_true", required=True)
+    launch_client = launch_subparsers.add_parser("client")
+    launch_client.add_argument("--client-path", required=True)
+    launch_client.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -95,6 +124,43 @@ def build_parser() -> argparse.ArgumentParser:
     mode_set.add_argument("value", choices=["stable", "managed"])
     mode_set.add_argument("--json", action="store_true", required=True)
 
+    policy = subparsers.add_parser("policy")
+    policy_subparsers = policy.add_subparsers(dest="policy_command", required=True)
+    policy_stage = policy_subparsers.add_parser("stage")
+    policy_stage_subparsers = policy_stage.add_subparsers(
+        dest="policy_stage_command", required=True
+    )
+    policy_stage_set = policy_stage_subparsers.add_parser("set")
+    policy_stage_set.add_argument("value")
+    policy_stage_set.add_argument("--json", action="store_true", required=True)
+
+    rollout = subparsers.add_parser("rollout")
+    rollout_subparsers = rollout.add_subparsers(dest="rollout_command", required=True)
+    rollout_rotation = rollout_subparsers.add_parser("rotation")
+    rollout_rotation_subparsers = rollout_rotation.add_subparsers(
+        dest="rollout_rotation_command", required=True
+    )
+    rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
+    rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+    rollout_evidence = rollout_subparsers.add_parser("evidence")
+    rollout_evidence_subparsers = rollout_evidence.add_subparsers(
+        dest="rollout_evidence_command", required=True
+    )
+    rollout_evidence_capture = rollout_evidence_subparsers.add_parser("capture")
+    rollout_evidence_capture.add_argument("value")
+    rollout_evidence_capture.add_argument("--json", action="store_true", required=True)
+    rollout_stage = rollout_subparsers.add_parser("stage")
+    rollout_stage_subparsers = rollout_stage.add_subparsers(
+        dest="rollout_stage_command", required=True
+    )
+    rollout_stage_prove = rollout_stage_subparsers.add_parser("prove")
+    rollout_stage_prove.add_argument("value", choices=["10", "15"])
+    rollout_stage_prove.add_argument("--json", action="store_true", required=True)
+    rollout_stage_advance = rollout_stage_subparsers.add_parser("advance")
+    rollout_stage_advance.add_argument("value", choices=["15", "20"])
+    rollout_stage_advance.add_argument("id")
+    rollout_stage_advance.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -114,11 +180,23 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "status":
             return emit_json(summarize_status(paths))
         if args.command == "stable" and args.stable_command == "repair":
+            if args.apply:
+                return emit_json(run_stable_repair_apply(paths))
             return emit_json(run_stable_repair_dry_run(paths))
+        if (
+            args.command == "stable"
+            and args.stable_command == "target"
+            and args.stable_target_command == "switch"
+        ):
+            return emit_json(
+                run_stable_target_switch_contract(paths, apply=bool(args.apply))
+            )
         if args.command == "sync":
             return emit_json(run_sync(paths, args.model))
         if args.command == "launch" and args.launch_command == "smoke":
             return emit_json(run_launch_smoke(paths))
+        if args.command == "launch" and args.launch_command == "client":
+            return emit_json(run_launch_client(paths, args.client_path))
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
@@ -130,32 +208,16 @@ def main(argv: list[str] | None = None) -> int:
                     failure_message="Account validation failed.",
                 )
             )
-        if args.command == "accounts" and args.accounts_command in {
-            "promote",
-            "demote",
-            "release",
-            "retire",
-        }:
-            return emit_json(
-                run_accounts_command(
-                    paths,
-                    [args.accounts_command, args.id],
-                    success_message=f"Account {args.accounts_command} completed.",
-                    failure_message=f"Account {args.accounts_command} failed.",
-                )
-            )
+        if args.command == "accounts" and args.accounts_command == "promote":
+            return emit_json(run_promote(paths, args.id))
+        if args.command == "accounts" and args.accounts_command == "demote":
+            return emit_json(run_demote(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "hold":
-            command = ["hold", args.id]
-            if args.reason:
-                command.append(args.reason)
-            return emit_json(
-                run_accounts_command(
-                    paths,
-                    command,
-                    success_message="Account hold completed.",
-                    failure_message="Account hold failed.",
-                )
-            )
+            return emit_json(run_hold(paths, args.id, args.reason))
+        if args.command == "accounts" and args.accounts_command == "release":
+            return emit_json(run_release(paths, args.id))
+        if args.command == "accounts" and args.accounts_command == "retire":
+            return emit_json(run_retire(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "onboard":
             return emit_json(
                 run_onboard(
@@ -172,6 +234,36 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(mode_get(paths))
         if args.command == "mode" and args.mode_command == "set":
             return emit_json(mode_set(paths, args.value))
+        if (
+            args.command == "policy"
+            and args.policy_command == "stage"
+            and args.policy_stage_command == "set"
+        ):
+            return emit_json(run_policy_stage_set(paths, args.value))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "rotation"
+            and args.rollout_rotation_command == "inspect"
+        ):
+            return emit_json(run_rollout_rotation_inspect(paths))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "evidence"
+            and args.rollout_evidence_command == "capture"
+        ):
+            return emit_json(run_rollout_evidence_capture(paths, args.value))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "stage"
+            and args.rollout_stage_command == "prove"
+        ):
+            return emit_json(run_rollout_stage_prove(paths, args.value))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "stage"
+            and args.rollout_stage_command == "advance"
+        ):
+            return emit_json(run_rollout_stage_advance(paths, args.value, args.id))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",
