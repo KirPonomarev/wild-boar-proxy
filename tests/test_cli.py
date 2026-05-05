@@ -5457,6 +5457,42 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_blocks_held_lock_without_mutation(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-lock-held",
+                            auth_ref="/tmp/codex-lock-held.json",
+                        )
+                    ]
+                ),
+                "WBP_TEST_ONBOARD_STDERR": "onboard-should-not-run",
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertNotIn("onboarding_result", payload)
+        self.assertEqual(before, after)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        self.assertEqual(
+            [item for item in registry["backends"] if item["id"] == "backend-lock-held"],
+            [],
+        )
+
     def test_accounts_onboard_ambiguous_new_auth_detection_stops_honestly(
         self,
     ) -> None:
@@ -6217,6 +6253,24 @@ class CliTests(unittest.TestCase):
             {"active_min": 15, "active_target": 15, "reserve_target": 0},
         )
         self.assertEqual(payload["changed_files"], [str(registry_path)])
+
+    def test_policy_stage_set_blocks_held_lock_without_mutation(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+        before_registry = registry_path.read_text(encoding="utf-8")
+        result = self.run_cli("policy", "stage", "set", "15", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertNotIn("pool_policy_update_result", payload)
+        self.assertEqual(before, after)
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
 
     def test_policy_stage_set_reports_already_on_stage_without_write(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
