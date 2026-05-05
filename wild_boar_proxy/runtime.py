@@ -43,6 +43,7 @@ REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
 REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
+CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,18 @@ class StableRuntimeLaunchAttempt:
     stderr: str
 
 
+@dataclass(frozen=True)
+class CurrentProxyOwnerPathActivationAttempt:
+    launcher_lane_eligibility: str
+    launcher_readiness_status: str
+    prerequisite_materialized: bool
+    activation_attempted: bool
+    activation_exit_code: int | None
+    prior_current_proxy_url: str
+    working_candidate: str
+    rollback_surface_snapshots: dict[str, dict[str, Any]]
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -181,6 +194,24 @@ def sanitized_env() -> dict[str, str]:
         env.pop(key, None)
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
+    return env
+
+
+def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
+    env = sanitized_env()
+    env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
+    env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
+    env["WBP_STABLE_CONFIG"] = str(paths.stable_config)
+    env["WBP_AUTH_FILE"] = str(paths.auth_file)
+    env["WBP_CONFIG_TOML"] = str(paths.config_toml)
+    env["WBP_RUNTIME_MODE_FILE"] = str(paths.runtime_mode_file)
+    env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(paths.runtime_effective_mode_file)
+    env["WBP_REGISTRY_FILE"] = str(paths.registry_file)
+    env["WBP_STATE_FILE"] = str(paths.state_file)
+    env["WBP_MANAGED_CONFIG_FILE"] = str(paths.managed_config_file)
+    env["WBP_LAUNCHER_SCRIPT"] = str(paths.launcher_script)
+    env["WBP_SYNC_SCRIPT"] = str(paths.sync_script)
+    env["WBP_LOCK_FILE"] = str(paths.lock_file)
     return env
 
 
@@ -375,8 +406,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
     return "\n".join(
         [
             "set -eu",
-            'mode="$1"',
-            '[ "$mode" = smoke ] || exit 7',
+            'mode="${1:-}"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
             '    env HTTP_PROXY="$WBP_CURRENT_PROXY_URL"'
@@ -391,8 +421,9 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             '    "$@"',
             "  }",
             "fi",
-            'printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
-            "proxy_env python3 - <<'PY'",
+            'if [ "$mode" = "smoke" ]; then',
+            '  printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
+            "  proxy_env python3 - <<'PY'",
             "import json",
             "import os",
             "from pathlib import Path",
@@ -423,7 +454,43 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "        out.append(line)",
             "config_path.write_text('\\n'.join(out) + '\\n')",
             "PY",
-            "exit 0",
+            "  exit 0",
+            "fi",
+            f'if [ "$mode" = "{CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE}" ]; then',
+            '  [ -n "${WBP_CURRENT_PROXY_URL:-}" ] || exit 8',
+            "  proxy_env python3 - <<'PY'",
+            "import json",
+            "import os",
+            "from pathlib import Path",
+            "state_path = Path(os.environ['WBP_STATE_FILE'])",
+            "state = json.loads(state_path.read_text())",
+            "managed_config = Path(os.environ['WBP_MANAGED_CONFIG_FILE'])",
+            "current_proxy_url = os.environ['WBP_CURRENT_PROXY_URL']",
+            "port = '9999'",
+            "for raw_line in managed_config.read_text().splitlines():",
+            "    line = raw_line.strip()",
+            "    if line.startswith('port:'):",
+            "        port = line.split(':', 1)[1].strip().strip('\"')",
+            "state['effective_mode'] = 'managed'",
+            "state['status'] = 'healthy'",
+            "state['last_error'] = ''",
+            "state['current_proxy_url'] = current_proxy_url",
+            "state_path.write_text(json.dumps(state) + '\\n')",
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])",
+            "lines = config_path.read_text().splitlines()",
+            "out = []",
+            "for line in lines:",
+            "    if line.strip().startswith('base_url = '):",
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')",
+            "    else:",
+            "        out.append(line)",
+            "config_path.write_text('\\n'.join(out) + '\\n')",
+            "runtime_effective_mode_path = Path(os.environ['WBP_RUNTIME_EFFECTIVE_MODE_FILE'])",
+            "runtime_effective_mode_path.write_text('managed\\n')",
+            "PY",
+            "  exit 0",
+            "fi",
+            "exit 7",
         ]
     )
 
@@ -501,6 +568,78 @@ def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
         return
     if not os.access(paths.launcher_script, os.X_OK):
         paths.launcher_script.chmod(0o755)
+
+
+def get_current_proxy_launcher_lane_status(
+    paths: RuntimePaths, *, materialize_absent_default: bool
+) -> dict[str, Any]:
+    path_is_default = launcher_path_is_default(paths)
+    prerequisite_materialized = False
+    if materialize_absent_default and path_is_default and not paths.launcher_script.exists():
+        ensure_repo_owned_default_launcher_consumer(paths)
+        prerequisite_materialized = paths.launcher_script.exists()
+    contract = build_current_proxy_adoption_contract(paths)
+    path_surface = contract["external_launcher_path_surface"]
+    readiness_status = str(contract["external_launcher_readiness_status"])
+    path_kind = str(path_surface["path_kind"])
+    repo_owned_default_consumer_provisioned = bool(
+        contract["repo_owned_default_consumer_provisioned"]
+    )
+    eligibility = readiness_status
+    if repo_owned_default_consumer_provisioned and path_kind == "default_owned_provisioning_target":
+        eligibility = "eligible_recognized_repo_owned_default_lane"
+    return {
+        "eligible": eligibility == "eligible_recognized_repo_owned_default_lane",
+        "eligibility": eligibility,
+        "launcher_readiness_status": readiness_status,
+        "path_kind": path_kind,
+        "prerequisite_materialized": prerequisite_materialized,
+    }
+
+
+def run_current_proxy_owner_path_activation(
+    paths: RuntimePaths, working_candidate: str
+) -> CurrentProxyOwnerPathActivationAttempt:
+    launcher_env = build_launcher_subprocess_env(paths)
+    launcher_env[CURRENT_PROXY_URL_HANDOFF_ENV] = working_candidate
+    with serialized_lock(paths):
+        lane_status = get_current_proxy_launcher_lane_status(
+            paths, materialize_absent_default=True
+        )
+        if not lane_status["eligible"]:
+            return CurrentProxyOwnerPathActivationAttempt(
+                launcher_lane_eligibility=str(lane_status["eligibility"]),
+                launcher_readiness_status=str(lane_status["launcher_readiness_status"]),
+                prerequisite_materialized=bool(
+                    lane_status["prerequisite_materialized"]
+                ),
+                activation_attempted=False,
+                activation_exit_code=None,
+                prior_current_proxy_url="",
+                working_candidate=working_candidate,
+                rollback_surface_snapshots={},
+            )
+        prior_state = read_json(paths.state_file, required=False)
+        rollback_surface_snapshots = snapshot_current_proxy_owner_path_runtime_surfaces(
+            paths
+        )
+        result = subprocess.run(
+            [str(paths.launcher_script), CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE],
+            capture_output=True,
+            text=True,
+            env=launcher_env,
+            check=False,
+        )
+    return CurrentProxyOwnerPathActivationAttempt(
+        launcher_lane_eligibility=str(lane_status["eligibility"]),
+        launcher_readiness_status=str(lane_status["launcher_readiness_status"]),
+        prerequisite_materialized=bool(lane_status["prerequisite_materialized"]),
+        activation_attempted=True,
+        activation_exit_code=result.returncode,
+        prior_current_proxy_url=str(prior_state.get("current_proxy_url", "")),
+        working_candidate=working_candidate,
+        rollback_surface_snapshots=rollback_surface_snapshots,
+    )
 
 
 def get_desired_mode(paths: RuntimePaths) -> str:
@@ -949,6 +1088,33 @@ def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
+def snapshot_current_proxy_owner_path_runtime_surfaces(
+    paths: RuntimePaths,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "state_file": snapshot_path_state(paths.state_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+    }
+
+
+def restore_current_proxy_owner_path_runtime_surfaces(
+    paths: RuntimePaths, snapshots: dict[str, dict[str, Any]]
+) -> None:
+    restore_path_state(
+        paths.state_file, snapshots.get("state_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.config_toml, snapshots.get("config_toml", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.runtime_effective_mode_file,
+        snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+
+
 def rollback_target_switch_apply(
     paths: RuntimePaths,
     *,
@@ -1342,16 +1508,16 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
         "state_file": str(paths.state_file),
-        "activation_surface_status": "contract_fixed_not_implemented",
+        "activation_surface_status": "owner_path_private_launcher_activation_available",
         "activation_surface_kind": "repo_owned_handoff_env_var",
         "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
-        "activation_value_source_field": "current_proxy_url",
+        "activation_value_source_field": "proxy_reprobe.working_candidate",
         "owner_activation_lane": "serialized_healthcheck_owner_path",
         "handoff_carrier_contract": handoff_carrier_contract,
         "external_launcher_path_surface": external_launcher_path_surface,
         "launcher_consumer_contract": launcher_consumer_contract,
         "engine_local_proxy_routing_contract": engine_local_proxy_routing_contract,
-        "effectful_runtime_wiring_status": "contract_fixed_not_implemented",
+        "effectful_runtime_wiring_status": "bounded_private_launcher_lane_available",
         "managed_runtime_subprocess_only": True,
         "ambient_proxy_env_authoritative_forbidden": True,
         "control_plane_proxyless": True,
@@ -1359,6 +1525,7 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "launcher_protocol_change_outside_repo_owned_handoff_forbidden": True,
         "managed_config_schema_widening_default": False,
         "config_toml_schema_widening_default": False,
+        "absent_default_path_prerequisite_materialization_separate_from_eligibility": True,
         "launcher_consumer_status": launcher_consumer_contract["status"],
         "launcher_protocol_scope": launcher_consumer_contract[
             "launcher_protocol_scope"
@@ -1395,7 +1562,7 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
             "persisted_history_by_presence_forbidden": True,
         },
         "write_owner": "serialized_healthcheck_owner_path",
-        "current_proxy_url_write_path_status": "contract_fixed_not_implemented",
+        "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
         "adoption_requires_same_owner_path_live_reproof": True,
         "adoption_from_candidate_liveness_alone_forbidden": True,
         "adoption_from_last_known_good_alone_forbidden": True,
@@ -1408,7 +1575,7 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "changed_files_visibility_required": True,
         "new_persisted_adoption_metadata_default": False,
         "nested_adoption_result_surface": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "field": "proxy_reprobe_adoption_result",
             "command_packet_only_default": True,
         },
@@ -1761,7 +1928,7 @@ def run_stable_runtime_launcher_attempt(
 ) -> StableRuntimeLaunchAttempt:
     desired_kind = str(selection["desired_kind"])
     observed_path = Path(selection["observed_path"])
-    launcher_env = sanitized_env()
+    launcher_env = build_launcher_subprocess_env(paths)
     launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(paths.stable_config)
     activation_attempted = False
     generated_config_regenerated = False
@@ -3133,6 +3300,9 @@ def summarize_status(
         last_known_good_proxy = build_last_known_good_proxy_surface(
             paths, state, current_proxy_url
         )
+    proxy_reprobe_adoption_result = health_payload.get("proxy_reprobe_adoption_result")
+    if not isinstance(proxy_reprobe_adoption_result, dict):
+        proxy_reprobe_adoption_result = None
     pool_summary = {
         "active": int(state.get("active_count", 0) or 0),
         "reserve": int(state.get("reserve_count", 0) or 0),
@@ -3165,6 +3335,13 @@ def summarize_status(
             "current_proxy_adoption_contract": current_proxy_adoption_contract,
             "last_known_good_proxy_contract": last_known_good_proxy_contract,
             "last_known_good_proxy": last_known_good_proxy,
+            **(
+                {
+                    "proxy_reprobe_adoption_result": proxy_reprobe_adoption_result,
+                }
+                if proxy_reprobe_adoption_result is not None
+                else {}
+            ),
             "pool_summary": pool_summary,
             "policy_drift": policy_drift,
             "stable_runtime_consumer": stable_runtime_consumer,
@@ -3187,6 +3364,7 @@ def run_healthcheck(
     *,
     allow_recovery: bool = True,
     allow_last_known_good_proxy_write: bool = True,
+    allow_current_proxy_auto_adoption: bool = True,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     state = read_json(paths.state_file, required=False)
@@ -3300,6 +3478,7 @@ def run_healthcheck(
     model_name = model or get_model(paths)
     error_detail = ""
     proxy_reprobe: dict[str, Any] | None = None
+    proxy_reprobe_adoption_result: dict[str, Any] | None = None
 
     if listener_ok:
         api_key = read_api_key(paths.auth_file)
@@ -3377,6 +3556,102 @@ def run_healthcheck(
             machine_error_code = "ATTESTATION_FAILED"
             human_message = "Runtime attestation failed one or more checks."
         ok = False
+
+    if (
+        not ok
+        and allow_current_proxy_auto_adoption
+        and proxy_reprobe is not None
+        and proxy_reprobe["found_candidate"]
+    ):
+        working_candidate = str(proxy_reprobe["working_candidate"] or "")
+        activation_attempt = run_current_proxy_owner_path_activation(
+            paths, working_candidate
+        )
+        proxy_reprobe_adoption_result = {
+            "status": "owner_path_emitted",
+            "attempted": activation_attempt.activation_attempted,
+            "working_candidate": working_candidate,
+            "launcher_lane_eligibility": activation_attempt.launcher_lane_eligibility,
+            "launcher_readiness_status": activation_attempt.launcher_readiness_status,
+            "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+            "prerequisite_materialized": activation_attempt.prerequisite_materialized,
+            "activation_attempted": activation_attempt.activation_attempted,
+            "activation_exit_code": activation_attempt.activation_exit_code,
+            "adoption_outcome": (
+                "launcher_lane_ineligible"
+                if not activation_attempt.activation_attempted
+                else "activation_failed"
+            ),
+            "current_proxy_url_rewritten": False,
+            "live_runtime_observation_confirmed": False,
+            "last_known_good_refreshed": False,
+        }
+        if (
+            activation_attempt.activation_attempted
+            and activation_attempt.activation_exit_code == 0
+        ):
+            reproof_payload = run_healthcheck(
+                paths,
+                model=model,
+                allow_recovery=False,
+                allow_last_known_good_proxy_write=False,
+                allow_current_proxy_auto_adoption=False,
+            )
+            reproof_ok = (
+                reproof_payload["status"] == "ok"
+                and str(reproof_payload["effective_mode"]) == "managed"
+            )
+            state = read_json(paths.state_file, required=False)
+            reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
+            same_current_reconfirmed = (
+                activation_attempt.prior_current_proxy_url == working_candidate
+                and reproof_ok
+            )
+            candidate_adopted = (
+                activation_attempt.prior_current_proxy_url != working_candidate
+                and reproof_ok
+                and reproof_current_proxy_url == working_candidate
+            )
+            if same_current_reconfirmed or candidate_adopted:
+                attestation = reproof_payload["attestation"]
+                listener_ok = bool(attestation["listener_ok"])
+                models_ok = bool(attestation["models_ok"])
+                responses_ok = bool(attestation["responses_ok"])
+                effective_mode_match = bool(attestation["effective_mode_match"])
+                base_url_match = bool(attestation["base_url_match"])
+                error_detail = str(reproof_payload.get("last_error", ""))
+                effective_mode = str(reproof_payload["effective_mode"])
+                reported_effective_mode = effective_mode
+                _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+                host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                liveness = str(reproof_payload["liveness"])
+                severity = str(reproof_payload["severity"])
+                operator_action = str(reproof_payload["operator_action"])
+                machine_error_code = str(reproof_payload["machine_error_code"])
+                human_message = str(reproof_payload["human_message"])
+                ok = True
+                proxy_reprobe_adoption_result["adoption_outcome"] = (
+                    "same_current_reconfirmed"
+                    if same_current_reconfirmed
+                    else "candidate_adopted"
+                )
+                proxy_reprobe_adoption_result["current_proxy_url_rewritten"] = (
+                    candidate_adopted
+                )
+                proxy_reprobe_adoption_result[
+                    "live_runtime_observation_confirmed"
+                ] = True
+            else:
+                with serialized_lock(paths):
+                    restore_current_proxy_owner_path_runtime_surfaces(
+                        paths, activation_attempt.rollback_surface_snapshots
+                    )
+                state = read_json(paths.state_file, required=False)
+                error_detail = str(reproof_payload.get("last_error", error_detail))
+                proxy_reprobe_adoption_result["adoption_outcome"] = (
+                    "live_reproof_failed"
+                )
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
@@ -3483,6 +3758,12 @@ def run_healthcheck(
             )
 
     current_proxy_url = str(state.get("current_proxy_url", ""))
+    previous_last_known_good_proxy_url = str(
+        state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or ""
+    )
+    previous_last_known_good_proxy_observed_at = str(
+        state.get(LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD) or ""
+    )
     if allow_last_known_good_proxy_write:
         state = refresh_last_known_good_proxy_from_healthcheck(
             paths,
@@ -3492,6 +3773,13 @@ def run_healthcheck(
             reported_effective_mode=reported_effective_mode,
         )
     current_proxy_url = str(state.get("current_proxy_url", ""))
+    if proxy_reprobe_adoption_result is not None:
+        proxy_reprobe_adoption_result["last_known_good_refreshed"] = (
+            str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or "")
+            != previous_last_known_good_proxy_url
+            or str(state.get(LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD) or "")
+            != previous_last_known_good_proxy_observed_at
+        )
     attestation = {
         "listener_ok": listener_ok,
         "models_ok": models_ok,
@@ -3518,6 +3806,8 @@ def run_healthcheck(
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
+    if proxy_reprobe_adoption_result is not None:
+        extra["proxy_reprobe_adoption_result"] = proxy_reprobe_adoption_result
     extra["current_proxy_adoption_contract"] = build_current_proxy_adoption_contract(paths)
     extra["last_known_good_proxy_contract"] = build_last_known_good_proxy_contract(paths)
     extra["last_known_good_proxy"] = build_last_known_good_proxy_surface(
@@ -3658,6 +3948,7 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
         paths,
         allow_recovery=False,
         allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
     )
     if (
         attempt.launcher_exit_code == 0
@@ -3670,6 +3961,7 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             paths,
             allow_recovery=False,
             allow_last_known_good_proxy_write=False,
+            allow_current_proxy_auto_adoption=False,
         )
         if (
             health_payload["status"] != "ok"
@@ -3680,6 +3972,7 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
                 paths,
                 allow_recovery=False,
                 allow_last_known_good_proxy_write=False,
+                allow_current_proxy_auto_adoption=False,
             )
     snapshot_payload: dict[str, Any] | None = None
     if (

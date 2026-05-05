@@ -271,6 +271,12 @@ Field meaning rules:
   `WBP_CURRENT_PROXY_URL`
 - that handoff remains a launcher-scoped process-local carrier rather than a
   truth surface for `current_proxy_url`
+- owner-path packets may now expose nested
+  `proxy_reprobe_adoption_result`
+  when proxy-path failure found a bounded working candidate and the owner path
+  evaluated or attempted current-proxy adoption
+- `proxy_reprobe_adoption_result` must remain nested owner-path truth rather
+  than a top-level current-proxy truth surface
 - that contract may expose an external launcher-path surface for
   `WBP_LAUNCHER_SCRIPT`, but launcher-path presence alone must not be treated as
   proof of current-proxy consumer capability
@@ -285,6 +291,14 @@ Field meaning rules:
   - default-path ownership-unverified state
   - explicit external override unverified state
   honestly without implying current-proxy adoption readiness
+- absent default-path materialization remains a bounded owner-path prerequisite,
+  not lane eligibility by itself
+- owner-path current-proxy adoption may proceed only through a recognized
+  repo-owned default launcher artifact after any prerequisite materialization
+  has been re-evaluated
+- explicit external override paths, invalid default-path markers, and
+  unrecognized marked default-path files remain ineligible owner-path adoption
+  lanes
 - that contract may allow a later launcher consumer to derive engine-local proxy
   env keys for the managed runtime child process only
 - any such derived proxy env keys remain engine-local routing inputs, not
@@ -294,6 +308,8 @@ Field meaning rules:
   in `supervisor-state.json`
 - `status --json` may expose the same `current_proxy_adoption_contract` only as
   delegated reporting
+- `status --json` may expose the same nested `proxy_reprobe_adoption_result`
+  only as delegated reporting
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
 - `status --json` may expose the same `last_known_good_proxy` readout only as
@@ -312,6 +328,12 @@ Field meaning rules:
   that the current engine already consumes those keys
 - control-plane runtime attestation remains proxyless even if a later managed
   runtime activation lane receives a dedicated current-proxy handoff
+- `current_proxy_url` may change only after the same serialized owner path:
+  - detected proxy-path failure
+  - found a bounded working candidate
+  - established an eligible recognized repo-owned launcher lane
+  - carried that candidate through `WBP_CURRENT_PROXY_URL`
+  - reran live managed runtime attestation successfully
 - candidate existence alone must never produce top-level `OK`
 - persisted last-known-good proxy truth must never by itself change top-level
   `status`, `liveness`, `machine_error_code`, `endpoint`, or `current_proxy_url`
