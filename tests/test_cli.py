@@ -7,6 +7,7 @@ import socket
 import subprocess
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -595,6 +596,32 @@ class CliTests(unittest.TestCase):
                 f"exit {exit_code}\n"
             ),
             encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def write_launch_client_probe(
+        self, path: Path, *, trace_file: Path, exit_code: int = 0
+    ) -> Path:
+        path.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "trace_path = Path(r'" + str(trace_file) + "')\n"
+            "payload = {\n"
+            "    'cwd': os.getcwd(),\n"
+            "    'HTTP_PROXY_present': 'HTTP_PROXY' in os.environ,\n"
+            "    'HTTPS_PROXY_present': 'HTTPS_PROXY' in os.environ,\n"
+            "    'ALL_PROXY_present': 'ALL_PROXY' in os.environ,\n"
+            "    'WBP_CURRENT_PROXY_URL_present': 'WBP_CURRENT_PROXY_URL' in os.environ,\n"
+            "    'NO_PROXY': os.environ.get('NO_PROXY', ''),\n"
+            "}\n"
+            "trace_path.write_text(json.dumps(payload) + '\\n')\n"
+            "PY\n"
+            f"exit {int(exit_code)}\n",
+            encoding='utf-8',
         )
         path.chmod(0o755)
         return path
@@ -6401,6 +6428,345 @@ class CliTests(unittest.TestCase):
         self.assertIn("Listener is not reachable", payload["last_error"])
         self.assertNotIn("current_proxy_adoption_contract", payload)
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
+
+    def test_launch_client_dispatches_bounded_executable_with_sanitized_env(self) -> None:
+        port = free_port()
+        trace_file = self.managed_dir / "launch-client-trace.json"
+        client_script = self.profile_dir / "fake-host-client.sh"
+        self.write_launch_client_probe(client_script, trace_file=trace_file)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "HTTP_PROXY": "http://example.invalid:1",
+                    "HTTPS_PROXY": "http://example.invalid:2",
+                    "ALL_PROXY": "http://example.invalid:3",
+                    "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                },
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["effective_mode"], "managed")
+        launch_result = payload["client_launch_result"]
+        self.assertEqual(launch_result["client_path_kind"], "executable")
+        self.assertEqual(launch_result["runtime_precondition_status"], "ok")
+        self.assertTrue(launch_result["dispatch_attempted"])
+        self.assertTrue(launch_result["dispatch_observed"])
+        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertEqual(payload["status_observed"]["exit_code"], 0)
+        for _ in range(50):
+            if trace_file.exists():
+                break
+            time.sleep(0.01)
+        trace_payload = json.loads(trace_file.read_text(encoding="utf-8"))
+        self.assertEqual(Path(trace_payload["cwd"]).resolve(), self.profile_dir.resolve())
+        self.assertFalse(trace_payload["HTTP_PROXY_present"])
+        self.assertFalse(trace_payload["HTTPS_PROXY_present"])
+        self.assertFalse(trace_payload["ALL_PROXY_present"])
+        self.assertFalse(trace_payload["WBP_CURRENT_PROXY_URL_present"])
+        self.assertEqual(trace_payload["NO_PROXY"], "127.0.0.1,localhost,::1")
+
+    def test_launch_client_reports_missing_client_path_as_owner_packet(self) -> None:
+        missing_path = self.profile_dir / "missing-host-client.sh"
+        result = self.run_cli(
+            "launch",
+            "client",
+            "--client-path",
+            str(missing_path),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "MISSING_CLIENT_PATH")
+        self.assertEqual(payload["next_action"], "user_action")
+        launch_result = payload["client_launch_result"]
+        self.assertFalse(launch_result["runtime_precondition_checked"])
+        self.assertFalse(launch_result["dispatch_attempted"])
+        self.assertEqual(launch_result["final_outcome"], "client_path_missing")
+
+    def test_launch_client_rejects_nonabsolute_client_path(self) -> None:
+        result = self.run_cli(
+            "launch",
+            "client",
+            "--client-path",
+            "fake-host-client.sh",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "CLIENT_PATH_NOT_ABSOLUTE")
+        self.assertEqual(payload["next_action"], "user_action")
+        self.assertEqual(
+            payload["client_launch_result"]["final_outcome"], "client_path_invalid"
+        )
+
+    def test_launch_client_blocks_dispatch_when_runtime_precondition_is_unhealthy(
+        self,
+    ) -> None:
+        trace_file = self.managed_dir / "launch-client-trace-unhealthy.json"
+        client_script = self.profile_dir / "fake-host-client-unhealthy.sh"
+        self.write_launch_client_probe(client_script, trace_file=trace_file)
+        before = self.state_snapshot()
+        result = self.run_cli(
+            "launch",
+            "client",
+            "--client-path",
+            str(client_script),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "CLIENT_LAUNCH_RUNTIME_PRECONDITION_FAILED"
+        )
+        launch_result = payload["client_launch_result"]
+        self.assertEqual(launch_result["runtime_precondition_status"], "failed")
+        self.assertFalse(launch_result["dispatch_attempted"])
+        self.assertEqual(payload["changed_files"], [])
+        self.assertFalse(trace_file.exists())
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_launch_client_treats_detached_executable_as_bounded_dispatch_only(
+        self,
+    ) -> None:
+        port = free_port()
+        client_script = self.profile_dir / "fake-host-client-fail.sh"
+        client_script.write_text(
+            "#!/bin/sh\n"
+            "sleep 1\n"
+            "exit 7\n",
+            encoding="utf-8",
+        )
+        client_script.chmod(0o755)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli(
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        launch_result = payload["client_launch_result"]
+        self.assertTrue(launch_result["dispatch_attempted"])
+        self.assertTrue(launch_result["dispatch_observed"])
+        self.assertIsNone(launch_result["dispatch_exit_code"])
+        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
+
+    def test_launch_client_reports_exec_format_failure_as_json_packet(self) -> None:
+        port = free_port()
+        client_script = self.profile_dir / "fake-host-client-bad-format.sh"
+        client_script.write_text("not a real executable format\n", encoding="utf-8")
+        client_script.chmod(0o755)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli(
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "CLIENT_LAUNCH_DISPATCH_FAILED")
+        self.assertEqual(
+            payload["client_launch_result"]["final_outcome"], "dispatch_failed"
+        )
+
+    def test_launch_client_reports_precondition_exceptions_inside_owner_packet(
+        self,
+    ) -> None:
+        port = free_port()
+        trace_file = self.managed_dir / "launch-client-trace-precondition.json"
+        client_script = self.profile_dir / "fake-host-client-precondition.sh"
+        self.write_launch_client_probe(client_script, trace_file=trace_file)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "auth.json").unlink()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.update({"effective_mode": "managed", "status": "healthy", "managed_port": port, "last_error": ""})
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli(
+                "launch",
+                "client",
+                "--client-path",
+                str(client_script),
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "MISSING_JSON_FILE")
+        launch_result = payload["client_launch_result"]
+        self.assertTrue(launch_result["runtime_precondition_checked"])
+        self.assertFalse(launch_result["dispatch_attempted"])
+        self.assertEqual(launch_result["final_outcome"], "runtime_precondition_failed")
+
+    def test_launch_client_reports_unsupported_app_bundle_shape_in_owner_packet(
+        self,
+    ) -> None:
+        port = free_port()
+        app_bundle = self.profile_dir / "FakeHostClient.app"
+        app_bundle.mkdir()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=True):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch.object(runtime_mod.shutil, "which", return_value=None):
+                    payload = runtime_mod.run_launch_client(paths, str(app_bundle))
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "CLIENT_LAUNCH_UNSUPPORTED_SHAPE"
+        )
+        launch_result = payload["client_launch_result"]
+        self.assertEqual(launch_result["client_path_kind"], "macos_app_bundle")
+        self.assertFalse(launch_result["dispatch_attempted"])
+        self.assertEqual(launch_result["dispatch_method"], "")
+        self.assertEqual(launch_result["final_outcome"], "unsupported_launch_shape")
 
 
 if __name__ == "__main__":

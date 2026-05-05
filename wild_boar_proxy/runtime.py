@@ -215,6 +215,103 @@ def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     return env
 
 
+def validate_launch_client_path(client_path_raw: str) -> tuple[Path, str]:
+    candidate = Path(client_path_raw).expanduser()
+    if not candidate.is_absolute():
+        raise RuntimeErrorInfo(
+            f"Client path must be absolute: {client_path_raw}",
+            machine_error_code="CLIENT_PATH_NOT_ABSOLUTE",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if not candidate.exists():
+        raise RuntimeErrorInfo(
+            f"Missing client path: {candidate}",
+            machine_error_code="MISSING_CLIENT_PATH",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if candidate.suffix == ".app" and candidate.is_dir():
+        return candidate, "macos_app_bundle"
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return candidate, "executable"
+    raise RuntimeErrorInfo(
+        f"Unsupported client path shape: {candidate}",
+        machine_error_code="CLIENT_PATH_INVALID",
+        severity="recoverable",
+        operator_action="user_action",
+    )
+
+
+def build_launch_client_profile_context(paths: RuntimePaths) -> dict[str, str]:
+    return {
+        "profile_dir": str(paths.profile_dir),
+        "managed_dir": str(paths.managed_dir),
+        "config_toml": str(paths.config_toml),
+        "managed_config_file": str(paths.managed_config_file),
+    }
+
+
+def dispatch_external_client(
+    paths: RuntimePaths, client_path: Path, client_path_kind: str
+) -> dict[str, Any]:
+    if client_path_kind == "macos_app_bundle":
+        open_bin = shutil.which("open")
+        if not open_bin:
+            raise RuntimeErrorInfo(
+                "macOS app-bundle launch is unavailable because `open` is missing.",
+                machine_error_code="CLIENT_LAUNCH_UNSUPPORTED_SHAPE",
+                severity="recoverable",
+                operator_action="user_action",
+            )
+        try:
+            result = subprocess.run(
+                [open_bin, "-a", str(client_path)],
+                capture_output=True,
+                text=True,
+                env=sanitized_env(),
+                check=False,
+            )
+        except OSError as exc:
+            raise RuntimeErrorInfo(
+                f"Host-client dispatch failed: {exc}",
+                machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
+                severity="recoverable",
+                operator_action="retry",
+            ) from exc
+        return {
+            "dispatch_method": "macos_open_app_bundle",
+            "dispatch_observed": result.returncode == 0,
+            "dispatch_exit_code": result.returncode,
+            "stderr": result.stderr,
+        }
+
+    try:
+        process = subprocess.Popen(
+            [str(client_path)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=sanitized_env(),
+            cwd=str(paths.profile_dir),
+            start_new_session=True,
+            text=False,
+        )
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Host-client dispatch failed: {exc}",
+            machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+    return {
+        "dispatch_method": "detached_executable_spawn",
+        "dispatch_observed": True,
+        "dispatch_exit_code": None,
+        "stderr": "",
+    }
+
+
 def proxyless_urlopen(request: urllib.request.Request, timeout: int):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     return opener.open(request, timeout=timeout)
@@ -3360,6 +3457,122 @@ def summarize_status(
     )
 
 
+def observe_runtime_precondition_for_launch_client(
+    paths: RuntimePaths, model: str | None = None
+) -> dict[str, Any]:
+    state = read_json(paths.state_file, required=False)
+    desired_mode = get_desired_mode(paths)
+    effective_mode = get_effective_mode(paths, state)
+    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    model_name = model or get_model(paths)
+    models_ok = False
+    responses_ok = False
+    error_detail = ""
+
+    if listener_ok:
+        api_key = read_api_key(paths.auth_file)
+        try:
+            models_payload = http_get_json(f"{attestation_endpoint}/models", api_key)
+            models_ok = isinstance(models_payload.get("data"), list)
+            responses_payload = http_post_json(
+                f"{attestation_endpoint}/responses",
+                api_key,
+                {"model": model_name, "input": "Respond with exactly OK"},
+            )
+            responses_ok = response_ok(responses_payload)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "ignore").strip()
+            error_detail = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"
+        except urllib.error.URLError as exc:
+            error_detail = str(exc.reason)
+        except RuntimeErrorInfo:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            error_detail = str(exc)
+
+    state_effective_mode = state.get("effective_mode")
+    effective_mode_artifact = read_effective_mode_artifact(paths)
+    expected_base_url = reported_endpoint
+    base_url_match = configured_base_url == expected_base_url
+    effective_mode_match = (
+        state_effective_mode in {None, "", reported_effective_mode}
+        and effective_mode_artifact == reported_effective_mode
+    )
+    attestation = {
+        "listener_ok": listener_ok,
+        "models_ok": models_ok,
+        "responses_ok": responses_ok,
+        "effective_mode_match": effective_mode_match,
+        "base_url_match": base_url_match,
+        "selected_backends_digest": get_selected_backends_digest(state),
+        "observed_at_utc": now_iso(),
+        "runtime_version": str(
+            state.get("version", state.get("schema_version", "unknown"))
+        ),
+        "attestation_source": "launch client precondition",
+    }
+
+    if not listener_ok:
+        return build_command_payload(
+            ok=False,
+            human_message=f"Listener is not reachable at {attestation_endpoint}.",
+            machine_error_code="LISTENER_DOWN",
+            liveness="down",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "desired_mode": desired_mode,
+                "effective_mode": reported_effective_mode,
+                "endpoint": reported_endpoint,
+                "attestation": attestation,
+                "last_error": error_detail
+                or f"Listener is not reachable at {attestation_endpoint}.",
+            },
+        )
+
+    if models_ok and responses_ok and base_url_match and effective_mode_match:
+        return build_command_payload(
+            ok=True,
+            human_message="Runtime precondition passed for host-client launch.",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "desired_mode": desired_mode,
+                "effective_mode": reported_effective_mode,
+                "endpoint": reported_endpoint,
+                "attestation": attestation,
+                "last_error": "",
+            },
+        )
+
+    return build_command_payload(
+        ok=False,
+        human_message="Runtime precondition failed one or more attestation checks.",
+        machine_error_code="ATTESTATION_FAILED",
+        liveness="degraded",
+        severity="recoverable",
+        operator_action="retry",
+        changed_files=[],
+        extra={
+            "desired_mode": desired_mode,
+            "effective_mode": reported_effective_mode,
+            "endpoint": reported_endpoint,
+            "attestation": attestation,
+            "last_error": error_detail or "Runtime precondition failed one or more checks.",
+        },
+    )
+
+
 def run_healthcheck(
     paths: RuntimePaths,
     model: str | None = None,
@@ -4061,6 +4274,233 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
     )
 
 
+def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    profile_context = build_launch_client_profile_context(paths)
+    try:
+        client_path, client_path_kind = validate_launch_client_path(client_path_raw)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra={
+                "client_launch_result": {
+                    "status": "client_path_invalid",
+                    "attempted": True,
+                    "client_path": str(Path(client_path_raw).expanduser()),
+                    "client_path_kind": "unresolved",
+                    "runtime_precondition_checked": False,
+                    "runtime_precondition_status": "not_checked",
+                    "effective_mode_observed": "",
+                    "endpoint_observed": "",
+                    "profile_context": profile_context,
+                    "env_sanitized": True,
+                    "dispatch_method": "",
+                    "dispatch_attempted": False,
+                    "dispatch_observed": False,
+                    "dispatch_exit_code": None,
+                    "launch_claim_scope": "os_dispatch_only",
+                    "final_outcome": (
+                        "client_path_missing"
+                        if exc.machine_error_code == "MISSING_CLIENT_PATH"
+                        else "client_path_invalid"
+                    ),
+                }
+            },
+            exit_code=exc.exit_code,
+        )
+
+    try:
+        status_payload = observe_runtime_precondition_for_launch_client(paths)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra={
+                "client_launch_result": {
+                    "status": "runtime_precondition_error",
+                    "attempted": True,
+                    "client_path": str(client_path),
+                    "client_path_kind": client_path_kind,
+                    "runtime_precondition_checked": True,
+                    "runtime_precondition_status": "failed",
+                    "effective_mode_observed": "",
+                    "endpoint_observed": "",
+                    "profile_context": profile_context,
+                    "env_sanitized": True,
+                    "dispatch_method": "",
+                    "dispatch_attempted": False,
+                    "dispatch_observed": False,
+                    "dispatch_exit_code": None,
+                    "launch_claim_scope": "os_dispatch_only",
+                    "final_outcome": "runtime_precondition_failed",
+                }
+            },
+            exit_code=exc.exit_code,
+        )
+    status_observed = summarize_owner_path_status_observation(status_payload)
+    client_launch_result: dict[str, Any] = {
+        "status": "runtime_precondition_checked",
+        "attempted": True,
+        "client_path": str(client_path),
+        "client_path_kind": client_path_kind,
+        "runtime_precondition_checked": True,
+        "runtime_precondition_status": (
+            "ok" if status_payload["status"] == "ok" else "failed"
+        ),
+        "effective_mode_observed": str(status_payload.get("effective_mode", "")),
+        "endpoint_observed": str(status_payload.get("endpoint", "")),
+        "profile_context": profile_context,
+        "env_sanitized": True,
+        "dispatch_method": "",
+        "dispatch_attempted": False,
+        "dispatch_observed": False,
+        "dispatch_exit_code": None,
+        "launch_claim_scope": "os_dispatch_only",
+        "final_outcome": "runtime_precondition_failed",
+    }
+
+    changed_files = detect_changed_files(before, runtime_write_surface_candidates(paths))
+    if status_payload["status"] != "ok":
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                "Host-client launch blocked because runtime precondition is unhealthy."
+            ),
+            machine_error_code="CLIENT_LAUNCH_RUNTIME_PRECONDITION_FAILED",
+            liveness=str(status_payload.get("liveness", "unknown")),
+            severity=str(status_payload.get("severity", "recoverable")),
+            operator_action=str(status_payload.get("operator_action", "retry")),
+            changed_files=changed_files,
+            extra={
+                "desired_mode": str(status_payload.get("desired_mode", "")),
+                "effective_mode": str(status_payload.get("effective_mode", "")),
+                "endpoint": str(status_payload.get("endpoint", "")),
+                "client_launch_result": client_launch_result,
+                "status_observed": status_observed,
+            },
+            exit_code=int(status_payload.get("exit_code", 1) or 1),
+        )
+
+    try:
+        dispatch_result = dispatch_external_client(paths, client_path, client_path_kind)
+    except RuntimeErrorInfo as exc:
+        unsupported_shape = exc.machine_error_code == "CLIENT_LAUNCH_UNSUPPORTED_SHAPE"
+        final_outcome = (
+            "unsupported_launch_shape" if unsupported_shape else "dispatch_failed"
+        )
+        client_launch_result.update(
+            {
+                "status": "dispatch_failed",
+                "dispatch_method": (
+                    ""
+                    if unsupported_shape
+                    else (
+                        "macos_open_app_bundle"
+                        if client_path_kind == "macos_app_bundle"
+                        else "detached_executable_spawn"
+                    )
+                ),
+                "dispatch_attempted": not unsupported_shape,
+                "dispatch_observed": False,
+                "dispatch_exit_code": None,
+                "final_outcome": final_outcome,
+            }
+        )
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness=str(status_payload.get("liveness", "unknown")),
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra={
+                "desired_mode": str(status_payload.get("desired_mode", "")),
+                "effective_mode": str(status_payload.get("effective_mode", "")),
+                "endpoint": str(status_payload.get("endpoint", "")),
+                "client_launch_result": client_launch_result,
+                "status_observed": status_observed,
+            },
+            exit_code=exc.exit_code,
+        )
+    if dispatch_result["stderr"]:
+        sys.stderr.write(str(dispatch_result["stderr"]))
+    client_launch_result.update(
+        {
+            "status": (
+                "dispatch_observed"
+                if dispatch_result["dispatch_observed"]
+                else "dispatch_failed"
+            ),
+            "dispatch_method": str(dispatch_result["dispatch_method"]),
+            "dispatch_attempted": True,
+            "dispatch_observed": bool(dispatch_result["dispatch_observed"]),
+            "dispatch_exit_code": dispatch_result["dispatch_exit_code"],
+            "final_outcome": (
+                "dispatch_requested"
+                if dispatch_result["dispatch_observed"]
+                else "dispatch_failed"
+            ),
+        }
+    )
+    changed_files = detect_changed_files(before, runtime_write_surface_candidates(paths))
+    if not dispatch_result["dispatch_observed"]:
+        dispatch_exit_code = dispatch_result["dispatch_exit_code"]
+        return build_command_payload(
+            ok=False,
+            human_message="Host-client dispatch failed.",
+            machine_error_code="CLIENT_LAUNCH_DISPATCH_FAILED",
+            liveness=str(status_payload.get("liveness", "unknown")),
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=changed_files,
+            extra={
+                "desired_mode": str(status_payload.get("desired_mode", "")),
+                "effective_mode": str(status_payload.get("effective_mode", "")),
+                "endpoint": str(status_payload.get("endpoint", "")),
+                "client_launch_result": client_launch_result,
+                "status_observed": status_observed,
+            },
+            exit_code=(
+                int(dispatch_exit_code) if isinstance(dispatch_exit_code, int) else 1
+            ),
+        )
+
+    return build_command_payload(
+        ok=True,
+        human_message="Host-client dispatch request completed.",
+        machine_error_code="OK",
+        liveness=str(status_payload.get("liveness", "healthy")),
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files(before, runtime_write_surface_candidates(paths)),
+        extra={
+            "desired_mode": str(status_payload.get("desired_mode", "")),
+            "effective_mode": str(status_payload.get("effective_mode", "")),
+            "endpoint": str(status_payload.get("endpoint", "")),
+            "client_launch_result": client_launch_result,
+            "status_observed": status_observed,
+        },
+    )
+
+
 def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     if not paths.sync_script.exists():
         raise RuntimeErrorInfo(
@@ -4656,7 +5096,7 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
 def summarize_owner_path_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "command_status": str(status_payload.get("status", "error")),
-        "exit_code": int(status_payload.get("exit_code", 1) or 1),
+        "exit_code": int(status_payload.get("exit_code", 1)),
         "machine_error_code": str(
             status_payload.get("machine_error_code", "STATUS_UNKNOWN")
         ),

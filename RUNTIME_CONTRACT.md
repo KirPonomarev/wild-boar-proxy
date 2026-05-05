@@ -38,6 +38,15 @@
   honestly; it is not a separate recovery owner
 - the current stable-runtime activation implementation is limited to the
   `launch smoke` seam
+- `launch client --json` may exist as a separate bounded external host-client
+  dispatch owner surface
+- `launch client --json` must not become a new owner of runtime health,
+  fallback, or recovery truth
+- `launch client --json` may verify runtime preconditions before dispatch and
+  may report that delegated runtime readout honestly
+- `launch client --json` success must remain bounded to explicit OS-level
+  dispatch truth and must not imply internal host-client session success,
+  profile-selection success, or runtime connectivity success by itself
 - generated stable runtime config materialization must not rewrite baseline
   stable config in place
 - deterministic stable recovery now reuses the same generated config path,

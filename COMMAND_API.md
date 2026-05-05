@@ -14,6 +14,7 @@ All operator commands must support `--json`.
 
 - `status --json`
 - `sync --json`
+- `launch client --json`
 - `healthcheck --json`
 - `mode get --json`
 - `mode set stable --json`
@@ -114,6 +115,57 @@ Reserve-first onboarding remains separate from promotion.
 `accounts onboard --json` must not place a newly admitted backend directly into
 `active`, and any ambiguous or missing identity proof must stop with
 `operator_action = user_action`.
+
+## Additional launch-client owner surface
+
+`launch client --json` is the owner surface for bounded external host-client
+dispatch truth.
+
+Launch success must not be inferred from OS invocation alone as end-to-end
+client-session success.
+Successful owner packets must prove, machine-readably:
+
+- explicit bounded client-path input
+- runtime precondition checked before dispatch
+- effective mode and endpoint observed before dispatch
+- env sanitization before launch
+- bounded dispatch observation at the OS invocation layer only
+- no stronger claim than dispatch truth
+
+`launch client --json` may expose a nested `client_launch_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `client_path`
+- `client_path_kind`
+- `runtime_precondition_checked`
+- `runtime_precondition_status`
+- `effective_mode_observed`
+- `endpoint_observed`
+- `profile_context`
+- `env_sanitized`
+- `dispatch_method`
+- `dispatch_attempted`
+- `dispatch_observed`
+- `dispatch_exit_code`
+- `launch_claim_scope`
+- `final_outcome`
+
+Canonical launch-client outcomes include:
+
+- `dispatch_requested`
+- `runtime_precondition_failed`
+- `client_path_missing`
+- `client_path_invalid`
+- `dispatch_failed`
+- `unsupported_launch_shape`
+
+`launch client --json` remains separate from:
+
+- runtime health ownership in `healthcheck --json`
+- delegated runtime readout in `status --json`
+- runtime smoke activation truth in `launch smoke --json`
 
 ## Additional promotion owner surface
 
