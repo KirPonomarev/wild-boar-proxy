@@ -5461,6 +5461,11 @@ def redact_sensitive_string(value: str) -> str:
         "[redacted-header]",
         value,
     )
+    value = re.sub(
+        r"(?i)\b(password|secret|token|cookie|api[_-]?key)\b\s*([:=])\s*[^\s;,]+",
+        lambda match: f"{match.group(1)}{match.group(2)}[redacted]",
+        value,
+    )
     return value
 
 
@@ -9572,24 +9577,15 @@ def export_diagnostics(paths: RuntimePaths) -> dict[str, Any]:
     registry = read_json(paths.registry_file)
     state = read_json(paths.state_file, required=False)
     export_dir = Path(tempfile.mkdtemp(prefix="wild-boar-proxy-diagnostics-"))
-
-    redacted_registry = dict(registry)
-    redacted_backends = []
-    for backend in registry.get("backends", []):
-        item = dict(backend)
-        if "auth_ref" in item:
-            item["auth_ref"] = Path(str(item["auth_ref"])).name
-        if item.get("notes"):
-            item["notes"] = "[redacted]"
-        redacted_backends.append(item)
-    redacted_registry["backends"] = redacted_backends
+    redacted_registry = redact_evidence_value(registry)
+    redacted_state = redact_evidence_value(state)
 
     (export_dir / "backend-registry.json").write_text(
         json.dumps(redacted_registry, indent=2, ensure_ascii=True) + "\n",
         encoding="utf-8",
     )
     (export_dir / "supervisor-state.json").write_text(
-        json.dumps(state, indent=2, ensure_ascii=True) + "\n",
+        json.dumps(redacted_state, indent=2, ensure_ascii=True) + "\n",
         encoding="utf-8",
     )
     (export_dir / "runtime-mode.txt").write_text(

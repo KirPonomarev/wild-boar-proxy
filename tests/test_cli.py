@@ -7308,7 +7308,10 @@ class CliTests(unittest.TestCase):
         state_path = self.managed_dir / "supervisor-state.json"
         state = json.loads(state_path.read_text())
         state["current_proxy_url"] = "http://user:pass@127.0.0.1:10808"
-        state["last_error"] = "Authorization: Bearer sk-testsecret"
+        state["last_error"] = (
+            "Authorization: Bearer sk-testsecret "
+            "password=swordfish cookie=sessionid"
+        )
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -10701,6 +10704,41 @@ class CliTests(unittest.TestCase):
         self.assertTrue(bundle_path.exists())
         registry = json.loads((bundle_path / "backend-registry.json").read_text())
         self.assertEqual(registry["backends"][0]["auth_ref"], "a.json")
+
+    def test_diagnostics_export_redacts_runtime_state_and_registry_secrets(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+        registry["backends"][0]["notes"] = "private operator secret"
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["current_proxy_url"] = "http://user:pass@127.0.0.1:10808"
+        state["last_error"] = (
+            "Authorization: Bearer sk-testsecret "
+            "password=swordfish cookie=sessionid"
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        result = self.run_cli("diagnostics", "export", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        bundle_path = Path(payload["bundle_path"])
+
+        registry_text = (bundle_path / "backend-registry.json").read_text(encoding="utf-8")
+        state_text = (bundle_path / "supervisor-state.json").read_text(encoding="utf-8")
+        bundle_text = registry_text + "\n" + state_text
+
+        self.assertIn('"notes": "[redacted]"', registry_text)
+        self.assertIn("http://[redacted]@127.0.0.1:10808", state_text)
+        self.assertIn("[redacted-token]", state_text)
+        self.assertIn("password=[redacted]", state_text)
+        self.assertIn("cookie=[redacted]", state_text)
+        self.assertNotIn("private operator secret", bundle_text)
+        self.assertNotIn("sk-testsecret", bundle_text)
+        self.assertNotIn("user:pass@", bundle_text)
+        self.assertNotIn("swordfish", bundle_text)
+        self.assertNotIn("sessionid", bundle_text)
 
     def test_sync_returns_single_json_object(self) -> None:
         result = self.run_cli("sync", "--json")
