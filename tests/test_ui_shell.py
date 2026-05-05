@@ -10,13 +10,16 @@ from unittest import mock
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
     ONBOARDING_RESULT_FIELDS,
+    SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
     JsonCommandRunner,
     MinimalCompanionShell,
     UiShellError,
     build_account_pool_snapshot,
     build_client_launch_field_values,
+    build_smoke_field_values,
     classify_client_launch_rendered_state,
+    classify_smoke_rendered_state,
     build_onboarding_field_values,
     build_runtime_snapshot,
     format_onboarding_value,
@@ -29,6 +32,7 @@ from wild_boar_proxy.ui_shell import (
     run_account_validate_and_refresh,
     run_launch_client_and_refresh,
     run_mode_control_and_refresh,
+    run_smoke_and_refresh,
     run_sync_and_refresh,
 )
 
@@ -107,6 +111,24 @@ def launch_payload(**overrides: object) -> dict[str, object]:
             "launch_claim_scope": "os_dispatch_only",
             "final_outcome": "dispatch_requested",
         },
+    )
+    payload.update(overrides)
+    return payload
+
+
+def smoke_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Launcher smoke completed.",
+        launch_mode="smoke",
+        desired_mode="managed",
+        effective_mode="managed",
+        endpoint="127.0.0.1:9999",
+        current_proxy_url="http://127.0.0.1:10808",
+        launcher_exit_code=0,
+        stabilization_seconds=0.2,
+        stable_runtime_consumer={"status": "observed_source_selected"},
+        attestation_summary={"status": "ok", "machine_error_code": "OK"},
+        last_error="",
     )
     payload.update(overrides)
     return payload
@@ -529,6 +551,66 @@ class LaunchClientTests(unittest.TestCase):
         rendered_state = classify_client_launch_rendered_state(
             payload,
             field_values,
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "unknown")
+
+
+class SmokeTests(unittest.TestCase):
+    def test_run_smoke_and_refresh_uses_smoke_then_status_only(self) -> None:
+        runner = FakeRunner(
+            {
+                ("launch", "smoke", "--json"): smoke_payload(),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        action_payload, snapshot = run_smoke_and_refresh(runner)
+
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(snapshot.overall_state, "ok")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("launch", "smoke", "--json"),
+                ("status", "--json"),
+            ],
+        )
+
+    def test_build_smoke_field_values_rejects_non_object_nested_surface(self) -> None:
+        with self.assertRaisesRegex(UiShellError, "stable_runtime_consumer must be an object"):
+            build_smoke_field_values(smoke_payload(stable_runtime_consumer="broken"))
+
+    def test_classify_smoke_rendered_state_marks_failure(self) -> None:
+        rendered_state = classify_smoke_rendered_state(
+            smoke_payload(
+                status="error",
+                machine_error_code="MANAGED_RUNTIME_PRECONDITION_FAILED",
+            ),
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "failure")
+
+    def test_classify_smoke_rendered_state_stays_bounded(self) -> None:
+        rendered_state = classify_smoke_rendered_state(
+            smoke_payload(),
+            malformed=False,
+        )
+        self.assertEqual(rendered_state, "bounded_runtime_smoke_only")
+        self.assertNotEqual(rendered_state, "success")
+
+    def test_classify_smoke_rendered_state_marks_malformed_surface(self) -> None:
+        rendered_state = classify_smoke_rendered_state(
+            smoke_payload(),
+            malformed=True,
+        )
+        self.assertEqual(rendered_state, "integration_failure")
+
+    def test_classify_smoke_rendered_state_marks_missing_launch_mode_unknown(self) -> None:
+        payload = smoke_payload()
+        del payload["launch_mode"]
+        rendered_state = classify_smoke_rendered_state(
+            payload,
             malformed=False,
         )
         self.assertEqual(rendered_state, "unknown")
@@ -1062,6 +1144,108 @@ class UiDispatchTests(unittest.TestCase):
             ),
         )
         thread_instance.start.assert_called_once_with()
+
+    def test_run_smoke_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_smoke_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_smoke_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_smoke_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._smoke_worker)
+        self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
+        thread_instance.start.assert_called_once_with()
+
+    def test_apply_smoke_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.smoke_command_status_var = mock.Mock()
+        shell.smoke_command_exit_code_var = mock.Mock()
+        shell.smoke_command_human_message_var = mock.Mock()
+        shell.smoke_command_machine_error_var = mock.Mock()
+        shell.smoke_command_changed_files_var = mock.Mock()
+        shell.smoke_command_next_action_var = mock.Mock()
+        shell.smoke_rendered_state_var = mock.Mock()
+        shell.smoke_field_vars = {
+            field: mock.Mock() for field in SMOKE_RESULT_FIELDS
+        }
+
+        shell._apply_smoke_payload(smoke_payload(stable_runtime_consumer="broken"))
+
+        shell.smoke_command_status_var.set.assert_called_once_with("ok")
+        for field in SMOKE_RESULT_FIELDS:
+            shell.smoke_field_vars[field].set.assert_called_once_with("")
+        shell.smoke_rendered_state_var.set.assert_called_once_with("integration_failure")
+
+    def test_apply_smoke_payload_failure_not_rendered_as_success(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.smoke_command_status_var = mock.Mock()
+        shell.smoke_command_exit_code_var = mock.Mock()
+        shell.smoke_command_human_message_var = mock.Mock()
+        shell.smoke_command_machine_error_var = mock.Mock()
+        shell.smoke_command_changed_files_var = mock.Mock()
+        shell.smoke_command_next_action_var = mock.Mock()
+        shell.smoke_rendered_state_var = mock.Mock()
+        shell.smoke_field_vars = {
+            field: mock.Mock() for field in SMOKE_RESULT_FIELDS
+        }
+
+        shell._apply_smoke_payload(
+            smoke_payload(
+                status="error",
+                machine_error_code="MANAGED_RUNTIME_PRECONDITION_FAILED",
+            )
+        )
+
+        shell.smoke_rendered_state_var.set.assert_called_once_with("failure")
+
+    def test_smoke_worker_keeps_action_payload_when_status_refresh_fails(self) -> None:
+        class BrokenStatusRunner:
+            def run(self, *args: str):
+                if args == ("launch", "smoke", "--json"):
+                    return type(
+                        "Result",
+                        (),
+                        {"payload": smoke_payload(human_message="Smoke executed."), "stderr": ""},
+                    )()
+                if args == ("status", "--json"):
+                    return type("Result", (), {"payload": command_payload(status="ok"), "stderr": ""})()
+                raise AssertionError(f"unexpected command: {args}")
+
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = BrokenStatusRunner()
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_smoke_results = mock.Mock()
+
+        shell._smoke_worker()
+
+        shell._apply_smoke_results.assert_called_once()
+        action_payload = shell._apply_smoke_results.call_args.args[0]
+        self.assertEqual(action_payload["status"], "ok")
 
     def test_apply_launch_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
