@@ -5460,6 +5460,130 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof(
+        self,
+    ) -> None:
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-nonzero",
+                                auth_ref="/tmp/codex-detected-nonzero.json",
+                            )
+                        ]
+                    ),
+                    "WBP_TEST_ONBOARD_EXIT_CODE": "7",
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "detected_new_auth")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected-nonzero")
+        self.assertEqual(onboarding["external_command_exit_code"], 7)
+        self.assertEqual(onboarding["external_command_status"], "nonzero")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "ok")
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
+
+    def test_accounts_onboard_detected_new_auth_no_sync_does_not_overclaim_sync(
+        self,
+    ) -> None:
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-no-sync",
+                                auth_ref="/tmp/codex-detected-no-sync.json",
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+                "--no-sync",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "detected_new_auth")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected-no-sync")
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(payload["sync_result"]["command_status"], "skipped")
+        self.assertEqual(payload["sync_result"]["machine_error_code"], "ONBOARD_SYNC_SKIPPED")
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
+
+    def test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success(
+        self,
+    ) -> None:
+        (self.profile_dir / "auth.json").write_text("{}\n", encoding="utf-8")
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-detected-status-fail",
+                            auth_ref="/tmp/codex-detected-status-fail.json",
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_STATUS_FAILED")
+        self.assertEqual(payload["next_action"], "retry")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "detected_new_auth")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected-status-fail")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertIsNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["final_outcome"], "status_failed")
+
     def test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof(
         self,
     ) -> None:
