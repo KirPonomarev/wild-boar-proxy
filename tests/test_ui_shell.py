@@ -8,33 +8,46 @@ import unittest
 from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
+    AccountPoolSnapshot,
     JsonCommandRunner,
+    MinimalCompanionShell,
     UiShellError,
+    build_account_pool_snapshot,
     build_runtime_snapshot,
+    load_account_pool_snapshot,
     load_runtime_snapshot,
     main,
     parse_exact_json_object,
+    run_account_validate_and_refresh,
     run_mode_control_and_refresh,
     run_sync_and_refresh,
 )
 
 
-def status_payload(**overrides: object) -> dict[str, object]:
+def command_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "status": "ok",
         "exit_code": 0,
-        "human_message": "Runtime status summary is available.",
+        "human_message": "Command completed.",
         "machine_error_code": "OK",
         "changed_files": [],
         "next_action": "none",
-        "liveness": "healthy",
-        "severity": "info",
-        "operator_action": "none",
-        "desired_mode": "managed",
-        "effective_mode": "managed",
-        "endpoint": "127.0.0.1:9999",
-        "current_proxy_url": "http://127.0.0.1:10808",
-        "pool_summary": {
+    }
+    payload.update(overrides)
+    return payload
+
+
+def status_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Runtime status summary is available.",
+        liveness="healthy",
+        severity="info",
+        operator_action="none",
+        desired_mode="managed",
+        effective_mode="managed",
+        endpoint="127.0.0.1:9999",
+        current_proxy_url="http://127.0.0.1:10808",
+        pool_summary={
             "active": 2,
             "reserve": 1,
             "retired": 0,
@@ -42,29 +55,67 @@ def status_payload(**overrides: object) -> dict[str, object]:
             "degraded": 1,
             "down": 0,
         },
-        "attestation_summary": {
+        attestation_summary={
             "status": "ok",
             "machine_error_code": "OK",
             "attestation_source": "healthcheck --json",
             "observed_at_utc": "2026-05-05T10:00:00+00:00",
         },
-        "last_error": "",
-    }
+        last_error="",
+    )
     payload.update(overrides)
     return payload
 
 
 def mode_payload(**overrides: object) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "status": "ok",
-        "exit_code": 0,
-        "human_message": "Mode values are available.",
-        "machine_error_code": "OK",
-        "changed_files": [],
-        "next_action": "none",
-        "desired_mode": "managed",
-        "effective_mode": "managed",
-    }
+    payload = command_payload(
+        human_message="Mode values are available.",
+        desired_mode="managed",
+        effective_mode="managed",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def accounts_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Account registry snapshot is available.",
+        accounts=[
+            {
+                "id": "backend-a",
+                "label": "Backend A",
+                "pool": "active",
+                "manual_hold": False,
+                "status": "healthy",
+                "fail_count": 0,
+                "success_count": 3,
+                "last_success": "2026-05-05T10:00:00+00:00",
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+            {
+                "id": "backend-b",
+                "label": "Backend B",
+                "pool": "reserve",
+                "manual_hold": False,
+                "status": "healthy",
+                "fail_count": 0,
+                "success_count": 0,
+                "last_success": None,
+                "last_error": "",
+                "cooldown_until": None,
+                "notes": "",
+            },
+        ],
+        registry_identity={
+            "status": "clear",
+            "machine_error_code": "OK",
+            "next_action": "none",
+        },
+        pool_policy={"active_min": 1, "active_target": 2, "reserve_target": 0},
+        stable_default_backend_id="backend-a",
+    )
     payload.update(overrides)
     return payload
 
@@ -200,6 +251,65 @@ class RuntimeSnapshotTests(unittest.TestCase):
             load_runtime_snapshot(runner)
 
 
+class AccountPoolSnapshotTests(unittest.TestCase):
+    def test_build_account_pool_snapshot_maps_account_truth(self) -> None:
+        snapshot = build_account_pool_snapshot(accounts_payload())
+
+        self.assertIsInstance(snapshot, AccountPoolSnapshot)
+        self.assertEqual(snapshot.registry_identity_status, "clear")
+        self.assertEqual(snapshot.active_count, 1)
+        self.assertEqual(snapshot.reserve_count, 1)
+        self.assertEqual(snapshot.capacity_target, 20)
+        self.assertEqual(snapshot.accounts[0].backend_id, "backend-a")
+
+    def test_build_account_pool_snapshot_rejects_missing_accounts_field(self) -> None:
+        broken_payload = accounts_payload()
+        del broken_payload["accounts"]
+
+        with self.assertRaisesRegex(UiShellError, "accounts"):
+            build_account_pool_snapshot(broken_payload)
+
+    def test_build_account_pool_snapshot_rejects_missing_account_row_field(self) -> None:
+        broken_payload = accounts_payload(
+            accounts=[
+                {
+                    "id": "backend-a",
+                    "label": "Backend A",
+                    "pool": "active",
+                    "manual_hold": False,
+                    "status": "healthy",
+                    "fail_count": 0,
+                    "success_count": 3,
+                    "last_success": "2026-05-05T10:00:00+00:00",
+                    "last_error": "",
+                    "cooldown_until": None,
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(UiShellError, "notes"):
+            build_account_pool_snapshot(broken_payload)
+
+    def test_build_account_pool_snapshot_rejects_missing_registry_identity_field(self) -> None:
+        broken_payload = accounts_payload(
+            registry_identity={
+                "status": "clear",
+                "machine_error_code": "OK",
+            }
+        )
+
+        with self.assertRaisesRegex(UiShellError, "next_action"):
+            build_account_pool_snapshot(broken_payload)
+
+    def test_load_account_pool_snapshot_reads_accounts_list_only(self) -> None:
+        runner = FakeRunner({("accounts", "list", "--json"): accounts_payload()})
+
+        snapshot = load_account_pool_snapshot(runner)
+
+        self.assertEqual(snapshot.accounts[0].label, "Backend A")
+        self.assertEqual(runner.calls, [("accounts", "list", "--json")])
+
+
 class ModeControlTests(unittest.TestCase):
     def test_run_mode_control_and_refresh_uses_command_then_truth_refresh(self) -> None:
         runner = FakeRunner(
@@ -238,19 +348,18 @@ class ModeControlTests(unittest.TestCase):
     def test_run_sync_and_refresh_includes_accounts_refresh(self) -> None:
         runner = FakeRunner(
             {
-                ("sync", "--json"): mode_payload(human_message="Managed sync completed."),
+                ("sync", "--json"): command_payload(human_message="Managed sync completed."),
                 ("status", "--json"): status_payload(),
-                ("accounts", "list", "--json"): status_payload(
-                    human_message="Accounts listed."
-                ),
+                ("accounts", "list", "--json"): accounts_payload(),
                 ("mode", "get", "--json"): mode_payload(),
             }
         )
 
-        action_payload, snapshot = run_sync_and_refresh(runner)
+        action_payload, runtime_snapshot, account_snapshot = run_sync_and_refresh(runner)
 
         self.assertEqual(action_payload["human_message"], "Managed sync completed.")
-        self.assertEqual(snapshot.effective_mode, "managed")
+        self.assertEqual(runtime_snapshot.effective_mode, "managed")
+        self.assertEqual(account_snapshot.active_count, 1)
         self.assertEqual(
             runner.calls,
             [
@@ -260,6 +369,55 @@ class ModeControlTests(unittest.TestCase):
                 ("mode", "get", "--json"),
             ],
         )
+
+
+class AccountCheckTests(unittest.TestCase):
+    def test_run_account_validate_and_refresh_uses_validate_then_accounts_list(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "validate", "backend-a", "--json"): command_payload(
+                    human_message="Account validated."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+
+        action_payload, snapshot = run_account_validate_and_refresh(runner, "backend-a")
+
+        self.assertEqual(action_payload["human_message"], "Account validated.")
+        self.assertEqual(snapshot.registry_identity_status, "clear")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "validate", "backend-a", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+        )
+
+    def test_recheck_alias_uses_same_validate_command_shape(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "validate", "backend-a", "--json"): command_payload(
+                    human_message="Account validated."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+
+        _action_payload, _snapshot = run_account_validate_and_refresh(runner, "backend-a")
+
+        self.assertNotIn(("status", "--json"), runner.calls)
+        self.assertEqual(runner.calls[0], ("accounts", "validate", "backend-a", "--json"))
+
+
+class UiDispatchTests(unittest.TestCase):
+    def test_run_recheck_action_delegates_to_account_check_alias(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_check_action = mock.Mock()
+
+        shell.run_recheck_action()
+
+        shell._run_account_check_action.assert_called_once_with("Recheck")
 
 
 class MainTests(unittest.TestCase):
