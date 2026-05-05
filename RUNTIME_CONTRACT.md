@@ -77,6 +77,17 @@
   `current_proxy_adoption_contract`
 - that contract may declare a dedicated current-proxy activation handoff such as
   `WBP_CURRENT_PROXY_URL`
+- that handoff remains a launcher-scoped process-local carrier rather than a
+  truth surface for `current_proxy_url`
+- that contract may expose an external launcher-path surface for
+  `WBP_LAUNCHER_SCRIPT`, but launcher-path presence alone must not be treated as
+  proof of current-proxy consumer capability
+- that contract may expose a bounded launcher-consumer readiness surface and
+  must report protocol-fixed-but-unimplemented states honestly
+- that contract may allow a later launcher consumer to derive engine-local proxy
+  env keys for the managed runtime child process only
+- any such derived proxy env keys remain engine-local routing inputs, not
+  control-plane truth surfaces
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
@@ -92,6 +103,10 @@
   from nested `proxy_reprobe.working_candidate`
 - ambient shell proxy env must not become the authoritative control-layer truth
   surface for current proxy selection
+- derived proxy env keys such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and
+  lowercase variants may later be generated only inside the bounded launcher
+  consumer from `WBP_CURRENT_PROXY_URL`; that allowance does not itself claim
+  that the current engine already consumes those keys
 - control-plane runtime attestation remains proxyless even if a later managed
   runtime activation lane receives a dedicated current-proxy handoff
 - persisted last-known-good proxy truth must remain separate from

@@ -612,6 +612,19 @@ class CliTests(unittest.TestCase):
             current_proxy_adoption_contract["handoff_env_var"],
             "WBP_CURRENT_PROXY_URL",
         )
+        handoff_carrier = current_proxy_adoption_contract["handoff_carrier_contract"]
+        self.assertEqual(handoff_carrier["status"], "contract_ready")
+        self.assertEqual(handoff_carrier["env_var"], "WBP_CURRENT_PROXY_URL")
+        self.assertEqual(
+            handoff_carrier["surface_kind"],
+            "launcher_scoped_process_local_carrier",
+        )
+        self.assertEqual(
+            handoff_carrier["current_proxy_truth_surface_field"],
+            "current_proxy_url",
+        )
+        self.assertTrue(handoff_carrier["ambient_authoritative_forbidden"])
+        self.assertTrue(handoff_carrier["top_level_runtime_truth_by_presence_forbidden"])
         self.assertEqual(
             current_proxy_adoption_contract["owner_activation_lane"],
             "serialized_healthcheck_owner_path",
@@ -619,6 +632,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             current_proxy_adoption_contract["effectful_runtime_wiring_status"],
             "contract_fixed_not_implemented",
+        )
+        launcher_consumer = current_proxy_adoption_contract["launcher_consumer_contract"]
+        self.assertEqual(launcher_consumer["status"], "contract_fixed_not_implemented")
+        self.assertEqual(
+            launcher_consumer["launcher_protocol_scope"],
+            "bounded_launcher_smoke_seam",
+        )
+        self.assertEqual(
+            launcher_consumer["external_launcher_readiness_status"],
+            "external_script_path_present_consumer_capability_unverified",
+        )
+        self.assertFalse(launcher_consumer["repo_owned_default_consumer_provisioned"])
+        self.assertTrue(launcher_consumer["path_presence_not_capability_proof"])
+        external_launcher = current_proxy_adoption_contract["external_launcher_path_surface"]
+        self.assertEqual(external_launcher["status"], "path_present")
+        self.assertEqual(external_launcher["env_var"], "WBP_LAUNCHER_SCRIPT")
+        self.assertTrue(external_launcher["exists"])
+        self.assertEqual(
+            external_launcher["role"],
+            "external_launcher_executable_path_surface",
+        )
+        self.assertTrue(
+            external_launcher["consumer_capability_by_path_presence_forbidden"]
+        )
+        engine_local_routing = current_proxy_adoption_contract[
+            "engine_local_proxy_routing_contract"
+        ]
+        self.assertEqual(engine_local_routing["status"], "contract_ready")
+        self.assertTrue(engine_local_routing["allowed"])
+        self.assertEqual(
+            engine_local_routing["routing_scope"],
+            "managed_runtime_child_process_only",
+        )
+        self.assertTrue(engine_local_routing["derived_from_handoff_carrier_only"])
+        self.assertFalse(engine_local_routing["current_engine_consumption_claimed"])
+        self.assertEqual(
+            current_proxy_adoption_contract["launcher_consumer_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["external_launcher_readiness_status"],
+            "external_script_path_present_consumer_capability_unverified",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["engine_local_proxy_routing_allowed"]
         )
         self.assertTrue(
             current_proxy_adoption_contract[
@@ -3133,6 +3191,42 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             current_proxy_adoption_contract["handoff_env_var"],
             "WBP_CURRENT_PROXY_URL",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["launcher_consumer_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["launcher_protocol_scope"],
+            "bounded_launcher_smoke_seam",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["external_launcher_readiness_status"],
+            "external_script_path_present_consumer_capability_unverified",
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract["repo_owned_default_consumer_provisioned"]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["external_launcher_path_surface"]["env_var"],
+            "WBP_LAUNCHER_SCRIPT",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["external_launcher_path_surface"][
+                "consumer_capability_by_path_presence_forbidden"
+            ]
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["engine_local_proxy_routing_allowed"]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["engine_local_proxy_routing_scope"],
+            "managed_runtime_child_process_only",
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract["engine_local_proxy_routing_contract"][
+                "current_engine_consumption_claimed"
+            ]
         )
         self.assertTrue(
             current_proxy_adoption_contract[

@@ -1064,6 +1064,56 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
 
 
 def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]:
+    launcher_path_exists = paths.launcher_script.exists()
+    handoff_carrier_contract = {
+        "status": "contract_ready",
+        "env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+        "surface_kind": "launcher_scoped_process_local_carrier",
+        "current_proxy_truth_surface_field": "current_proxy_url",
+        "persisted_truth_surface_forbidden": True,
+        "working_candidate_truth_by_presence_forbidden": True,
+        "top_level_runtime_truth_by_presence_forbidden": True,
+        "ambient_authoritative_forbidden": True,
+    }
+    external_launcher_path_surface = {
+        "status": "path_present" if launcher_path_exists else "path_missing",
+        "env_var": "WBP_LAUNCHER_SCRIPT",
+        "resolved_path": str(paths.launcher_script),
+        "exists": launcher_path_exists,
+        "role": "external_launcher_executable_path_surface",
+        "consumer_capability_by_path_presence_forbidden": True,
+        "truth_surface": False,
+    }
+    launcher_consumer_contract = {
+        "status": "contract_fixed_not_implemented",
+        "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+        "consumer_kind": "external_launcher_script",
+        "handoff_carrier_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+        "repo_owned_default_consumer_provisioned": False,
+        "external_launcher_readiness_status": (
+            "external_script_path_present_consumer_capability_unverified"
+            if launcher_path_exists
+            else "external_script_path_missing_consumer_capability_unverified"
+        ),
+        "path_presence_not_capability_proof": True,
+        "owner_controlled_activation_only": True,
+    }
+    engine_local_proxy_routing_contract = {
+        "status": "contract_ready",
+        "allowed": True,
+        "routing_scope": "managed_runtime_child_process_only",
+        "derived_from_handoff_carrier_only": True,
+        "derived_proxy_env_keys": [
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+        ],
+        "derived_proxy_env_authoritative_for_control_plane_forbidden": True,
+        "current_engine_consumption_claimed": False,
+    }
     return {
         "status": "contract_ready",
         "owner_command_surface": "healthcheck --json",
@@ -1076,6 +1126,10 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
         "activation_value_source_field": "current_proxy_url",
         "owner_activation_lane": "serialized_healthcheck_owner_path",
+        "handoff_carrier_contract": handoff_carrier_contract,
+        "external_launcher_path_surface": external_launcher_path_surface,
+        "launcher_consumer_contract": launcher_consumer_contract,
+        "engine_local_proxy_routing_contract": engine_local_proxy_routing_contract,
         "effectful_runtime_wiring_status": "contract_fixed_not_implemented",
         "managed_runtime_subprocess_only": True,
         "ambient_proxy_env_authoritative_forbidden": True,
@@ -1084,6 +1138,27 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "launcher_protocol_change_outside_repo_owned_handoff_forbidden": True,
         "managed_config_schema_widening_default": False,
         "config_toml_schema_widening_default": False,
+        "launcher_consumer_status": launcher_consumer_contract["status"],
+        "launcher_protocol_scope": launcher_consumer_contract[
+            "launcher_protocol_scope"
+        ],
+        "engine_local_proxy_routing_allowed": engine_local_proxy_routing_contract[
+            "allowed"
+        ],
+        "engine_local_proxy_routing_scope": engine_local_proxy_routing_contract[
+            "routing_scope"
+        ],
+        "derived_proxy_env_authoritative_for_control_plane_forbidden": (
+            engine_local_proxy_routing_contract[
+                "derived_proxy_env_authoritative_for_control_plane_forbidden"
+            ]
+        ),
+        "external_launcher_readiness_status": launcher_consumer_contract[
+            "external_launcher_readiness_status"
+        ],
+        "repo_owned_default_consumer_provisioned": launcher_consumer_contract[
+            "repo_owned_default_consumer_provisioned"
+        ],
         "current_proxy_truth_surface": {
             "status": "contract_ready",
             "field": "current_proxy_url",
