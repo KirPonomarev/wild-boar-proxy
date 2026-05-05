@@ -7907,6 +7907,52 @@ class CliTests(unittest.TestCase):
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
 
+    def test_rollout_stage_advance_15_blocks_held_lock_without_mutation(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-lock-15"
+        reserve_auth_path = self.profile_dir / "codex-reserve-lock-15.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        stage_summary = runtime_mod.observe_current_stage_from_pool_policy(registry)
+        self.assertEqual(stage_summary["status"], "matched")
+        self.assertEqual(stage_summary["observed_stage"], "10")
+        pool_counts = runtime_mod.summarize_registry_pool_counts(registry)
+        self.assertEqual(pool_counts["active"], 10)
+        self.assertEqual(pool_counts["reserve"], 1)
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script)
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli(
+                "rollout", "stage", "advance", "15", reserve_backend_id, "--json"
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertNotIn("stage_advancement_result", payload)
+        self.assertEqual(before, after)
+
     def test_rollout_stage_advance_15_blocks_when_stable_10_proof_fails(self) -> None:
         self.configure_stable_ten_proof_fixture()
         reserve_backend_id = "backend-reserve-proof-fail"
@@ -8406,6 +8452,56 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["postflight_rotation_status"], "available")
         self.assertEqual(advance["rollback_readiness_status"], "ready")
         self.assertEqual(advance["final_outcome"], "advanced_one_step")
+
+    def test_rollout_stage_advance_20_blocks_held_lock_without_mutation(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        reserve_backend_id = "backend-reserve-lock-20"
+        reserve_auth_path = self.profile_dir / "codex-reserve-lock-20.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 20,
+            "active_target": 20,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        stage_summary = runtime_mod.observe_current_stage_from_pool_policy(registry)
+        self.assertEqual(stage_summary["status"], "matched")
+        self.assertEqual(stage_summary["observed_stage"], "20")
+        pool_counts = runtime_mod.summarize_registry_pool_counts(registry)
+        self.assertEqual(pool_counts["active"], 15)
+        self.assertEqual(pool_counts["reserve"], 1)
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli(
+                "rollout", "stage", "advance", "20", reserve_backend_id, "--json"
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertNotIn("stage_advancement_result", payload)
+        self.assertEqual(before, after)
 
     def test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion(
         self,
