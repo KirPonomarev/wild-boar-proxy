@@ -252,6 +252,15 @@ Successful owner packets must prove, machine-readably:
 `rotation_evidence_result` surface.
 Preferred fields include:
 
+- `schema_version`
+- `observed_at_utc`
+- `evidence_status`
+- `evidence_source`
+- `evidence_source_layer`
+- `evidence_freshness`
+- `selected_backend_snapshot_present`
+- `selected_backend_ids`
+- `selected_backends_digest`
 - `status`
 - `attempted`
 - `requested_scope`
@@ -266,16 +275,56 @@ Preferred fields include:
 - `registry_identity_status`
 - `evidence_sources`
 - `evidence_strength`
+- `evidence_reason`
 - `participation_status`
+- `participation_summary`
+- `blocker_type`
 - `claim_scope`
 - `final_outcome`
 
 Canonical rotation-evidence outcomes include:
 
+- `participation_evidence_present`
+- `participation_evidence_stale`
 - `participation_evidence_available`
 - `participation_evidence_insufficient`
 - `participation_evidence_contradicted`
 - `participation_evidence_unknown`
+- `participation_evidence_unavailable`
+
+`selected_backend_ids` and `selected_backend_ids_observed` must come from a
+runtime or supervisor snapshot of selected backends.
+They must not be synthesized from registry active ids, registry active counts,
+or routing-candidate counts.
+
+`evidence_strength` is the normalized strength axis and must use:
+
+- `strong`
+- `partial`
+- `weak_log_derived`
+- `none`
+
+`evidence_reason` carries the narrower local reason such as
+`multi_backend_snapshot`, `selected_backend_snapshot_missing`, or
+`policy_drift_detected`.
+
+`blocker_type` must use:
+
+- `none`
+- `observability`
+- `unsupported_api`
+- `stale_state`
+- `schema_gap`
+- `contradicted_state`
+
+Rotation evidence `machine_error_code` values include:
+
+- `OK`
+- `ROTATION_EVIDENCE_STALE`
+- `ROTATION_EVIDENCE_UNKNOWN`
+- `ROTATION_EVIDENCE_UNAVAILABLE`
+- `ROTATION_EVIDENCE_INSUFFICIENT`
+- `ROTATION_EVIDENCE_CONTRADICTED`
 
 `rollout rotation inspect --json` remains separate from:
 

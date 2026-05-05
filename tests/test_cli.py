@@ -6293,8 +6293,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["stable_inventory_status"], "available")
         self.assertEqual(evidence["policy_drift_status"], "clear")
         self.assertEqual(evidence["registry_identity_status"], "clear")
-        self.assertEqual(evidence["evidence_strength"], "multi_backend_snapshot")
+        self.assertEqual(evidence["schema_version"], 1)
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_present")
+        self.assertEqual(evidence["evidence_strength"], "partial")
+        self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
+        self.assertEqual(evidence["evidence_source"], "runtime_state.selected_backend_ids")
+        self.assertEqual(
+            evidence["evidence_source_layer"], "control_layer_supervisor_snapshot"
+        )
+        self.assertEqual(evidence["evidence_freshness"], "unknown")
+        self.assertTrue(evidence["selected_backend_snapshot_present"])
+        self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
+        self.assertEqual(
+            evidence["selected_backends_digest"],
+            runtime_mod.get_selected_backends_digest(
+                {"selected_backend_ids": ["backend-a", "backend-b"]}
+            ),
+        )
         self.assertEqual(evidence["participation_status"], "available")
+        self.assertEqual(
+            evidence["participation_summary"]["status"], "available"
+        )
+        self.assertEqual(evidence["blocker_type"], "none")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_available"
         )
@@ -6313,8 +6333,11 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["changed_files"], [])
         evidence = payload["rotation_evidence_result"]
-        self.assertEqual(evidence["evidence_strength"], "single_backend_snapshot_only")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_insufficient")
+        self.assertEqual(evidence["evidence_strength"], "partial")
+        self.assertEqual(evidence["evidence_reason"], "single_backend_snapshot_only")
         self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(evidence["blocker_type"], "observability")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_insufficient"
         )
@@ -6355,8 +6378,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["active_pool_count_agreement_status"], "matched")
         self.assertEqual(evidence["policy_drift_status"], "clear")
         self.assertEqual(evidence["stable_inventory_status"], "available")
-        self.assertEqual(evidence["evidence_strength"], "active_pool_not_expanded")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_insufficient")
+        self.assertEqual(evidence["evidence_strength"], "none")
+        self.assertEqual(evidence["evidence_reason"], "active_pool_not_expanded")
         self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(evidence["blocker_type"], "observability")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_insufficient"
         )
@@ -6389,11 +6415,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["policy_drift_status"], "clear")
         self.assertEqual(evidence["stable_inventory_status"], "available")
         self.assertEqual(evidence["registry_identity_status"], "clear")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_insufficient")
+        self.assertEqual(evidence["evidence_strength"], "none")
         self.assertEqual(
-            evidence["evidence_strength"],
-            "active_routing_candidates_not_expanded",
+            evidence["evidence_reason"], "active_routing_candidates_not_expanded"
         )
         self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(evidence["blocker_type"], "observability")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_insufficient"
         )
@@ -6412,11 +6440,13 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["changed_files"], [])
         evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_strength"], "partial")
         self.assertEqual(
-            evidence["evidence_strength"],
-            "selected_backend_outside_active_candidates",
+            evidence["evidence_reason"], "selected_backend_outside_active_candidates"
         )
         self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(evidence["blocker_type"], "contradicted_state")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_contradicted"
         )
@@ -6439,11 +6469,15 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_UNAVAILABLE"
+        )
         self.assertEqual(payload["changed_files"], [])
         evidence = payload["rotation_evidence_result"]
         self.assertEqual(evidence["stable_inventory_status"], "missing")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_unavailable")
         self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "observability")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_unknown"
         )
@@ -6457,13 +6491,46 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
         evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_unknown")
+        self.assertEqual(evidence["evidence_strength"], "none")
+        self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_missing")
+        self.assertFalse(evidence["selected_backend_snapshot_present"])
+        self.assertEqual(evidence["selected_backend_ids"], [])
+        self.assertEqual(evidence["selected_backend_ids_observed"], [])
         self.assertEqual(
-            evidence["evidence_strength"], "selected_backend_snapshot_missing"
+            evidence["active_routing_candidate_ids_observed"],
+            ["backend-a", "backend-b"],
         )
         self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "observability")
         self.assertEqual(
             evidence["final_outcome"], "participation_evidence_unknown"
         )
+
+    def test_rollout_rotation_inspect_reports_stale_selected_snapshot(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids_observed_at"] = "2026-05-03T00:00:00+00:00"
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_STALE")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["observed_at_utc"], "2026-05-03T00:00:00+00:00")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_stale")
+        self.assertEqual(evidence["evidence_strength"], "partial")
+        self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_stale")
+        self.assertEqual(evidence["evidence_freshness"], "stale")
+        self.assertTrue(evidence["selected_backend_snapshot_present"])
+        self.assertEqual(evidence["participation_status"], "stale")
+        self.assertEqual(evidence["blocker_type"], "stale_state")
+        self.assertEqual(evidence["final_outcome"], "participation_evidence_stale")
 
     def test_rollout_rotation_inspect_reports_unknown_for_invalid_runtime_active_count(
         self,
@@ -6483,10 +6550,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             evidence["active_pool_count_agreement_status"], "runtime_missing_or_invalid"
         )
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_unknown")
+        self.assertEqual(evidence["evidence_strength"], "none")
         self.assertEqual(
-            evidence["evidence_strength"], "runtime_active_count_missing_or_invalid"
+            evidence["evidence_reason"], "runtime_active_count_missing_or_invalid"
         )
         self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
 
     def test_rollout_rotation_inspect_reports_contradicted_for_active_count_mismatch(
         self,
@@ -6509,8 +6579,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["runtime_active_pool_count_observed"], 1)
         self.assertEqual(evidence["registry_active_pool_count_observed"], 2)
         self.assertEqual(evidence["active_pool_count_agreement_status"], "mismatched")
-        self.assertEqual(evidence["evidence_strength"], "active_pool_count_mismatched")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_strength"], "none")
+        self.assertEqual(evidence["evidence_reason"], "active_pool_count_mismatched")
         self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(evidence["blocker_type"], "contradicted_state")
 
     def test_rollout_rotation_inspect_reports_contradicted_for_ambiguous_registry_identity(
         self,
@@ -6536,8 +6609,11 @@ class CliTests(unittest.TestCase):
         )
         evidence = payload["rotation_evidence_result"]
         self.assertEqual(evidence["registry_identity_status"], "ambiguous")
-        self.assertEqual(evidence["evidence_strength"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_strength"], "none")
+        self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
         self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(evidence["blocker_type"], "contradicted_state")
 
     def test_rollout_rotation_inspect_reports_contradicted_for_policy_drift(
         self,
@@ -6554,8 +6630,11 @@ class CliTests(unittest.TestCase):
         )
         evidence = payload["rotation_evidence_result"]
         self.assertEqual(evidence["policy_drift_status"], "detected")
-        self.assertEqual(evidence["evidence_strength"], "policy_drift_detected")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_strength"], "none")
+        self.assertEqual(evidence["evidence_reason"], "policy_drift_detected")
         self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(evidence["blocker_type"], "contradicted_state")
 
     def test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence(
         self,

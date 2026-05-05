@@ -47,6 +47,8 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
+ROTATION_EVIDENCE_SCHEMA_VERSION = 1
+ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
     "10": {"active_min": 10, "active_target": 10, "reserve_target": 0},
     "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
@@ -789,6 +791,44 @@ def get_selected_backends_digest(state: dict[str, Any]) -> str:
     ids = state.get("selected_backend_ids") or []
     encoded = json.dumps(sorted(ids), separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def parse_utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def rotation_snapshot_observed_at(state: dict[str, Any]) -> str:
+    explicit_value = state.get("selected_backend_ids_observed_at")
+    if isinstance(explicit_value, str) and explicit_value.strip():
+        return explicit_value.strip()
+    return ""
+
+
+def rotation_snapshot_freshness(state: dict[str, Any]) -> str:
+    explicit_value = state.get("selected_backend_ids_observed_at")
+    if not isinstance(explicit_value, str) or not explicit_value.strip():
+        return "unknown"
+    observed_at = parse_utc_datetime(explicit_value)
+    current_time = parse_utc_datetime(now_iso())
+    if observed_at is None or current_time is None:
+        return "unknown"
+    age_seconds = (current_time - observed_at).total_seconds()
+    if age_seconds < 0:
+        return "unknown"
+    if age_seconds > ROTATION_EVIDENCE_FRESHNESS_SECONDS:
+        return "stale"
+    return "fresh"
 
 
 def get_auth_basename(auth_ref: Any) -> str:
@@ -4801,9 +4841,20 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
 
 def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
     evidence_result: dict[str, Any] = {
+        "schema_version": ROTATION_EVIDENCE_SCHEMA_VERSION,
         "status": "owner_path_emitted",
         "attempted": True,
         "requested_scope": "expanded-active-pool",
+        "observed_at_utc": "",
+        "evidence_status": "pending_observation",
+        "evidence_strength": "none",
+        "evidence_reason": "pending",
+        "evidence_source": "runtime_state.selected_backend_ids",
+        "evidence_source_layer": "control_layer_supervisor_snapshot",
+        "evidence_freshness": "unknown",
+        "selected_backend_snapshot_present": False,
+        "selected_backend_ids": [],
+        "selected_backends_digest": get_selected_backends_digest({}),
         "selected_backend_ids_observed": [],
         "active_pool_count_observed": 0,
         "runtime_active_pool_count_observed": None,
@@ -4821,8 +4872,9 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "stable_policy_drift",
             "registry_identity",
         ],
-        "evidence_strength": "pending",
         "participation_status": "pending",
+        "participation_summary": {},
+        "blocker_type": "none",
         "claim_scope": "bounded_local_participation_evidence_only",
         "final_outcome": "pending_observation",
     }
@@ -4834,6 +4886,9 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         policy_drift = get_stable_policy_drift(paths, registry)
         pool_counts = summarize_registry_pool_counts(registry)
         selected_backend_ids = selected_backend_ids_from_state(state)
+        selected_snapshot_observed_at = rotation_snapshot_observed_at(state)
+        selected_snapshot_freshness = rotation_snapshot_freshness(state)
+        selected_backends_digest = get_selected_backends_digest(state)
         active_routing_candidate_ids = get_active_routing_candidate_backend_ids(registry)
         runtime_active_pool_count_observed = coerce_nonnegative_int(
             state.get("active_count")
@@ -4846,6 +4901,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             else "missing"
         )
 
+    evidence_result["observed_at_utc"] = selected_snapshot_observed_at
+    evidence_result["evidence_freshness"] = selected_snapshot_freshness
+    evidence_result["selected_backend_snapshot_present"] = bool(selected_backend_ids)
+    evidence_result["selected_backend_ids"] = selected_backend_ids
+    evidence_result["selected_backends_digest"] = selected_backends_digest
     evidence_result["selected_backend_ids_observed"] = selected_backend_ids
     evidence_result["runtime_active_pool_count_observed"] = (
         runtime_active_pool_count_observed
@@ -4880,18 +4940,24 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is contradicted because registry identity is ambiguous."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "registry_identity_ambiguous"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "registry_identity_ambiguous"
         evidence_result["participation_status"] = "contradicted"
+        evidence_result["evidence_status"] = "participation_evidence_contradicted"
+        evidence_result["blocker_type"] = "contradicted_state"
         evidence_result["final_outcome"] = "participation_evidence_contradicted"
         ok = False
     elif stable_inventory_status != "available":
-        machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+        machine_error_code = "ROTATION_EVIDENCE_UNAVAILABLE"
         human_message = (
             "Rotation participation evidence is unknown because the stable inventory is not locally available."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "stable_inventory_missing"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "stable_inventory_missing"
         evidence_result["participation_status"] = "unknown"
+        evidence_result["evidence_status"] = "participation_evidence_unavailable"
+        evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_unknown"
         ok = False
     elif evidence_result["policy_drift_status"] != "clear":
@@ -4900,8 +4966,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is contradicted because stable policy drift is still detected."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "policy_drift_detected"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "policy_drift_detected"
         evidence_result["participation_status"] = "contradicted"
+        evidence_result["evidence_status"] = "participation_evidence_contradicted"
+        evidence_result["blocker_type"] = "contradicted_state"
         evidence_result["final_outcome"] = "participation_evidence_contradicted"
         ok = False
     elif evidence_result["active_pool_count_agreement_status"] == "runtime_missing_or_invalid":
@@ -4910,8 +4979,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is unknown because runtime active-pool count is missing or invalid."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "runtime_active_count_missing_or_invalid"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "runtime_active_count_missing_or_invalid"
         evidence_result["participation_status"] = "unknown"
+        evidence_result["evidence_status"] = "participation_evidence_unknown"
+        evidence_result["blocker_type"] = "schema_gap"
         evidence_result["final_outcome"] = "participation_evidence_unknown"
         ok = False
     elif evidence_result["active_pool_count_agreement_status"] == "mismatched":
@@ -4920,8 +4992,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is contradicted because runtime and registry active-pool counts do not agree."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "active_pool_count_mismatched"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "active_pool_count_mismatched"
         evidence_result["participation_status"] = "contradicted"
+        evidence_result["evidence_status"] = "participation_evidence_contradicted"
+        evidence_result["blocker_type"] = "contradicted_state"
         evidence_result["final_outcome"] = "participation_evidence_contradicted"
         ok = False
     elif registry_active_pool_count_observed < 2:
@@ -4930,8 +5005,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is insufficient because the active pool is not yet observably expanded."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "active_pool_not_expanded"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "active_pool_not_expanded"
         evidence_result["participation_status"] = "insufficient"
+        evidence_result["evidence_status"] = "participation_evidence_insufficient"
+        evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_insufficient"
         ok = False
     elif len(active_routing_candidate_ids) < 2:
@@ -4940,8 +5018,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is insufficient because routing-eligible active candidates are not yet observably expanded."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "active_routing_candidates_not_expanded"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "active_routing_candidates_not_expanded"
         evidence_result["participation_status"] = "insufficient"
+        evidence_result["evidence_status"] = "participation_evidence_insufficient"
+        evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_insufficient"
         ok = False
     elif not selected_backend_ids:
@@ -4950,9 +5031,25 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is unknown because no selected backend snapshot is currently materialized."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "selected_backend_snapshot_missing"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = "selected_backend_snapshot_missing"
         evidence_result["participation_status"] = "unknown"
+        evidence_result["evidence_status"] = "participation_evidence_unknown"
+        evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_unknown"
+        ok = False
+    elif selected_snapshot_freshness == "stale":
+        machine_error_code = "ROTATION_EVIDENCE_STALE"
+        human_message = (
+            "Rotation participation evidence is stale because the selected backend snapshot is outside the freshness window."
+        )
+        operator_action = "retry"
+        evidence_result["evidence_strength"] = "partial"
+        evidence_result["evidence_reason"] = "selected_backend_snapshot_stale"
+        evidence_result["participation_status"] = "stale"
+        evidence_result["evidence_status"] = "participation_evidence_stale"
+        evidence_result["blocker_type"] = "stale_state"
+        evidence_result["final_outcome"] = "participation_evidence_stale"
         ok = False
     elif not selected_backend_id_set.issubset(active_routing_candidate_id_set):
         machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
@@ -4960,10 +5057,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is contradicted because selected backends do not match routing-eligible active candidates."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = (
-            "selected_backend_outside_active_candidates"
-        )
+        evidence_result["evidence_strength"] = "partial"
+        evidence_result["evidence_reason"] = "selected_backend_outside_active_candidates"
         evidence_result["participation_status"] = "contradicted"
+        evidence_result["evidence_status"] = "participation_evidence_contradicted"
+        evidence_result["blocker_type"] = "contradicted_state"
         evidence_result["final_outcome"] = "participation_evidence_contradicted"
         ok = False
     elif len(selected_backend_id_set) < 2:
@@ -4972,8 +5070,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Rotation participation evidence is insufficient because only a single selected backend is visible in the bounded local snapshot."
         )
         operator_action = "user_action"
-        evidence_result["evidence_strength"] = "single_backend_snapshot_only"
+        evidence_result["evidence_strength"] = "partial"
+        evidence_result["evidence_reason"] = "single_backend_snapshot_only"
         evidence_result["participation_status"] = "insufficient"
+        evidence_result["evidence_status"] = "participation_evidence_insufficient"
+        evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_insufficient"
         ok = False
     else:
@@ -4982,10 +5083,25 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
             "Bounded local rotation participation evidence is available."
         )
         operator_action = "none"
-        evidence_result["evidence_strength"] = "multi_backend_snapshot"
+        evidence_result["evidence_strength"] = "partial"
+        evidence_result["evidence_reason"] = "multi_backend_snapshot"
         evidence_result["participation_status"] = "available"
+        evidence_result["evidence_status"] = "participation_evidence_present"
+        evidence_result["blocker_type"] = "none"
         evidence_result["final_outcome"] = "participation_evidence_available"
         ok = True
+
+    evidence_result["participation_summary"] = {
+        "status": evidence_result["participation_status"],
+        "final_outcome": evidence_result["final_outcome"],
+        "selected_backend_count": len(selected_backend_ids),
+        "active_routing_candidate_count": len(active_routing_candidate_ids),
+        "registry_active_pool_count": registry_active_pool_count_observed,
+        "runtime_active_pool_count": runtime_active_pool_count_observed,
+        "active_pool_count_agreement_status": evidence_result[
+            "active_pool_count_agreement_status"
+        ],
+    }
 
     return build_command_payload(
         ok=ok,

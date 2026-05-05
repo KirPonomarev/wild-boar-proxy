@@ -124,12 +124,22 @@ Optional fields currently supported by the local contour:
 - `healthy_count`
 - `degraded_count`
 - `down_count`
+- `selected_backend_ids_observed_at`
 - `probe_port`
 - `last_proxy_discovery_at`
 - `last_full_deep_probe_at`
 - `last_known_good_proxy_url`
 - `last_known_good_proxy_observed_at`
 - `stable_runtime_consumer_snapshot`
+
+`selected_backend_ids` is a supervisor/runtime snapshot field.
+It is not registry lifecycle truth and must not be inferred from active registry
+ids or active registry counts.
+
+If `selected_backend_ids_observed_at` is present, it records when the selected
+backend snapshot was observed.
+Consumers may use it for freshness classification, but cached freshness does
+not override live runtime checks.
 
 If `last_known_good_proxy_url` and `last_known_good_proxy_observed_at` are
 materialized, they are:
