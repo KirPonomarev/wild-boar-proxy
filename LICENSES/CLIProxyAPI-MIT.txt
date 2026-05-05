@@ -1,7 +1,12 @@
 MIT License
 
-The upstream CLIProxyAPI project is represented in this repository as a
-third-party engine dependency. The exact upstream snapshot and its final
-packaging method must be re-confirmed before any bundled release is published.
+This note tracks the upstream license status of the third-party CLIProxyAPI
+engine dependency represented in this repository.
+
+The exact upstream snapshot and its final packaging method must be re-confirmed
+before any bundled release is published.
 
 At bootstrap time, the project is tracked as MIT-licensed.
+
+This file does not replace or narrow the upstream license terms, and it is not
+relicensed by the Wild Boar Proxy repo license switch.
