@@ -18,6 +18,7 @@ from wild_boar_proxy.ui_shell import (
     load_runtime_snapshot,
     main,
     parse_exact_json_object,
+    run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
     run_mode_control_and_refresh,
     run_sync_and_refresh,
@@ -410,7 +411,101 @@ class AccountCheckTests(unittest.TestCase):
         self.assertEqual(runner.calls[0], ("accounts", "validate", "backend-a", "--json"))
 
 
+class AccountMutationTests(unittest.TestCase):
+    def test_run_account_mutation_and_refresh_uses_accounts_list_then_status(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "promote", "backend-b", "--json"): command_payload(
+                    human_message="Account promoted."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(
+                    accounts=[
+                        {
+                            "id": "backend-b",
+                            "label": "Backend B",
+                            "pool": "active",
+                            "manual_hold": False,
+                            "status": "healthy",
+                            "fail_count": 0,
+                            "success_count": 1,
+                            "last_success": "2026-05-05T11:00:00+00:00",
+                            "last_error": "",
+                            "cooldown_until": None,
+                            "notes": "",
+                        }
+                    ]
+                ),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_account_mutation_and_refresh(
+            runner, ("accounts", "promote", "backend-b", "--json")
+        )
+
+        self.assertEqual(action_payload["human_message"], "Account promoted.")
+        self.assertEqual(runtime_snapshot.overall_state, "ok")
+        self.assertEqual(account_snapshot.active_count, 1)
+        self.assertNotIn(("mode", "get", "--json"), runner.calls)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "promote", "backend-b", "--json"),
+                ("accounts", "list", "--json"),
+                ("status", "--json"),
+            ],
+        )
+
+    def test_run_account_mutation_and_refresh_rejects_broken_accounts_refresh(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "hold", "backend-a", "--json"): command_payload(
+                    human_message="Account held."
+                ),
+                ("accounts", "list", "--json"): command_payload(
+                    human_message="Account registry snapshot is available.",
+                    registry_identity={
+                        "status": "clear",
+                        "machine_error_code": "OK",
+                        "next_action": "none",
+                    },
+                ),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        with self.assertRaisesRegex(UiShellError, "accounts"):
+            run_account_mutation_and_refresh(runner, ("accounts", "hold", "backend-a", "--json"))
+
+    def test_run_account_mutation_and_refresh_rejects_broken_status_refresh(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "release", "backend-a", "--json"): command_payload(
+                    human_message="Account released."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): command_payload(
+                    human_message="Runtime status summary is available.",
+                    machine_error_code="OK",
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(UiShellError, "liveness"):
+            run_account_mutation_and_refresh(
+                runner, ("accounts", "release", "backend-a", "--json")
+            )
+
+
 class UiDispatchTests(unittest.TestCase):
+    def test_run_validate_action_delegates_to_account_check_alias(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_check_action = mock.Mock()
+
+        shell.run_validate_action()
+
+        shell._run_account_check_action.assert_called_once_with("Validate")
+
     def test_run_recheck_action_delegates_to_account_check_alias(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell._run_account_check_action = mock.Mock()
@@ -418,6 +513,112 @@ class UiDispatchTests(unittest.TestCase):
         shell.run_recheck_action()
 
         shell._run_account_check_action.assert_called_once_with("Recheck")
+
+    def test_account_mutation_action_without_selection_shows_info(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell._selected_account_id = mock.Mock(return_value=None)
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            shell._run_account_mutation_action(
+                "Promote",
+                "Promote selected reserve account into active routing?",
+                "promote",
+            )
+
+        showinfo_mock.assert_called_once()
+        shell.set_busy.assert_not_called()
+
+    def test_account_mutation_action_declines_without_starting_thread(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell._selected_account_id = mock.Mock(return_value="backend-a")
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell._run_account_mutation_action(
+                    "Hold",
+                    "Place selected account on hold and isolate it from active routing?",
+                    "hold",
+                )
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_account_check_action_starts_without_confirmation_gate(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell._selected_account_id = mock.Mock(return_value="backend-a")
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.threading.Thread", return_value=thread_instance) as thread_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", side_effect=AssertionError("unexpected confirmation")):
+                shell._run_account_check_action("Validate")
+
+        shell.set_busy.assert_called_once_with(True)
+        shell.banner_var.set.assert_called_once_with("Running validate...")
+        thread_mock.assert_called_once()
+        thread_instance.start.assert_called_once_with()
+
+    def test_run_promote_action_maps_to_generic_mutation_handler(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_mutation_action = mock.Mock()
+
+        shell.run_promote_action()
+
+        shell._run_account_mutation_action.assert_called_once_with(
+            "Promote",
+            "Promote selected reserve account into active routing?",
+            "promote",
+        )
+
+    def test_run_demote_action_maps_to_generic_mutation_handler(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_mutation_action = mock.Mock()
+
+        shell.run_demote_action()
+
+        shell._run_account_mutation_action.assert_called_once_with(
+            "Demote",
+            "Demote selected active account back to reserve?",
+            "demote",
+        )
+
+    def test_run_hold_action_maps_to_generic_mutation_handler(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_mutation_action = mock.Mock()
+
+        shell.run_hold_action()
+
+        shell._run_account_mutation_action.assert_called_once_with(
+            "Hold",
+            "Place selected account on hold and isolate it from active routing?",
+            "hold",
+        )
+
+    def test_run_release_action_maps_to_generic_mutation_handler(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._run_account_mutation_action = mock.Mock()
+
+        shell.run_release_action()
+
+        shell._run_account_mutation_action.assert_called_once_with(
+            "Release",
+            "Release selected held account back to reserve semantics?",
+            "release",
+        )
+
+    def test_retire_action_is_not_exposed_in_wave_1g(self) -> None:
+        self.assertFalse(hasattr(MinimalCompanionShell, "run_retire_action"))
 
 
 class MainTests(unittest.TestCase):
