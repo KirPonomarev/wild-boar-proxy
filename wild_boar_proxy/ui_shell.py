@@ -84,6 +84,18 @@ CLIENT_LAUNCH_RESULT_FIELDS = (
     "launch_claim_scope",
     "final_outcome",
 )
+SMOKE_RESULT_FIELDS = (
+    "launch_mode",
+    "desired_mode",
+    "effective_mode",
+    "endpoint",
+    "current_proxy_url",
+    "launcher_exit_code",
+    "stabilization_seconds",
+    "last_error",
+    "attestation_summary",
+    "stable_runtime_consumer",
+)
 ACCOUNT_CAPACITY_TARGET = 20
 
 
@@ -445,6 +457,15 @@ def run_launch_client_and_refresh(
     return action_result.payload, snapshot
 
 
+def run_smoke_and_refresh(
+    runner: JsonCommandRunner,
+) -> tuple[dict[str, Any], RuntimeSnapshot]:
+    action_result = runner.run("launch", "smoke", "--json")
+    status_payload = runner.run("status", "--json").payload
+    snapshot = build_runtime_snapshot(status_payload=status_payload)
+    return action_result.payload, snapshot
+
+
 def run_sync_and_refresh(
     runner: JsonCommandRunner,
 ) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
@@ -566,6 +587,36 @@ def classify_client_launch_rendered_state(
     return "unknown"
 
 
+def build_smoke_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in SMOKE_RESULT_FIELDS}
+    for field in SMOKE_RESULT_FIELDS:
+        if field not in action_payload:
+            continue
+        value = action_payload[field]
+        if field in {"attestation_summary", "stable_runtime_consumer"} and not isinstance(
+            value, dict
+        ):
+            raise UiShellError(f"{field} must be an object when present")
+        result[field] = format_onboarding_value(value)
+    return result
+
+
+def classify_smoke_rendered_state(
+    action_payload: dict[str, Any], *, malformed: bool
+) -> str:
+    if malformed:
+        return "integration_failure"
+    command_status = str(action_payload.get("status", ""))
+    if command_status == "integration_failure":
+        return "integration_failure"
+    if command_status != "ok":
+        return "failure"
+    launch_mode = str(action_payload.get("launch_mode", ""))
+    if launch_mode != "smoke":
+        return "unknown"
+    return "bounded_runtime_smoke_only"
+
+
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
         self.root = root
@@ -614,6 +665,17 @@ class MinimalCompanionShell:
         self.launch_field_vars = {
             field: StringVar(value="")
             for field in CLIENT_LAUNCH_RESULT_FIELDS
+        }
+        self.smoke_command_status_var = StringVar(value="")
+        self.smoke_command_exit_code_var = StringVar(value="")
+        self.smoke_command_human_message_var = StringVar(value="")
+        self.smoke_command_machine_error_var = StringVar(value="")
+        self.smoke_command_changed_files_var = StringVar(value="")
+        self.smoke_command_next_action_var = StringVar(value="")
+        self.smoke_rendered_state_var = StringVar(value="unknown")
+        self.smoke_field_vars = {
+            field: StringVar(value="")
+            for field in SMOKE_RESULT_FIELDS
         }
 
         self._build_layout()
@@ -681,6 +743,11 @@ class MinimalCompanionShell:
             controls_box,
             text="Run Managed Sync",
             command=self.run_sync_action,
+        ).pack(fill="x", pady=4)
+        ttk.Button(
+            controls_box,
+            text="Smoke Test",
+            command=self.run_smoke_action,
         ).pack(fill="x", pady=4)
         launch_box = ttk.LabelFrame(controls_box, text="Launch Client", padding=8)
         launch_box.pack(fill="x", pady=(8, 0))
@@ -751,6 +818,57 @@ class MinimalCompanionShell:
             ("Final outcome", "final_outcome"),
         ):
             self._add_status_row(launch_box, label, self.launch_field_vars[field])
+
+        smoke_box = ttk.LabelFrame(controls_box, text="Smoke Test", padding=8)
+        smoke_box.pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            smoke_box,
+            "Rendered state",
+            self.smoke_rendered_state_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Command status",
+            self.smoke_command_status_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Exit code",
+            self.smoke_command_exit_code_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Human message",
+            self.smoke_command_human_message_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Machine error",
+            self.smoke_command_machine_error_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Changed files",
+            self.smoke_command_changed_files_var,
+        )
+        self._add_status_row(
+            smoke_box,
+            "Next action",
+            self.smoke_command_next_action_var,
+        )
+        for label, field in (
+            ("Launch mode", "launch_mode"),
+            ("Desired mode", "desired_mode"),
+            ("Effective mode", "effective_mode"),
+            ("Endpoint", "endpoint"),
+            ("Current proxy", "current_proxy_url"),
+            ("Launcher exit", "launcher_exit_code"),
+            ("Stabilization", "stabilization_seconds"),
+            ("Last error", "last_error"),
+            ("Attestation", "attestation_summary"),
+            ("Stable consumer", "stable_runtime_consumer"),
+        ):
+            self._add_status_row(smoke_box, label, self.smoke_field_vars[field])
 
         onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
         onboarding_box.pack(fill="x", pady=(16, 0))
@@ -1037,6 +1155,19 @@ class MinimalCompanionShell:
             daemon=True,
         ).start()
 
+    def run_smoke_action(self) -> None:
+        if self._busy:
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run runtime smoke test and refresh runtime truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running smoke test...")
+        threading.Thread(target=self._smoke_worker, daemon=True).start()
+
     def run_onboard_action(self) -> None:
         if self._busy:
             return
@@ -1213,6 +1344,38 @@ class MinimalCompanionShell:
             ),
         )
 
+    def _smoke_worker(self) -> None:
+        action_payload: dict[str, Any] | None = None
+        try:
+            action_payload = self.runner.run("launch", "smoke", "--json").payload
+            banner = str(action_payload.get("human_message", "Smoke test completed."))
+            try:
+                status_payload = self.runner.run("status", "--json").payload
+                runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
+            except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+                runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+                banner = "Operator action failed."
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = action_payload or {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_smoke_results(
+                action_payload,
+                runtime_snapshot,
+                banner=banner,
+            ),
+        )
+
     def _account_check_worker(self, backend_id: str) -> None:
         try:
             action_payload, account_snapshot = run_account_validate_and_refresh(
@@ -1282,6 +1445,42 @@ class MinimalCompanionShell:
         banner: str,
     ) -> None:
         self._apply_launch_client_payload(action_payload)
+        self._apply_runtime_snapshot(runtime_snapshot)
+        self.banner_var.set(banner)
+        self.set_busy(False)
+
+    def _apply_smoke_payload(self, action_payload: dict[str, Any]) -> None:
+        self.smoke_command_status_var.set(str(action_payload.get("status", "")))
+        self.smoke_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.smoke_command_human_message_var.set(str(action_payload.get("human_message", "")))
+        self.smoke_command_machine_error_var.set(str(action_payload.get("machine_error_code", "")))
+        self.smoke_command_next_action_var.set(str(action_payload.get("next_action", "")))
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.smoke_command_changed_files_var.set("")
+        else:
+            self.smoke_command_changed_files_var.set(format_onboarding_value(changed_files_value))
+        malformed_surface = False
+        try:
+            field_values = build_smoke_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in SMOKE_RESULT_FIELDS}
+            malformed_surface = True
+        for field, value in field_values.items():
+            self.smoke_field_vars[field].set(value)
+        rendered_state = classify_smoke_rendered_state(
+            action_payload, malformed=malformed_surface
+        )
+        self.smoke_rendered_state_var.set(rendered_state)
+
+    def _apply_smoke_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_smoke_payload(action_payload)
         self._apply_runtime_snapshot(runtime_snapshot)
         self.banner_var.set(banner)
         self.set_busy(False)
