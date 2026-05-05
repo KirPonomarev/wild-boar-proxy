@@ -1304,7 +1304,11 @@ def snapshot_path_state(path: Path) -> dict[str, Any]:
         return {"state": "missing"}
     if path.is_dir():
         return {"state": "dir"}
-    return {"state": "file", "text": path.read_text(encoding="utf-8")}
+    return {
+        "state": "file",
+        "text": path.read_text(encoding="utf-8"),
+        "mode": path.stat().st_mode & 0o777,
+    }
 
 
 def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
@@ -1320,6 +1324,23 @@ def restore_path_state(path: Path, snapshot: dict[str, Any]) -> None:
     tmp_path = path.with_name(f".{path.name}.tmp")
     tmp_path.write_text(str(snapshot.get("text", "")), encoding="utf-8")
     tmp_path.replace(path)
+    mode = snapshot.get("mode")
+    if isinstance(mode, int):
+        path.chmod(mode)
+
+
+def restore_rollout_stage_advance_inventory_dir_state(
+    path: Path, snapshot: dict[str, Any]
+) -> None:
+    state = snapshot.get("state")
+    if state == "missing":
+        if path.is_file() or path.is_symlink():
+            path.unlink(missing_ok=True)
+            return
+        if path.is_dir():
+            shutil.rmtree(path)
+        return
+    restore_path_state(path, snapshot)
 
 
 def snapshot_current_proxy_owner_path_runtime_surfaces(
@@ -4265,6 +4286,10 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
     return result
 
 
+def snapshot_path_states(candidates: list[Path]) -> dict[Path, dict[str, Any]]:
+    return {candidate: snapshot_path_state(candidate) for candidate in candidates}
+
+
 def detect_changed_files(
     before: dict[Path, tuple[int, int]], after_paths: list[Path]
 ) -> list[str]:
@@ -4277,6 +4302,16 @@ def detect_changed_files(
         stat_result = candidate.stat()
         after = (stat_result.st_mtime_ns, stat_result.st_mode)
         if before.get(candidate) != after:
+            changed.append(str(candidate))
+    return changed
+
+
+def detect_changed_files_by_state(
+    before: dict[Path, dict[str, Any]], after_paths: list[Path]
+) -> list[str]:
+    changed: list[str] = []
+    for candidate in after_paths:
+        if before.get(candidate) != snapshot_path_state(candidate):
             changed.append(str(candidate))
     return changed
 
@@ -5075,10 +5110,11 @@ def summarize_stable_10_rollback_readiness(
 
 def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
     before = snapshot_known_files(paths)
+    requested_stage_label = str(stage).strip()
     stage_proof_result: dict[str, Any] = {
         "status": "owner_path_emitted",
         "attempted": True,
-        "requested_stage": str(stage).strip(),
+        "requested_stage": requested_stage_label,
         "policy_stage_status": "pending",
         "policy_stage_observed": "",
         "policy_mapping_status": "pending",
@@ -5120,6 +5156,26 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         )
 
     requested_stage = stage_proof_result["requested_stage"]
+    stable_stage_label = f"Stable-{requested_stage}"
+    if requested_stage not in {"10", "15"}:
+        stage_proof_result["policy_stage_status"] = "unsupported_stage"
+        stage_proof_result["proof_gate_status"] = "blocked_by_requested_stage"
+        stage_proof_result["final_outcome"] = "proof_blocked"
+        stage_proof_result["delegated_evidence"] = {
+            "stage_mapping_summary": {
+                "status": "unowned_stage",
+                "machine_error_code": "STAGE_PROOF_STAGE_UNOWNED",
+                "requested_stage": requested_stage,
+            }
+        }
+        return build_stage_proof_payload(
+            ok=False,
+            human_message=(
+                f"{stable_stage_label} proof is blocked because this stage does not yet own a proof surface."
+            ),
+            machine_error_code="STAGE_PROOF_STAGE_UNOWNED",
+            operator_action="user_action",
+        )
     stage_mapping = summarize_stage_pool_policy_mapping(requested_stage)
     stage_proof_result["policy_mapping_status"] = str(
         stage_mapping.get("status", "unsupported")
@@ -5133,7 +5189,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         }
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because the requested stage is not supported.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because the requested stage is not supported."
+            ),
             machine_error_code=str(
                 stage_mapping.get("machine_error_code", "POOL_POLICY_STAGE_UNSUPPORTED")
             ),
@@ -5151,12 +5209,17 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         "stage_mapping_summary": stage_mapping,
         "policy_stage_summary": observed_stage,
     }
-    if observed_stage.get("status") != "matched" or observed_stage.get("observed_stage") != "10":
+    if (
+        observed_stage.get("status") != "matched"
+        or observed_stage.get("observed_stage") != requested_stage
+    ):
         stage_proof_result["proof_gate_status"] = "blocked_by_stage_policy_mismatch"
         stage_proof_result["final_outcome"] = "stage_policy_mismatch"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because current staged policy does not match canonical stage 10.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because current staged policy does not match canonical stage {requested_stage}."
+            ),
             machine_error_code="STAGE_PROOF_POLICY_MISMATCH",
             operator_action="user_action",
         )
@@ -5199,7 +5262,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         )
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because observed pool counts are not aligned with canonical stage 10 targets.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because observed pool counts are not aligned with canonical stage {requested_stage} targets."
+            ),
             machine_error_code="STAGE_PROOF_ACTIVE_POOL_MISMATCH",
             operator_action="user_action",
         )
@@ -5209,7 +5274,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "rotation_evidence_contradicted"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because bounded rotation evidence is contradicted.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because bounded rotation evidence is contradicted."
+            ),
             machine_error_code="STAGE_PROOF_ROTATION_CONTRADICTED",
             operator_action="user_action",
         )
@@ -5218,7 +5285,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "rotation_evidence_insufficient"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because bounded rotation evidence is insufficient.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because bounded rotation evidence is insufficient."
+            ),
             machine_error_code="STAGE_PROOF_ROTATION_INSUFFICIENT",
             operator_action="user_action",
         )
@@ -5227,7 +5296,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "proof_blocked"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because bounded rotation evidence is not available.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because bounded rotation evidence is not available."
+            ),
             machine_error_code="STAGE_PROOF_ROTATION_UNKNOWN",
             operator_action="user_action",
         )
@@ -5289,14 +5360,16 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
     if (
         reserve_target is None
         or reserve_pool_count_observed is None
-        or reserve_pool_count_observed < reserve_target
+        or reserve_pool_count_observed != reserve_target
     ):
         stage_proof_result["proof_gate_status"] = "blocked_by_reserve_pool_alignment"
-        stage_proof_result["final_outcome"] = "proof_blocked"
+        stage_proof_result["final_outcome"] = "reserve_posture_mismatch"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because reserve pool posture is not aligned with canonical stage 10 targets.",
-            machine_error_code="STAGE_PROOF_ACTIVE_POOL_MISMATCH",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because reserve pool posture is not aligned with canonical stage {requested_stage} targets."
+            ),
+            machine_error_code="STAGE_PROOF_RESERVE_POSTURE_MISMATCH",
             operator_action="user_action",
         )
 
@@ -5305,7 +5378,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "runtime_attestation_failed"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because live managed runtime attestation did not pass.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because live managed runtime attestation did not pass."
+            ),
             machine_error_code="STAGE_PROOF_ATTESTATION_FAILED",
             operator_action="retry",
         )
@@ -5315,7 +5390,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "rollback_readiness_failed"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because rollback readiness is not available.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because rollback readiness is not available."
+            ),
             machine_error_code=str(
                 pre_rollback_readiness.get(
                     "machine_error_code", "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
@@ -5342,7 +5419,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "runtime_smoke_failed"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because bounded runtime smoke did not pass.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because bounded runtime smoke did not pass."
+            ),
             machine_error_code="STAGE_PROOF_SMOKE_FAILED",
             operator_action="retry",
             exit_code=int(smoke_payload.get("exit_code", 1) or 1),
@@ -5399,7 +5478,7 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         return build_stage_proof_payload(
             ok=False,
             human_message=(
-                "Stable-10 proof is blocked because bounded runtime smoke did not preserve a healthy managed runtime proof surface."
+                f"{stable_stage_label} proof is blocked because bounded runtime smoke did not preserve a healthy managed runtime proof surface."
             ),
             machine_error_code="STAGE_PROOF_SMOKE_FAILED",
             operator_action="retry",
@@ -5410,7 +5489,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         stage_proof_result["final_outcome"] = "rollback_readiness_failed"
         return build_stage_proof_payload(
             ok=False,
-            human_message="Stable-10 proof is blocked because rollback readiness is not available.",
+            human_message=(
+                f"{stable_stage_label} proof is blocked because rollback readiness is not available."
+            ),
             machine_error_code=str(
                 post_rollback_readiness.get(
                     "machine_error_code", "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
@@ -5419,11 +5500,699 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    stage_proof_result["proof_gate_status"] = "stable_10_gate_closed"
-    stage_proof_result["final_outcome"] = "stable_10_proved"
+    stage_proof_result["proof_gate_status"] = f"stable_{requested_stage}_gate_closed"
+    stage_proof_result["final_outcome"] = f"stable_{requested_stage}_proved"
     return build_stage_proof_payload(
         ok=True,
-        human_message="Stable-10 proof gate is closed with bounded delegated evidence.",
+        human_message=(
+            f"{stable_stage_label} proof gate is closed with bounded delegated evidence."
+        ),
+        machine_error_code="OK",
+    )
+
+
+def summarize_rollout_stage_advance_preflight(
+    paths: RuntimePaths,
+) -> tuple[bool, str, str, dict[str, Any]]:
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    status_payload = summarize_status(paths, health_payload=health_payload)
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+
+    attestation_ok = (
+        health_payload.get("status") == "ok"
+        and str(health_payload.get("effective_mode")) == "managed"
+    )
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    consumer = status_payload.get("stable_runtime_consumer", {})
+    readiness = summarize_stable_10_rollback_readiness(health_payload, status_payload)
+    readiness_ok = readiness.get("status") == "ready"
+
+    summary = {
+        "attestation_status": "passed" if attestation_ok else "failed",
+        "rotation_status": rotation_status,
+        "readiness_status": "ready" if readiness_ok else "failed",
+        "healthcheck_summary": {
+            "status": health_payload.get("status"),
+            "machine_error_code": health_payload.get("machine_error_code"),
+            "effective_mode": health_payload.get("effective_mode"),
+            "liveness": health_payload.get("liveness"),
+        },
+        "status_summary": summarize_owner_path_status_observation(status_payload),
+        "rotation_summary": {
+            "status": rotation_payload.get("status"),
+            "machine_error_code": rotation_payload.get("machine_error_code"),
+            "rotation_evidence_result": rotation_result,
+        },
+        "readiness_summary": readiness,
+    }
+
+    if not attestation_ok:
+        return (
+            False,
+            "STAGE_ADVANCE_PREFLIGHT_ATTESTATION_FAILED",
+            "retry",
+            summary,
+        )
+    if rotation_status != "available":
+        return False, "STAGE_ADVANCE_PREFLIGHT_ROTATION_FAILED", "user_action", summary
+    if not readiness_ok:
+        return False, "STAGE_ADVANCE_PREFLIGHT_READINESS_FAILED", "user_action", summary
+    return True, "OK", "none", summary
+
+
+def materialize_rollout_stage_advance_stable_auth(
+    paths: RuntimePaths,
+    backend: dict[str, Any],
+) -> dict[str, Any]:
+    auth_ref = Path(str(backend.get("auth_ref") or "")).expanduser()
+    auth_basename = get_auth_basename(backend.get("auth_ref"))
+    if not auth_basename:
+        raise RuntimeErrorInfo(
+            "Rollout stage advance cannot materialize stable inventory because the promoted backend auth basename is invalid.",
+            machine_error_code="STAGE_ADVANCE_AUTH_BASENAME_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if not auth_ref.is_file():
+        raise RuntimeErrorInfo(
+            "Rollout stage advance cannot materialize stable inventory because the promoted backend auth source is missing.",
+            machine_error_code="STAGE_ADVANCE_AUTH_SOURCE_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    stable_auth_dir.mkdir(parents=True, exist_ok=True)
+    target_path = stable_auth_dir / auth_basename
+    if auth_ref.resolve() != target_path.resolve():
+        shutil.copy2(auth_ref, target_path)
+    if target_path.read_bytes() != auth_ref.read_bytes():
+        raise RuntimeErrorInfo(
+            "Rollout stage advance stable inventory verification failed after copying the promoted auth.",
+            machine_error_code="STAGE_ADVANCE_STABLE_INVENTORY_VERIFY_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        )
+    return {
+        "auth_basename": auth_basename,
+        "source_auth_ref": str(auth_ref),
+        "target_path": str(target_path),
+        "target_dir": str(stable_auth_dir),
+        "inventory_source": inventory_source,
+    }
+
+
+def summarize_rollout_stage_advance_postflight(
+    paths: RuntimePaths,
+    *,
+    expected_stage: str,
+    backend_id: str,
+    active_pool_count_before: int,
+) -> tuple[bool, str, str, dict[str, Any]]:
+    registry = read_json(paths.registry_file)
+    observed_stage = observe_current_stage_from_pool_policy(registry)
+    pool_counts = summarize_registry_pool_counts(registry)
+    backend_matches = get_registry_backends_by_id(registry, backend_id)
+    promoted_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    status_payload = summarize_status(paths, health_payload=health_payload)
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+    readiness = summarize_stable_10_rollback_readiness(health_payload, status_payload)
+
+    desired_policy = STAGED_POOL_POLICY_PACKETS.get(expected_stage, {})
+    active_target = coerce_nonnegative_int(desired_policy.get("active_target"))
+    reserve_target = coerce_nonnegative_int(desired_policy.get("reserve_target"))
+    active_pool_count_after = int(pool_counts.get("active", 0) or 0)
+    reserve_pool_count_after = int(pool_counts.get("reserve", 0) or 0)
+    policy_ok = (
+        observed_stage.get("status") == "matched"
+        and str(observed_stage.get("observed_stage", "")) == expected_stage
+    )
+    backend_promoted_ok = bool(
+        isinstance(promoted_backend, dict)
+        and str(promoted_backend.get("pool", "")) == "active"
+        and not bool(promoted_backend.get("manual_hold", False))
+    )
+    active_step_ok = (
+        active_pool_count_after == active_pool_count_before + 1
+        and (active_target is None or active_pool_count_after <= active_target)
+    )
+    reserve_step_ok = (
+        reserve_target is None or reserve_pool_count_after == reserve_target
+    )
+    attestation_ok = (
+        health_payload.get("status") == "ok"
+        and str(health_payload.get("effective_mode")) == "managed"
+    )
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    readiness_ok = readiness.get("status") == "ready"
+    summary = {
+        "policy_stage_status": (
+            "matched" if policy_ok else str(observed_stage.get("status", "invalid"))
+        ),
+        "policy_stage_observed": str(observed_stage.get("observed_stage", "")),
+        "promotion_verification_status": "passed"
+        if backend_promoted_ok and active_step_ok and reserve_step_ok
+        else "failed",
+        "active_pool_count_before": active_pool_count_before,
+        "active_pool_count_after": active_pool_count_after,
+        "active_target": active_target,
+        "reserve_pool_count_after": reserve_pool_count_after,
+        "reserve_target": reserve_target,
+        "backend_verification": {
+            "backend_id": backend_id,
+            "backend_match_count": len(backend_matches),
+            "backend_pool_observed": (
+                str(promoted_backend.get("pool", ""))
+                if isinstance(promoted_backend, dict)
+                else ""
+            ),
+            "backend_manual_hold_observed": (
+                bool(promoted_backend.get("manual_hold", False))
+                if isinstance(promoted_backend, dict)
+                else False
+            ),
+        },
+        "attestation_status": "passed" if attestation_ok else "failed",
+        "rotation_status": rotation_status,
+        "readiness_status": "ready" if readiness_ok else "failed",
+        "healthcheck_summary": {
+            "status": health_payload.get("status"),
+            "machine_error_code": health_payload.get("machine_error_code"),
+            "effective_mode": health_payload.get("effective_mode"),
+            "liveness": health_payload.get("liveness"),
+        },
+        "status_summary": summarize_owner_path_status_observation(status_payload),
+        "rotation_summary": {
+            "status": rotation_payload.get("status"),
+            "machine_error_code": rotation_payload.get("machine_error_code"),
+            "rotation_evidence_result": rotation_result,
+        },
+        "readiness_summary": readiness,
+    }
+
+    if not policy_ok:
+        return False, "STAGE_ADVANCE_POSTFLIGHT_POLICY_FAILED", "user_action", summary
+    if not backend_promoted_ok or not active_step_ok or not reserve_step_ok:
+        return False, "STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED", "user_action", summary
+    if not attestation_ok:
+        return False, "STAGE_ADVANCE_POSTFLIGHT_ATTESTATION_FAILED", "retry", summary
+    if rotation_status != "available":
+        return False, "STAGE_ADVANCE_POSTFLIGHT_ROTATION_FAILED", "user_action", summary
+    if not readiness_ok:
+        return False, "STAGE_ADVANCE_POSTFLIGHT_READINESS_FAILED", "user_action", summary
+    return True, "OK", "none", summary
+
+
+def run_rollout_stage_advance(
+    paths: RuntimePaths, stage: str, backend_id: str
+) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    extra_write_surfaces: list[Path] = []
+    stateful_write_surfaces = runtime_write_surface_candidates(paths)
+    before_stateful = snapshot_path_states(stateful_write_surfaces)
+    before_extra_states: dict[Path, dict[str, Any]] = {}
+    stage_advancement_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_stage": str(stage).strip(),
+        "requested_backend_id": str(backend_id).strip(),
+        "preflight_stage10_proof_status": "not_invoked",
+        "preflight_policy_status": "pending",
+        "policy_transition_status": "not_invoked",
+        "promotion_status": "not_invoked",
+        "postflight_attestation_status": "not_checked",
+        "postflight_rotation_status": "not_checked",
+        "rollback_readiness_status": "not_checked",
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "delegated_evidence": {},
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_stage_advance_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str = "none",
+        severity: str = "recoverable",
+        exit_code: int | None = None,
+    ) -> dict[str, Any]:
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files_by_state(
+                before_stateful | before_extra_states,
+                stateful_write_surfaces + extra_write_surfaces,
+            ),
+            extra={
+                "requested_stage": stage_advancement_result["requested_stage"],
+                "requested_backend_id": stage_advancement_result["requested_backend_id"],
+                "stage_advancement_result": stage_advancement_result,
+            },
+            exit_code=exit_code,
+        )
+
+    def rollback_after_failed_step(
+        *,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str,
+        exit_code: int | None = None,
+        snapshots: dict[str, dict[str, Any]] | None,
+        severity: str = "recoverable",
+        final_outcome: str = "rollback_completed_after_failed_step",
+    ) -> dict[str, Any]:
+        if snapshots is None:
+            stage_advancement_result["final_outcome"] = final_outcome
+            return build_stage_advance_payload(
+                ok=False,
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                operator_action=operator_action,
+                exit_code=exit_code,
+                severity=severity,
+            )
+
+        stage_advancement_result["rollback_attempted"] = True
+        try:
+            with serialized_lock(paths):
+                restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
+                stable_auth_entry_snapshot = snapshots.get("stable_auth_entry_file")
+                stable_auth_entry_path = snapshots.get("stable_auth_entry_path")
+                stable_auth_dir_snapshot = snapshots.get("stable_auth_dir")
+                stable_auth_dir_path = snapshots.get("stable_auth_dir_path")
+                if isinstance(stable_auth_entry_snapshot, dict) and isinstance(
+                    stable_auth_entry_path, str
+                ):
+                    restore_path_state(
+                        Path(stable_auth_entry_path), stable_auth_entry_snapshot
+                    )
+                if isinstance(stable_auth_dir_snapshot, dict) and isinstance(
+                    stable_auth_dir_path, str
+                ):
+                    restore_rollout_stage_advance_inventory_dir_state(
+                        Path(stable_auth_dir_path), stable_auth_dir_snapshot
+                    )
+            stage_advancement_result["rollback_outcome"] = "completed"
+            stage_advancement_result["final_outcome"] = final_outcome
+            return build_stage_advance_payload(
+                ok=False,
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                operator_action=operator_action,
+                exit_code=exit_code,
+                severity=severity,
+            )
+        except Exception as exc:  # noqa: BLE001
+            stage_advancement_result["rollback_outcome"] = "failed"
+            stage_advancement_result["final_outcome"] = "rollback_failed"
+            stage_advancement_result["delegated_evidence"]["rollback_error"] = str(exc)
+            return build_stage_advance_payload(
+                ok=False,
+                human_message=(
+                    f"{human_message} Rollback of rollout advancement state failed."
+                ),
+                machine_error_code="STAGE_ADVANCE_ROLLBACK_FAILED",
+                operator_action="stop",
+                exit_code=1,
+                severity="fatal",
+            )
+
+    requested_stage = stage_advancement_result["requested_stage"]
+    requested_backend_id = stage_advancement_result["requested_backend_id"]
+    if requested_stage != "15":
+        stage_advancement_result["final_outcome"] = "unsupported_target_stage"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance supports only target stage 15.",
+            machine_error_code="STAGE_ADVANCE_UNSUPPORTED_STAGE",
+            operator_action="user_action",
+        )
+    if not requested_backend_id:
+        stage_advancement_result["final_outcome"] = "backend_not_eligible"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance requires an explicit backend id.",
+            machine_error_code="STAGE_ADVANCE_BACKEND_ID_REQUIRED",
+            operator_action="user_action",
+        )
+
+    stage_mapping = summarize_stage_pool_policy_mapping(requested_stage)
+    stage_advancement_result["delegated_evidence"]["stage_mapping_summary"] = stage_mapping
+    if stage_mapping.get("status") != "ok":
+        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance target is not canonically supported.",
+            machine_error_code=str(
+                stage_mapping.get("machine_error_code", "POOL_POLICY_STAGE_UNSUPPORTED")
+            ),
+            operator_action="user_action",
+        )
+
+    registry = read_json(paths.registry_file)
+    observed_stage = observe_current_stage_from_pool_policy(registry)
+    stage_advancement_result["preflight_policy_status"] = str(
+        observed_stage.get("status", "invalid")
+    )
+    stage_advancement_result["delegated_evidence"]["policy_stage_summary"] = observed_stage
+    if observed_stage.get("status") != "matched":
+        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance is blocked because policy stage is not canonical.",
+            machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
+            operator_action="user_action",
+        )
+
+    current_stage = str(observed_stage.get("observed_stage", ""))
+    desired_policy = STAGED_POOL_POLICY_PACKETS["15"]
+    pool_counts = summarize_registry_pool_counts(registry)
+    active_count_before = int(pool_counts.get("active", 0) or 0)
+    reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
+    active_target = int(desired_policy["active_target"])
+    reserve_target = int(desired_policy["reserve_target"])
+    target_already_satisfied = (
+        current_stage == "15"
+        and active_count_before == active_target
+        and reserve_count_before == reserve_target
+    )
+    stage_advancement_result["delegated_evidence"]["pool_count_summary_before"] = {
+        "active_count_observed": active_count_before,
+        "reserve_count_observed": reserve_count_before,
+        "active_target": active_target,
+        "reserve_target": reserve_target,
+    }
+
+    if current_stage not in {"10", "15"}:
+        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance requires canonical source stage 10 or in-progress stage 15.",
+            machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
+            operator_action="user_action",
+        )
+
+    backend_matches = get_registry_backends_by_id(registry, requested_backend_id)
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    selected_backend_auth_basename = (
+        get_auth_basename(selected_backend.get("auth_ref"))
+        if isinstance(selected_backend, dict)
+        else None
+    )
+    backend_precondition_status = "eligible_reserve_backend"
+    if not backend_matches:
+        backend_precondition_status = "backend_missing"
+    elif len(backend_matches) > 1:
+        backend_precondition_status = "ambiguous_backend_id"
+    elif bool(selected_backend.get("manual_hold", False)):
+        backend_precondition_status = "backend_on_hold"
+    elif str(selected_backend.get("pool", "")) == "retired":
+        backend_precondition_status = "backend_retired"
+    elif target_already_satisfied:
+        backend_precondition_status = "valid_existing_backend"
+    elif str(selected_backend.get("pool", "")) != "reserve":
+        backend_precondition_status = "backend_not_reserve"
+    stage_advancement_result["delegated_evidence"]["backend_precondition_summary"] = {
+        "backend_id": requested_backend_id,
+        "precondition_status": backend_precondition_status,
+        "match_count": len(backend_matches),
+        "observed_pool": (
+            str(selected_backend.get("pool", ""))
+            if isinstance(selected_backend, dict)
+            else ""
+        ),
+        "observed_manual_hold": (
+            bool(selected_backend.get("manual_hold", False))
+            if isinstance(selected_backend, dict)
+            else False
+        ),
+    }
+    if backend_precondition_status not in {
+        "eligible_reserve_backend",
+        "valid_existing_backend",
+    }:
+        stage_advancement_result["final_outcome"] = "backend_not_eligible"
+        return build_stage_advance_payload(
+            ok=False,
+            human_message="Rollout stage advance requires one explicit eligible reserve backend id.",
+            machine_error_code="STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
+            operator_action="user_action",
+        )
+
+    if target_already_satisfied:
+        stage_advancement_result["policy_transition_status"] = "already_on_stage"
+        stage_advancement_result["promotion_status"] = "not_needed"
+        stage_advancement_result["final_outcome"] = "already_at_stage_15_target"
+        return build_stage_advance_payload(
+            ok=True,
+            human_message="Rollout stage advance found canonical stage-15 target already satisfied.",
+            machine_error_code="OK",
+        )
+
+    step_snapshots: dict[str, dict[str, Any]] | None = None
+    if current_stage == "10":
+        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+        if selected_backend_auth_basename:
+            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+            extra_write_surfaces.append(stable_auth_entry_path)
+            before_extra_states.setdefault(
+                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+            )
+            if stable_auth_dir not in extra_write_surfaces:
+                extra_write_surfaces.append(stable_auth_dir)
+            before_extra_states.setdefault(
+                stable_auth_dir, snapshot_path_state(stable_auth_dir)
+            )
+            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                stable_auth_entry_path
+            )
+            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+        proof_payload = run_rollout_stage_prove(paths, "10")
+        proof_result = proof_payload.get("stage_proof_result", {})
+        stage_advancement_result["delegated_evidence"]["stable_10_proof_summary"] = {
+            "status": proof_payload.get("status"),
+            "machine_error_code": proof_payload.get("machine_error_code"),
+            "exit_code": proof_payload.get("exit_code"),
+            "proof_gate_status": proof_result.get("proof_gate_status"),
+            "final_outcome": proof_result.get("final_outcome"),
+        }
+        if proof_payload.get("status") != "ok":
+            stage_advancement_result["preflight_stage10_proof_status"] = "failed"
+            return rollback_after_failed_step(
+                human_message="Rollout stage advance is blocked because stable-10 proof is not satisfied.",
+                machine_error_code=str(
+                    proof_payload.get("machine_error_code", "STAGE_ADVANCE_PROOF_FAILED")
+                ),
+                operator_action=str(proof_payload.get("operator_action", "user_action")),
+                exit_code=int(proof_payload.get("exit_code", 1) or 1),
+                snapshots=step_snapshots,
+                final_outcome="stable_10_proof_failed",
+            )
+        stage_advancement_result["preflight_stage10_proof_status"] = "passed"
+
+        policy_payload = run_policy_stage_set(paths, requested_stage)
+        policy_result = policy_payload.get("pool_policy_update_result", {})
+        stage_advancement_result["delegated_evidence"]["policy_transition_summary"] = {
+            "status": policy_payload.get("status"),
+            "machine_error_code": policy_payload.get("machine_error_code"),
+            "exit_code": policy_payload.get("exit_code"),
+            "final_outcome": policy_result.get("final_outcome"),
+        }
+        if policy_payload.get("status") != "ok":
+            stage_advancement_result["policy_transition_status"] = "failed"
+            return rollback_after_failed_step(
+                human_message="Rollout stage advance failed while updating policy stage to 15.",
+                machine_error_code=str(
+                    policy_payload.get("machine_error_code", "POOL_POLICY_UPDATE_FAILED")
+                ),
+                operator_action=str(policy_payload.get("operator_action", "retry")),
+                exit_code=int(policy_payload.get("exit_code", 1) or 1),
+                snapshots=step_snapshots,
+                final_outcome="policy_transition_failed",
+            )
+        stage_advancement_result["policy_transition_status"] = str(
+            policy_result.get("final_outcome", "updated")
+        )
+    else:
+        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+        if selected_backend_auth_basename:
+            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+            extra_write_surfaces.append(stable_auth_entry_path)
+            before_extra_states.setdefault(
+                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+            )
+            if stable_auth_dir not in extra_write_surfaces:
+                extra_write_surfaces.append(stable_auth_dir)
+            before_extra_states.setdefault(
+                stable_auth_dir, snapshot_path_state(stable_auth_dir)
+            )
+            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                stable_auth_entry_path
+            )
+            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+        preflight_ok, preflight_code, preflight_action, preflight_summary = (
+            summarize_rollout_stage_advance_preflight(paths)
+        )
+        stage_advancement_result["delegated_evidence"]["preflight_summary"] = preflight_summary
+        if not preflight_ok:
+            stage_advancement_result["preflight_stage10_proof_status"] = "not_required"
+            stage_advancement_result["postflight_attestation_status"] = str(
+                preflight_summary.get("attestation_status", "failed")
+            )
+            stage_advancement_result["postflight_rotation_status"] = str(
+                preflight_summary.get("rotation_status", "unknown")
+            )
+            stage_advancement_result["rollback_readiness_status"] = str(
+                preflight_summary.get("readiness_status", "failed")
+            )
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance is blocked because current stage-15 rollout posture fails bounded preflight verification."
+                ),
+                machine_error_code=preflight_code,
+                operator_action=preflight_action,
+                snapshots=step_snapshots,
+                final_outcome="preflight_verification_failed",
+            )
+        stage_advancement_result["preflight_stage10_proof_status"] = "not_required"
+        stage_advancement_result["policy_transition_status"] = "already_on_stage"
+
+    promote_payload = run_promote(paths, requested_backend_id)
+    promote_result = promote_payload.get("promotion_result", {})
+    stage_advancement_result["delegated_evidence"]["promotion_summary"] = {
+        "status": promote_payload.get("status"),
+        "machine_error_code": promote_payload.get("machine_error_code"),
+        "exit_code": promote_payload.get("exit_code"),
+        "precondition_status": promote_result.get("precondition_status"),
+        "final_outcome": promote_result.get("final_outcome"),
+    }
+    if promote_payload.get("status") != "ok":
+        stage_advancement_result["promotion_status"] = "failed"
+        return rollback_after_failed_step(
+            human_message="Rollout stage advance failed while promoting the explicit backend id.",
+            machine_error_code=str(
+                promote_payload.get("machine_error_code", "PROMOTION_FAILED")
+            ),
+            operator_action=str(promote_payload.get("operator_action", "user_action")),
+            exit_code=int(promote_payload.get("exit_code", 1) or 1),
+            snapshots=step_snapshots,
+        )
+    stage_advancement_result["promotion_status"] = "promoted"
+    updated_registry = read_json(paths.registry_file)
+    promoted_backend_matches = get_registry_backends_by_id(
+        updated_registry, requested_backend_id
+    )
+    promoted_backend = (
+        promoted_backend_matches[0] if len(promoted_backend_matches) == 1 else None
+    )
+    if not isinstance(promoted_backend, dict):
+        return rollback_after_failed_step(
+            human_message=(
+                "Rollout stage advance could not verify a uniquely identifiable promoted backend before stable inventory materialization."
+            ),
+            machine_error_code="STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED",
+            operator_action="user_action",
+            snapshots=step_snapshots,
+        )
+    try:
+        stable_auth_materialization = materialize_rollout_stage_advance_stable_auth(
+            paths, promoted_backend
+        )
+    except RuntimeErrorInfo as exc:
+        stage_advancement_result["delegated_evidence"][
+            "stable_auth_materialization_summary"
+        ] = {
+            "status": "failed",
+            "machine_error_code": exc.machine_error_code,
+            "operator_action": exc.operator_action,
+        }
+        return rollback_after_failed_step(
+            human_message=(
+                "Rollout stage advance failed while materializing the promoted backend into stable auth inventory."
+            ),
+            machine_error_code=exc.machine_error_code,
+            operator_action=exc.operator_action,
+            exit_code=exc.exit_code,
+            snapshots=step_snapshots,
+        )
+    stage_advancement_result["delegated_evidence"][
+        "stable_auth_materialization_summary"
+    ] = {
+        "status": "materialized",
+        "machine_error_code": "OK",
+        **stable_auth_materialization,
+    }
+
+    postflight_ok, postflight_code, postflight_action, postflight_summary = (
+        summarize_rollout_stage_advance_postflight(
+            paths,
+            expected_stage=requested_stage,
+            backend_id=requested_backend_id,
+            active_pool_count_before=active_count_before,
+        )
+    )
+    stage_advancement_result["postflight_attestation_status"] = str(
+        postflight_summary.get("attestation_status", "failed")
+    )
+    stage_advancement_result["postflight_rotation_status"] = str(
+        postflight_summary.get("rotation_status", "unknown")
+    )
+    stage_advancement_result["rollback_readiness_status"] = str(
+        postflight_summary.get("readiness_status", "failed")
+    )
+    stage_advancement_result["delegated_evidence"]["postflight_summary"] = postflight_summary
+    if not postflight_ok:
+        return rollback_after_failed_step(
+            human_message=(
+                "Rollout stage advance step completed, but postflight checks detected a contradiction or readiness gap."
+            ),
+            machine_error_code=postflight_code,
+            operator_action=postflight_action,
+            snapshots=step_snapshots,
+        )
+
+    updated_registry = read_json(paths.registry_file)
+    updated_counts = summarize_registry_pool_counts(updated_registry)
+    stage_advancement_result["delegated_evidence"]["pool_count_summary_after_step"] = {
+        "active_count_observed": int(updated_counts.get("active", 0) or 0),
+        "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
+        "active_target": STAGED_POOL_POLICY_PACKETS["15"]["active_target"],
+        "reserve_target": STAGED_POOL_POLICY_PACKETS["15"]["reserve_target"],
+    }
+    stage_advancement_result["rollback_outcome"] = "not_needed"
+    if int(updated_counts.get("active", 0) or 0) >= STAGED_POOL_POLICY_PACKETS["15"][
+        "active_target"
+    ]:
+        stage_advancement_result["final_outcome"] = "advanced_one_step"
+    else:
+        stage_advancement_result["final_outcome"] = "advanced_one_step"
+    return build_stage_advance_payload(
+        ok=True,
+        human_message="Rollout stage advance completed one controlled promotion step toward canonical stage 15.",
         machine_error_code="OK",
     )
 
@@ -7604,6 +8373,7 @@ def snapshot_promotion_owner_path_runtime_surfaces(
         "runtime_effective_mode_file": snapshot_path_state(
             paths.runtime_effective_mode_file
         ),
+        "launcher_script": snapshot_path_state(paths.launcher_script),
         "stable_runtime_generated_config_file": snapshot_path_state(
             paths.stable_runtime_generated_config_file
         ),
@@ -7630,6 +8400,9 @@ def restore_promotion_owner_path_runtime_surfaces(
     restore_path_state(
         paths.runtime_effective_mode_file,
         snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        paths.launcher_script, snapshots.get("launcher_script", {"state": "missing"})
     )
     restore_path_state(
         paths.stable_runtime_generated_config_file,

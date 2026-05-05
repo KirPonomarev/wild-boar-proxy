@@ -219,6 +219,8 @@ Any operation that changes active routing, registry, mode, or managed state must
    - `policy stage set`
    - `rollout rotation inspect`
    - `rollout stage prove 10`
+   - `rollout stage prove 15`
+   - `rollout stage advance 15`
    - `accounts list`
    - `accounts validate`
    - `accounts promote`

@@ -320,6 +320,8 @@ class CliTests(unittest.TestCase):
             self.profile_dir / "config.toml",
             self.profile_dir / "runtime-mode.txt",
             self.profile_dir / "runtime-effective-mode.txt",
+            self.default_launcher_script,
+            self.launcher_script,
         ]
         snapshot = {}
         for path in paths:
@@ -333,7 +335,14 @@ class CliTests(unittest.TestCase):
                     }
                 )
                 continue
-            snapshot[str(path)] = path.read_text(encoding="utf-8")
+            snapshot[str(path)] = json.dumps(
+                {
+                    "kind": "file",
+                    "text": path.read_text(encoding="utf-8"),
+                    "mode": path.stat().st_mode & 0o777,
+                },
+                sort_keys=True,
+            )
         snapshot[f"DIR:{repair_target_dir}"] = (
             json.dumps(sorted(path.name for path in repair_target_dir.iterdir()))
             if repair_target_dir.is_dir()
@@ -573,17 +582,17 @@ class CliTests(unittest.TestCase):
         state["selected_backend_ids"] = selected_backend_ids
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
-    def configure_stable_ten_proof_fixture(
-        self, *, selected_backend_ids: list[str] | None = None
+    def configure_stage_proof_fixture(
+        self, active_target: int, *, selected_backend_ids: list[str] | None = None
     ) -> None:
-        backend_ids = [f"backend-{index:02d}" for index in range(10)]
+        backend_ids = [f"backend-{index:02d}" for index in range(active_target)]
         if selected_backend_ids is None:
             selected_backend_ids = backend_ids[:2]
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
         registry["stable_default_backend_id"] = backend_ids[0]
         registry["pool_policy"] = {
-            "active_min": 10,
-            "active_target": 10,
+            "active_min": active_target,
+            "active_target": active_target,
             "reserve_target": 0,
         }
         registry["backends"] = []
@@ -603,16 +612,26 @@ class CliTests(unittest.TestCase):
 
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["stable_default_backend_id"] = backend_ids[0]
-        state["active_count"] = 10
+        state["active_count"] = active_target
         state["reserve_count"] = 0
         state["retired_count"] = 0
-        state["healthy_count"] = 10
+        state["healthy_count"] = active_target
         state["degraded_count"] = 0
         state["down_count"] = 0
         state["selected_backend_ids"] = list(selected_backend_ids)
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
+
+    def configure_stable_ten_proof_fixture(
+        self, *, selected_backend_ids: list[str] | None = None
+    ) -> None:
+        self.configure_stage_proof_fixture(10, selected_backend_ids=selected_backend_ids)
+
+    def configure_stable_fifteen_proof_fixture(
+        self, *, selected_backend_ids: list[str] | None = None
+    ) -> None:
+        self.configure_stage_proof_fixture(15, selected_backend_ids=selected_backend_ids)
 
     def configure_managed_runtime_probe(self, port: int) -> None:
         (self.managed_dir / "managed-config.yaml").write_text(
@@ -6702,6 +6721,1075 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proof["rollback_readiness_status"], "failed")
         self.assertEqual(proof["final_outcome"], "rollback_readiness_failed")
         self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+
+    def test_rollout_stage_prove_15_reports_success_with_bounded_delegated_evidence(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["policy_stage_status"], "matched")
+        self.assertEqual(proof["policy_stage_observed"], "15")
+        self.assertEqual(proof["active_pool_count_observed"], 15)
+        self.assertEqual(proof["reserve_pool_count_observed"], 0)
+        self.assertEqual(proof["rotation_evidence_status"], "available")
+        self.assertEqual(proof["runtime_attestation_status"], "passed")
+        self.assertEqual(proof["runtime_smoke_status"], "passed")
+        self.assertEqual(proof["rollback_readiness_status"], "ready")
+        self.assertEqual(proof["proof_gate_status"], "stable_15_gate_closed")
+        self.assertEqual(proof["final_outcome"], "stable_15_proved")
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+
+    def test_rollout_stage_prove_15_rejects_stage_policy_mismatch_without_delegated_writes(
+        self,
+    ) -> None:
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_POLICY_MISMATCH")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["policy_stage_status"], "custom")
+        self.assertEqual(proof["proof_gate_status"], "blocked_by_stage_policy_mismatch")
+        self.assertEqual(proof["final_outcome"], "stage_policy_mismatch")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_15_reports_insufficient_active_pool(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"] = registry["backends"][:-1]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 14
+        state["healthy_count"] = 14
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        (self.stable_dir / "codex-14.json").unlink()
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ACTIVE_POOL_MISMATCH")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["active_pool_count_observed"], 14)
+        self.assertEqual(proof["final_outcome"], "insufficient_active_pool")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_15_reports_reserve_posture_mismatch(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        reserve_auth_path = self.profile_dir / "codex-reserve-stage15-proof.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-stage15-proof",
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["reserve_count"] = 1
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            before = self.state_snapshot()
+            result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+            after = self.state_snapshot()
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["reserve_pool_count_observed"], 1)
+        self.assertEqual(proof["final_outcome"], "reserve_posture_mismatch")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_15_reports_runtime_attestation_failure(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ATTESTATION_FAILED")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["runtime_attestation_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "runtime_attestation_failed")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+
+    def test_rollout_stage_prove_15_reports_runtime_smoke_failure(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script, exit_code=9)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_SMOKE_FAILED")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["runtime_smoke_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "runtime_smoke_failed")
+
+    def test_rollout_stage_prove_15_reports_rotation_insufficiency(self) -> None:
+        self.configure_stable_fifteen_proof_fixture(selected_backend_ids=["backend-00"])
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "15", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ROTATION_INSUFFICIENT")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["rotation_evidence_status"], "insufficient")
+        self.assertEqual(proof["final_outcome"], "rotation_evidence_insufficient")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_15_reports_rollback_readiness_failure(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch(
+                    "wild_boar_proxy.runtime.summarize_stable_10_rollback_readiness",
+                    return_value={
+                        "status": "failed",
+                        "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+                        "reason": "forced_test_failure",
+                    },
+                ):
+                    payload = runtime_mod.run_rollout_stage_prove(paths, "15")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
+        )
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["rollback_readiness_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "rollback_readiness_failed")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+
+    def test_rollout_stage_prove_20_rejects_unowned_stage(self) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            payload = runtime_mod.run_rollout_stage_prove(paths, "20")
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_STAGE_UNOWNED")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["policy_stage_status"], "unsupported_stage")
+        self.assertEqual(proof["proof_gate_status"], "blocked_by_requested_stage")
+        self.assertEqual(proof["final_outcome"], "proof_blocked")
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_from_stage_10_updates_policy_one_step(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-step"
+        reserve_auth_path = self.profile_dir / "codex-reserve-advance-step.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-stage10-ok.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-00", reserve_backend_id],
+                "active_count": 11,
+                "reserve_count": 0,
+                "retired_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-stage10-ok",
+            exit_code=0,
+        )
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "rollout",
+                "stage",
+                "advance",
+                "15",
+                reserve_backend_id,
+                "--json",
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
+        self.assertEqual(advance["preflight_policy_status"], "matched")
+        self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["postflight_attestation_status"], "passed")
+        self.assertEqual(advance["postflight_rotation_status"], "available")
+        self.assertEqual(advance["rollback_readiness_status"], "ready")
+        self.assertEqual(advance["final_outcome"], "advanced_one_step")
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 15, "active_target": 15, "reserve_target": 0},
+        )
+        promoted = [item for item in registry["backends"] if item["id"] == reserve_backend_id]
+        self.assertEqual(promoted[0]["pool"], "active")
+        self.assertIn(
+            str(self.managed_dir / "backend-registry.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
+
+    def test_rollout_stage_advance_15_blocks_when_stable_10_proof_fails(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-proof-fail"
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref="/tmp/codex-reserve-proof-fail.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"] = registry["backends"][:-2] + registry["backends"][-1:]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 9
+        state["reserve_count"] = 1
+        state["healthy_count"] = 9
+        state["selected_backend_ids"] = ["backend-00"]
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        (self.stable_dir / "codex-09.json").unlink()
+        before = self.state_snapshot()
+        result = self.run_cli(
+            "rollout", "stage", "advance", "15", reserve_backend_id, "--json"
+        )
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ACTIVE_POOL_MISMATCH")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "failed")
+        self.assertEqual(advance["policy_transition_status"], "not_invoked")
+        self.assertEqual(advance["promotion_status"], "not_invoked")
+        self.assertEqual(advance["final_outcome"], "stable_10_proof_failed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_advance_15_rejects_invalid_or_ineligible_backend(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        result = self.run_cli(
+            "rollout", "stage", "advance", "15", "backend-missing", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["promotion_status"], "not_invoked")
+        self.assertEqual(advance["final_outcome"], "backend_not_eligible")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_rollout_stage_advance_15_returns_noop_when_target_is_already_satisfied(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        for index in range(10, 15):
+            registry["backends"].append(
+                self.build_backend(
+                    backend_id=f"backend-{index:02d}",
+                    auth_ref=f"/tmp/codex-{index:02d}.json",
+                    pool="active",
+                )
+            )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 15
+        state["reserve_count"] = 0
+        state["healthy_count"] = 15
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "rollout", "stage", "advance", "15", "backend-00", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["policy_transition_status"], "already_on_stage")
+        self.assertEqual(advance["promotion_status"], "not_needed")
+        self.assertEqual(advance["final_outcome"], "already_at_stage_15_target")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_rollout_stage_advance_15_rejects_invalid_backend_even_when_target_met(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        for index in range(10, 15):
+            registry["backends"].append(
+                self.build_backend(
+                    backend_id=f"backend-{index:02d}",
+                    auth_ref=f"/tmp/codex-{index:02d}.json",
+                    pool="active",
+                )
+            )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 15
+        state["reserve_count"] = 0
+        state["healthy_count"] = 15
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "rollout", "stage", "advance", "15", "backend-missing", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["final_outcome"], "backend_not_eligible")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_rollout_stage_advance_15_rejects_overfull_stage_as_already_satisfied(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        for index in range(10, 16):
+            registry["backends"].append(
+                self.build_backend(
+                    backend_id=f"backend-{index:02d}",
+                    auth_ref=f"/tmp/codex-{index:02d}.json",
+                    pool="active",
+                )
+            )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 16
+        state["reserve_count"] = 0
+        state["healthy_count"] = 16
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "rollout", "stage", "advance", "15", "backend-00", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["final_outcome"], "backend_not_eligible")
+        self.assertNotEqual(advance["final_outcome"], "already_at_stage_15_target")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_rollout_stage_advance_15_rolls_back_failed_stage10_proof_side_effects(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-proof-side-effect"
+        reserve_auth_path = self.profile_dir / "codex-reserve-proof-side-effect.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def proof_side_effect(*_args: object, **_kwargs: object) -> dict[str, object]:
+                state_path = self.managed_dir / "supervisor-state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                state["stable_runtime_consumer"] = {
+                    "status": "delegated_owner_path_write",
+                    "source": "forced-proof-failure-side-effect",
+                }
+                state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+                generated_config = (
+                    self.managed_dir / "stable-runtime-config.generated.yaml"
+                )
+                generated_config.write_text("generated: true\n", encoding="utf-8")
+                self.launcher_script.write_text(
+                    "#!/bin/sh\n# forced-proof-failure-side-effect\n",
+                    encoding="utf-8",
+                )
+                self.launcher_script.chmod(0o644)
+                return {
+                    "status": "error",
+                    "machine_error_code": "STAGE_PROOF_FORCED_FAILURE",
+                    "operator_action": "user_action",
+                    "exit_code": 1,
+                    "stage_proof_result": {
+                        "proof_gate_status": "blocked_by_forced_failure",
+                        "final_outcome": "proof_blocked",
+                    },
+                }
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                payload = runtime_mod.run_rollout_stage_advance(
+                    paths, "15", reserve_backend_id
+                )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_FORCED_FAILURE")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "failed")
+        self.assertEqual(advance["final_outcome"], "stable_10_proof_failed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_rolls_back_failed_policy_transition_side_effects(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-policy-failure"
+        reserve_auth_path = self.profile_dir / "codex-reserve-policy-failure.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def proof_side_effect(*_args: object, **_kwargs: object) -> dict[str, object]:
+                state_path = self.managed_dir / "supervisor-state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                state["stable_runtime_consumer"] = {
+                    "status": "delegated_owner_path_write",
+                    "source": "forced-policy-failure-proof-side-effect",
+                }
+                state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+                generated_config = (
+                    self.managed_dir / "stable-runtime-config.generated.yaml"
+                )
+                generated_config.write_text("generated: true\n", encoding="utf-8")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                }
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_policy_stage_set",
+                    return_value={
+                        "status": "error",
+                        "machine_error_code": "POOL_POLICY_UPDATE_FAILED",
+                        "operator_action": "retry",
+                        "exit_code": 1,
+                        "pool_policy_update_result": {
+                            "final_outcome": "rollback_completed_after_failed_verification",
+                        },
+                    },
+                ):
+                    payload = runtime_mod.run_rollout_stage_advance(
+                        paths, "15", reserve_backend_id
+                    )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "POOL_POLICY_UPDATE_FAILED")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
+        self.assertEqual(advance["policy_transition_status"], "failed")
+        self.assertEqual(advance["final_outcome"], "policy_transition_failed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_rolls_back_failed_promotion_side_effects(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-promotion-failure"
+        reserve_auth_path = self.profile_dir / "codex-reserve-promotion-failure.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def proof_side_effect(*_args: object, **_kwargs: object) -> dict[str, object]:
+                state_path = self.managed_dir / "supervisor-state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                state["stable_runtime_consumer"] = {
+                    "status": "delegated_owner_path_write",
+                    "source": "forced-promotion-failure-proof-side-effect",
+                }
+                state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+                generated_config = (
+                    self.managed_dir / "stable-runtime-config.generated.yaml"
+                )
+                generated_config.write_text("generated: true\n", encoding="utf-8")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                }
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_promote",
+                    return_value={
+                        "status": "error",
+                        "machine_error_code": "PROMOTION_FAILED",
+                        "operator_action": "user_action",
+                        "exit_code": 1,
+                        "promotion_result": {
+                            "precondition_status": "eligible_reserve_backend",
+                            "final_outcome": "promotion_failed",
+                        },
+                    },
+                ):
+                    payload = runtime_mod.run_rollout_stage_advance(
+                        paths, "15", reserve_backend_id
+                    )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_FAILED")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
+        self.assertEqual(advance["promotion_status"], "failed")
+        self.assertEqual(advance["final_outcome"], "rollback_completed_after_failed_step")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_rolls_back_failed_stage15_preflight_side_effects(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-stage15-preflight-failure"
+        reserve_auth_path = self.profile_dir / "codex-reserve-stage15-preflight-failure.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def preflight_side_effect(*_args: object, **_kwargs: object):
+                state_path = self.managed_dir / "supervisor-state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                state["stable_runtime_consumer"] = {
+                    "status": "delegated_owner_path_write",
+                    "source": "forced-stage15-preflight-side-effect",
+                }
+                state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+                generated_config = (
+                    self.managed_dir / "stable-runtime-config.generated.yaml"
+                )
+                generated_config.write_text("generated: true\n", encoding="utf-8")
+                return (
+                    False,
+                    "STAGE_ADVANCE_PREFLIGHT_ROTATION_FAILED",
+                    "user_action",
+                    {
+                        "attestation_status": "passed",
+                        "rotation_status": "contradicted",
+                        "readiness_status": "ready",
+                    },
+                )
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.summarize_rollout_stage_advance_preflight",
+                side_effect=preflight_side_effect,
+            ):
+                payload = runtime_mod.run_rollout_stage_advance(
+                    paths, "15", reserve_backend_id
+                )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_ADVANCE_PREFLIGHT_ROTATION_FAILED"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "not_required")
+        self.assertEqual(advance["final_outcome"], "preflight_verification_failed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-contradicted"
+        reserve_auth_path = self.profile_dir / "codex-reserve-advance-contradicted.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        stable_auth_dir = self.stable_dir / "stable-auth-inventory"
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\nport: 8318\nauth-dir: stable-auth-inventory\n",
+            encoding="utf-8",
+        )
+        self.assertFalse(stable_auth_dir.exists())
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-contradicted.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-00", reserve_backend_id, "backend-ghost"],
+                "active_count": 11,
+                "reserve_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-contradicted",
+            exit_code=0,
+        )
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        before = self.state_snapshot()
+        try:
+            def proof_side_effect(*_args: object, **_kwargs: object) -> dict[str, object]:
+                state_path = self.managed_dir / "supervisor-state.json"
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                state["stable_runtime_consumer"] = {
+                    "status": "delegated_owner_path_write",
+                    "source": "forced-proof-side-effect",
+                }
+                state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                }
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                with mock.patch.dict(
+                    os.environ,
+                    self.env() | {"WBP_SYNC_SCRIPT": str(sync_script)},
+                    clear=False,
+                ):
+                    paths = runtime_mod.RuntimePaths.from_env()
+                    payload = runtime_mod.run_rollout_stage_advance(
+                        paths, "15", reserve_backend_id
+                    )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_ADVANCE_POSTFLIGHT_ROTATION_FAILED"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["postflight_rotation_status"], "contradicted")
+        self.assertEqual(
+            advance["final_outcome"], "rollback_completed_after_failed_step"
+        )
+        postflight = advance["delegated_evidence"]["postflight_summary"]
+        self.assertEqual(postflight["rotation_status"], "contradicted")
+        self.assertEqual(payload["changed_files"], [])
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 10, "active_target": 10, "reserve_target": 0},
+        )
+        restored = [item for item in registry["backends"] if item["id"] == reserve_backend_id]
+        self.assertEqual(restored[0]["pool"], "reserve")
+        self.assertFalse(stable_auth_dir.exists())
+        self.assertEqual(before, self.state_snapshot())
+
+    def test_rollout_stage_advance_15_reports_truthful_changed_files_after_promotion(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-ok"
+        reserve_auth_path = self.profile_dir / "codex-reserve-advance-ok.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-ok.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-00", reserve_backend_id],
+                "active_count": 11,
+                "reserve_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-ok",
+            exit_code=0,
+        )
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "rollout",
+                "stage",
+                "advance",
+                "15",
+                reserve_backend_id,
+                "--json",
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "not_required")
+        self.assertEqual(advance["policy_transition_status"], "already_on_stage")
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["postflight_attestation_status"], "passed")
+        self.assertEqual(advance["postflight_rotation_status"], "available")
+        self.assertEqual(advance["rollback_readiness_status"], "ready")
+        self.assertEqual(advance["final_outcome"], "advanced_one_step")
+        self.assertIn(
+            str(self.managed_dir / "backend-registry.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
+        self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+
+    def test_rollout_stage_advance_15_fails_when_postflight_reserve_posture_remains_nonzero(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-postflight-reserve-mismatch"
+        leftover_reserve_backend_id = "backend-reserve-postflight-leftover"
+        reserve_auth_path = self.profile_dir / "codex-reserve-postflight-reserve-mismatch.json"
+        leftover_auth_path = self.profile_dir / "codex-reserve-postflight-leftover.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        leftover_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=leftover_reserve_backend_id,
+                auth_ref=str(leftover_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["reserve_count"] = 2
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-reserve-mismatch.sh",
+            state_patch={
+                "selected_backend_ids": [
+                    *[f"backend-{index:02d}" for index in range(10)],
+                    reserve_backend_id,
+                ],
+                "active_count": 11,
+                "reserve_count": 1,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-reserve-mismatch",
+            exit_code=0,
+        )
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "rollout",
+                "stage",
+                "advance",
+                "15",
+                reserve_backend_id,
+                "--json",
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["postflight_rotation_status"], "available")
+        self.assertEqual(
+            advance["final_outcome"], "rollback_completed_after_failed_step"
+        )
+
+    def test_rollout_stage_advance_15_accepts_already_materialized_stable_auth(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-stable-auth-inline"
+        stable_auth_dir = self.stable_dir / "stable-auth-inventory"
+        stable_auth_dir.mkdir(parents=True, exist_ok=True)
+        for auth_path in sorted(self.stable_dir.glob("codex-*.json")):
+            (stable_auth_dir / auth_path.name).write_text(
+                auth_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        reserve_auth_path = stable_auth_dir / "codex-reserve-stable-auth-inline.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\nport: 8318\nauth-dir: stable-auth-inventory\n",
+            encoding="utf-8",
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-inline-auth.sh",
+            state_patch={
+                "selected_backend_ids": [
+                    *[f"backend-{index:02d}" for index in range(10)],
+                    reserve_backend_id,
+                ],
+                "active_count": 11,
+                "reserve_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-inline-auth",
+            exit_code=0,
+        )
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                },
+            ):
+                with mock.patch.dict(
+                    os.environ,
+                    self.env() | {"WBP_SYNC_SCRIPT": str(sync_script)},
+                    clear=False,
+                ):
+                    paths = runtime_mod.RuntimePaths.from_env()
+                    payload = runtime_mod.run_rollout_stage_advance(
+                        paths, "15", reserve_backend_id
+                    )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["final_outcome"], "advanced_one_step")
 
     def test_accounts_promote_rejects_held_backend_precondition(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"

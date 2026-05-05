@@ -64,6 +64,12 @@ No routing-impacting transition is complete if rollback data is missing.
 ## Transition notes
 
 - reserve-first onboarding is mandatory
+- rollout stage advance toward `15` is canon-first and one-step only:
+  delegated stage-policy set to `15` plus one explicit delegated
+  reserve-to-active promotion, or one explicit delegated reserve-to-active
+  promotion when already on canonical stage `15`
+- rollout stage advance must keep backend choice explicit; no hidden reserve
+  selection policy is implied by the transition notes
 - demote is a narrow explicit `active -> reserve` lane only
 - demote must not operate on held backends; held backends use `release` only
 - demote must reject `retired` backends

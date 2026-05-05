@@ -25,6 +25,8 @@ All operator commands must support `--json`.
 - `policy stage set <10|15|20> --json`
 - `rollout rotation inspect --json`
 - `rollout stage prove 10 --json`
+- `rollout stage prove 15 --json`
+- `rollout stage advance 15 <id> --json`
 - `accounts list --json`
 - `accounts validate <id> --json`
 - `accounts promote <id> --json`
@@ -281,12 +283,12 @@ Canonical rotation-evidence outcomes include:
 - policy mutation under `policy stage set ... --json`
 - runtime-health ownership in `healthcheck --json`
 
-## Additional stable-10 proof owner surface
+## Additional stage-proof owner surfaces
 
-`rollout stage prove 10 --json` is the owner surface for canonical stable-10
-proof truth.
+`rollout stage prove 10 --json` and `rollout stage prove 15 --json` are the
+owner surfaces for canonical stage-proof truth at stages `10` and `15`.
 
-Stable-10 proof success must not be inferred from:
+Stage-proof success must not be inferred from:
 
 - policy stage alone
 - stale status alone
@@ -296,8 +298,9 @@ Stable-10 proof success must not be inferred from:
 
 Successful owner packets must prove, machine-readably:
 
-- the current staged policy matches canonical stage `10`
-- active-pool posture is aligned with canonical stage-10 policy
+- the current staged policy matches the requested canonical stage
+- active-pool posture is aligned with the requested stage policy
+- reserve-pool posture is aligned with the requested stage policy
 - bounded rotation evidence is not contradicted
 - live runtime attestation passed
 - bounded runtime smoke passed
@@ -307,7 +310,7 @@ Successful owner packets must prove, machine-readably:
 - all delegated evidence lines stayed delegated rather than replacing their
   owner surfaces
 
-`rollout stage prove 10 --json` may expose a nested `stage_proof_result`
+`rollout stage prove 10 --json` and `rollout stage prove 15 --json` may expose a nested `stage_proof_result`
 surface.
 Preferred fields include:
 
@@ -327,11 +330,13 @@ Preferred fields include:
 - `proof_gate_status`
 - `final_outcome`
 
-Canonical stable-10 proof outcomes include:
+Canonical stage-proof outcomes include:
 
 - `stable_10_proved`
+- `stable_15_proved`
 - `stage_policy_mismatch`
 - `insufficient_active_pool`
+- `reserve_posture_mismatch`
 - `rotation_evidence_insufficient`
 - `rotation_evidence_contradicted`
 - `runtime_attestation_failed`
@@ -339,7 +344,7 @@ Canonical stable-10 proof outcomes include:
 - `rollback_readiness_failed`
 - `proof_blocked`
 
-`rollout stage prove 10 --json` remains separate from:
+`rollout stage prove 10 --json` and `rollout stage prove 15 --json` remain separate from:
 
 - policy mutation under `policy stage set ... --json`
 - bounded rotation evidence ownership under `rollout rotation inspect --json`
@@ -347,6 +352,74 @@ Canonical stable-10 proof outcomes include:
 - runtime smoke ownership under `launch smoke --json`
 - lifecycle mutation under `accounts ... --json`
 - stage execution toward `15` or `20`
+
+## Additional stage-15 advance owner surface
+
+`rollout stage advance 15 <id> --json` is the owner surface for one-step
+controlled progression from canonical stable stage `10` toward canonical stage
+`15`.
+
+Stage-advance success must not be inferred from:
+
+- policy write alone
+- promotion subprocess exit alone
+- implicit reserve-target selection
+- hidden best-reserve logic
+- any direct lifecycle mutation outside delegated `accounts promote <id> --json`
+- any direct policy rewrite outside delegated `policy stage set 15 --json`
+
+Successful owner packets must prove, machine-readably:
+
+- explicit backend id input (no fallback selection)
+- stable-10 proof gate delegated through `rollout stage prove 10 --json`
+  when the current policy stage is canonical `10`
+- canon-first one-step sequencing:
+  delegated policy transition to stage `15`, then one explicit promotion step,
+  or one explicit promotion step when already on canonical stage `15`
+- postflight attestation, rotation, and readiness checks delegated to their
+  owner surfaces
+- delegated failures resolve conservatively and may trigger rollback of the
+  bounded advancement step
+- no stronger claim than one-step control-layer progression; no stage-15 proof
+  claim
+
+`rollout stage advance 15 <id> --json` may expose a nested
+`stage_advancement_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `requested_stage`
+- `requested_backend_id`
+- `preflight_stage10_proof_status`
+- `preflight_policy_status`
+- `policy_transition_status`
+- `promotion_status`
+- `postflight_attestation_status`
+- `postflight_rotation_status`
+- `rollback_readiness_status`
+- `rollback_attempted`
+- `rollback_outcome`
+- `delegated_evidence`
+- `final_outcome`
+
+Canonical stage-advance outcomes include:
+
+- `advanced_one_step`
+- `already_at_stage_15_target`
+- `stable_10_proof_failed`
+- `backend_not_eligible`
+- `preflight_verification_failed`
+- `policy_transition_failed`
+- `rollback_completed_after_failed_step`
+- `rollback_failed`
+
+`rollout stage advance 15 <id> --json` remains separate from:
+
+- stable-10 proof ownership under `rollout stage prove 10 --json`
+- policy mutation ownership under `policy stage set ... --json`
+- lifecycle mutation ownership under `accounts ... --json`
+- rotation evidence ownership under `rollout rotation inspect --json`
 
 ## Additional promotion owner surface
 

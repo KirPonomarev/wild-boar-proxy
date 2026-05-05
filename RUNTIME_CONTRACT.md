@@ -170,7 +170,7 @@
 
 ## Runtime attestation
 
-No `healthy`, `PASS`, `alpha-ready`, `pilot-ready`, or `stable-10-proved`
+No `healthy`, `PASS`, `alpha-ready`, `pilot-ready`, `stable-10-proved`, or `stable-15-proved`
 claim is valid without machine-carried runtime attestation.
 
 Required attestation fields:
