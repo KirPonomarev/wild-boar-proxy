@@ -573,6 +573,72 @@ class CliTests(unittest.TestCase):
         state["selected_backend_ids"] = selected_backend_ids
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
+    def configure_stable_ten_proof_fixture(
+        self, *, selected_backend_ids: list[str] | None = None
+    ) -> None:
+        backend_ids = [f"backend-{index:02d}" for index in range(10)]
+        if selected_backend_ids is None:
+            selected_backend_ids = backend_ids[:2]
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["stable_default_backend_id"] = backend_ids[0]
+        registry["pool_policy"] = {
+            "active_min": 10,
+            "active_target": 10,
+            "reserve_target": 0,
+        }
+        registry["backends"] = []
+        for index, backend_id in enumerate(backend_ids):
+            auth_name = f"codex-{index:02d}.json"
+            registry["backends"].append(
+                self.build_backend(
+                    backend_id=backend_id,
+                    auth_ref=f"/tmp/{auth_name}",
+                    pool="active",
+                )
+            )
+            (self.stable_dir / auth_name).write_text("{}", encoding="utf-8")
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["stable_default_backend_id"] = backend_ids[0]
+        state["active_count"] = 10
+        state["reserve_count"] = 0
+        state["retired_count"] = 0
+        state["healthy_count"] = 10
+        state["degraded_count"] = 0
+        state["down_count"] = 0
+        state["selected_backend_ids"] = list(selected_backend_ids)
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+
+    def configure_managed_runtime_probe(self, port: int) -> None:
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["status"] = "healthy"
+        state["last_error"] = ""
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+
+    def configure_stable_runtime_probe(self, port: int) -> None:
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+
     def build_backend(
         self,
         *,
@@ -717,6 +783,31 @@ class CliTests(unittest.TestCase):
                 "    else:\n"
                 "        out.append(line)\n"
                 "config_path.write_text('\\n'.join(out) + '\\n')\n"
+                "PY\n"
+                f"exit {exit_code}\n"
+            ),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def write_recording_managed_launcher(self, path: Path, *, exit_code: int = 0) -> Path:
+        path.write_text(
+            (
+                "#!/bin/sh\n"
+                "mode=\"$1\"\n"
+                "[ \"$mode\" = smoke ] || exit 7\n"
+                "printf 'managed\\n' > \"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\"\n"
+                "python3 - <<'PY'\n"
+                "import json\n"
+                "import os\n"
+                "from pathlib import Path\n"
+                "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+                "state = json.loads(state_path.read_text())\n"
+                "state['effective_mode'] = 'managed'\n"
+                "state['status'] = 'healthy'\n"
+                "state['last_error'] = ''\n"
+                "state_path.write_text(json.dumps(state) + '\\n')\n"
                 "PY\n"
                 f"exit {exit_code}\n"
             ),
@@ -6446,6 +6537,171 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["policy_drift_status"], "detected")
         self.assertEqual(evidence["evidence_strength"], "policy_drift_detected")
         self.assertEqual(evidence["participation_status"], "contradicted")
+
+    def test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["policy_stage_status"], "matched")
+        self.assertEqual(proof["policy_stage_observed"], "10")
+        self.assertEqual(proof["active_pool_count_observed"], 10)
+        self.assertEqual(proof["reserve_pool_count_observed"], 0)
+        self.assertEqual(proof["rotation_evidence_status"], "available")
+        self.assertEqual(proof["runtime_attestation_status"], "passed")
+        self.assertEqual(proof["runtime_smoke_status"], "passed")
+        self.assertEqual(proof["rollback_readiness_status"], "ready")
+        self.assertEqual(proof["proof_gate_status"], "stable_10_gate_closed")
+        self.assertEqual(proof["final_outcome"], "stable_10_proved")
+        self.assertEqual(
+            proof["delegated_evidence"]["runtime_smoke_summary"]["effective_mode"],
+            "managed",
+        )
+        self.assertEqual(
+            proof["delegated_evidence"]["post_smoke_healthcheck_summary"][
+                "effective_mode"
+            ],
+            "managed",
+        )
+        self.assertIn("delegated_evidence", proof)
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
+
+    def test_rollout_stage_prove_10_rejects_stage_policy_mismatch_without_delegated_writes(
+        self,
+    ) -> None:
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_POLICY_MISMATCH")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["policy_stage_status"], "custom")
+        self.assertEqual(proof["proof_gate_status"], "blocked_by_stage_policy_mismatch")
+        self.assertEqual(proof["final_outcome"], "stage_policy_mismatch")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_10_reports_insufficient_active_pool(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"] = registry["backends"][:-1]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 9
+        state["healthy_count"] = 9
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        (self.stable_dir / "codex-09.json").unlink()
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ACTIVE_POOL_MISMATCH")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["active_pool_count_observed"], 9)
+        self.assertEqual(proof["final_outcome"], "insufficient_active_pool")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_10_reports_runtime_attestation_failure(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ATTESTATION_FAILED")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["runtime_attestation_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "runtime_attestation_failed")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+
+    def test_rollout_stage_prove_10_reports_runtime_smoke_failure(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        self.write_recording_managed_launcher(self.launcher_script, exit_code=9)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_SMOKE_FAILED")
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["runtime_smoke_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "runtime_smoke_failed")
+
+    def test_rollout_stage_prove_10_reports_rotation_insufficiency(self) -> None:
+        self.configure_stable_ten_proof_fixture(selected_backend_ids=["backend-00"])
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "stage", "prove", "10", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "STAGE_PROOF_ROTATION_INSUFFICIENT")
+        self.assertEqual(payload["changed_files"], [])
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["rotation_evidence_status"], "insufficient")
+        self.assertEqual(proof["final_outcome"], "rotation_evidence_insufficient")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
+        self.assertEqual(before, after)
+
+    def test_rollout_stage_prove_10_reports_rollback_readiness_failure(self) -> None:
+        self.configure_stable_ten_proof_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch(
+                    "wild_boar_proxy.runtime.summarize_stable_10_rollback_readiness",
+                    return_value={
+                        "status": "failed",
+                        "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+                        "reason": "forced_test_failure",
+                    },
+                ):
+                    payload = runtime_mod.run_rollout_stage_prove(paths, "10")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
+        )
+        proof = payload["stage_proof_result"]
+        self.assertEqual(proof["rollback_readiness_status"], "failed")
+        self.assertEqual(proof["final_outcome"], "rollback_readiness_failed")
+        self.assertEqual(proof["runtime_smoke_status"], "not_invoked")
 
     def test_accounts_promote_rejects_held_backend_precondition(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"

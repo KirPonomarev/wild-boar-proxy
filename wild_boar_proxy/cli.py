@@ -26,6 +26,7 @@ from .runtime import (
     run_promote,
     run_release,
     run_rollout_rotation_inspect,
+    run_rollout_stage_prove,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -139,6 +140,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
     rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+    rollout_stage = rollout_subparsers.add_parser("stage")
+    rollout_stage_subparsers = rollout_stage.add_subparsers(
+        dest="rollout_stage_command", required=True
+    )
+    rollout_stage_prove = rollout_stage_subparsers.add_parser("prove")
+    rollout_stage_prove.add_argument("value")
+    rollout_stage_prove.add_argument("--json", action="store_true", required=True)
 
     return root_parser
 
@@ -225,6 +233,12 @@ def main(argv: list[str] | None = None) -> int:
             and args.rollout_rotation_command == "inspect"
         ):
             return emit_json(run_rollout_rotation_inspect(paths))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "stage"
+            and args.rollout_stage_command == "prove"
+        ):
+            return emit_json(run_rollout_stage_prove(paths, args.value))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

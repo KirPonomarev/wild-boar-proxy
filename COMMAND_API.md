@@ -24,6 +24,7 @@ All operator commands must support `--json`.
 - `mode set managed --json`
 - `policy stage set <10|15|20> --json`
 - `rollout rotation inspect --json`
+- `rollout stage prove 10 --json`
 - `accounts list --json`
 - `accounts validate <id> --json`
 - `accounts promote <id> --json`
@@ -279,6 +280,73 @@ Canonical rotation-evidence outcomes include:
 - lifecycle mutation under `accounts ... --json`
 - policy mutation under `policy stage set ... --json`
 - runtime-health ownership in `healthcheck --json`
+
+## Additional stable-10 proof owner surface
+
+`rollout stage prove 10 --json` is the owner surface for canonical stable-10
+proof truth.
+
+Stable-10 proof success must not be inferred from:
+
+- policy stage alone
+- stale status alone
+- logs alone
+- rotation evidence alone
+- runtime smoke alone
+
+Successful owner packets must prove, machine-readably:
+
+- the current staged policy matches canonical stage `10`
+- active-pool posture is aligned with canonical stage-10 policy
+- bounded rotation evidence is not contradicted
+- live runtime attestation passed
+- bounded runtime smoke passed
+- delegated runtime smoke did not displace or invalidate the managed runtime
+  proof surface being certified
+- rollback-readiness remained available
+- all delegated evidence lines stayed delegated rather than replacing their
+  owner surfaces
+
+`rollout stage prove 10 --json` may expose a nested `stage_proof_result`
+surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `requested_stage`
+- `policy_stage_status`
+- `policy_stage_observed`
+- `policy_mapping_status`
+- `active_pool_count_observed`
+- `reserve_pool_count_observed`
+- `rotation_evidence_status`
+- `runtime_attestation_status`
+- `runtime_smoke_status`
+- `rollback_readiness_status`
+- `delegated_evidence`
+- `proof_gate_status`
+- `final_outcome`
+
+Canonical stable-10 proof outcomes include:
+
+- `stable_10_proved`
+- `stage_policy_mismatch`
+- `insufficient_active_pool`
+- `rotation_evidence_insufficient`
+- `rotation_evidence_contradicted`
+- `runtime_attestation_failed`
+- `runtime_smoke_failed`
+- `rollback_readiness_failed`
+- `proof_blocked`
+
+`rollout stage prove 10 --json` remains separate from:
+
+- policy mutation under `policy stage set ... --json`
+- bounded rotation evidence ownership under `rollout rotation inspect --json`
+- runtime-health ownership under `healthcheck --json`
+- runtime smoke ownership under `launch smoke --json`
+- lifecycle mutation under `accounts ... --json`
+- stage execution toward `15` or `20`
 
 ## Additional promotion owner surface
 

@@ -1119,6 +1119,36 @@ def pool_policy_matches_stage_packet(
     )
 
 
+def observe_current_stage_from_pool_policy(registry: dict[str, Any]) -> dict[str, Any]:
+    policy_summary = summarize_promotion_pool_policy(registry)
+    if policy_summary.get("status") != "ok":
+        return {
+            "status": "invalid",
+            "machine_error_code": str(
+                policy_summary.get("machine_error_code", "POOL_POLICY_INVALID")
+            ),
+            "observed_stage": "",
+            "pool_policy_summary": policy_summary,
+        }
+
+    pool_policy = registry.get("pool_policy") or {}
+    for stage, desired_policy in STAGED_POOL_POLICY_PACKETS.items():
+        if pool_policy_matches_stage_packet(pool_policy, desired_policy):
+            return {
+                "status": "matched",
+                "machine_error_code": "OK",
+                "observed_stage": stage,
+                "pool_policy_summary": policy_summary,
+            }
+
+    return {
+        "status": "custom",
+        "machine_error_code": "POOL_POLICY_STAGE_CUSTOM",
+        "observed_stage": "",
+        "pool_policy_summary": policy_summary,
+    }
+
+
 def get_claim_gate(
     policy_drift: dict[str, Any], registry_identity: dict[str, Any]
 ) -> dict[str, Any]:
@@ -4958,6 +4988,443 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
                 ),
             },
         },
+    )
+
+
+def summarize_stable_10_rollback_readiness(
+    health_payload: dict[str, Any], status_payload: dict[str, Any]
+) -> dict[str, Any]:
+    recovery_contract = health_payload.get("deterministic_stable_recovery_contract")
+    last_known_good_contract = health_payload.get("last_known_good_proxy_contract")
+    consumer = status_payload.get("stable_runtime_consumer")
+    if not isinstance(recovery_contract, dict):
+        return {
+            "status": "failed",
+            "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+            "reason": "deterministic_recovery_contract_missing",
+        }
+    if not isinstance(last_known_good_contract, dict):
+        return {
+            "status": "failed",
+            "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+            "reason": "last_known_good_contract_missing",
+        }
+    if not isinstance(consumer, dict):
+        return {
+            "status": "failed",
+            "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+            "reason": "stable_runtime_consumer_missing",
+        }
+
+    fallback_contract = consumer.get("fallback_contract")
+    readiness = consumer.get("consumer_activation_readiness")
+    if not isinstance(fallback_contract, dict) or not isinstance(readiness, dict):
+        return {
+            "status": "failed",
+            "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+            "reason": "fallback_or_readiness_surface_missing",
+        }
+
+    recovery_contract_ready = (
+        recovery_contract.get("status") == "contract_ready"
+        and recovery_contract.get("owner_command_surface") == "healthcheck --json"
+        and recovery_contract.get("entry_owner") == "healthcheck_live_attestation_path"
+        and bool(recovery_contract.get("status_delegates_to_owner"))
+    )
+    last_known_good_ready = (
+        last_known_good_contract.get("status") == "contract_ready"
+        and last_known_good_contract.get("owner_command_surface") == "healthcheck --json"
+        and bool(last_known_good_contract.get("status_delegates_to_owner"))
+        and bool(last_known_good_contract.get("changed_files_visibility_required"))
+    )
+    fallback_contract_ready = (
+        fallback_contract.get("status") == "contract_ready"
+        and bool(fallback_contract.get("fallback_allowed"))
+        and bool(fallback_contract.get("silent_fallback_forbidden"))
+        and bool(fallback_contract.get("desired_source_remains_visible"))
+        and bool(fallback_contract.get("effective_source_must_report_fallback"))
+    )
+    readiness_ok = readiness.get("machine_error_code") == "OK"
+
+    if (
+        recovery_contract_ready
+        and last_known_good_ready
+        and fallback_contract_ready
+        and readiness_ok
+    ):
+        return {
+            "status": "ready",
+            "machine_error_code": "OK",
+            "reason": "bounded_fallback_and_recovery_contracts_ready",
+        }
+
+    if not recovery_contract_ready:
+        reason = "deterministic_recovery_contract_not_ready"
+    elif not last_known_good_ready:
+        reason = "last_known_good_contract_not_ready"
+    elif not fallback_contract_ready:
+        reason = "fallback_contract_not_ready"
+    else:
+        reason = "consumer_activation_readiness_not_ok"
+    return {
+        "status": "failed",
+        "machine_error_code": "STAGE_PROOF_ROLLBACK_READINESS_FAILED",
+        "reason": reason,
+    }
+
+
+def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    stage_proof_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_stage": str(stage).strip(),
+        "policy_stage_status": "pending",
+        "policy_stage_observed": "",
+        "policy_mapping_status": "pending",
+        "active_pool_count_observed": 0,
+        "reserve_pool_count_observed": 0,
+        "rotation_evidence_status": "pending",
+        "runtime_attestation_status": "not_checked",
+        "runtime_smoke_status": "not_invoked",
+        "rollback_readiness_status": "not_checked",
+        "delegated_evidence": {},
+        "proof_gate_status": "pending",
+        "final_outcome": "pending_observation",
+    }
+
+    def build_stage_proof_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str = "none",
+        severity: str = "recoverable",
+        exit_code: int | None = None,
+    ) -> dict[str, Any]:
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra={
+                "requested_stage": stage_proof_result["requested_stage"],
+                "stage_proof_result": stage_proof_result,
+            },
+            exit_code=exit_code,
+        )
+
+    requested_stage = stage_proof_result["requested_stage"]
+    stage_mapping = summarize_stage_pool_policy_mapping(requested_stage)
+    stage_proof_result["policy_mapping_status"] = str(
+        stage_mapping.get("status", "unsupported")
+    )
+    if stage_mapping.get("status") != "ok":
+        stage_proof_result["policy_stage_status"] = "unsupported_stage"
+        stage_proof_result["proof_gate_status"] = "blocked_by_requested_stage"
+        stage_proof_result["final_outcome"] = "proof_blocked"
+        stage_proof_result["delegated_evidence"] = {
+            "stage_mapping_summary": stage_mapping,
+        }
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because the requested stage is not supported.",
+            machine_error_code=str(
+                stage_mapping.get("machine_error_code", "POOL_POLICY_STAGE_UNSUPPORTED")
+            ),
+            operator_action="user_action",
+        )
+
+    registry = read_json(paths.registry_file)
+    observed_stage = observe_current_stage_from_pool_policy(registry)
+    stage_proof_result["policy_stage_observed"] = str(
+        observed_stage.get("observed_stage", "")
+    )
+    stage_proof_result["policy_stage_status"] = str(observed_stage.get("status", "invalid"))
+
+    stage_proof_result["delegated_evidence"] = {
+        "stage_mapping_summary": stage_mapping,
+        "policy_stage_summary": observed_stage,
+    }
+    if observed_stage.get("status") != "matched" or observed_stage.get("observed_stage") != "10":
+        stage_proof_result["proof_gate_status"] = "blocked_by_stage_policy_mismatch"
+        stage_proof_result["final_outcome"] = "stage_policy_mismatch"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because current staged policy does not match canonical stage 10.",
+            machine_error_code="STAGE_PROOF_POLICY_MISMATCH",
+            operator_action="user_action",
+        )
+
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    active_pool_count_observed = coerce_nonnegative_int(
+        rotation_result.get("registry_active_pool_count_observed")
+    )
+    desired_policy = dict(stage_mapping.get("mapped_pool_policy") or {})
+    active_target = coerce_nonnegative_int(desired_policy.get("active_target"))
+    reserve_target = coerce_nonnegative_int(desired_policy.get("reserve_target"))
+
+    stage_proof_result["active_pool_count_observed"] = active_pool_count_observed or 0
+    stage_proof_result["rotation_evidence_status"] = rotation_status
+    stage_proof_result["delegated_evidence"] = {
+        "stage_mapping_summary": stage_mapping,
+        "policy_stage_summary": observed_stage,
+        "rotation_summary": {
+            "status": rotation_payload.get("status"),
+            "machine_error_code": rotation_payload.get("machine_error_code"),
+            "human_message": rotation_payload.get("human_message"),
+            "rotation_evidence_result": rotation_result,
+        },
+    }
+
+    if (
+        active_target is None
+        or active_pool_count_observed is None
+        or active_pool_count_observed != active_target
+    ):
+        stage_proof_result["proof_gate_status"] = "blocked_by_active_pool_alignment"
+        stage_proof_result["final_outcome"] = (
+            "insufficient_active_pool"
+            if active_pool_count_observed is not None
+            and active_target is not None
+            and active_pool_count_observed < active_target
+            else "proof_blocked"
+        )
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because observed pool counts are not aligned with canonical stage 10 targets.",
+            machine_error_code="STAGE_PROOF_ACTIVE_POOL_MISMATCH",
+            operator_action="user_action",
+        )
+
+    if rotation_status == "contradicted":
+        stage_proof_result["proof_gate_status"] = "blocked_by_rotation_contradiction"
+        stage_proof_result["final_outcome"] = "rotation_evidence_contradicted"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because bounded rotation evidence is contradicted.",
+            machine_error_code="STAGE_PROOF_ROTATION_CONTRADICTED",
+            operator_action="user_action",
+        )
+    if rotation_status == "insufficient":
+        stage_proof_result["proof_gate_status"] = "blocked_by_rotation_insufficiency"
+        stage_proof_result["final_outcome"] = "rotation_evidence_insufficient"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because bounded rotation evidence is insufficient.",
+            machine_error_code="STAGE_PROOF_ROTATION_INSUFFICIENT",
+            operator_action="user_action",
+        )
+    if rotation_status != "available":
+        stage_proof_result["proof_gate_status"] = "blocked_by_rotation_unknown"
+        stage_proof_result["final_outcome"] = "proof_blocked"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because bounded rotation evidence is not available.",
+            machine_error_code="STAGE_PROOF_ROTATION_UNKNOWN",
+            operator_action="user_action",
+        )
+
+    pre_health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    pre_status_payload = summarize_status(paths, health_payload=pre_health_payload)
+    pre_pool_summary = pre_status_payload.get("pool_summary", {})
+    reserve_pool_count_observed = coerce_nonnegative_int(pre_pool_summary.get("reserve"))
+    stage_proof_result["reserve_pool_count_observed"] = reserve_pool_count_observed or 0
+
+    pre_attestation_ok = (
+        pre_health_payload.get("status") == "ok"
+        and str(pre_health_payload.get("effective_mode")) == "managed"
+    )
+    pre_rollback_readiness = summarize_stable_10_rollback_readiness(
+        pre_health_payload, pre_status_payload
+    )
+    stage_proof_result["runtime_attestation_status"] = (
+        "passed" if pre_attestation_ok else "failed"
+    )
+    stage_proof_result["rollback_readiness_status"] = str(
+        pre_rollback_readiness.get("status", "failed")
+    )
+    stage_proof_result["delegated_evidence"].update(
+        {
+            "pre_smoke_healthcheck_summary": {
+                "status": pre_health_payload.get("status"),
+                "machine_error_code": pre_health_payload.get("machine_error_code"),
+                "effective_mode": pre_health_payload.get("effective_mode"),
+                "attestation": pre_health_payload.get("attestation", {}),
+                "deterministic_stable_recovery_contract": pre_health_payload.get(
+                    "deterministic_stable_recovery_contract", {}
+                ),
+                "last_known_good_proxy_contract": pre_health_payload.get(
+                    "last_known_good_proxy_contract", {}
+                ),
+                "last_known_good_proxy": pre_health_payload.get(
+                    "last_known_good_proxy", {}
+                ),
+            },
+            "pre_smoke_status_summary": {
+                "status": pre_status_payload.get("status"),
+                "machine_error_code": pre_status_payload.get("machine_error_code"),
+                "pool_summary": pre_pool_summary,
+                "attestation_summary": pre_status_payload.get("attestation_summary", {}),
+                "stable_runtime_consumer": pre_status_payload.get(
+                    "stable_runtime_consumer", {}
+                ),
+            },
+            "pre_smoke_rollback_readiness_summary": pre_rollback_readiness,
+        }
+    )
+
+    if (
+        reserve_target is None
+        or reserve_pool_count_observed is None
+        or reserve_pool_count_observed < reserve_target
+    ):
+        stage_proof_result["proof_gate_status"] = "blocked_by_reserve_pool_alignment"
+        stage_proof_result["final_outcome"] = "proof_blocked"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because reserve pool posture is not aligned with canonical stage 10 targets.",
+            machine_error_code="STAGE_PROOF_ACTIVE_POOL_MISMATCH",
+            operator_action="user_action",
+        )
+
+    if not pre_attestation_ok:
+        stage_proof_result["proof_gate_status"] = "blocked_by_runtime_attestation"
+        stage_proof_result["final_outcome"] = "runtime_attestation_failed"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because live managed runtime attestation did not pass.",
+            machine_error_code="STAGE_PROOF_ATTESTATION_FAILED",
+            operator_action="retry",
+        )
+
+    if pre_rollback_readiness.get("status") != "ready":
+        stage_proof_result["proof_gate_status"] = "blocked_by_rollback_readiness"
+        stage_proof_result["final_outcome"] = "rollback_readiness_failed"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because rollback readiness is not available.",
+            machine_error_code=str(
+                pre_rollback_readiness.get(
+                    "machine_error_code", "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
+                )
+            ),
+            operator_action="user_action",
+        )
+
+    smoke_payload = run_launch_smoke(paths)
+    stage_proof_result["runtime_smoke_status"] = (
+        "passed" if smoke_payload.get("status") == "ok" else "failed"
+    )
+    stage_proof_result["delegated_evidence"]["runtime_smoke_summary"] = {
+        "status": smoke_payload.get("status"),
+        "machine_error_code": smoke_payload.get("machine_error_code"),
+        "effective_mode": smoke_payload.get("effective_mode"),
+        "launcher_exit_code": smoke_payload.get("launcher_exit_code"),
+        "attestation_summary": smoke_payload.get("attestation_summary", {}),
+        "stable_runtime_consumer": smoke_payload.get("stable_runtime_consumer", {}),
+    }
+
+    if smoke_payload.get("status") != "ok":
+        stage_proof_result["proof_gate_status"] = "blocked_by_runtime_smoke"
+        stage_proof_result["final_outcome"] = "runtime_smoke_failed"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because bounded runtime smoke did not pass.",
+            machine_error_code="STAGE_PROOF_SMOKE_FAILED",
+            operator_action="retry",
+            exit_code=int(smoke_payload.get("exit_code", 1) or 1),
+        )
+
+    post_health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    post_status_payload = summarize_status(paths, health_payload=post_health_payload)
+    post_rollback_readiness = summarize_stable_10_rollback_readiness(
+        post_health_payload, post_status_payload
+    )
+    post_attestation_ok = (
+        post_health_payload.get("status") == "ok"
+        and str(post_health_payload.get("effective_mode")) == "managed"
+    )
+    stage_proof_result["runtime_attestation_status"] = (
+        "passed" if post_attestation_ok else "failed"
+    )
+    stage_proof_result["rollback_readiness_status"] = str(
+        post_rollback_readiness.get("status", "failed")
+    )
+    stage_proof_result["delegated_evidence"]["post_smoke_healthcheck_summary"] = {
+        "status": post_health_payload.get("status"),
+        "machine_error_code": post_health_payload.get("machine_error_code"),
+        "effective_mode": post_health_payload.get("effective_mode"),
+        "attestation": post_health_payload.get("attestation", {}),
+        "deterministic_stable_recovery_contract": post_health_payload.get(
+            "deterministic_stable_recovery_contract", {}
+        ),
+        "last_known_good_proxy_contract": post_health_payload.get(
+            "last_known_good_proxy_contract", {}
+        ),
+        "last_known_good_proxy": post_health_payload.get("last_known_good_proxy", {}),
+    }
+    stage_proof_result["delegated_evidence"]["post_smoke_status_summary"] = {
+        "status": post_status_payload.get("status"),
+        "machine_error_code": post_status_payload.get("machine_error_code"),
+        "pool_summary": post_status_payload.get("pool_summary", {}),
+        "attestation_summary": post_status_payload.get("attestation_summary", {}),
+        "stable_runtime_consumer": post_status_payload.get("stable_runtime_consumer", {}),
+    }
+    stage_proof_result["delegated_evidence"]["post_smoke_rollback_readiness_summary"] = (
+        post_rollback_readiness
+    )
+
+    if not post_attestation_ok:
+        stage_proof_result["runtime_smoke_status"] = "failed"
+        stage_proof_result["proof_gate_status"] = "blocked_by_post_smoke_reproof"
+        stage_proof_result["final_outcome"] = "runtime_smoke_failed"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message=(
+                "Stable-10 proof is blocked because bounded runtime smoke did not preserve a healthy managed runtime proof surface."
+            ),
+            machine_error_code="STAGE_PROOF_SMOKE_FAILED",
+            operator_action="retry",
+        )
+
+    if post_rollback_readiness.get("status") != "ready":
+        stage_proof_result["proof_gate_status"] = "blocked_by_rollback_readiness"
+        stage_proof_result["final_outcome"] = "rollback_readiness_failed"
+        return build_stage_proof_payload(
+            ok=False,
+            human_message="Stable-10 proof is blocked because rollback readiness is not available.",
+            machine_error_code=str(
+                post_rollback_readiness.get(
+                    "machine_error_code", "STAGE_PROOF_ROLLBACK_READINESS_FAILED"
+                )
+            ),
+            operator_action="user_action",
+        )
+
+    stage_proof_result["proof_gate_status"] = "stable_10_gate_closed"
+    stage_proof_result["final_outcome"] = "stable_10_proved"
+    return build_stage_proof_payload(
+        ok=True,
+        human_message="Stable-10 proof gate is closed with bounded delegated evidence.",
+        machine_error_code="OK",
     )
 
 
