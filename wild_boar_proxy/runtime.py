@@ -4661,6 +4661,552 @@ def run_accounts_command(
     )
 
 
+def selected_backend_ids_from_state(state: dict[str, Any]) -> list[str]:
+    return sorted(str(item) for item in state.get("selected_backend_ids", []) or [])
+
+
+def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
+    if not paths.sync_script.exists():
+        raise RuntimeErrorInfo(
+            f"Missing sync script: {paths.sync_script}",
+            machine_error_code="MISSING_SYNC_SCRIPT",
+            operator_action="user_action",
+        )
+    sync_result = subprocess.run(
+        [str(paths.sync_script), get_model(paths)],
+        capture_output=True,
+        text=True,
+        env=sanitized_env(),
+        check=False,
+    )
+    emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
+    sync_state = read_json(paths.state_file, required=False)
+    sync_effective_mode = get_effective_mode(paths, sync_state)
+    sync_host, sync_port, _ = get_endpoint(paths, sync_effective_mode)
+    sync_listener_ok = socket_is_listening(sync_host, sync_port)
+    sync_reported_effective_mode = reconcile_effective_mode_for_reporting(
+        sync_effective_mode, listener_ok=sync_listener_ok
+    )
+    _, _, sync_reported_endpoint = get_endpoint(paths, sync_reported_effective_mode)
+    if sync_result.returncode != 0:
+        return {
+            "status": "error",
+            "machine_error_code": "SYNC_FAILED",
+            "exit_code": sync_result.returncode,
+            "liveness": "down" if not sync_listener_ok else "degraded",
+            "operator_action": "retry",
+            "effective_mode": sync_reported_effective_mode,
+            "endpoint": sync_reported_endpoint,
+        }
+    if not sync_listener_ok:
+        return {
+            "status": "error",
+            "machine_error_code": "SYNC_HEALTHCHECK_FAILED",
+            "exit_code": 1,
+            "liveness": "down",
+            "operator_action": "retry",
+            "effective_mode": sync_reported_effective_mode,
+            "endpoint": sync_reported_endpoint,
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "exit_code": 0,
+        "liveness": "healthy",
+        "operator_action": "none",
+        "effective_mode": sync_reported_effective_mode,
+        "endpoint": sync_reported_endpoint,
+    }
+
+
+def observe_status_proof_for_owner_path_under_lock(
+    paths: RuntimePaths,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    status_payload = summarize_status(paths, health_payload=health_payload)
+    return status_payload, summarize_owner_path_status_observation(status_payload)
+
+
+def run_hold(paths: RuntimePaths, backend_id: str, reason: str | None) -> dict[str, Any]:
+    return run_protective_lifecycle_owner_path(
+        paths,
+        backend_id,
+        action="hold",
+        reason=reason,
+    )
+
+
+def run_release(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    return run_protective_lifecycle_owner_path(paths, backend_id, action="release")
+
+
+def run_protective_lifecycle_owner_path(
+    paths: RuntimePaths,
+    backend_id: str,
+    *,
+    action: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    if not paths.accounts_bin.exists():
+        raise RuntimeErrorInfo(
+            f"Missing accounts command: {paths.accounts_bin}",
+            machine_error_code="MISSING_ACCOUNTS_BIN",
+            operator_action="user_action",
+        )
+
+    before = snapshot_known_files(paths)
+    before_registry = read_json(paths.registry_file)
+    before_state = read_json(paths.state_file, required=False)
+    before_routing_ids = routing_eligible_active_backend_ids(before_registry)
+    before_selected_backend_ids = selected_backend_ids_from_state(before_state)
+    command = [action, backend_id]
+    if action == "hold" and reason:
+        command.append(reason)
+
+    result_key = "hold_result" if action == "hold" else "release_result"
+    success_outcome = (
+        "backend_held" if action == "hold" else "backend_released_to_reserve"
+    )
+    failure_prefix = action.upper()
+    backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    previous_pool = (
+        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+    )
+    previous_manual_hold = bool(
+        selected_backend.get("manual_hold", False)
+        if isinstance(selected_backend, dict)
+        else False
+    )
+    transition_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "backend_id": backend_id,
+        "precondition_status": "pending",
+        "previous_pool": previous_pool,
+        "previous_manual_hold": previous_manual_hold,
+        "requested_transition": "protective_hold" if action == "hold" else "release_to_reserve",
+        "rollback_point_captured": False,
+        "routing_change_attempted": False,
+        "routing_change_observed": False,
+        "sync_attempted": False,
+        "sync_outcome": "not_attempted",
+        "status_observed": None,
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "external_command_exit_code": None,
+        "external_command_status": "not_invoked",
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_transition_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str = "unknown",
+        severity: str = "recoverable",
+        operator_action: str = "none",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "command": command,
+            result_key: transition_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness=liveness,
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    def rollback_after_failed_verification(
+        *,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str,
+        operator_action: str,
+        exit_code: int | None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        transition_result["rollback_attempted"] = True
+        try:
+            restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
+            transition_result["rollback_outcome"] = "completed"
+            transition_result["final_outcome"] = (
+                "rollback_completed_after_failed_verification"
+            )
+            return build_transition_payload(
+                ok=False,
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                severity="recoverable",
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+        except Exception as exc:  # noqa: BLE001
+            transition_result["rollback_outcome"] = "failed"
+            transition_result["final_outcome"] = "rollback_failed"
+            payload_extra = dict(extra or {})
+            payload_extra["rollback_error"] = str(exc)
+            return build_transition_payload(
+                ok=False,
+                human_message=(
+                    f"{human_message} Rollback of control-layer lifecycle state failed."
+                ),
+                machine_error_code=f"{failure_prefix}_ROLLBACK_FAILED",
+                liveness=liveness,
+                severity="fatal",
+                operator_action="stop",
+                exit_code=1,
+                extra=payload_extra,
+            )
+
+    if not backend_matches:
+        transition_result["precondition_status"] = "backend_missing"
+        transition_result["final_outcome"] = "precondition_failed"
+        return build_transition_payload(
+            ok=False,
+            human_message="Lifecycle target backend does not exist.",
+            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if len(backend_matches) > 1:
+        transition_result["precondition_status"] = "ambiguous_backend_id"
+        transition_result["final_outcome"] = "precondition_failed"
+        return build_transition_payload(
+            ok=False,
+            human_message="Lifecycle target backend is ambiguous.",
+            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if previous_pool == "retired":
+        transition_result["precondition_status"] = "backend_retired"
+        transition_result["final_outcome"] = "precondition_failed"
+        return build_transition_payload(
+            ok=False,
+            human_message="Retired backend is not eligible for this lifecycle transition.",
+            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if action == "hold" and previous_manual_hold:
+        transition_result["precondition_status"] = "already_held"
+        transition_result["final_outcome"] = "already_held"
+        return build_transition_payload(
+            ok=True,
+            human_message="Backend is already on protective hold.",
+            machine_error_code="OK",
+            operator_action="none",
+        )
+
+    if action == "release" and not previous_manual_hold:
+        transition_result["precondition_status"] = "not_on_hold"
+        transition_result["final_outcome"] = "not_on_hold"
+        return build_transition_payload(
+            ok=False,
+            human_message="Backend is not currently on hold.",
+            machine_error_code=f"{failure_prefix}_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    transition_result["precondition_status"] = (
+        "eligible_backend_for_hold"
+        if action == "hold"
+        else "eligible_backend_for_release"
+    )
+
+    with serialized_lock(paths):
+        rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
+        transition_result["rollback_point_captured"] = True
+        try:
+            result = subprocess.run(
+                [str(paths.accounts_bin), *command],
+                capture_output=True,
+                text=True,
+                env=sanitized_env(),
+                check=False,
+            )
+        except OSError as exc:
+            transition_result["external_command_status"] = "exec_error"
+            transition_result["final_outcome"] = (
+                "hold_command_failed"
+                if action == "hold"
+                else "release_command_failed"
+            )
+            return build_transition_payload(
+                ok=False,
+                human_message="Protective lifecycle command could not be executed.",
+                machine_error_code=f"{failure_prefix}_COMMAND_EXEC_FAILED",
+                operator_action="user_action",
+                exit_code=1,
+                extra={"command_error": str(exc)},
+            )
+        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
+        transition_result["external_command_exit_code"] = int(result.returncode)
+        transition_result["external_command_status"] = (
+            "ok" if result.returncode == 0 else "nonzero"
+        )
+
+        after_command_registry = read_json(paths.registry_file)
+        after_command_state = read_json(paths.state_file, required=False)
+        after_command_matches = get_registry_backends_by_id(
+            after_command_registry, backend_id
+        )
+        after_command_backend = (
+            after_command_matches[0] if len(after_command_matches) == 1 else None
+        )
+        after_routing_ids = routing_eligible_active_backend_ids(after_command_registry)
+        after_selected_backend_ids = selected_backend_ids_from_state(after_command_state)
+        after_command_pool = (
+            str(after_command_backend.get("pool", ""))
+            if isinstance(after_command_backend, dict)
+            else ""
+        )
+        transition_result["routing_change_attempted"] = bool(
+            before_routing_ids != after_routing_ids
+            or before_selected_backend_ids != after_selected_backend_ids
+            or (
+                previous_pool == "active"
+                and after_command_pool != "active"
+            )
+            or (
+                previous_pool != "active"
+                and after_command_pool == "active"
+            )
+        )
+
+        def fail_after_command(
+            *,
+            human_message: str,
+            machine_error_code: str,
+            liveness: str,
+            operator_action: str,
+            exit_code: int | None,
+            extra: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            return rollback_after_failed_verification(
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+
+        if len(after_command_matches) != 1:
+            transition_result["final_outcome"] = (
+                f"{action}_command_failed"
+                if action == "hold"
+                else "release_command_failed"
+            )
+            return fail_after_command(
+                human_message=(
+                    "Lifecycle transition did not leave a uniquely identifiable backend state."
+                ),
+                machine_error_code=f"{failure_prefix}_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        after_command_hold = bool(after_command_backend.get("manual_hold", False))
+        if action == "hold":
+            lifecycle_verified = (
+                after_command_hold and after_command_pool in {"active", "reserve"}
+            )
+        else:
+            lifecycle_verified = not after_command_hold and after_command_pool == "reserve"
+        if not lifecycle_verified:
+            transition_result["final_outcome"] = (
+                "hold_command_failed"
+                if action == "hold"
+                else "release_command_failed"
+            )
+            return fail_after_command(
+                human_message=(
+                    "Protective hold command did not leave the backend in held state."
+                    if action == "hold"
+                    else "Release command did not return the backend to reserve."
+                ),
+                machine_error_code=f"{failure_prefix}_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        sync_payload: dict[str, Any] | None = None
+        status_payload: dict[str, Any] | None = None
+        if transition_result["routing_change_attempted"]:
+            transition_result["sync_attempted"] = True
+            try:
+                sync_payload = run_sync_for_owner_path_under_lock(paths)
+                transition_result["sync_outcome"] = (
+                    "ok" if sync_payload["status"] == "ok" else "failed"
+                )
+                if sync_payload["status"] != "ok":
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Protective lifecycle transition changed routing inputs, but managed sync verification failed."
+                        ),
+                        machine_error_code=f"{failure_prefix}_SYNC_FAILED",
+                        liveness=str(sync_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            sync_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(sync_payload.get("exit_code", 1) or 1),
+                        extra={
+                            "sync_result": {
+                                "command_status": sync_payload["status"],
+                                "machine_error_code": sync_payload["machine_error_code"],
+                                "exit_code": sync_payload["exit_code"],
+                            }
+                        },
+                    )
+
+                status_payload, status_observed = (
+                    observe_status_proof_for_owner_path_under_lock(paths)
+                )
+                transition_result["status_observed"] = status_observed
+                verified_registry = read_json(paths.registry_file)
+                verified_state = read_json(paths.state_file, required=False)
+                verified_matches = get_registry_backends_by_id(
+                    verified_registry, backend_id
+                )
+                verified_backend = (
+                    verified_matches[0] if len(verified_matches) == 1 else None
+                )
+                verified_selected_backend_ids = set(
+                    selected_backend_ids_from_state(verified_state)
+                )
+                verified_routing_ids = set(
+                    routing_eligible_active_backend_ids(verified_registry)
+                )
+                if action == "hold":
+                    transition_result["routing_change_observed"] = bool(
+                        status_payload["status"] == "ok"
+                        and isinstance(verified_backend, dict)
+                        and bool(verified_backend.get("manual_hold", False))
+                        and backend_id not in verified_routing_ids
+                        and backend_id not in verified_selected_backend_ids
+                    )
+                else:
+                    transition_result["routing_change_observed"] = bool(
+                        status_payload["status"] == "ok"
+                        and isinstance(verified_backend, dict)
+                        and not bool(verified_backend.get("manual_hold", False))
+                        and str(verified_backend.get("pool", "")) == "reserve"
+                        and backend_id not in verified_routing_ids
+                        and backend_id not in verified_selected_backend_ids
+                    )
+                if (
+                    status_payload["status"] != "ok"
+                    or not transition_result["routing_change_observed"]
+                ):
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Protective hold did not produce verified routing isolation after status proof."
+                            if action == "hold"
+                            else "Release did not produce verified reserve-only state after status proof."
+                        ),
+                        machine_error_code=f"{failure_prefix}_STATUS_FAILED",
+                        liveness=str(status_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            status_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(status_payload.get("exit_code", 1) or 1),
+                        extra=(
+                            {
+                                "sync_result": {
+                                    "command_status": sync_payload["status"],
+                                    "machine_error_code": sync_payload["machine_error_code"],
+                                    "exit_code": sync_payload["exit_code"],
+                                }
+                            }
+                            if sync_payload is not None
+                            else None
+                        ),
+                    )
+            except RuntimeErrorInfo as exc:
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Protective lifecycle post-command verification raised a runtime error."
+                    ),
+                    machine_error_code=f"{failure_prefix}_SYNC_FAILED",
+                    liveness="unknown",
+                    operator_action=exc.operator_action,
+                    exit_code=exc.exit_code,
+                    extra={"verification_error": str(exc)},
+                )
+            except Exception as exc:  # noqa: BLE001
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Protective lifecycle post-command verification raised an unexpected error."
+                    ),
+                    machine_error_code=f"{failure_prefix}_STATUS_FAILED",
+                    liveness="unknown",
+                    operator_action="retry",
+                    exit_code=1,
+                    extra={"verification_error": str(exc)},
+                )
+
+        transition_result["rollback_outcome"] = "not_needed"
+        transition_result["final_outcome"] = success_outcome
+        success_extra: dict[str, Any] = {}
+        if sync_payload is not None:
+            success_extra["sync_result"] = {
+                "command_status": sync_payload["status"],
+                "machine_error_code": sync_payload["machine_error_code"],
+                "exit_code": sync_payload["exit_code"],
+            }
+        return build_transition_payload(
+            ok=True,
+            human_message=(
+                "Protective hold completed with verified routing isolation."
+                if action == "hold" and transition_result["routing_change_attempted"]
+                else "Protective hold completed."
+                if action == "hold"
+                else "Release completed with verified reserve-only routing proof."
+                if transition_result["routing_change_attempted"]
+                else "Release completed and backend remains reserve-only."
+            )
+            if result.returncode == 0
+            else (
+                "Protective hold completed after external hold exit non-zero."
+                if action == "hold"
+                else "Release completed after external release exit non-zero."
+            ),
+            machine_error_code="OK",
+            liveness=(
+                str(status_payload.get("liveness", "unknown"))
+                if status_payload is not None
+                else "unknown"
+            ),
+            severity="recoverable",
+            operator_action="none",
+            extra=success_extra or None,
+        )
+
+
 def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(
@@ -5179,6 +5725,18 @@ def restore_promotion_owner_path_runtime_surfaces(
         paths.runtime_effective_mode_file,
         snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
     )
+
+
+def snapshot_lifecycle_owner_path_runtime_surfaces(
+    paths: RuntimePaths,
+) -> dict[str, dict[str, Any]]:
+    return snapshot_promotion_owner_path_runtime_surfaces(paths)
+
+
+def restore_lifecycle_owner_path_runtime_surfaces(
+    paths: RuntimePaths, snapshots: dict[str, dict[str, Any]]
+) -> None:
+    restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
 
 
 def classify_onboarded_backend_selection(

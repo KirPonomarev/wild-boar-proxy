@@ -14,10 +14,12 @@ from .runtime import (
     mode_set,
     run_accounts_command,
     run_healthcheck,
+    run_hold,
     run_launch_client,
     run_launch_smoke,
     run_onboard,
     run_promote,
+    run_release,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
     run_stable_target_switch_contract,
@@ -163,7 +165,6 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_promote(paths, args.id))
         if args.command == "accounts" and args.accounts_command in {
             "demote",
-            "release",
             "retire",
         }:
             return emit_json(
@@ -175,17 +176,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         if args.command == "accounts" and args.accounts_command == "hold":
-            command = ["hold", args.id]
-            if args.reason:
-                command.append(args.reason)
-            return emit_json(
-                run_accounts_command(
-                    paths,
-                    command,
-                    success_message="Account hold completed.",
-                    failure_message="Account hold failed.",
-                )
-            )
+            return emit_json(run_hold(paths, args.id, args.reason))
+        if args.command == "accounts" and args.accounts_command == "release":
+            return emit_json(run_release(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "onboard":
             return emit_json(
                 run_onboard(

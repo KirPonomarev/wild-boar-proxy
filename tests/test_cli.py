@@ -404,6 +404,52 @@ class CliTests(unittest.TestCase):
             "    if stderr_text:\n"
             "        print(stderr_text, file=sys.stderr)\n"
             "    raise SystemExit(int(os.environ.get('WBP_TEST_PROMOTE_EXIT_CODE', '0')))\n"
+            "if command == 'hold':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    updates = json.loads(os.environ.get('WBP_TEST_HOLD_BACKEND_UPDATES_JSON', '[]'))\n"
+            "    if not updates and backend_id:\n"
+            "        updates = [{'id': backend_id, 'manual_hold': True}]\n"
+            "    updates_by_id = {str(item.get('id')): item for item in updates if item.get('id') is not None}\n"
+            "    if updates_by_id:\n"
+            "        for backend in registry.get('backends', []):\n"
+            "            update = updates_by_id.get(str(backend.get('id')))\n"
+            "            if update:\n"
+            "                backend.update(update)\n"
+            "        registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "        registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "    state_patch = json.loads(os.environ.get('WBP_TEST_HOLD_STATE_PATCH_JSON', '{}'))\n"
+            "    if state_patch:\n"
+            "        state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "        state = json.loads(state_path.read_text())\n"
+            "        state.update(state_patch)\n"
+            "        state_path.write_text(json.dumps(state) + '\\n')\n"
+            "    stderr_text = os.environ.get('WBP_TEST_HOLD_STDERR', 'hold-ran')\n"
+            "    if stderr_text:\n"
+            "        print(stderr_text, file=sys.stderr)\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_HOLD_EXIT_CODE', '0')))\n"
+            "if command == 'release':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    updates = json.loads(os.environ.get('WBP_TEST_RELEASE_BACKEND_UPDATES_JSON', '[]'))\n"
+            "    if not updates and backend_id:\n"
+            "        updates = [{'id': backend_id, 'manual_hold': False, 'pool': 'reserve'}]\n"
+            "    updates_by_id = {str(item.get('id')): item for item in updates if item.get('id') is not None}\n"
+            "    if updates_by_id:\n"
+            "        for backend in registry.get('backends', []):\n"
+            "            update = updates_by_id.get(str(backend.get('id')))\n"
+            "            if update:\n"
+            "                backend.update(update)\n"
+            "        registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "        registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "    state_patch = json.loads(os.environ.get('WBP_TEST_RELEASE_STATE_PATCH_JSON', '{}'))\n"
+            "    if state_patch:\n"
+            "        state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "        state = json.loads(state_path.read_text())\n"
+            "        state.update(state_patch)\n"
+            "        state_path.write_text(json.dumps(state) + '\\n')\n"
+            "    stderr_text = os.environ.get('WBP_TEST_RELEASE_STDERR', 'release-ran')\n"
+            "    if stderr_text:\n"
+            "        print(stderr_text, file=sys.stderr)\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_RELEASE_EXIT_CODE', '0')))\n"
             "print('accounts-ok', file=sys.stderr)\n"
             "raise SystemExit(0)\n"
             "PY\n",
@@ -5419,6 +5465,243 @@ class CliTests(unittest.TestCase):
         self.assertTrue(onboarding["active_routing_changed"])
         self.assertFalse(onboarding["validate_attempted"])
 
+    def test_accounts_hold_holds_active_backend_with_verified_routing_isolation(
+        self,
+    ) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-hold-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "retired_count": 0,
+                "healthy_count": 1,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-hold-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "hold",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["precondition_status"], "eligible_backend_for_hold")
+        self.assertTrue(hold["rollback_point_captured"])
+        self.assertTrue(hold["routing_change_attempted"])
+        self.assertTrue(hold["routing_change_observed"])
+        self.assertTrue(hold["sync_attempted"])
+        self.assertEqual(hold["sync_outcome"], "ok")
+        self.assertEqual(hold["rollback_outcome"], "not_needed")
+        self.assertEqual(hold["final_outcome"], "backend_held")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        backend = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertTrue(backend["manual_hold"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertNotIn("backend-a", state.get("selected_backend_ids", []))
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_hold_sync_failure_rolls_back_control_state(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-hold-fail.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "last_error": "sync failed after hold",
+            },
+            stderr_text="sync-hold-fail",
+            exit_code=5,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(sync_script)},
+            "accounts",
+            "hold",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 5, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "HOLD_SYNC_FAILED")
+        hold = payload["hold_result"]
+        self.assertTrue(hold["routing_change_attempted"])
+        self.assertTrue(hold["rollback_attempted"])
+        self.assertEqual(hold["rollback_outcome"], "completed")
+        self.assertEqual(
+            hold["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_release_releases_held_backend_to_reserve_only(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-held-reserve",
+                auth_ref="/tmp/codex-held-reserve.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "accounts",
+            "release",
+            "backend-held-reserve",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        release = payload["release_result"]
+        self.assertEqual(release["precondition_status"], "eligible_backend_for_release")
+        self.assertFalse(release["routing_change_attempted"])
+        self.assertFalse(release["sync_attempted"])
+        self.assertEqual(release["rollback_outcome"], "not_needed")
+        self.assertEqual(release["final_outcome"], "backend_released_to_reserve")
+        registry = json.loads(registry_path.read_text())
+        backend = [
+            item for item in registry["backends"] if item["id"] == "backend-held-reserve"
+        ][0]
+        self.assertEqual(backend["pool"], "reserve")
+        self.assertFalse(backend["manual_hold"])
+        self.assertIn(str(registry_path), payload["changed_files"])
+
+    def test_accounts_release_rejects_not_on_hold_precondition(self) -> None:
+        result = self.run_cli("accounts", "release", "backend-a", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_PRECONDITION_FAILED")
+        release = payload["release_result"]
+        self.assertEqual(release["precondition_status"], "not_on_hold")
+        self.assertFalse(release["rollback_point_captured"])
+        self.assertEqual(release["final_outcome"], "not_on_hold")
+
+    def test_accounts_release_reserve_only_violation_rolls_back_when_routing_changes(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-release-violation",
+                auth_ref="/tmp/codex-release-violation.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_RELEASE_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-release-violation",
+                            "pool": "active",
+                            "manual_hold": False,
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "release",
+            "backend-release-violation",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_FAILED")
+        release = payload["release_result"]
+        self.assertTrue(release["routing_change_attempted"])
+        self.assertTrue(release["rollback_attempted"])
+        self.assertEqual(release["rollback_outcome"], "completed")
+        self.assertEqual(
+            release["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
+    def test_accounts_release_nonrouting_verification_failure_rolls_back(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-release-no-routing",
+                auth_ref="/tmp/codex-release-no-routing.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = state_path.read_text(encoding="utf-8")
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_RELEASE_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-release-no-routing",
+                            "pool": "reserve",
+                            "manual_hold": True,
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "release",
+            "backend-release-no-routing",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_FAILED")
+        release = payload["release_result"]
+        self.assertFalse(release["routing_change_attempted"])
+        self.assertTrue(release["rollback_attempted"])
+        self.assertEqual(release["rollback_outcome"], "completed")
+        self.assertEqual(
+            release["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(state_path.read_text(encoding="utf-8"), before_state)
+
     def test_accounts_promote_promotes_reserve_backend_with_verified_active_routing(
         self,
     ) -> None:
@@ -5753,6 +6036,434 @@ class CliTests(unittest.TestCase):
         self.assertEqual(promotion["external_command_exit_code"], 7)
         self.assertEqual(promotion["external_command_status"], "nonzero")
         self.assertEqual(promotion["final_outcome"], "promoted_to_active")
+
+    def test_accounts_hold_applies_protective_hold_with_verified_routing_isolation(
+        self,
+    ) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-hold-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-hold-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "hold",
+                "backend-a",
+                "suspicious",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["precondition_status"], "eligible_backend_for_hold")
+        self.assertTrue(hold["rollback_point_captured"])
+        self.assertTrue(hold["routing_change_attempted"])
+        self.assertTrue(hold["routing_change_observed"])
+        self.assertTrue(hold["sync_attempted"])
+        self.assertEqual(hold["sync_outcome"], "ok")
+        self.assertEqual(hold["final_outcome"], "backend_held")
+        self.assertEqual(hold["external_command_status"], "ok")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        held = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertTrue(held["manual_hold"])
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_hold_already_held_backend_returns_owner_noop(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "hold", "backend-a", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["precondition_status"], "already_held")
+        self.assertEqual(hold["final_outcome"], "already_held")
+        self.assertFalse(hold["rollback_point_captured"])
+        self.assertFalse(hold["sync_attempted"])
+
+    def test_accounts_hold_rejects_retired_backend_precondition(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-hold",
+                auth_ref="/tmp/codex-retired-hold.json",
+                pool="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "hold", "backend-retired-hold", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "HOLD_PRECONDITION_FAILED")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["precondition_status"], "backend_retired")
+        self.assertEqual(hold["final_outcome"], "precondition_failed")
+
+    def test_accounts_hold_rejects_illegal_pool_token_drift(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-held",
+                auth_ref="/tmp/codex-reserve-held.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_HOLD_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-reserve-held",
+                            "manual_hold": True,
+                            "pool": "hold",
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "hold",
+            "backend-reserve-held",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "HOLD_COMMAND_FAILED")
+        hold = payload["hold_result"]
+        self.assertTrue(hold["rollback_attempted"])
+        self.assertEqual(hold["rollback_outcome"], "completed")
+        self.assertEqual(
+            hold["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_hold_status_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-hold-unverified.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 1,
+                "reserve_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-hold-unverified",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "hold",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "HOLD_STATUS_FAILED")
+        hold = payload["hold_result"]
+        self.assertTrue(hold["rollback_attempted"])
+        self.assertEqual(hold["rollback_outcome"], "completed")
+        self.assertEqual(
+            hold["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_release_returns_held_backend_to_reserve_with_verified_proof(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-release-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-release-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "release",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        release = payload["release_result"]
+        self.assertEqual(release["precondition_status"], "eligible_backend_for_release")
+        self.assertTrue(release["rollback_point_captured"])
+        self.assertTrue(release["routing_change_attempted"])
+        self.assertTrue(release["routing_change_observed"])
+        self.assertTrue(release["sync_attempted"])
+        self.assertEqual(release["sync_outcome"], "ok")
+        self.assertEqual(release["final_outcome"], "backend_released_to_reserve")
+        registry = json.loads(registry_path.read_text())
+        released = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertFalse(released["manual_hold"])
+        self.assertEqual(released["pool"], "reserve")
+
+    def test_accounts_release_rejects_backend_not_on_hold(self) -> None:
+        result = self.run_cli("accounts", "release", "backend-a", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_PRECONDITION_FAILED")
+        release = payload["release_result"]
+        self.assertEqual(release["precondition_status"], "not_on_hold")
+        self.assertEqual(release["final_outcome"], "not_on_hold")
+
+    def test_accounts_hold_exec_failure_returns_single_json_owner_packet(self) -> None:
+        broken_accounts = self.bin_dir / "broken-accounts"
+        broken_accounts.write_text("#!/definitely/missing-interpreter\n", encoding="utf-8")
+        broken_accounts.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(broken_accounts)},
+            "accounts",
+            "hold",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "HOLD_COMMAND_EXEC_FAILED")
+        hold = payload["hold_result"]
+        self.assertEqual(hold["external_command_status"], "exec_error")
+        self.assertEqual(hold["final_outcome"], "hold_command_failed")
+
+    def test_accounts_release_exec_failure_returns_single_json_owner_packet(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        broken_accounts = self.bin_dir / "broken-accounts-release"
+        broken_accounts.write_text(
+            "#!/definitely/missing-interpreter\n", encoding="utf-8"
+        )
+        broken_accounts.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(broken_accounts)},
+            "accounts",
+            "release",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_EXEC_FAILED")
+        release = payload["release_result"]
+        self.assertEqual(release["external_command_status"], "exec_error")
+        self.assertEqual(release["final_outcome"], "release_command_failed")
+
+    def test_accounts_release_never_returns_backend_directly_to_active(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_RELEASE_BACKEND_UPDATES_JSON": json.dumps(
+                    [{"id": "backend-a", "manual_hold": False, "pool": "active"}]
+                )
+            },
+            "accounts",
+            "release",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_COMMAND_FAILED")
+        release = payload["release_result"]
+        self.assertTrue(release["rollback_attempted"])
+        self.assertEqual(release["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_release_missing_sync_script_rolls_back(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(self.profile_dir / "missing-release-sync.sh")},
+            "accounts",
+            "release",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RELEASE_SYNC_FAILED")
+        release = payload["release_result"]
+        self.assertTrue(release["rollback_attempted"])
+        self.assertEqual(release["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_release_external_nonzero_with_verified_reserve_state_still_succeeds(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["manual_hold"] = True
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-release-nonzero.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-release-nonzero",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_RELEASE_EXIT_CODE": "7",
+                },
+                "accounts",
+                "release",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        release = payload["release_result"]
+        self.assertEqual(release["external_command_exit_code"], 7)
+        self.assertEqual(release["external_command_status"], "nonzero")
+        self.assertEqual(release["final_outcome"], "backend_released_to_reserve")
 
     def test_diagnostics_export_creates_bundle(self) -> None:
         result = self.run_cli("diagnostics", "export", "--json")

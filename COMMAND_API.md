@@ -219,6 +219,72 @@ Rollback proof is limited to control-layer state and companion-managed
 artifacts.
 It does not imply rollback of engine-internal routing behavior.
 
+## Additional hold and release owner surfaces
+
+`accounts hold <id> --json` is the owner surface for protective isolation
+truth.
+
+`accounts release <id> --json` is the owner surface for explicit
+hold-to-reserve truth.
+
+Hold and release success must not be inferred from external subprocess exit
+code alone.
+Successful owner packets must prove, machine-readably:
+
+- a unique backend identity
+- explicit precondition truth
+- `hold` represented by `manual_hold=true`, not a new pool token
+- `release` returns to `reserve`, not directly to `active`
+- a rollback point captured before any routing-impacting mutation
+- post-transition sync outcome when routing consequence changes
+- post-transition status proof summary when routing consequence changes
+- an explicit routing-consequence classification
+
+`accounts hold <id> --json` and `accounts release <id> --json` may expose
+nested `hold_result` and `release_result` surfaces.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `backend_id`
+- `precondition_status`
+- `previous_pool`
+- `previous_manual_hold`
+- `requested_transition`
+- `rollback_point_captured`
+- `routing_change_attempted`
+- `routing_change_observed`
+- `sync_attempted`
+- `sync_outcome`
+- `status_observed`
+- `rollback_attempted`
+- `rollback_outcome`
+- `external_command_exit_code`
+- `external_command_status`
+- `final_outcome`
+
+Canonical hold outcomes include:
+
+- `backend_held`
+- `already_held`
+- `precondition_failed`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+- `hold_command_failed`
+
+Canonical release outcomes include:
+
+- `backend_released_to_reserve`
+- `not_on_hold`
+- `precondition_failed`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+- `release_command_failed`
+
+Protective hold remains separate from promotion.
+Release remains separate from promotion and must not return a backend directly
+to `active`.
+
 ## Additional target-switch contract surface
 
 The current target-switch contour exposes:
