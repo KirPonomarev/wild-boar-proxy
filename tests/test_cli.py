@@ -560,6 +560,9 @@ class CliTests(unittest.TestCase):
             "from pathlib import Path\n"
             "registry_path = Path(os.environ['WBP_REGISTRY_FILE'])\n"
             "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "argv_capture = os.environ.get('WBP_TEST_ONBOARD_ARGV_FILE', '')\n"
+            "if argv_capture:\n"
+            "    Path(argv_capture).write_text(json.dumps(sys.argv[1:]) + '\\n')\n"
             "registry = json.loads(registry_path.read_text())\n"
             "added_backends = json.loads(os.environ.get('WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON', '[]'))\n"
             "for item in added_backends:\n"
@@ -5457,6 +5460,71 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-skip-login.json"
+        argv_file = self.managed_dir / "onboard-argv.json"
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-skip-login",
+                                auth_ref=auth_ref,
+                            )
+                        ]
+                    ),
+                    "WBP_TEST_ONBOARD_ARGV_FILE": str(argv_file),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--skip-login",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["command"],
+            ["--once", "--auth-ref", auth_ref, "--skip-login"],
+        )
+        self.assertEqual(
+            json.loads(argv_file.read_text(encoding="utf-8")),
+            ["--once", "--auth-ref", auth_ref, "--skip-login"],
+        )
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["explicit_auth_ref"], auth_ref)
+        self.assertEqual(onboarding["selected_backend_id"], "backend-skip-login")
+        self.assertEqual(onboarding["selection_status"], "selected_unique_backend")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "ok")
+        self.assertIsNotNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        added = [item for item in registry["backends"] if item["id"] == "backend-skip-login"]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["pool"], "reserve")
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
     def test_accounts_onboard_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
@@ -5602,6 +5670,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["selection_status"], "explicit_auth_ref_mismatch")
         self.assertEqual(onboarding["selected_backend_id"], "")
         self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
+
+    def test_accounts_onboard_explicit_auth_skip_login_mismatch_does_not_claim_success(
+        self,
+    ) -> None:
+        requested_auth_ref = "/tmp/requested/codex-shared.json"
+        argv_file = self.managed_dir / "onboard-mismatch-argv.json"
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-skip-login-mismatch",
+                            auth_ref="/var/tmp/other/codex-shared.json",
+                        )
+                    ]
+                ),
+                "WBP_TEST_ONBOARD_ARGV_FILE": str(argv_file),
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            requested_auth_ref,
+            "--skip-login",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["command"],
+            ["--once", "--auth-ref", requested_auth_ref, "--skip-login"],
+        )
+        self.assertEqual(
+            json.loads(argv_file.read_text(encoding="utf-8")),
+            ["--once", "--auth-ref", requested_auth_ref, "--skip-login"],
+        )
+        self.assertEqual(
+            payload["machine_error_code"], "ONBOARD_AMBIGUOUS_BACKEND_SELECTION"
+        )
+        self.assertEqual(payload["status"], "error")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selection_status"], "explicit_auth_ref_mismatch")
+        self.assertEqual(onboarding["selected_backend_id"], "")
+        self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
 
     def test_accounts_onboard_external_nonzero_with_reserve_proof_still_runs_post_proof(
         self,
