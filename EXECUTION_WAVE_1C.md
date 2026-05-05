@@ -79,10 +79,58 @@ Live evidence lane does not authorize additional repo-write work by itself.
 
 ### Preferred candidates
 
-- direct `policy stage set 15 --json` coverage
 - parser rejection coverage for missing required `--json`
 - broader single-writer lock coverage across more than one mutating command
 - direct `accounts onboard --skip-login` coverage
+
+### Current next contour
+
+The immediate next repo-write contour is:
+
+`Wave 1C Repo-Write: Strict JSON Parser Rejection Coverage`
+
+Purpose:
+
+- add representative parser-rejection coverage for required command parser
+  entries that mandate `--json`
+- prove that omitted `--json` fails closed on selected commands
+- strengthen JSON-contract confidence without overclaiming exhaustive proof for
+  every required command entry in one contour
+
+Scope:
+
+- tests only
+- 1 to 3 representative required commands from distinct command classes
+- preferred representatives:
+  - `policy stage set`
+  - `status`
+  - `rollout rotation inspect`
+- parser-level failure expectations only:
+  - nonzero exit
+  - parser rejection text
+  - no false success path
+
+Acceptance:
+
+- representative parser-rejection coverage is added
+- chosen commands fail closed when `--json` is omitted
+- no new truth surface is introduced
+- full local CLI suite remains green
+- the contour closes as tests-only unless a failing test proves a real defect
+
+Decision rule:
+
+- if the new tests pass once added, close the contour as tests-only
+- if a new test reveals a real defect, fix only that parser-contract defect in
+  the same contour
+- if a fix would expand beyond parser-contract behavior, stop and open a
+  separate contour
+
+Explicitly deferred from this contour:
+
+- exhaustive `--json` coverage across every required command
+- `accounts onboard --skip-login` direct coverage
+- broader single-writer lock expansion
 
 ### Out of scope
 
