@@ -49,6 +49,16 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
+SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
+SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
+SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
+ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
+SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
+    "engine_observed",
+    "runtime_observed",
+    "supervisor_owner_observed",
+    "external_owner_path_observed",
+}
 STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
     "10": {"active_min": 10, "active_target": 10, "reserve_target": 0},
     "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
@@ -789,7 +799,12 @@ def get_endpoint(paths: RuntimePaths, effective_mode: str) -> tuple[str, int, st
 
 def get_selected_backends_digest(state: dict[str, Any]) -> str:
     ids = state.get("selected_backend_ids") or []
-    encoded = json.dumps(sorted(ids), separators=(",", ":")).encode("utf-8")
+    return get_selected_backend_ids_digest(ids)
+
+
+def get_selected_backend_ids_digest(ids: Any) -> str:
+    normalized_ids = normalize_selected_backend_ids(ids)
+    encoded = json.dumps(normalized_ids, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -829,6 +844,101 @@ def rotation_snapshot_freshness(state: dict[str, Any]) -> str:
     if age_seconds > ROTATION_EVIDENCE_FRESHNESS_SECONDS:
         return "stale"
     return "fresh"
+
+
+def selected_backend_snapshot_freshness(observed_at_value: Any) -> str:
+    if not isinstance(observed_at_value, str) or not observed_at_value.strip():
+        return "unknown"
+    observed_at = parse_utc_datetime(observed_at_value)
+    current_time = parse_utc_datetime(now_iso())
+    if observed_at is None or current_time is None:
+        return "unknown"
+    age_seconds = (current_time - observed_at).total_seconds()
+    if age_seconds < 0:
+        return "unknown"
+    if age_seconds > ROTATION_EVIDENCE_FRESHNESS_SECONDS:
+        return "stale"
+    return "fresh"
+
+
+def normalize_selected_backend_ids(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return sorted(str(item) for item in value if isinstance(item, str) and item)
+
+
+def get_rotation_selected_backend_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    snapshot = state.get(SELECTED_BACKEND_SNAPSHOT_FIELD)
+    if isinstance(snapshot, dict):
+        ids = normalize_selected_backend_ids(snapshot.get("selected_backend_ids"))
+        observed_at = str(snapshot.get("observed_at_utc") or "").strip()
+        source_class = str(snapshot.get("source_class") or "").strip()
+        digest = str(snapshot.get("selected_backends_digest") or "").strip()
+        expected_digest = get_selected_backend_ids_digest(ids)
+        result = {
+            "source": "runtime_state.selected_backend_snapshot",
+            "source_layer": source_class,
+            "source_class": source_class,
+            "source_name": str(snapshot.get("source_name") or "").strip(),
+            "source_run_id": str(snapshot.get("source_run_id") or "").strip(),
+            "producer_version": str(snapshot.get("producer_version") or "").strip(),
+            "selected_backend_ids": ids,
+            "observed_at_utc": observed_at,
+            "selected_backends_digest": digest,
+            "expected_selected_backends_digest": expected_digest,
+            "freshness": selected_backend_snapshot_freshness(observed_at),
+            "validation_status": "valid",
+            "validation_error": "",
+            "compatibility": "nested_snapshot",
+        }
+        if snapshot.get("schema_version") != SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_schema_unsupported"
+        elif snapshot.get("snapshot_kind") != SELECTED_BACKEND_SNAPSHOT_KIND:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_kind_invalid"
+        elif source_class not in SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_source_class_invalid"
+        elif (
+            not result["source_name"]
+            or not result["source_run_id"]
+            or not result["producer_version"]
+        ):
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_source_metadata_missing"
+        elif not observed_at or result["freshness"] == "unknown":
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_observed_at_invalid"
+        elif not ids:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_ids_missing"
+        elif not digest or digest != expected_digest:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_digest_mismatch"
+        elif snapshot.get("claim_scope") != ROTATION_EVIDENCE_CLAIM_SCOPE:
+            result["validation_status"] = "invalid"
+            result["validation_error"] = "selected_backend_snapshot_claim_scope_invalid"
+        return result
+
+    ids = selected_backend_ids_from_state(state)
+    observed_at = rotation_snapshot_observed_at(state)
+    return {
+        "source": "runtime_state.selected_backend_ids",
+        "source_layer": "legacy_flat_compatibility",
+        "source_class": "legacy_flat_compatibility",
+        "source_name": "",
+        "source_run_id": "",
+        "producer_version": "",
+        "selected_backend_ids": ids,
+        "observed_at_utc": observed_at,
+        "selected_backends_digest": get_selected_backends_digest(state),
+        "expected_selected_backends_digest": get_selected_backends_digest(state),
+        "freshness": rotation_snapshot_freshness(state),
+        "validation_status": "legacy",
+        "validation_error": "",
+        "compatibility": "legacy_flat",
+    }
 
 
 def get_auth_basename(auth_ref: Any) -> str:
@@ -4850,11 +4960,19 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         "evidence_strength": "none",
         "evidence_reason": "pending",
         "evidence_source": "runtime_state.selected_backend_ids",
-        "evidence_source_layer": "control_layer_supervisor_snapshot",
+        "evidence_source_layer": "legacy_flat_compatibility",
+        "evidence_source_class": "legacy_flat_compatibility",
+        "evidence_source_name": "",
+        "evidence_source_run_id": "",
+        "evidence_producer_version": "",
         "evidence_freshness": "unknown",
+        "selected_backend_snapshot_validation_status": "pending",
+        "selected_backend_snapshot_validation_error": "",
+        "selected_backend_snapshot_compatibility": "legacy_flat",
         "selected_backend_snapshot_present": False,
         "selected_backend_ids": [],
         "selected_backends_digest": get_selected_backends_digest({}),
+        "expected_selected_backends_digest": get_selected_backends_digest({}),
         "selected_backend_ids_observed": [],
         "active_pool_count_observed": 0,
         "runtime_active_pool_count_observed": None,
@@ -4865,6 +4983,7 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         "policy_drift_status": "pending",
         "registry_identity_status": "pending",
         "evidence_sources": [
+            "runtime_state.selected_backend_snapshot",
             "runtime_state.selected_backend_ids",
             "runtime_state.active_count",
             "backend_registry.active_pool",
@@ -4885,10 +5004,11 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         registry_identity = get_registry_identity(registry)
         policy_drift = get_stable_policy_drift(paths, registry)
         pool_counts = summarize_registry_pool_counts(registry)
-        selected_backend_ids = selected_backend_ids_from_state(state)
-        selected_snapshot_observed_at = rotation_snapshot_observed_at(state)
-        selected_snapshot_freshness = rotation_snapshot_freshness(state)
-        selected_backends_digest = get_selected_backends_digest(state)
+        selected_snapshot = get_rotation_selected_backend_snapshot(state)
+        selected_backend_ids = selected_snapshot["selected_backend_ids"]
+        selected_snapshot_observed_at = selected_snapshot["observed_at_utc"]
+        selected_snapshot_freshness = selected_snapshot["freshness"]
+        selected_backends_digest = selected_snapshot["selected_backends_digest"]
         active_routing_candidate_ids = get_active_routing_candidate_backend_ids(registry)
         runtime_active_pool_count_observed = coerce_nonnegative_int(
             state.get("active_count")
@@ -4902,10 +5022,31 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         )
 
     evidence_result["observed_at_utc"] = selected_snapshot_observed_at
+    evidence_result["evidence_source"] = selected_snapshot["source"]
+    evidence_result["evidence_source_layer"] = selected_snapshot["source_layer"]
+    evidence_result["evidence_source_class"] = selected_snapshot["source_class"]
+    evidence_result["evidence_source_name"] = selected_snapshot["source_name"]
+    evidence_result["evidence_source_run_id"] = selected_snapshot["source_run_id"]
+    evidence_result["evidence_producer_version"] = selected_snapshot["producer_version"]
     evidence_result["evidence_freshness"] = selected_snapshot_freshness
-    evidence_result["selected_backend_snapshot_present"] = bool(selected_backend_ids)
+    evidence_result["selected_backend_snapshot_present"] = (
+        selected_snapshot["compatibility"] == "nested_snapshot"
+        or bool(selected_backend_ids)
+    )
+    evidence_result["selected_backend_snapshot_validation_status"] = selected_snapshot[
+        "validation_status"
+    ]
+    evidence_result["selected_backend_snapshot_validation_error"] = selected_snapshot[
+        "validation_error"
+    ]
+    evidence_result["selected_backend_snapshot_compatibility"] = selected_snapshot[
+        "compatibility"
+    ]
     evidence_result["selected_backend_ids"] = selected_backend_ids
     evidence_result["selected_backends_digest"] = selected_backends_digest
+    evidence_result["expected_selected_backends_digest"] = selected_snapshot[
+        "expected_selected_backends_digest"
+    ]
     evidence_result["selected_backend_ids_observed"] = selected_backend_ids
     evidence_result["runtime_active_pool_count_observed"] = (
         runtime_active_pool_count_observed
@@ -5024,6 +5165,38 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         evidence_result["evidence_status"] = "participation_evidence_insufficient"
         evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_insufficient"
+        ok = False
+    elif selected_snapshot["validation_status"] == "invalid":
+        validation_error = selected_snapshot["validation_error"]
+        if validation_error == "selected_backend_snapshot_digest_mismatch":
+            machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
+            human_message = (
+                "Rotation participation evidence is contradicted because the selected backend snapshot digest does not match its ids."
+            )
+            evidence_result["evidence_status"] = "participation_evidence_contradicted"
+            evidence_result["participation_status"] = "contradicted"
+            evidence_result["blocker_type"] = "contradicted_state"
+            evidence_result["final_outcome"] = "participation_evidence_contradicted"
+        else:
+            machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+            human_message = (
+                "Rotation participation evidence is unknown because the selected backend snapshot contract is not valid."
+            )
+            evidence_result["evidence_status"] = "participation_evidence_unknown"
+            evidence_result["participation_status"] = "unknown"
+            evidence_result["blocker_type"] = (
+                "observability"
+                if validation_error
+                in {
+                    "selected_backend_snapshot_observed_at_invalid",
+                    "selected_backend_snapshot_ids_missing",
+                }
+                else "schema_gap"
+            )
+            evidence_result["final_outcome"] = "participation_evidence_unknown"
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "none"
+        evidence_result["evidence_reason"] = validation_error
         ok = False
     elif not selected_backend_ids:
         machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"

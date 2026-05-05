@@ -131,6 +131,7 @@ Optional fields currently supported by the local contour:
 - `last_known_good_proxy_url`
 - `last_known_good_proxy_observed_at`
 - `stable_runtime_consumer_snapshot`
+- `selected_backend_snapshot`
 
 `selected_backend_ids` is a supervisor/runtime snapshot field.
 It is not registry lifecycle truth and must not be inferred from active registry
@@ -140,6 +141,64 @@ If `selected_backend_ids_observed_at` is present, it records when the selected
 backend snapshot was observed.
 Consumers may use it for freshness classification, but cached freshness does
 not override live runtime checks.
+
+If `selected_backend_snapshot` is materialized, it is:
+
+- cached bounded local participation evidence
+- a read/validation contract for rollout evidence surfaces
+- separate from registry lifecycle truth
+- separate from active-pool counts
+- not final runtime truth without live checks
+- not a production writer contract in the current contour
+- not sufficient by itself for `STABLE_20_PROVED`, `SCALE_COMPLETE`, or
+  `PILOT_READY`
+
+Required fields if materialized:
+
+- `schema_version`
+- `snapshot_kind`
+- `source_class`
+- `source_name`
+- `source_run_id`
+- `producer_version`
+- `observed_at_utc`
+- `selected_backend_ids`
+- `selected_backends_digest`
+- `claim_scope`
+
+Supported `schema_version`:
+
+- `1`
+
+Supported `snapshot_kind`:
+
+- `selected_backend_participation`
+
+Supported `claim_scope`:
+
+- `bounded_local_participation_evidence_only`
+
+Supported `source_class` values:
+
+- `engine_observed`
+- `runtime_observed`
+- `supervisor_owner_observed`
+- `external_owner_path_observed`
+
+`selected_backends_digest` is the SHA-256 digest of the normalized selected
+backend id list.
+The normalized list is sorted, string-only, and encoded as compact JSON before
+hashing.
+
+Migration rule:
+
+- v1 nested `selected_backend_snapshot` is optional.
+- existing flat `selected_backend_ids` plus `selected_backend_ids_observed_at`
+  remains legacy-compatible read input.
+- no migration may synthesize selected ids from registry active ids, registry
+  active counts, routing candidates, or pool policy.
+- invalid nested snapshots must be surfaced as invalid and must not be masked by
+  legacy flat fallback.
 
 If `last_known_good_proxy_url` and `last_known_good_proxy_observed_at` are
 materialized, they are:

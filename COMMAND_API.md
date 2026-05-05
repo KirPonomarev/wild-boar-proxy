@@ -257,10 +257,18 @@ Preferred fields include:
 - `evidence_status`
 - `evidence_source`
 - `evidence_source_layer`
+- `evidence_source_class`
+- `evidence_source_name`
+- `evidence_source_run_id`
+- `evidence_producer_version`
 - `evidence_freshness`
+- `selected_backend_snapshot_validation_status`
+- `selected_backend_snapshot_validation_error`
+- `selected_backend_snapshot_compatibility`
 - `selected_backend_snapshot_present`
 - `selected_backend_ids`
 - `selected_backends_digest`
+- `expected_selected_backends_digest`
 - `status`
 - `attempted`
 - `requested_scope`
@@ -292,8 +300,56 @@ Canonical rotation-evidence outcomes include:
 - `participation_evidence_unknown`
 - `participation_evidence_unavailable`
 
+Preferred selected-backend evidence source is
+`runtime_state.selected_backend_snapshot`.
+Legacy flat `runtime_state.selected_backend_ids` remains accepted only as a
+compatibility surface when it carries a same-event observation timestamp.
+
+`runtime_state.selected_backend_snapshot` is a read contract for a cached
+external owner or runtime observation.
+It is not a production write contract in this contour.
+`rollout rotation inspect --json` validates it but does not create, repair, or
+mutate it.
+
+Required nested snapshot fields are:
+
+- `schema_version`
+- `snapshot_kind`
+- `source_class`
+- `source_name`
+- `source_run_id`
+- `producer_version`
+- `observed_at_utc`
+- `selected_backend_ids`
+- `selected_backends_digest`
+- `claim_scope`
+
+Accepted `snapshot_kind`:
+
+- `selected_backend_participation`
+
+Accepted `claim_scope`:
+
+- `bounded_local_participation_evidence_only`
+
+Accepted `source_class` values:
+
+- `engine_observed`
+- `runtime_observed`
+- `supervisor_owner_observed`
+- `external_owner_path_observed`
+
+Rejected source classes include registry-synthesized or count-derived claims.
+Selected backends must never be synthesized from active registry ids, registry
+active counts, or routing-candidate counts.
+
+Invalid nested snapshots must not silently fall back to legacy flat fields.
+A digest mismatch is contradicted evidence.
+Unsupported schema, kind, source class, or missing source metadata is unknown
+evidence and blocks the claim until repaired.
+
 `selected_backend_ids` and `selected_backend_ids_observed` must come from a
-runtime or supervisor snapshot of selected backends.
+runtime, supervisor, engine, or external owner snapshot of selected backends.
 They must not be synthesized from registry active ids, registry active counts,
 or routing-candidate counts.
 Selected backend ids without `observed_at_utc` from the same observation event

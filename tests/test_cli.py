@@ -552,8 +552,31 @@ class CliTests(unittest.TestCase):
         )
         path.chmod(0o755)
 
+    def build_selected_backend_snapshot(
+        self, selected_backend_ids: list[str], **overrides: object
+    ) -> dict[str, object]:
+        snapshot: dict[str, object] = {
+            "schema_version": runtime_mod.SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION,
+            "snapshot_kind": runtime_mod.SELECTED_BACKEND_SNAPSHOT_KIND,
+            "source_class": "external_owner_path_observed",
+            "source_name": "test-owner-path",
+            "source_run_id": "test-run-1",
+            "producer_version": "test-producer-1",
+            "observed_at_utc": runtime_mod.now_iso(),
+            "selected_backend_ids": list(selected_backend_ids),
+            "selected_backends_digest": runtime_mod.get_selected_backend_ids_digest(
+                selected_backend_ids
+            ),
+            "claim_scope": runtime_mod.ROTATION_EVIDENCE_CLAIM_SCOPE,
+        }
+        snapshot.update(overrides)
+        return snapshot
+
     def configure_rotation_evidence_fixture(
-        self, *, selected_backend_ids: list[str]
+        self,
+        *,
+        selected_backend_ids: list[str],
+        selected_backend_snapshot: dict[str, object] | None = None,
     ) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -584,6 +607,10 @@ class CliTests(unittest.TestCase):
             state["selected_backend_ids_observed_at"] = runtime_mod.now_iso()
         else:
             state.pop("selected_backend_ids_observed_at", None)
+        if selected_backend_snapshot is None:
+            state.pop("selected_backend_snapshot", None)
+        else:
+            state["selected_backend_snapshot"] = selected_backend_snapshot
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
     def configure_stage_proof_fixture(
@@ -6307,7 +6334,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
         self.assertEqual(evidence["evidence_source"], "runtime_state.selected_backend_ids")
         self.assertEqual(
-            evidence["evidence_source_layer"], "control_layer_supervisor_snapshot"
+            evidence["evidence_source_layer"], "legacy_flat_compatibility"
+        )
+        self.assertEqual(evidence["evidence_source_class"], "legacy_flat_compatibility")
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_status"], "legacy"
+        )
+        self.assertEqual(
+            evidence["selected_backend_snapshot_compatibility"], "legacy_flat"
         )
         self.assertTrue(evidence["observed_at_utc"])
         self.assertEqual(evidence["evidence_freshness"], "fresh")
@@ -6329,6 +6363,245 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["delegated_evidence"]["pool_summary"]["active"], 2)
         self.assertEqual(before, after)
+
+    def test_rollout_rotation_inspect_accepts_selected_backend_snapshot_contract(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(["backend-b", "backend-a"])
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a"],
+            selected_backend_snapshot=snapshot,
+        )
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        after = self.state_snapshot()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_present")
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["evidence_source_layer"], "external_owner_path_observed")
+        self.assertEqual(evidence["evidence_source_class"], "external_owner_path_observed")
+        self.assertEqual(evidence["evidence_source_name"], "test-owner-path")
+        self.assertEqual(evidence["evidence_source_run_id"], "test-run-1")
+        self.assertEqual(evidence["evidence_producer_version"], "test-producer-1")
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_status"], "valid"
+        )
+        self.assertEqual(
+            evidence["selected_backend_snapshot_compatibility"], "nested_snapshot"
+        )
+        self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
+        self.assertEqual(evidence["selected_backend_ids_observed"], ["backend-a", "backend-b"])
+        self.assertEqual(
+            evidence["selected_backends_digest"],
+            runtime_mod.get_selected_backend_ids_digest(["backend-a", "backend-b"]),
+        )
+        self.assertEqual(
+            evidence["expected_selected_backends_digest"],
+            runtime_mod.get_selected_backend_ids_digest(["backend-a", "backend-b"]),
+        )
+        self.assertEqual(evidence["claim_scope"], runtime_mod.ROTATION_EVIDENCE_CLAIM_SCOPE)
+        self.assertEqual(before, after)
+
+    def test_rollout_rotation_inspect_prefers_nested_snapshot_over_flat_fields(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(["backend-a", "backend-b"])
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-legacy-ghost"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
+        self.assertEqual(evidence["participation_status"], "available")
+
+    def test_rollout_rotation_inspect_rejects_snapshot_digest_mismatch(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            selected_backends_digest="not-the-digest",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_status"], "invalid"
+        )
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_digest_mismatch",
+        )
+        self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_digest_mismatch")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(evidence["blocker_type"], "contradicted_state")
+
+    def test_rollout_rotation_inspect_rejects_snapshot_missing_source_metadata(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            source_run_id="",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_source_metadata_missing",
+        )
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_source_metadata_missing",
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
+    def test_rollout_rotation_inspect_rejects_snapshot_source_class(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            source_class="registry_synthesized",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_source_class_invalid",
+        )
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
+    def test_rollout_rotation_inspect_rejects_snapshot_schema_version(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            schema_version=2,
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_schema_unsupported",
+        )
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
+    def test_rollout_rotation_inspect_rejects_snapshot_kind(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            snapshot_kind="registry_pool_claim",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_kind_invalid",
+        )
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
+    def test_rollout_rotation_inspect_reports_stale_nested_snapshot(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-03T00:00:00+00:00",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_STALE")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["observed_at_utc"], "2026-05-03T00:00:00+00:00")
+        self.assertEqual(evidence["evidence_freshness"], "stale")
+        self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "valid")
+        self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_stale")
+
+    def test_rollout_rotation_inspect_rejects_nested_snapshot_outside_candidates(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(["backend-a", "backend-ghost"])
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(
+            evidence["evidence_reason"], "selected_backend_outside_active_candidates"
+        )
+        self.assertEqual(evidence["participation_status"], "contradicted")
 
     def test_rollout_rotation_inspect_reports_insufficient_single_backend_snapshot(
         self,
