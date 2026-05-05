@@ -267,6 +267,8 @@ Field meaning rules:
 - owner-path packets may expose top-level `last_known_good_proxy`
   with an honest materialization status such as `declared_not_materialized`
 - owner-path packets may expose top-level `current_proxy_adoption_contract`
+- that contract may declare a dedicated current-proxy activation handoff such as
+  `WBP_CURRENT_PROXY_URL`
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
@@ -282,6 +284,10 @@ Field meaning rules:
   from nested `proxy_reprobe.working_candidate`
 - `current_proxy_url` remains separate from persisted
   `last_known_good_proxy.proxy_url`
+- ambient shell proxy env must not become the authoritative control-layer truth
+  surface for current proxy selection
+- control-plane runtime attestation remains proxyless even if a later managed
+  runtime activation lane receives a dedicated current-proxy handoff
 - candidate existence alone must never produce top-level `OK`
 - persisted last-known-good proxy truth must never by itself change top-level
   `status`, `liveness`, `machine_error_code`, `endpoint`, or `current_proxy_url`

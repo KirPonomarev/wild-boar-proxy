@@ -92,6 +92,8 @@ If `current_proxy_url` is materialized, it is:
 - current live control-layer outbound proxy truth
 - separate from `last_known_good_proxy_url`
 - separate from nested `proxy_reprobe.working_candidate`
+- effectful only through a repo-owned activation surface, not by ambient shell
+  proxy env alone
 - not historical truth by itself
 - not final runtime truth without live checks by itself
 

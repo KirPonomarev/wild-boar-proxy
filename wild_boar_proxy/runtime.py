@@ -168,6 +168,7 @@ def sanitized_env() -> dict[str, str]:
         "http_proxy",
         "https_proxy",
         "all_proxy",
+        CURRENT_PROXY_URL_HANDOFF_ENV,
     ):
         env.pop(key, None)
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
@@ -665,6 +666,7 @@ APPROVED_REPAIR_TARGET_IDENTITY = "companion_managed_stable_auth_inventory"
 APPROVED_REPAIR_TARGET_KIND = "control_owned_inventory_path"
 STABLE_RUNTIME_GENERATED_CONFIG_METHOD = "control_owned_generated_config"
 STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV = "WBP_STABLE_CONFIG"
+CURRENT_PROXY_URL_HANDOFF_ENV = "WBP_CURRENT_PROXY_URL"
 STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC = "stable_runtime_consumer_snapshot"
 STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME = "approved_target_activated"
 STABLE_RUNTIME_OBSERVED_SOURCE_SELECTED_OUTCOME = "observed_source_selected"
@@ -1069,6 +1071,19 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
         "state_file": str(paths.state_file),
+        "activation_surface_status": "contract_fixed_not_implemented",
+        "activation_surface_kind": "repo_owned_handoff_env_var",
+        "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+        "activation_value_source_field": "current_proxy_url",
+        "owner_activation_lane": "serialized_healthcheck_owner_path",
+        "effectful_runtime_wiring_status": "contract_fixed_not_implemented",
+        "managed_runtime_subprocess_only": True,
+        "ambient_proxy_env_authoritative_forbidden": True,
+        "control_plane_proxyless": True,
+        "base_url_proxy_selection_surface_forbidden": True,
+        "launcher_protocol_change_outside_repo_owned_handoff_forbidden": True,
+        "managed_config_schema_widening_default": False,
+        "config_toml_schema_widening_default": False,
         "current_proxy_truth_surface": {
             "status": "contract_ready",
             "field": "current_proxy_url",

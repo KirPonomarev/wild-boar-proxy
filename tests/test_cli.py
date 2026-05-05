@@ -257,6 +257,34 @@ class CliTests(unittest.TestCase):
             check=False,
         )
 
+    def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HTTP_PROXY": "http://example.invalid:1",
+                "HTTPS_PROXY": "http://example.invalid:2",
+                "ALL_PROXY": "http://example.invalid:3",
+                "http_proxy": "http://example.invalid:4",
+                "https_proxy": "http://example.invalid:5",
+                "all_proxy": "http://example.invalid:6",
+                "WBP_CURRENT_PROXY_URL": "http://example.invalid:7",
+            },
+            clear=True,
+        ):
+            env = runtime_mod.sanitized_env()
+        for key in (
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "ALL_PROXY",
+            "http_proxy",
+            "https_proxy",
+            "all_proxy",
+            "WBP_CURRENT_PROXY_URL",
+        ):
+            self.assertNotIn(key, env)
+        self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(env["no_proxy"], env["NO_PROXY"])
+
     def state_snapshot(self) -> dict[str, str]:
         repair_target_dir = self.managed_dir / "stable-repair-target"
         paths = [
@@ -571,6 +599,37 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             current_proxy_adoption_contract["current_proxy_url_write_path_status"],
             "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["activation_surface_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["activation_surface_kind"],
+            "repo_owned_handoff_env_var",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["handoff_env_var"],
+            "WBP_CURRENT_PROXY_URL",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["owner_activation_lane"],
+            "serialized_healthcheck_owner_path",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["effectful_runtime_wiring_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract[
+                "ambient_proxy_env_authoritative_forbidden"
+            ]
+        )
+        self.assertTrue(current_proxy_adoption_contract["control_plane_proxyless"])
+        self.assertTrue(
+            current_proxy_adoption_contract[
+                "base_url_proxy_selection_surface_forbidden"
+            ]
         )
         self.assertTrue(
             current_proxy_adoption_contract["candidate_existence_alone_not_ok"]
@@ -3064,6 +3123,24 @@ class CliTests(unittest.TestCase):
             ]
         )
         self.assertEqual(
+            current_proxy_adoption_contract["activation_surface_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["activation_surface_kind"],
+            "repo_owned_handoff_env_var",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["handoff_env_var"],
+            "WBP_CURRENT_PROXY_URL",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract[
+                "ambient_proxy_env_authoritative_forbidden"
+            ]
+        )
+        self.assertTrue(current_proxy_adoption_contract["control_plane_proxyless"])
+        self.assertEqual(
             current_proxy_adoption_contract["current_proxy_url_write_path_status"],
             "contract_fixed_not_implemented",
         )
@@ -3373,6 +3450,44 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("last_known_good_proxy_contract", payload)
         self.assertNotIn("current_proxy_adoption_contract", payload)
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
+
+    def test_launch_smoke_does_not_forward_current_proxy_handoff_env(self) -> None:
+        stable_port = free_port()
+        marker = self.profile_dir / "launch-smoke-current-proxy-env.txt"
+        baseline_launcher = self.profile_dir / "baseline-launcher.sh"
+        baseline_launcher.write_text(self.launcher_script.read_text(encoding="utf-8"), encoding="utf-8")
+        baseline_launcher.chmod(0o755)
+        self.launcher_script.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s' \"${{{runtime_mod.CURRENT_PROXY_URL_HANDOFF_ENV}:-}}\" > '{marker}'\n"
+            f"exec '{baseline_launcher}' \"$@\"\n",
+            encoding="utf-8",
+        )
+        self.launcher_script.chmod(0o755)
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {runtime_mod.CURRENT_PROXY_URL_HANDOFF_ENV: "http://127.0.0.1:65535"},
+                "launch",
+                "smoke",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(marker.exists())
+        self.assertEqual(marker.read_text(encoding="utf-8"), "")
+        self.assertNotIn("current_proxy_adoption_contract", payload)
 
     def test_launch_smoke_does_not_write_last_known_good_proxy_when_it_is_not_the_owner(
         self,

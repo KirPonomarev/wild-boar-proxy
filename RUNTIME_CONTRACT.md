@@ -75,6 +75,8 @@
   with an honest materialization status such as `declared_not_materialized`
 - owner-path proxy packets may expose top-level
   `current_proxy_adoption_contract`
+- that contract may declare a dedicated current-proxy activation handoff such as
+  `WBP_CURRENT_PROXY_URL`
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
@@ -88,6 +90,10 @@
   `changed_files`
 - `current_proxy_url` is current live outbound proxy truth and remains separate
   from nested `proxy_reprobe.working_candidate`
+- ambient shell proxy env must not become the authoritative control-layer truth
+  surface for current proxy selection
+- control-plane runtime attestation remains proxyless even if a later managed
+  runtime activation lane receives a dedicated current-proxy handoff
 - persisted last-known-good proxy truth must remain separate from
   `current_proxy_url`
 - candidate existence alone must never produce top-level `OK`
