@@ -23,6 +23,7 @@ All operator commands must support `--json`.
 - `mode set stable --json`
 - `mode set managed --json`
 - `policy stage set <10|15|20> --json`
+- `rollout rotation inspect --json`
 - `accounts list --json`
 - `accounts validate <id> --json`
 - `accounts promote <id> --json`
@@ -220,6 +221,64 @@ Canonical stage-policy outcomes include:
 - stage-completion proof in later rollout contours
 - runtime-health ownership in `healthcheck --json`
 - delegated registry readout in `accounts list --json`
+
+## Additional rollout rotation evidence surface
+
+`rollout rotation inspect --json` is the bounded read surface for rollout
+participation evidence truth.
+
+Participation evidence success must not be inferred from raw blocker tokens or
+logs alone.
+Successful owner packets must prove, machine-readably:
+
+- the bounded local evidence sources that were inspected
+- the observed selected backend ids snapshot
+- the observed active-pool posture relevant to participation
+- whether policy drift or registry identity contradicts participation evidence
+- whether evidence is available, insufficient, contradicted, or unknown
+- no stronger claim than bounded local participation evidence itself
+
+`participation_evidence_insufficient` must stay precise:
+
+- it may report that the registry active pool is not yet observably expanded
+- it may report that the registry active pool is expanded but routing-eligible
+  active candidates are not yet observably expanded
+
+`rollout rotation inspect --json` may expose a nested
+`rotation_evidence_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `requested_scope`
+- `selected_backend_ids_observed`
+- `active_pool_count_observed`
+- `runtime_active_pool_count_observed`
+- `registry_active_pool_count_observed`
+- `active_routing_candidate_ids_observed`
+- `active_pool_count_agreement_status`
+- `stable_inventory_status`
+- `policy_drift_status`
+- `registry_identity_status`
+- `evidence_sources`
+- `evidence_strength`
+- `participation_status`
+- `claim_scope`
+- `final_outcome`
+
+Canonical rotation-evidence outcomes include:
+
+- `participation_evidence_available`
+- `participation_evidence_insufficient`
+- `participation_evidence_contradicted`
+- `participation_evidence_unknown`
+
+`rollout rotation inspect --json` remains separate from:
+
+- stable-10 proof ownership in later rollout contours
+- lifecycle mutation under `accounts ... --json`
+- policy mutation under `policy stage set ... --json`
+- runtime-health ownership in `healthcheck --json`
 
 ## Additional promotion owner surface
 

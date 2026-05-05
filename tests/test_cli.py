@@ -543,6 +543,36 @@ class CliTests(unittest.TestCase):
         )
         path.chmod(0o755)
 
+    def configure_rotation_evidence_fixture(
+        self, *, selected_backend_ids: list[str]
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["auth_ref"] = "/tmp/codex-a.json"
+        registry["backends"][0]["pool"] = "active"
+        registry["backends"][0]["status"] = "healthy"
+        registry["backends"][0]["manual_hold"] = False
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-b",
+                auth_ref="/tmp/codex-b.json",
+                pool="active",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.stable_dir / "codex-a.json").write_text("{}", encoding="utf-8")
+        (self.stable_dir / "codex-b.json").write_text("{}", encoding="utf-8")
+
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 2
+        state["reserve_count"] = 0
+        state["healthy_count"] = 2
+        state["degraded_count"] = 0
+        state["down_count"] = 0
+        state["selected_backend_ids"] = selected_backend_ids
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
     def build_backend(
         self,
         *,
@@ -6124,6 +6154,298 @@ class CliTests(unittest.TestCase):
         self.assertEqual(promotion["active_pool_count_before"], 10)
         self.assertEqual(promotion["active_target_observed"], 10)
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_rollout_rotation_inspect_reports_available_participation_evidence(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        before = self.state_snapshot()
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_ids_observed"], ["backend-a", "backend-b"]
+        )
+        self.assertEqual(evidence["active_pool_count_observed"], 2)
+        self.assertEqual(
+            evidence["active_routing_candidate_ids_observed"],
+            ["backend-a", "backend-b"],
+        )
+        self.assertEqual(evidence["runtime_active_pool_count_observed"], 2)
+        self.assertEqual(evidence["registry_active_pool_count_observed"], 2)
+        self.assertEqual(evidence["active_pool_count_agreement_status"], "matched")
+        self.assertEqual(evidence["stable_inventory_status"], "available")
+        self.assertEqual(evidence["policy_drift_status"], "clear")
+        self.assertEqual(evidence["registry_identity_status"], "clear")
+        self.assertEqual(evidence["evidence_strength"], "multi_backend_snapshot")
+        self.assertEqual(evidence["participation_status"], "available")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_available"
+        )
+        self.assertEqual(payload["delegated_evidence"]["pool_summary"]["active"], 2)
+        self.assertEqual(before, after)
+
+    def test_rollout_rotation_inspect_reports_insufficient_single_backend_snapshot(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(selected_backend_ids=["backend-a"])
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_INSUFFICIENT"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["evidence_strength"], "single_backend_snapshot_only")
+        self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_insufficient"
+        )
+
+    def test_rollout_rotation_inspect_reports_insufficient_when_active_pool_not_expanded(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(selected_backend_ids=["backend-a"])
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"] = [
+            backend
+            for backend in registry["backends"]
+            if backend.get("id") != "backend-b"
+        ]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.stable_dir / "codex-b.json").unlink()
+
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 1
+        state["reserve_count"] = 0
+        state["healthy_count"] = 1
+        state["selected_backend_ids"] = ["backend-a"]
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_INSUFFICIENT"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["active_pool_count_observed"], 1)
+        self.assertEqual(evidence["runtime_active_pool_count_observed"], 1)
+        self.assertEqual(evidence["registry_active_pool_count_observed"], 1)
+        self.assertEqual(evidence["active_pool_count_agreement_status"], "matched")
+        self.assertEqual(evidence["policy_drift_status"], "clear")
+        self.assertEqual(evidence["stable_inventory_status"], "available")
+        self.assertEqual(evidence["evidence_strength"], "active_pool_not_expanded")
+        self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_insufficient"
+        )
+
+    def test_rollout_rotation_inspect_reports_insufficient_when_routing_candidates_not_expanded(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(selected_backend_ids=["backend-a"])
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][1]["id"] = ""
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_INSUFFICIENT"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["active_pool_count_observed"], 2)
+        self.assertEqual(evidence["runtime_active_pool_count_observed"], 2)
+        self.assertEqual(evidence["registry_active_pool_count_observed"], 2)
+        self.assertEqual(
+            evidence["active_routing_candidate_ids_observed"],
+            ["backend-a"],
+        )
+        self.assertEqual(evidence["active_pool_count_agreement_status"], "matched")
+        self.assertEqual(evidence["policy_drift_status"], "clear")
+        self.assertEqual(evidence["stable_inventory_status"], "available")
+        self.assertEqual(evidence["registry_identity_status"], "clear")
+        self.assertEqual(
+            evidence["evidence_strength"],
+            "active_routing_candidates_not_expanded",
+        )
+        self.assertEqual(evidence["participation_status"], "insufficient")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_insufficient"
+        )
+
+    def test_rollout_rotation_inspect_reports_contradicted_selected_backend_snapshot(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-ghost"]
+        )
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_strength"],
+            "selected_backend_outside_active_candidates",
+        )
+        self.assertEqual(evidence["participation_status"], "contradicted")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_contradicted"
+        )
+
+    def test_rollout_rotation_inspect_reports_unknown_when_stable_inventory_missing(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        missing_stable_config = (
+            Path(self.temp_dir.name) / "missing-stable" / "config.yaml"
+        )
+        result = self.run_cli_with_env(
+            {"WBP_STABLE_CONFIG": str(missing_stable_config)},
+            "rollout",
+            "rotation",
+            "inspect",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        self.assertEqual(payload["changed_files"], [])
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["stable_inventory_status"], "missing")
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_unknown"
+        )
+
+    def test_rollout_rotation_inspect_reports_unknown_when_selected_snapshot_missing(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(selected_backend_ids=[])
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_strength"], "selected_backend_snapshot_missing"
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_unknown"
+        )
+
+    def test_rollout_rotation_inspect_reports_unknown_for_invalid_runtime_active_count(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = "oops"
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["active_pool_count_agreement_status"], "runtime_missing_or_invalid"
+        )
+        self.assertEqual(
+            evidence["evidence_strength"], "runtime_active_count_missing_or_invalid"
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_active_count_mismatch(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 1
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["active_pool_count_observed"], 2)
+        self.assertEqual(evidence["runtime_active_pool_count_observed"], 1)
+        self.assertEqual(evidence["registry_active_pool_count_observed"], 2)
+        self.assertEqual(evidence["active_pool_count_agreement_status"], "mismatched")
+        self.assertEqual(evidence["evidence_strength"], "active_pool_count_mismatched")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_ambiguous_registry_identity(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-b",
+                auth_ref="/tmp/codex-b-duplicate.json",
+                pool="active",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["registry_identity_status"], "ambiguous")
+        self.assertEqual(evidence["evidence_strength"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_policy_drift(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        (self.stable_dir / "codex-b.json").unlink()
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["policy_drift_status"], "detected")
+        self.assertEqual(evidence["evidence_strength"], "policy_drift_detected")
+        self.assertEqual(evidence["participation_status"], "contradicted")
 
     def test_accounts_promote_rejects_held_backend_precondition(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"

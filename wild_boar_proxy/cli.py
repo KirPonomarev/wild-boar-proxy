@@ -25,6 +25,7 @@ from .runtime import (
     run_policy_stage_set,
     run_promote,
     run_release,
+    run_rollout_rotation_inspect,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -130,6 +131,15 @@ def build_parser() -> argparse.ArgumentParser:
     policy_stage_set.add_argument("value")
     policy_stage_set.add_argument("--json", action="store_true", required=True)
 
+    rollout = subparsers.add_parser("rollout")
+    rollout_subparsers = rollout.add_subparsers(dest="rollout_command", required=True)
+    rollout_rotation = rollout_subparsers.add_parser("rotation")
+    rollout_rotation_subparsers = rollout_rotation.add_subparsers(
+        dest="rollout_rotation_command", required=True
+    )
+    rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
+    rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -209,6 +219,12 @@ def main(argv: list[str] | None = None) -> int:
             and args.policy_stage_command == "set"
         ):
             return emit_json(run_policy_stage_set(paths, args.value))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "rotation"
+            and args.rollout_rotation_command == "inspect"
+        ):
+            return emit_json(run_rollout_rotation_inspect(paths))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

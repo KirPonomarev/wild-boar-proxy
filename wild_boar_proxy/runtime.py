@@ -1013,6 +1013,18 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
     }
 
 
+def get_active_routing_candidate_backend_ids(registry: dict[str, Any]) -> list[str]:
+    candidate_ids: list[str] = []
+    for backend in registry.get("backends") or []:
+        backend_id = backend.get("id")
+        if not backend_id:
+            continue
+        allowed, _ = is_stable_auth_allowed(backend)
+        if allowed:
+            candidate_ids.append(str(backend_id))
+    return sorted(candidate_ids)
+
+
 def summarize_registry_identity(registry_identity: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": registry_identity.get("status", "unknown"),
@@ -4718,6 +4730,233 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
             "registry_identity": get_registry_identity(registry),
             "pool_policy": registry.get("pool_policy", {}),
             "stable_default_backend_id": registry.get("stable_default_backend_id"),
+        },
+    )
+
+
+def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
+    evidence_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_scope": "expanded-active-pool",
+        "selected_backend_ids_observed": [],
+        "active_pool_count_observed": 0,
+        "runtime_active_pool_count_observed": None,
+        "registry_active_pool_count_observed": 0,
+        "active_routing_candidate_ids_observed": [],
+        "active_pool_count_agreement_status": "pending",
+        "stable_inventory_status": "pending",
+        "policy_drift_status": "pending",
+        "registry_identity_status": "pending",
+        "evidence_sources": [
+            "runtime_state.selected_backend_ids",
+            "runtime_state.active_count",
+            "backend_registry.active_pool",
+            "backend_registry.routing_candidate_backends",
+            "stable_policy_drift",
+            "registry_identity",
+        ],
+        "evidence_strength": "pending",
+        "participation_status": "pending",
+        "claim_scope": "bounded_local_participation_evidence_only",
+        "final_outcome": "pending_observation",
+    }
+
+    with serialized_lock(paths):
+        registry = read_json(paths.registry_file)
+        state = read_json(paths.state_file, required=False)
+        registry_identity = get_registry_identity(registry)
+        policy_drift = get_stable_policy_drift(paths, registry)
+        pool_counts = summarize_registry_pool_counts(registry)
+        selected_backend_ids = selected_backend_ids_from_state(state)
+        active_routing_candidate_ids = get_active_routing_candidate_backend_ids(registry)
+        runtime_active_pool_count_observed = coerce_nonnegative_int(
+            state.get("active_count")
+        )
+        registry_active_pool_count_observed = int(pool_counts.get("active", 0) or 0)
+        stable_inventory_source = policy_drift.get("stable_auth_inventory_source", {})
+        stable_inventory_status = (
+            "available"
+            if bool(stable_inventory_source.get("exists"))
+            else "missing"
+        )
+
+    evidence_result["selected_backend_ids_observed"] = selected_backend_ids
+    evidence_result["runtime_active_pool_count_observed"] = (
+        runtime_active_pool_count_observed
+    )
+    evidence_result["registry_active_pool_count_observed"] = (
+        registry_active_pool_count_observed
+    )
+    evidence_result["active_pool_count_observed"] = registry_active_pool_count_observed
+    evidence_result["active_routing_candidate_ids_observed"] = (
+        active_routing_candidate_ids
+    )
+    evidence_result["stable_inventory_status"] = stable_inventory_status
+    evidence_result["policy_drift_status"] = str(policy_drift.get("status", "unknown"))
+    evidence_result["registry_identity_status"] = str(
+        registry_identity.get("status", "unknown")
+    )
+    if runtime_active_pool_count_observed is None:
+        evidence_result["active_pool_count_agreement_status"] = (
+            "runtime_missing_or_invalid"
+        )
+    elif runtime_active_pool_count_observed != registry_active_pool_count_observed:
+        evidence_result["active_pool_count_agreement_status"] = "mismatched"
+    else:
+        evidence_result["active_pool_count_agreement_status"] = "matched"
+
+    selected_backend_id_set = set(selected_backend_ids)
+    active_routing_candidate_id_set = set(active_routing_candidate_ids)
+
+    if evidence_result["registry_identity_status"] != "clear":
+        machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
+        human_message = (
+            "Rotation participation evidence is contradicted because registry identity is ambiguous."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "registry_identity_ambiguous"
+        evidence_result["participation_status"] = "contradicted"
+        evidence_result["final_outcome"] = "participation_evidence_contradicted"
+        ok = False
+    elif stable_inventory_status != "available":
+        machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+        human_message = (
+            "Rotation participation evidence is unknown because the stable inventory is not locally available."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "stable_inventory_missing"
+        evidence_result["participation_status"] = "unknown"
+        evidence_result["final_outcome"] = "participation_evidence_unknown"
+        ok = False
+    elif evidence_result["policy_drift_status"] != "clear":
+        machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
+        human_message = (
+            "Rotation participation evidence is contradicted because stable policy drift is still detected."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "policy_drift_detected"
+        evidence_result["participation_status"] = "contradicted"
+        evidence_result["final_outcome"] = "participation_evidence_contradicted"
+        ok = False
+    elif evidence_result["active_pool_count_agreement_status"] == "runtime_missing_or_invalid":
+        machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+        human_message = (
+            "Rotation participation evidence is unknown because runtime active-pool count is missing or invalid."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "runtime_active_count_missing_or_invalid"
+        evidence_result["participation_status"] = "unknown"
+        evidence_result["final_outcome"] = "participation_evidence_unknown"
+        ok = False
+    elif evidence_result["active_pool_count_agreement_status"] == "mismatched":
+        machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
+        human_message = (
+            "Rotation participation evidence is contradicted because runtime and registry active-pool counts do not agree."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "active_pool_count_mismatched"
+        evidence_result["participation_status"] = "contradicted"
+        evidence_result["final_outcome"] = "participation_evidence_contradicted"
+        ok = False
+    elif registry_active_pool_count_observed < 2:
+        machine_error_code = "ROTATION_EVIDENCE_INSUFFICIENT"
+        human_message = (
+            "Rotation participation evidence is insufficient because the active pool is not yet observably expanded."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "active_pool_not_expanded"
+        evidence_result["participation_status"] = "insufficient"
+        evidence_result["final_outcome"] = "participation_evidence_insufficient"
+        ok = False
+    elif len(active_routing_candidate_ids) < 2:
+        machine_error_code = "ROTATION_EVIDENCE_INSUFFICIENT"
+        human_message = (
+            "Rotation participation evidence is insufficient because routing-eligible active candidates are not yet observably expanded."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "active_routing_candidates_not_expanded"
+        evidence_result["participation_status"] = "insufficient"
+        evidence_result["final_outcome"] = "participation_evidence_insufficient"
+        ok = False
+    elif not selected_backend_ids:
+        machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+        human_message = (
+            "Rotation participation evidence is unknown because no selected backend snapshot is currently materialized."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "selected_backend_snapshot_missing"
+        evidence_result["participation_status"] = "unknown"
+        evidence_result["final_outcome"] = "participation_evidence_unknown"
+        ok = False
+    elif not selected_backend_id_set.issubset(active_routing_candidate_id_set):
+        machine_error_code = "ROTATION_EVIDENCE_CONTRADICTED"
+        human_message = (
+            "Rotation participation evidence is contradicted because selected backends do not match routing-eligible active candidates."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = (
+            "selected_backend_outside_active_candidates"
+        )
+        evidence_result["participation_status"] = "contradicted"
+        evidence_result["final_outcome"] = "participation_evidence_contradicted"
+        ok = False
+    elif len(selected_backend_id_set) < 2:
+        machine_error_code = "ROTATION_EVIDENCE_INSUFFICIENT"
+        human_message = (
+            "Rotation participation evidence is insufficient because only a single selected backend is visible in the bounded local snapshot."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "single_backend_snapshot_only"
+        evidence_result["participation_status"] = "insufficient"
+        evidence_result["final_outcome"] = "participation_evidence_insufficient"
+        ok = False
+    else:
+        machine_error_code = "OK"
+        human_message = (
+            "Bounded local rotation participation evidence is available."
+        )
+        operator_action = "none"
+        evidence_result["evidence_strength"] = "multi_backend_snapshot"
+        evidence_result["participation_status"] = "available"
+        evidence_result["final_outcome"] = "participation_evidence_available"
+        ok = True
+
+    return build_command_payload(
+        ok=ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action=operator_action,
+        changed_files=[],
+        extra={
+            "rotation_evidence_result": evidence_result,
+            "delegated_evidence": {
+                "pool_summary": {
+                    "active": registry_active_pool_count_observed,
+                    "runtime_active_count": runtime_active_pool_count_observed,
+                    "selected_backend_ids": selected_backend_ids,
+                    "backend_count": len(registry.get("backends") or []),
+                },
+                "policy_drift_summary": {
+                    "status": policy_drift.get("status"),
+                    "machine_error_code": policy_drift.get("machine_error_code"),
+                    "configured_active_count": policy_drift.get(
+                        "configured_active_count"
+                    ),
+                    "allowed_stable_auth_count": policy_drift.get(
+                        "allowed_stable_auth_count"
+                    ),
+                    "stable_auth_inventory_count": policy_drift.get(
+                        "stable_auth_inventory_count"
+                    ),
+                    "stable_auth_inventory_source": stable_inventory_source,
+                },
+                "registry_identity_summary": summarize_registry_identity(
+                    registry_identity
+                ),
+            },
         },
     )
 
