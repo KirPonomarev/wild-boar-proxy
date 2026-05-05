@@ -6146,6 +6146,43 @@ class CliTests(unittest.TestCase):
         )
         self.assertIn(str(registry_path), payload["changed_files"])
 
+    def test_policy_stage_set_updates_pool_policy_to_canonical_stage_15(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        before_registry = json.loads(registry_path.read_text())
+        result = self.run_cli("policy", "stage", "set", "15", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["requested_stage"], "15")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["status"], "owner_path_emitted")
+        self.assertTrue(update["attempted"])
+        self.assertEqual(update["requested_stage"], "15")
+        self.assertEqual(update["previous_pool_policy"], before_registry["pool_policy"])
+        self.assertEqual(
+            update["mapped_pool_policy"],
+            {"active_min": 15, "active_target": 15, "reserve_target": 0},
+        )
+        self.assertEqual(
+            update["next_pool_policy"],
+            {"active_min": 15, "active_target": 15, "reserve_target": 0},
+        )
+        self.assertEqual(update["policy_validation_status"], "ok")
+        self.assertEqual(update["stage_mapping_status"], "ok")
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["write_attempted"])
+        self.assertTrue(update["write_observed"])
+        self.assertFalse(update["rollback_attempted"])
+        self.assertEqual(update["rollback_outcome"], "not_needed")
+        self.assertEqual(update["final_outcome"], "stage_policy_updated")
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 15, "active_target": 15, "reserve_target": 0},
+        )
+        self.assertEqual(payload["changed_files"], [str(registry_path)])
+
     def test_policy_stage_set_reports_already_on_stage_without_write(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
