@@ -5940,6 +5940,191 @@ class CliTests(unittest.TestCase):
         self.assertFalse(promotion["validate_attempted"])
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 
+    def test_policy_stage_set_updates_pool_policy_to_canonical_stage(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        result = self.run_cli("policy", "stage", "set", "10", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["requested_stage"], "10")
+        self.assertEqual(
+            update["mapped_pool_policy"],
+            {"active_min": 10, "active_target": 10, "reserve_target": 0},
+        )
+        self.assertEqual(update["policy_validation_status"], "ok")
+        self.assertEqual(update["stage_mapping_status"], "ok")
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["write_attempted"])
+        self.assertTrue(update["write_observed"])
+        self.assertEqual(update["rollback_outcome"], "not_needed")
+        self.assertEqual(update["final_outcome"], "stage_policy_updated")
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 10, "active_target": 10, "reserve_target": 0},
+        )
+        self.assertIn(str(registry_path), payload["changed_files"])
+
+    def test_policy_stage_set_reports_already_on_stage_without_write(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 10,
+            "active_target": 10,
+            "reserve_target": 0,
+        }
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        result = self.run_cli("policy", "stage", "set", "10", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["final_outcome"], "already_on_stage")
+        self.assertFalse(update["rollback_point_captured"])
+        self.assertFalse(update["write_attempted"])
+        self.assertFalse(update["write_observed"])
+        self.assertEqual(update["rollback_outcome"], "not_needed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+
+    def test_policy_stage_set_rejects_unsupported_stage(self) -> None:
+        result = self.run_cli("policy", "stage", "set", "12", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "POOL_POLICY_STAGE_UNSUPPORTED")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["requested_stage"], "12")
+        self.assertEqual(update["stage_mapping_status"], "unsupported")
+        self.assertEqual(update["final_outcome"], "unsupported_stage")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_policy_stage_set_rejects_invalid_existing_pool_policy(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"]["active_target"] = "oops"
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("policy", "stage", "set", "10", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "POOL_POLICY_INVALID")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["policy_validation_status"], "invalid")
+        self.assertEqual(update["final_outcome"], "policy_invalid")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_policy_stage_set_rolls_back_when_verification_fails(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        before_registry = registry_path.read_text(encoding="utf-8")
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            original_read_json = runtime_mod.read_json
+            read_calls = {"count": 0}
+
+            def staged_read_json(path: Path, required: bool = True) -> dict[str, object]:
+                if path == paths.registry_file:
+                    read_calls["count"] += 1
+                    if read_calls["count"] == 2:
+                        registry = json.loads(before_registry)
+                        registry["pool_policy"] = {
+                            "active_min": 2,
+                            "active_target": 2,
+                            "reserve_target": 0,
+                        }
+                        return registry
+                return original_read_json(path, required=required)
+
+            with mock.patch("wild_boar_proxy.runtime.read_json", side_effect=staged_read_json):
+                payload = runtime_mod.run_policy_stage_set(paths, "10")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "POOL_POLICY_UPDATE_FAILED")
+        update = payload["pool_policy_update_result"]
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["write_attempted"])
+        self.assertFalse(update["write_observed"])
+        self.assertTrue(update["rollback_attempted"])
+        self.assertEqual(update["rollback_outcome"], "completed")
+        self.assertEqual(
+            update["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+
+    def test_policy_stage_set_reports_fatal_rollback_failure(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        before_registry = registry_path.read_text(encoding="utf-8")
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            original_read_json = runtime_mod.read_json
+            read_calls = {"count": 0}
+
+            def staged_read_json(path: Path, required: bool = True) -> dict[str, object]:
+                if path == paths.registry_file:
+                    read_calls["count"] += 1
+                    if read_calls["count"] == 2:
+                        registry = json.loads(before_registry)
+                        registry["pool_policy"] = {
+                            "active_min": 2,
+                            "active_target": 2,
+                            "reserve_target": 0,
+                        }
+                        return registry
+                return original_read_json(path, required=required)
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.read_json", side_effect=staged_read_json
+            ):
+                with mock.patch(
+                    "wild_boar_proxy.runtime.restore_path_state",
+                    side_effect=RuntimeError("forced rollback failure"),
+                ):
+                    payload = runtime_mod.run_policy_stage_set(paths, "10")
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "POOL_POLICY_UPDATE_ROLLBACK_FAILED"
+        )
+        update = payload["pool_policy_update_result"]
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["rollback_attempted"])
+        self.assertEqual(update["rollback_outcome"], "failed")
+        self.assertEqual(update["final_outcome"], "rollback_failed")
+        self.assertNotEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+
+    def test_policy_stage_set_updates_promotion_guard_target(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        for index in range(2, 11):
+            registry["backends"].append(
+                self.build_backend(
+                    backend_id=f"backend-active-{index}",
+                    auth_ref=f"/tmp/codex-active-{index}.json",
+                    pool="active",
+                )
+            )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-policy-promote-blocked",
+                auth_ref="/tmp/codex-policy-promote-blocked.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        stage_result = self.run_cli("policy", "stage", "set", "10", "--json")
+        self.assertEqual(stage_result.returncode, 0, stage_result.stderr)
+        promote_result = self.run_cli(
+            "accounts", "promote", "backend-policy-promote-blocked", "--json"
+        )
+        self.assertEqual(promote_result.returncode, 1, promote_result.stderr)
+        payload = json.loads(promote_result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_POLICY_LIMIT_REACHED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "active_target_reached")
+        self.assertEqual(promotion["active_pool_count_before"], 10)
+        self.assertEqual(promotion["active_target_observed"], 10)
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
     def test_accounts_promote_rejects_held_backend_precondition(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())

@@ -22,6 +22,7 @@ from .runtime import (
     run_launch_client,
     run_launch_smoke,
     run_onboard,
+    run_policy_stage_set,
     run_promote,
     run_release,
     run_retire,
@@ -119,6 +120,16 @@ def build_parser() -> argparse.ArgumentParser:
     mode_set.add_argument("value", choices=["stable", "managed"])
     mode_set.add_argument("--json", action="store_true", required=True)
 
+    policy = subparsers.add_parser("policy")
+    policy_subparsers = policy.add_subparsers(dest="policy_command", required=True)
+    policy_stage = policy_subparsers.add_parser("stage")
+    policy_stage_subparsers = policy_stage.add_subparsers(
+        dest="policy_stage_command", required=True
+    )
+    policy_stage_set = policy_stage_subparsers.add_parser("set")
+    policy_stage_set.add_argument("value")
+    policy_stage_set.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -192,6 +203,12 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(mode_get(paths))
         if args.command == "mode" and args.mode_command == "set":
             return emit_json(mode_set(paths, args.value))
+        if (
+            args.command == "policy"
+            and args.policy_command == "stage"
+            and args.policy_stage_command == "set"
+        ):
+            return emit_json(run_policy_stage_set(paths, args.value))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

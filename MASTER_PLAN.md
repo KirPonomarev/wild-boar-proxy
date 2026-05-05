@@ -17,7 +17,7 @@ We do not fork the host client.
 We do not build a second proxy engine.
 We build the managing layer: modes, policy, onboarding, diagnostics, recovery, and staged scaling.
 Architecture is designed for 20 accounts from day one.
-Operational proof of scale is staged: 10, then 12 to 15, then 20.
+Operational proof of scale is staged: 10, then 15, then 20.
 
 ## Product Strategy
 
@@ -216,6 +216,7 @@ Any operation that changes active routing, registry, mode, or managed state must
    - `mode get`
    - `mode set stable`
    - `mode set managed`
+   - `policy stage set`
    - `accounts list`
    - `accounts validate`
    - `accounts promote`
@@ -405,7 +406,7 @@ Acceptance: Architecture and data format do not need redesign when moving to 20 
 ### Workstream 05: Staged Pool Rollout
 
 Stage 1 proves stable 10.
-Stage 2 expands to 12 or 15.
+Stage 2 expands to 15.
 Stage 3 expands to 20.
 Every stage requires runtime attestation, healthcheck, runtime test, rotation log review, and rollback point.
 Any degrading account moves to reserve or hold.

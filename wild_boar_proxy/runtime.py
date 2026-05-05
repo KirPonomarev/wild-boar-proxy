@@ -47,6 +47,11 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
+STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
+    "10": {"active_min": 10, "active_target": 10, "reserve_target": 0},
+    "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
+    "20": {"active_min": 20, "active_target": 20, "reserve_target": 0},
+}
 
 
 @dataclass(frozen=True)
@@ -1070,6 +1075,36 @@ def summarize_promotion_pool_policy(registry: dict[str, Any]) -> dict[str, Any]:
         "active_target": active_target,
         "reserve_target": reserve_target,
     }
+
+
+def summarize_stage_pool_policy_mapping(stage_value: str) -> dict[str, Any]:
+    stage = str(stage_value).strip()
+    desired_policy = STAGED_POOL_POLICY_PACKETS.get(stage)
+    if desired_policy is None:
+        return {
+            "status": "unsupported",
+            "machine_error_code": "POOL_POLICY_STAGE_UNSUPPORTED",
+            "requested_stage": stage,
+            "mapped_pool_policy": None,
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "requested_stage": stage,
+        "mapped_pool_policy": dict(desired_policy),
+    }
+
+
+def pool_policy_matches_stage_packet(
+    pool_policy: dict[str, Any], desired_policy: dict[str, int]
+) -> bool:
+    return (
+        coerce_nonnegative_int(pool_policy.get("active_min")) == desired_policy["active_min"]
+        and coerce_nonnegative_int(pool_policy.get("active_target"))
+        == desired_policy["active_target"]
+        and coerce_nonnegative_int(pool_policy.get("reserve_target"))
+        == desired_policy["reserve_target"]
+    )
 
 
 def get_claim_gate(
@@ -3815,11 +3850,21 @@ def run_healthcheck(
         operator_action = "retry"
         if listener_ok and is_proxy_path_error(error_detail):
             proxy_reprobe = run_proxy_reprobe(state)
+            last_known_good_proxy = build_last_known_good_proxy_surface(
+                paths, state, str(state.get("current_proxy_url", ""))
+            )
             if proxy_reprobe["found_candidate"]:
                 machine_error_code = "PROXY_PATH_BROKEN"
                 human_message = (
                     "Runtime attestation failed because the outbound proxy path is broken; "
                     "a local proxy candidate is reachable."
+                )
+            elif last_known_good_proxy["status"] == "materialized":
+                machine_error_code = "PROXY_PATH_BROKEN"
+                human_message = (
+                    "Runtime attestation failed because the outbound proxy path is broken; "
+                    "a previously materialized local proxy snapshot is preserved, but "
+                    "no bounded live candidate is currently reachable."
                 )
             else:
                 machine_error_code = "PROXY_REPROBE_FAILED"
@@ -4674,6 +4719,189 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
             "pool_policy": registry.get("pool_policy", {}),
             "stable_default_backend_id": registry.get("stable_default_backend_id"),
         },
+    )
+
+
+def run_policy_stage_set(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+    before = snapshot_known_files(paths)
+    policy_update_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_stage": str(stage).strip(),
+        "mapped_pool_policy": None,
+        "previous_pool_policy": None,
+        "next_pool_policy": None,
+        "policy_validation_status": "pending",
+        "stage_mapping_status": "pending",
+        "rollback_point_captured": False,
+        "write_attempted": False,
+        "write_observed": False,
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_policy_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str = "none",
+        severity: str = "recoverable",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "requested_stage": policy_update_result["requested_stage"],
+            "pool_policy_update_result": policy_update_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(before, [paths.registry_file]),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    with serialized_lock(paths):
+        registry = read_json(paths.registry_file)
+        current_pool_policy = registry.get("pool_policy")
+        policy_update_result["previous_pool_policy"] = current_pool_policy
+        policy_summary = summarize_promotion_pool_policy(registry)
+        policy_update_result["policy_validation_status"] = str(
+            policy_summary.get("status", "invalid")
+        )
+        if policy_summary.get("status") != "ok":
+            policy_update_result["final_outcome"] = "policy_invalid"
+            return build_policy_payload(
+                ok=False,
+                human_message="Stage policy update blocked because the current pool policy is invalid.",
+                machine_error_code=str(
+                    policy_summary.get("machine_error_code", "POOL_POLICY_INVALID")
+                ),
+                operator_action="user_action",
+            )
+
+        stage_mapping = summarize_stage_pool_policy_mapping(stage)
+        policy_update_result["requested_stage"] = str(
+            stage_mapping.get("requested_stage", policy_update_result["requested_stage"])
+        )
+        policy_update_result["stage_mapping_status"] = str(
+            stage_mapping.get("status", "unsupported")
+        )
+        if stage_mapping.get("status") != "ok":
+            policy_update_result["final_outcome"] = "unsupported_stage"
+            return build_policy_payload(
+                ok=False,
+                human_message="Requested stage is not supported by the canonical staged policy sequence.",
+                machine_error_code=str(
+                    stage_mapping.get(
+                        "machine_error_code", "POOL_POLICY_STAGE_UNSUPPORTED"
+                    )
+                ),
+                operator_action="user_action",
+            )
+
+        desired_policy = dict(stage_mapping["mapped_pool_policy"])
+        policy_update_result["mapped_pool_policy"] = dict(desired_policy)
+        next_pool_policy = dict(current_pool_policy)
+        next_pool_policy.update(desired_policy)
+        policy_update_result["next_pool_policy"] = next_pool_policy
+
+        if pool_policy_matches_stage_packet(current_pool_policy, desired_policy):
+            policy_update_result["rollback_outcome"] = "not_needed"
+            policy_update_result["final_outcome"] = "already_on_stage"
+            return build_policy_payload(
+                ok=True,
+                human_message=(
+                    f"Pool policy already matches canonical stage {policy_update_result['requested_stage']}."
+                ),
+                machine_error_code="OK",
+            )
+
+        registry_snapshot = snapshot_path_state(paths.registry_file)
+        policy_update_result["rollback_point_captured"] = True
+        try:
+            updated_registry = dict(registry)
+            updated_registry["pool_policy"] = next_pool_policy
+            updated_registry["updated_at"] = now_iso()
+            policy_update_result["write_attempted"] = True
+            write_json_atomic(paths.registry_file, updated_registry)
+
+            observed_registry = read_json(paths.registry_file)
+            observed_pool_policy = observed_registry.get("pool_policy")
+            policy_update_result["write_observed"] = observed_pool_policy == next_pool_policy
+            observed_summary = summarize_promotion_pool_policy(observed_registry)
+            if (
+                observed_summary.get("status") != "ok"
+                or observed_pool_policy != next_pool_policy
+                or not pool_policy_matches_stage_packet(observed_pool_policy, desired_policy)
+            ):
+                raise RuntimeErrorInfo(
+                    "Pool policy verification failed after stage update.",
+                    machine_error_code="POOL_POLICY_UPDATE_FAILED",
+                    severity="recoverable",
+                    operator_action="retry",
+                )
+        except Exception as exc:  # noqa: BLE001
+            policy_update_result["rollback_attempted"] = True
+            try:
+                restore_path_state(paths.registry_file, registry_snapshot)
+                policy_update_result["rollback_outcome"] = "completed"
+                policy_update_result["final_outcome"] = (
+                    "rollback_completed_after_failed_verification"
+                )
+                error_code = (
+                    exc.machine_error_code
+                    if isinstance(exc, RuntimeErrorInfo)
+                    else "POOL_POLICY_UPDATE_FAILED"
+                )
+                return build_policy_payload(
+                    ok=False,
+                    human_message=(
+                        "Stage policy update failed verification and previous pool policy was restored."
+                    ),
+                    machine_error_code=str(error_code),
+                    operator_action=(
+                        exc.operator_action
+                        if isinstance(exc, RuntimeErrorInfo)
+                        else "retry"
+                    ),
+                    extra={"update_error": str(exc)}
+                    if not isinstance(exc, RuntimeErrorInfo)
+                    else None,
+                )
+            except Exception as rollback_exc:  # noqa: BLE001
+                policy_update_result["rollback_outcome"] = "failed"
+                policy_update_result["final_outcome"] = "rollback_failed"
+                return build_policy_payload(
+                    ok=False,
+                    human_message=(
+                        "Stage policy update failed verification and rollback of the previous pool policy failed."
+                    ),
+                    machine_error_code="POOL_POLICY_UPDATE_ROLLBACK_FAILED",
+                    operator_action="stop",
+                    severity="fatal",
+                    extra={
+                        "update_error": str(exc),
+                        "rollback_error": str(rollback_exc),
+                    },
+                )
+
+    policy_update_result["rollback_outcome"] = "not_needed"
+    policy_update_result["final_outcome"] = "stage_policy_updated"
+    return build_policy_payload(
+        ok=True,
+        human_message=(
+            f"Pool policy updated to canonical stage {policy_update_result['requested_stage']}."
+        ),
+        machine_error_code="OK",
     )
 
 

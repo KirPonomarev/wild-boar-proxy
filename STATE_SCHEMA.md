@@ -39,6 +39,16 @@ Current execution-wave meaning:
 - `active_target` is the current staged active-pool ceiling for promotion truth
 - `reserve_target` is the minimum reserve floor that promotion must preserve
 
+Canonical staged policy mapping for the current contour:
+
+- stage `10` sets `active_min = 10`, `active_target = 10`, `reserve_target = 0`
+- stage `15` sets `active_min = 15`, `active_target = 15`, `reserve_target = 0`
+- stage `20` sets `active_min = 20`, `active_target = 20`, `reserve_target = 0`
+
+Stage selection updates policy truth only.
+It does not itself promote or demote any backend, and it does not prove stage
+completion by itself.
+
 Required backend fields:
 
 - `id`

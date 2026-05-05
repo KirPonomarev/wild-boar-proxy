@@ -22,6 +22,7 @@ All operator commands must support `--json`.
 - `mode get --json`
 - `mode set stable --json`
 - `mode set managed --json`
+- `policy stage set <10|15|20> --json`
 - `accounts list --json`
 - `accounts validate <id> --json`
 - `accounts promote <id> --json`
@@ -169,6 +170,56 @@ Canonical launch-client outcomes include:
 - runtime health ownership in `healthcheck --json`
 - delegated runtime readout in `status --json`
 - runtime smoke activation truth in `launch smoke --json`
+
+## Additional staged pool-policy owner surface
+
+`policy stage set <10|15|20> --json` is the owner surface for staged
+pool-policy mutation truth.
+
+Stage-policy update success must not be inferred from raw schema mutation alone.
+Successful owner packets must prove, machine-readably:
+
+- the requested stage is canonically supported
+- the current `pool_policy` is valid before mutation
+- the stage-to-policy mapping used for the update
+- a rollback point captured before write
+- post-write policy verification
+- no stronger claim than policy truth itself
+
+`policy stage set <10|15|20> --json` may expose a nested
+`pool_policy_update_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `requested_stage`
+- `mapped_pool_policy`
+- `previous_pool_policy`
+- `next_pool_policy`
+- `policy_validation_status`
+- `stage_mapping_status`
+- `rollback_point_captured`
+- `write_attempted`
+- `write_observed`
+- `rollback_attempted`
+- `rollback_outcome`
+- `final_outcome`
+
+Canonical stage-policy outcomes include:
+
+- `stage_policy_updated`
+- `already_on_stage`
+- `policy_invalid`
+- `unsupported_stage`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+
+`policy stage set <10|15|20> --json` remains separate from:
+
+- active-pool growth execution in `accounts promote <id> --json`
+- stage-completion proof in later rollout contours
+- runtime-health ownership in `healthcheck --json`
+- delegated registry readout in `accounts list --json`
 
 ## Additional promotion owner surface
 
