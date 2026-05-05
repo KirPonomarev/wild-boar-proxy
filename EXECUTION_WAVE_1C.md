@@ -79,83 +79,85 @@ Live evidence lane does not authorize additional repo-write work by itself.
 
 ### Preferred candidates
 
-- direct `accounts onboard --skip-login` owner-surface coverage
 - `rollout stage advance` lock coverage
+- detected-new-auth onboarding lane expansion
 
 ### Recently closed contour
 
 Recently closed:
 
-`Wave 1C Repo-Write: Single-Writer Lock Coverage Expansion`
+`Wave 1C Repo-Write: Accounts Onboard Explicit Skip-Login Owner-Surface Coverage`
 
 Closeout:
 
-- representative `LOCK_HELD` coverage was added for:
-  - `policy stage set`
-  - `accounts onboard`
-- both commands now fail closed with:
-  - `changed_files == []`
-  - no tracked state mutation
-  - no owner-lane progress past lock preflight
+- direct owner-surface coverage was added for:
+  - `accounts onboard --json --auth-ref <path> --skip-login`
+- the contour now proves:
+  - the explicit `--skip-login` lane has direct machine-verified coverage
+  - successful packets still carry reserve-first onboarding truth honestly
+  - mismatch paths do not emit false success claims
 - the contour closed as tests-only
 
 ### Current next contour
 
 The immediate next repo-write contour is:
 
-`Wave 1C Repo-Write: Accounts Onboard Explicit Skip-Login Owner-Surface Coverage`
+`Wave 1C Repo-Write: Rollout Stage Advance Lock Coverage`
 
 Purpose:
 
-- close the remaining direct coverage gap on the explicit `--skip-login`
-  onboarding lane
-- prove that `accounts onboard --json` forwards `--skip-login` explicitly
-  rather than inferring it
-- strengthen bounded onboarding owner-surface coverage without claiming
-  completion of one-click onboarding, Workstream 03, or the full critical user
-  path
+- close the remaining direct lock-coverage gap on the stage-advance owner
+  surfaces
+- prove fail-closed owner-surface behavior under held-lock conditions on
+  representative stage-advance branches
+- strengthen `STATE_SERIALIZATION_GATE` confidence on a delegated multi-step
+  mutating owner surface without claiming stage-proof completion, scale proof,
+  or broader rollout completion
 
 Scope:
 
 - tests first
 - direct coverage for:
-  - `accounts onboard --json --auth-ref <path> --skip-login`
-- prove the external onboarding stub actually receives `--skip-login`
-- prove owner-packet truth remains machine-carried for:
-  - uniquely selected backend identity
-  - resulting placement in `reserve`
-  - no silent active-routing change
-  - post-onboard validate outcome
-  - post-onboard sync outcome, unless explicitly skipped
-  - post-onboard status proof summary
-- allow a minimal test-harness extension only if needed to record forwarded
-  argv or equivalent owner-surface evidence
+  - `rollout stage advance 15 <id> --json` from canonical source stage `10`
+  - `rollout stage advance 20 <id> --json` from canonical requested stage `20`
+    when target posture is not yet satisfied
+- prove observable owner-surface failure expectations only:
+  - `machine_error_code == LOCK_HELD`
+  - `changed_files == []`
+  - tracked state remains unchanged
+  - no committed control-layer mutation is observed in canonical write surfaces
+- do not assert absence of read-only delegated preflight or proof work unless
+  that fact is already surfaced machine-readably
+- allow a minimal runtime fix only if a new test reveals a real missing
+  serialized-path guard or fail-open behavior in the stage-advance owner
+  surface
 
 Acceptance:
 
-- direct coverage exists for the explicit `--skip-login` onboarding lane
-- the coverage proves `--skip-login` is forwarded, not merely inferred
-- successful packets still prove reserve-first admission honestly
-- no success claim is emitted when identity proof is missing or ambiguous
+- direct lock-held coverage exists for two distinct stage-advance owner-flow
+  branches
+- held-lock results emit non-success owner packets with `LOCK_HELD`
+- no committed control-layer mutation is observed under held-lock conditions
 - no new truth surface is introduced
 - full local CLI suite remains green
 - the contour closes as tests-only unless a failing test proves a real defect
 
 Decision rule:
 
-- if tests pass with test-only or harness-only additions, close as tests-only
+- if tests pass once added, close the contour as tests-only
 - if a new test reveals a real defect, fix only the control-layer
-  owner-surface plumbing or packet-shaping defect in the same contour
-- if a fix would require engine-layer auth-flow duplication or broader runtime
-  redesign, stop and open a separate contour
+  stage-advance lock-preflight or serialized-path defect in the same contour
+- if a fix would expand into stage-proof semantics, rollout-policy redesign,
+  engine-layer work, or live operational behavior, stop and open a separate
+  contour
 
 Explicitly deferred from this contour:
 
-- `rollout stage advance` lock coverage
 - detected-new-auth onboarding lane expansion
-- one-click onboarding completion claims
-- Workstream 03 completion claims
-- Critical User Path Gate completion claims
+- exhaustive lock coverage across every remaining mutating command
+- stage-advance semantic expansion beyond held-lock behavior
+- live `rollout evidence capture 16 --json`
+- scale-to-20 proof claims
 
 ### Out of scope
 
