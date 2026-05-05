@@ -5729,6 +5729,7 @@ def run_rollout_stage_advance(
         "requested_stage": str(stage).strip(),
         "requested_backend_id": str(backend_id).strip(),
         "preflight_stage10_proof_status": "not_invoked",
+        "preflight_stage15_proof_status": "not_invoked",
         "preflight_policy_status": "pending",
         "policy_transition_status": "not_invoked",
         "promotion_status": "not_invoked",
@@ -5837,14 +5838,33 @@ def run_rollout_stage_advance(
 
     requested_stage = stage_advancement_result["requested_stage"]
     requested_backend_id = stage_advancement_result["requested_backend_id"]
-    if requested_stage != "15":
+    stage_advance_config = {
+        "15": {
+            "source_stage": "10",
+            "preflight_status_field": "preflight_stage10_proof_status",
+            "already_target_outcome": "already_at_stage_15_target",
+            "proof_failure_outcome": "stable_10_proof_failed",
+        },
+        "20": {
+            "source_stage": "15",
+            "preflight_status_field": "preflight_stage15_proof_status",
+            "already_target_outcome": "already_at_stage_20_target",
+            "proof_failure_outcome": "stable_15_proof_failed",
+        },
+    }
+    config = stage_advance_config.get(requested_stage)
+    if config is None:
         stage_advancement_result["final_outcome"] = "unsupported_target_stage"
         return build_stage_advance_payload(
             ok=False,
-            human_message="Rollout stage advance supports only target stage 15.",
+            human_message="Rollout stage advance supports only target stages 15 and 20.",
             machine_error_code="STAGE_ADVANCE_UNSUPPORTED_STAGE",
             operator_action="user_action",
         )
+    source_stage = str(config["source_stage"])
+    preflight_status_field = str(config["preflight_status_field"])
+    already_target_outcome = str(config["already_target_outcome"])
+    proof_failure_outcome = str(config["proof_failure_outcome"])
     if not requested_backend_id:
         stage_advancement_result["final_outcome"] = "backend_not_eligible"
         return build_stage_advance_payload(
@@ -5883,14 +5903,14 @@ def run_rollout_stage_advance(
         )
 
     current_stage = str(observed_stage.get("observed_stage", ""))
-    desired_policy = STAGED_POOL_POLICY_PACKETS["15"]
+    desired_policy = STAGED_POOL_POLICY_PACKETS[requested_stage]
     pool_counts = summarize_registry_pool_counts(registry)
     active_count_before = int(pool_counts.get("active", 0) or 0)
     reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
     active_target = int(desired_policy["active_target"])
     reserve_target = int(desired_policy["reserve_target"])
     target_already_satisfied = (
-        current_stage == "15"
+        current_stage == requested_stage
         and active_count_before == active_target
         and reserve_count_before == reserve_target
     )
@@ -5901,11 +5921,14 @@ def run_rollout_stage_advance(
         "reserve_target": reserve_target,
     }
 
-    if current_stage not in {"10", "15"}:
+    if current_stage not in {source_stage, requested_stage}:
         stage_advancement_result["final_outcome"] = "invalid_stage_policy"
         return build_stage_advance_payload(
             ok=False,
-            human_message="Rollout stage advance requires canonical source stage 10 or in-progress stage 15.",
+            human_message=(
+                f"Rollout stage advance requires canonical source stage {source_stage} "
+                f"or in-progress stage {requested_stage}."
+            ),
             machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
             operator_action="user_action",
         )
@@ -5960,15 +5983,18 @@ def run_rollout_stage_advance(
     if target_already_satisfied:
         stage_advancement_result["policy_transition_status"] = "already_on_stage"
         stage_advancement_result["promotion_status"] = "not_needed"
-        stage_advancement_result["final_outcome"] = "already_at_stage_15_target"
+        stage_advancement_result["final_outcome"] = already_target_outcome
         return build_stage_advance_payload(
             ok=True,
-            human_message="Rollout stage advance found canonical stage-15 target already satisfied.",
+            human_message=(
+                f"Rollout stage advance found canonical stage-{requested_stage} "
+                "target already satisfied."
+            ),
             machine_error_code="OK",
         )
 
     step_snapshots: dict[str, dict[str, Any]] | None = None
-    if current_stage == "10":
+    if current_stage == source_stage:
         step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
         if selected_backend_auth_basename:
             stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
@@ -5988,9 +6014,11 @@ def run_rollout_stage_advance(
             step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
             step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
             step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
-        proof_payload = run_rollout_stage_prove(paths, "10")
+        proof_payload = run_rollout_stage_prove(paths, source_stage)
         proof_result = proof_payload.get("stage_proof_result", {})
-        stage_advancement_result["delegated_evidence"]["stable_10_proof_summary"] = {
+        stage_advancement_result["delegated_evidence"][
+            f"stable_{source_stage}_proof_summary"
+        ] = {
             "status": proof_payload.get("status"),
             "machine_error_code": proof_payload.get("machine_error_code"),
             "exit_code": proof_payload.get("exit_code"),
@@ -5998,18 +6026,21 @@ def run_rollout_stage_advance(
             "final_outcome": proof_result.get("final_outcome"),
         }
         if proof_payload.get("status") != "ok":
-            stage_advancement_result["preflight_stage10_proof_status"] = "failed"
+            stage_advancement_result[preflight_status_field] = "failed"
             return rollback_after_failed_step(
-                human_message="Rollout stage advance is blocked because stable-10 proof is not satisfied.",
+                human_message=(
+                    f"Rollout stage advance is blocked because stable-{source_stage} "
+                    "proof is not satisfied."
+                ),
                 machine_error_code=str(
                     proof_payload.get("machine_error_code", "STAGE_ADVANCE_PROOF_FAILED")
                 ),
                 operator_action=str(proof_payload.get("operator_action", "user_action")),
                 exit_code=int(proof_payload.get("exit_code", 1) or 1),
                 snapshots=step_snapshots,
-                final_outcome="stable_10_proof_failed",
+                final_outcome=proof_failure_outcome,
             )
-        stage_advancement_result["preflight_stage10_proof_status"] = "passed"
+        stage_advancement_result[preflight_status_field] = "passed"
 
         policy_payload = run_policy_stage_set(paths, requested_stage)
         policy_result = policy_payload.get("pool_policy_update_result", {})
@@ -6022,7 +6053,10 @@ def run_rollout_stage_advance(
         if policy_payload.get("status") != "ok":
             stage_advancement_result["policy_transition_status"] = "failed"
             return rollback_after_failed_step(
-                human_message="Rollout stage advance failed while updating policy stage to 15.",
+                human_message=(
+                    "Rollout stage advance failed while updating policy stage to "
+                    f"{requested_stage}."
+                ),
                 machine_error_code=str(
                     policy_payload.get("machine_error_code", "POOL_POLICY_UPDATE_FAILED")
                 ),
@@ -6059,7 +6093,7 @@ def run_rollout_stage_advance(
         )
         stage_advancement_result["delegated_evidence"]["preflight_summary"] = preflight_summary
         if not preflight_ok:
-            stage_advancement_result["preflight_stage10_proof_status"] = "not_required"
+            stage_advancement_result[preflight_status_field] = "not_required"
             stage_advancement_result["postflight_attestation_status"] = str(
                 preflight_summary.get("attestation_status", "failed")
             )
@@ -6071,14 +6105,16 @@ def run_rollout_stage_advance(
             )
             return rollback_after_failed_step(
                 human_message=(
-                    "Rollout stage advance is blocked because current stage-15 rollout posture fails bounded preflight verification."
+                    "Rollout stage advance is blocked because current "
+                    f"stage-{requested_stage} rollout posture fails bounded "
+                    "preflight verification."
                 ),
                 machine_error_code=preflight_code,
                 operator_action=preflight_action,
                 snapshots=step_snapshots,
                 final_outcome="preflight_verification_failed",
             )
-        stage_advancement_result["preflight_stage10_proof_status"] = "not_required"
+        stage_advancement_result[preflight_status_field] = "not_required"
         stage_advancement_result["policy_transition_status"] = "already_on_stage"
 
     promote_payload = run_promote(paths, requested_backend_id)
@@ -6180,19 +6216,17 @@ def run_rollout_stage_advance(
     stage_advancement_result["delegated_evidence"]["pool_count_summary_after_step"] = {
         "active_count_observed": int(updated_counts.get("active", 0) or 0),
         "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
-        "active_target": STAGED_POOL_POLICY_PACKETS["15"]["active_target"],
-        "reserve_target": STAGED_POOL_POLICY_PACKETS["15"]["reserve_target"],
+        "active_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["active_target"],
+        "reserve_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["reserve_target"],
     }
     stage_advancement_result["rollback_outcome"] = "not_needed"
-    if int(updated_counts.get("active", 0) or 0) >= STAGED_POOL_POLICY_PACKETS["15"][
-        "active_target"
-    ]:
-        stage_advancement_result["final_outcome"] = "advanced_one_step"
-    else:
-        stage_advancement_result["final_outcome"] = "advanced_one_step"
+    stage_advancement_result["final_outcome"] = "advanced_one_step"
     return build_stage_advance_payload(
         ok=True,
-        human_message="Rollout stage advance completed one controlled promotion step toward canonical stage 15.",
+        human_message=(
+            "Rollout stage advance completed one controlled promotion step "
+            f"toward canonical stage {requested_stage}."
+        ),
         machine_error_code="OK",
     )
 

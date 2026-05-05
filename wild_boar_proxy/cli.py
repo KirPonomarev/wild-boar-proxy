@@ -149,7 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_prove.add_argument("value", choices=["10", "15"])
     rollout_stage_prove.add_argument("--json", action="store_true", required=True)
     rollout_stage_advance = rollout_stage_subparsers.add_parser("advance")
-    rollout_stage_advance.add_argument("value", choices=["15"])
+    rollout_stage_advance.add_argument("value", choices=["15", "20"])
     rollout_stage_advance.add_argument("id")
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
 
