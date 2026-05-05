@@ -549,6 +549,39 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(recovery_contract["last_known_good_proxy_persistence_in_scope"])
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
+        self.assertEqual(
+            current_proxy_adoption_contract["owner_command_surface"],
+            "healthcheck --json",
+        )
+        self.assertTrue(current_proxy_adoption_contract["status_delegates_to_owner"])
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
+            "current_proxy_url",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["working_candidate_surface"]["field"],
+            "proxy_reprobe.working_candidate",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["working_candidate_surface"][
+                "nested_evidence_only"
+            ]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_url_write_path_status"],
+            "contract_fixed_not_implemented",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["candidate_existence_alone_not_ok"]
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["top_level_ok_requires_live_runtime_reproof"]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["nested_adoption_result_surface"]["field"],
+            "proxy_reprobe_adoption_result",
+        )
         last_known_good_contract = payload["last_known_good_proxy_contract"]
         self.assertEqual(last_known_good_contract["status"], "contract_ready")
         self.assertEqual(last_known_good_contract["owner_command_surface"], "healthcheck --json")
@@ -785,6 +818,8 @@ class CliTests(unittest.TestCase):
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{candidate_port}",
         )
+        self.assertNotIn("proxy_reprobe_adoption_result", payload)
+        self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertFalse(payload["attestation"]["responses_ok"])
 
     def test_healthcheck_reconciles_effective_mode_mismatch_to_stable(self) -> None:
@@ -3013,6 +3048,25 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
         self.assertFalse(last_known_good_contract["historical_truth_promotes_live_truth"])
+        current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
+        self.assertEqual(
+            current_proxy_adoption_contract["owner_command_surface"],
+            "healthcheck --json",
+        )
+        self.assertTrue(current_proxy_adoption_contract["status_delegates_to_owner"])
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
+            "current_proxy_url",
+        )
+        self.assertTrue(
+            current_proxy_adoption_contract["working_candidate_surface"][
+                "nested_evidence_only"
+            ]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_url_write_path_status"],
+            "contract_fixed_not_implemented",
+        )
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "declared_not_materialized")
         self.assertEqual(last_known_good["proxy_url"], "")
@@ -3317,6 +3371,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertNotIn("last_known_good_proxy", payload)
         self.assertNotIn("last_known_good_proxy_contract", payload)
+        self.assertNotIn("current_proxy_adoption_contract", payload)
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
 
     def test_launch_smoke_does_not_write_last_known_good_proxy_when_it_is_not_the_owner(
@@ -3507,6 +3562,19 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
+        current_proxy_adoption_contract = payload["current_proxy_adoption_contract"]
+        self.assertEqual(
+            current_proxy_adoption_contract["owner_command_surface"],
+            "healthcheck --json",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_truth_surface"]["field"],
+            "current_proxy_url",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["current_proxy_url_write_path_status"],
+            "contract_fixed_not_implemented",
+        )
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "materialized")
         self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10808")
@@ -4166,6 +4234,7 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("deterministic_stable_recovery_result", payload)
         self.assertNotIn("last_known_good_proxy", payload)
         self.assertNotIn("last_known_good_proxy_contract", payload)
+        self.assertNotIn("current_proxy_adoption_contract", payload)
 
     def test_sync_reports_managed_pid_deletion_in_changed_files(self) -> None:
         pid_path = self.managed_dir / "managed-proxy.pid"

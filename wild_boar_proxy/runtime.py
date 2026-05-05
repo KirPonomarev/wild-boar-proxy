@@ -1061,6 +1061,49 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
     }
 
 
+def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "status": "contract_ready",
+        "owner_command_surface": "healthcheck --json",
+        "status_delegates_to_owner": True,
+        "sync_owner_forbidden": True,
+        "launch_smoke_owner_forbidden": True,
+        "state_file": str(paths.state_file),
+        "current_proxy_truth_surface": {
+            "status": "contract_ready",
+            "field": "current_proxy_url",
+            "meaning": "current_live_outbound_proxy_truth",
+            "persisted_last_known_good_separate": True,
+            "working_candidate_separate": True,
+        },
+        "working_candidate_surface": {
+            "status": "contract_ready",
+            "field": "proxy_reprobe.working_candidate",
+            "nested_evidence_only": True,
+            "current_proxy_truth_by_presence_forbidden": True,
+            "persisted_history_by_presence_forbidden": True,
+        },
+        "write_owner": "serialized_healthcheck_owner_path",
+        "current_proxy_url_write_path_status": "contract_fixed_not_implemented",
+        "adoption_requires_same_owner_path_live_reproof": True,
+        "adoption_from_candidate_liveness_alone_forbidden": True,
+        "adoption_from_last_known_good_alone_forbidden": True,
+        "adoption_from_working_candidate_alone_forbidden": True,
+        "same_current_reconfirm_not_adoption": True,
+        "candidate_existence_alone_not_ok": True,
+        "top_level_ok_requires_live_runtime_reproof": True,
+        "proxy_path_broken_remains_valid_without_live_reproof": True,
+        "proxy_reprobe_failed_remains_valid_without_candidate": True,
+        "changed_files_visibility_required": True,
+        "new_persisted_adoption_metadata_default": False,
+        "nested_adoption_result_surface": {
+            "status": "contract_fixed_not_implemented",
+            "field": "proxy_reprobe_adoption_result",
+            "command_packet_only_default": True,
+        },
+    }
+
+
 def build_last_known_good_proxy_surface(
     paths: RuntimePaths, state: dict[str, Any], current_proxy_url: str
 ) -> dict[str, Any]:
@@ -2767,6 +2810,9 @@ def summarize_status(
     current_proxy_url = str(
         health_payload.get("current_proxy_url", state.get("current_proxy_url", ""))
     )
+    current_proxy_adoption_contract = health_payload.get("current_proxy_adoption_contract")
+    if not isinstance(current_proxy_adoption_contract, dict):
+        current_proxy_adoption_contract = build_current_proxy_adoption_contract(paths)
     last_known_good_proxy_contract = health_payload.get("last_known_good_proxy_contract")
     if not isinstance(last_known_good_proxy_contract, dict):
         last_known_good_proxy_contract = build_last_known_good_proxy_contract(paths)
@@ -2804,6 +2850,7 @@ def summarize_status(
             "effective_mode": health_payload["effective_mode"],
             "endpoint": health_payload["endpoint"],
             "current_proxy_url": current_proxy_url,
+            "current_proxy_adoption_contract": current_proxy_adoption_contract,
             "last_known_good_proxy_contract": last_known_good_proxy_contract,
             "last_known_good_proxy": last_known_good_proxy,
             "pool_summary": pool_summary,
@@ -3159,6 +3206,7 @@ def run_healthcheck(
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
+    extra["current_proxy_adoption_contract"] = build_current_proxy_adoption_contract(paths)
     extra["last_known_good_proxy_contract"] = build_last_known_good_proxy_contract(paths)
     extra["last_known_good_proxy"] = build_last_known_good_proxy_surface(
         paths, state, current_proxy_url

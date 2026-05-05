@@ -87,6 +87,14 @@ Required fields:
 - `current_proxy_url`
 - `stable_default_backend_id`
 
+If `current_proxy_url` is materialized, it is:
+
+- current live control-layer outbound proxy truth
+- separate from `last_known_good_proxy_url`
+- separate from nested `proxy_reprobe.working_candidate`
+- not historical truth by itself
+- not final runtime truth without live checks by itself
+
 Optional fields currently supported by the local contour:
 
 - `active_count`

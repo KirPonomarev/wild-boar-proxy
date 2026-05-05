@@ -73,15 +73,24 @@
   `last_known_good_proxy_contract`
 - owner-path proxy packets may expose top-level `last_known_good_proxy`
   with an honest materialization status such as `declared_not_materialized`
+- owner-path proxy packets may expose top-level
+  `current_proxy_adoption_contract`
 - owner-path healthcheck writes may materialize or refresh
   `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
   in `supervisor-state.json`
+- `status --json` may report the same current-proxy adoption contract only as
+  delegated readout
+- `proxy_reprobe.working_candidate` remains nested bounded evidence only and
+  must not become `current_proxy_url` by mere presence
 - `status --json` may report the same last-known-good proxy surface only as
   delegated readout
 - delegated `status --json` must propagate those owner-path writes honestly in
   `changed_files`
+- `current_proxy_url` is current live outbound proxy truth and remains separate
+  from nested `proxy_reprobe.working_candidate`
 - persisted last-known-good proxy truth must remain separate from
   `current_proxy_url`
+- candidate existence alone must never produce top-level `OK`
 - persisted last-known-good proxy truth must never by itself change top-level
   live runtime truth
 
