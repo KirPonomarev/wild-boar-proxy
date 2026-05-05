@@ -285,6 +285,63 @@ Protective hold remains separate from promotion.
 Release remains separate from promotion and must not return a backend directly
 to `active`.
 
+## Additional retire owner surface
+
+`accounts retire <id> --json` is the owner surface for terminal retirement
+truth.
+
+Retirement success must not be inferred from external subprocess exit code
+alone.
+Successful owner packets must prove, machine-readably:
+
+- a unique backend identity
+- explicit retirement precondition truth
+- resulting terminal `retired` lifecycle state
+- explicit terminal no-return proof (`retired`, not held, not routing-eligible,
+  not selected)
+- no automatic return path implied by the owner packet
+- a rollback point captured before any routing-impacting mutation
+- post-transition sync outcome when routing consequence changes
+- post-transition status proof summary when routing consequence changes
+- an explicit routing-consequence classification
+- truthful `changed_files` across registry/state/runtime write surfaces
+
+`accounts retire <id> --json` may expose a nested `retire_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `backend_id`
+- `precondition_status`
+- `previous_pool`
+- `previous_manual_hold`
+- `requested_transition`
+- `rollback_point_captured`
+- `routing_change_attempted`
+- `routing_change_observed`
+- `sync_attempted`
+- `sync_outcome`
+- `status_observed`
+- `rollback_attempted`
+- `rollback_outcome`
+- `external_command_exit_code`
+- `external_command_status`
+- `terminal_no_return_confirmed`
+- `final_outcome`
+
+Canonical retirement outcomes include:
+
+- `backend_retired`
+- `already_retired`
+- `precondition_failed`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+- `retire_command_failed`
+
+Retirement remains separate from demote semantics.
+`accounts retire <id> --json` must not define or imply any later
+reserve-return or reactivation lane for `retired` backends.
+
 ## Additional target-switch contract surface
 
 The current target-switch contour exposes:

@@ -4106,6 +4106,7 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
+        paths.stable_runtime_generated_config_file,
         paths.launcher_script,
         managed_pid_path(paths),
     ]
@@ -4743,6 +4744,424 @@ def run_hold(paths: RuntimePaths, backend_id: str, reason: str | None) -> dict[s
 
 def run_release(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
     return run_protective_lifecycle_owner_path(paths, backend_id, action="release")
+
+
+def run_retire(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    if not paths.accounts_bin.exists():
+        raise RuntimeErrorInfo(
+            f"Missing accounts command: {paths.accounts_bin}",
+            machine_error_code="MISSING_ACCOUNTS_BIN",
+            operator_action="user_action",
+        )
+
+    before = snapshot_known_files(paths)
+    before_registry = read_json(paths.registry_file)
+    before_state = read_json(paths.state_file, required=False)
+    before_routing_ids = routing_eligible_active_backend_ids(before_registry)
+    before_selected_backend_ids = selected_backend_ids_from_state(before_state)
+    command = ["retire", backend_id]
+    backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    previous_pool = (
+        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+    )
+    previous_manual_hold = bool(
+        selected_backend.get("manual_hold", False)
+        if isinstance(selected_backend, dict)
+        else False
+    )
+    retire_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "backend_id": backend_id,
+        "precondition_status": "pending",
+        "previous_pool": previous_pool,
+        "previous_manual_hold": previous_manual_hold,
+        "requested_transition": "retire_terminal",
+        "rollback_point_captured": False,
+        "routing_change_attempted": False,
+        "routing_change_observed": False,
+        "sync_attempted": False,
+        "sync_outcome": "not_attempted",
+        "status_observed": None,
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "external_command_exit_code": None,
+        "external_command_status": "not_invoked",
+        "terminal_no_return_confirmed": False,
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_retire_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str = "unknown",
+        severity: str = "recoverable",
+        operator_action: str = "none",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "command": command,
+            "retire_result": retire_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness=liveness,
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    def rollback_after_failed_verification(
+        *,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str,
+        operator_action: str,
+        exit_code: int | None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        retire_result["rollback_attempted"] = True
+        try:
+            restore_lifecycle_owner_path_runtime_surfaces(paths, rollback_snapshots)
+            retire_result["rollback_outcome"] = "completed"
+            retire_result["final_outcome"] = (
+                "rollback_completed_after_failed_verification"
+            )
+            return build_retire_payload(
+                ok=False,
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                severity="recoverable",
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+        except Exception as exc:  # noqa: BLE001
+            retire_result["rollback_outcome"] = "failed"
+            retire_result["final_outcome"] = "rollback_failed"
+            payload_extra = dict(extra or {})
+            payload_extra["rollback_error"] = str(exc)
+            return build_retire_payload(
+                ok=False,
+                human_message=(
+                    f"{human_message} Rollback of control-layer retirement state failed."
+                ),
+                machine_error_code="RETIRE_ROLLBACK_FAILED",
+                liveness=liveness,
+                severity="fatal",
+                operator_action="stop",
+                exit_code=1,
+                extra=payload_extra,
+            )
+
+    if not backend_matches:
+        retire_result["precondition_status"] = "backend_missing"
+        retire_result["final_outcome"] = "precondition_failed"
+        return build_retire_payload(
+            ok=False,
+            human_message="Retirement target backend does not exist.",
+            machine_error_code="RETIRE_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if len(backend_matches) > 1:
+        retire_result["precondition_status"] = "ambiguous_backend_id"
+        retire_result["final_outcome"] = "precondition_failed"
+        return build_retire_payload(
+            ok=False,
+            human_message="Retirement target backend is ambiguous.",
+            machine_error_code="RETIRE_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if previous_pool == "retired":
+        retire_result["precondition_status"] = "already_retired"
+        retire_result["terminal_no_return_confirmed"] = bool(
+            backend_id not in set(before_routing_ids)
+            and backend_id not in set(before_selected_backend_ids)
+            and not previous_manual_hold
+        )
+        if not retire_result["terminal_no_return_confirmed"]:
+            retire_result["final_outcome"] = "precondition_failed"
+            return build_retire_payload(
+                ok=False,
+                human_message="Retired backend does not satisfy terminal no-return proof.",
+                machine_error_code="RETIRE_STATUS_FAILED",
+                operator_action="user_action",
+            )
+        retire_result["final_outcome"] = "already_retired"
+        retire_result["rollback_outcome"] = "not_needed"
+        return build_retire_payload(
+            ok=True,
+            human_message="Backend is already retired with terminal no-return proof.",
+            machine_error_code="OK",
+            operator_action="none",
+        )
+
+    if previous_pool not in {"active", "reserve"}:
+        retire_result["precondition_status"] = "backend_not_retirable_pool"
+        retire_result["final_outcome"] = "precondition_failed"
+        return build_retire_payload(
+            ok=False,
+            human_message="Only active or reserve backends are eligible for retirement.",
+            machine_error_code="RETIRE_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    retire_result["precondition_status"] = (
+        "eligible_active_backend_for_retire"
+        if previous_pool == "active"
+        else "eligible_reserve_backend_for_retire"
+    )
+
+    with serialized_lock(paths):
+        rollback_snapshots = snapshot_lifecycle_owner_path_runtime_surfaces(paths)
+        retire_result["rollback_point_captured"] = True
+        try:
+            result = subprocess.run(
+                [str(paths.accounts_bin), *command],
+                capture_output=True,
+                text=True,
+                env=sanitized_env(),
+                check=False,
+            )
+        except OSError as exc:
+            retire_result["external_command_status"] = "exec_error"
+            retire_result["final_outcome"] = "retire_command_failed"
+            return build_retire_payload(
+                ok=False,
+                human_message="Retirement command could not be executed.",
+                machine_error_code="RETIRE_COMMAND_EXEC_FAILED",
+                operator_action="user_action",
+                exit_code=1,
+                extra={"command_error": str(exc)},
+            )
+        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
+        retire_result["external_command_exit_code"] = int(result.returncode)
+        retire_result["external_command_status"] = (
+            "ok" if result.returncode == 0 else "nonzero"
+        )
+
+        after_command_registry = read_json(paths.registry_file)
+        after_command_state = read_json(paths.state_file, required=False)
+        after_command_matches = get_registry_backends_by_id(
+            after_command_registry, backend_id
+        )
+        after_command_backend = (
+            after_command_matches[0] if len(after_command_matches) == 1 else None
+        )
+        after_routing_ids = routing_eligible_active_backend_ids(after_command_registry)
+        after_selected_backend_ids = selected_backend_ids_from_state(after_command_state)
+        after_command_pool = (
+            str(after_command_backend.get("pool", ""))
+            if isinstance(after_command_backend, dict)
+            else ""
+        )
+        retire_result["routing_change_attempted"] = bool(
+            before_routing_ids != after_routing_ids
+            or before_selected_backend_ids != after_selected_backend_ids
+            or (previous_pool == "active" and after_command_pool != "active")
+            or (previous_pool != "active" and after_command_pool == "active")
+        )
+
+        def fail_after_command(
+            *,
+            human_message: str,
+            machine_error_code: str,
+            liveness: str,
+            operator_action: str,
+            exit_code: int | None,
+            extra: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            return rollback_after_failed_verification(
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+
+        if len(after_command_matches) != 1:
+            retire_result["final_outcome"] = "retire_command_failed"
+            return fail_after_command(
+                human_message=(
+                    "Retirement did not leave a uniquely identifiable backend state."
+                ),
+                machine_error_code="RETIRE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        after_command_hold = bool(after_command_backend.get("manual_hold", False))
+        terminal_pool_verified = after_command_pool == "retired" and not after_command_hold
+        if retire_result["routing_change_attempted"]:
+            lifecycle_verified = terminal_pool_verified
+            retire_result["terminal_no_return_confirmed"] = False
+        else:
+            lifecycle_verified = bool(
+                terminal_pool_verified
+                and backend_id not in set(after_routing_ids)
+                and backend_id not in set(after_selected_backend_ids)
+            )
+            retire_result["terminal_no_return_confirmed"] = lifecycle_verified
+        if not lifecycle_verified:
+            retire_result["final_outcome"] = "retire_command_failed"
+            return fail_after_command(
+                human_message=(
+                    "Retirement command did not leave the backend in terminal retired state."
+                ),
+                machine_error_code="RETIRE_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        sync_payload: dict[str, Any] | None = None
+        status_payload: dict[str, Any] | None = None
+        if retire_result["routing_change_attempted"]:
+            retire_result["sync_attempted"] = True
+            try:
+                sync_payload = run_sync_for_owner_path_under_lock(paths)
+                retire_result["sync_outcome"] = (
+                    "ok" if sync_payload["status"] == "ok" else "failed"
+                )
+                if sync_payload["status"] != "ok":
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Retirement changed routing inputs, but managed sync verification failed."
+                        ),
+                        machine_error_code="RETIRE_SYNC_FAILED",
+                        liveness=str(sync_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            sync_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(sync_payload.get("exit_code", 1) or 1),
+                        extra={
+                            "sync_result": {
+                                "command_status": sync_payload["status"],
+                                "machine_error_code": sync_payload["machine_error_code"],
+                                "exit_code": sync_payload["exit_code"],
+                            }
+                        },
+                    )
+
+                status_payload, status_observed = (
+                    observe_status_proof_for_owner_path_under_lock(paths)
+                )
+                retire_result["status_observed"] = status_observed
+                verified_registry = read_json(paths.registry_file)
+                verified_state = read_json(paths.state_file, required=False)
+                verified_matches = get_registry_backends_by_id(
+                    verified_registry, backend_id
+                )
+                verified_backend = (
+                    verified_matches[0] if len(verified_matches) == 1 else None
+                )
+                verified_selected_backend_ids = set(
+                    selected_backend_ids_from_state(verified_state)
+                )
+                verified_routing_ids = set(
+                    routing_eligible_active_backend_ids(verified_registry)
+                )
+                retire_result["routing_change_observed"] = bool(
+                    status_payload["status"] == "ok"
+                    and isinstance(verified_backend, dict)
+                    and str(verified_backend.get("pool", "")) == "retired"
+                    and not bool(verified_backend.get("manual_hold", False))
+                    and backend_id not in verified_routing_ids
+                    and backend_id not in verified_selected_backend_ids
+                )
+                retire_result["terminal_no_return_confirmed"] = retire_result[
+                    "routing_change_observed"
+                ]
+                if (
+                    status_payload["status"] != "ok"
+                    or not retire_result["routing_change_observed"]
+                ):
+                    return rollback_after_failed_verification(
+                        human_message=(
+                            "Retirement did not produce verified terminal routing removal after status proof."
+                        ),
+                        machine_error_code="RETIRE_STATUS_FAILED",
+                        liveness=str(status_payload.get("liveness", "unknown")),
+                        operator_action=str(
+                            status_payload.get("operator_action", "retry")
+                        ),
+                        exit_code=int(status_payload.get("exit_code", 1) or 1),
+                        extra={
+                            "sync_result": {
+                                "command_status": sync_payload["status"],
+                                "machine_error_code": sync_payload["machine_error_code"],
+                                "exit_code": sync_payload["exit_code"],
+                            }
+                        },
+                    )
+            except RuntimeErrorInfo as exc:
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Retirement post-command verification raised a runtime error."
+                    ),
+                    machine_error_code="RETIRE_SYNC_FAILED",
+                    liveness="unknown",
+                    operator_action=exc.operator_action,
+                    exit_code=exc.exit_code,
+                    extra={"verification_error": str(exc)},
+                )
+            except Exception as exc:  # noqa: BLE001
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Retirement post-command verification raised an unexpected error."
+                    ),
+                    machine_error_code="RETIRE_STATUS_FAILED",
+                    liveness="unknown",
+                    operator_action="retry",
+                    exit_code=1,
+                    extra={"verification_error": str(exc)},
+                )
+
+        retire_result["rollback_outcome"] = "not_needed"
+        retire_result["final_outcome"] = "backend_retired"
+        success_extra: dict[str, Any] = {}
+        if sync_payload is not None:
+            success_extra["sync_result"] = {
+                "command_status": sync_payload["status"],
+                "machine_error_code": sync_payload["machine_error_code"],
+                "exit_code": sync_payload["exit_code"],
+            }
+        return build_retire_payload(
+            ok=True,
+            human_message=(
+                "Account retirement completed with rollback-safe terminal proof."
+                if result.returncode == 0 and retire_result["routing_change_attempted"]
+                else "Account retirement completed."
+                if result.returncode == 0
+                else "Account retirement completed with terminal proof after external retire exit non-zero."
+            ),
+            machine_error_code="OK",
+            liveness=(
+                str(status_payload.get("liveness", "unknown"))
+                if status_payload is not None
+                else "unknown"
+            ),
+            severity="recoverable",
+            operator_action="none",
+            extra=success_extra or None,
+        )
 
 
 def run_protective_lifecycle_owner_path(
@@ -5702,6 +6121,10 @@ def snapshot_promotion_owner_path_runtime_surfaces(
         "runtime_effective_mode_file": snapshot_path_state(
             paths.runtime_effective_mode_file
         ),
+        "stable_runtime_generated_config_file": snapshot_path_state(
+            paths.stable_runtime_generated_config_file
+        ),
+        "managed_pid_file": snapshot_path_state(managed_pid_path(paths)),
     }
 
 
@@ -5724,6 +6147,14 @@ def restore_promotion_owner_path_runtime_surfaces(
     restore_path_state(
         paths.runtime_effective_mode_file,
         snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        paths.stable_runtime_generated_config_file,
+        snapshots.get("stable_runtime_generated_config_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        managed_pid_path(paths),
+        snapshots.get("managed_pid_file", {"state": "missing"}),
     )
 
 

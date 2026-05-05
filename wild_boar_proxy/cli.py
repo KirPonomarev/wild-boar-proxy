@@ -20,6 +20,7 @@ from .runtime import (
     run_onboard,
     run_promote,
     run_release,
+    run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
     run_stable_target_switch_contract,
@@ -165,7 +166,6 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_promote(paths, args.id))
         if args.command == "accounts" and args.accounts_command in {
             "demote",
-            "retire",
         }:
             return emit_json(
                 run_accounts_command(
@@ -179,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_hold(paths, args.id, args.reason))
         if args.command == "accounts" and args.accounts_command == "release":
             return emit_json(run_release(paths, args.id))
+        if args.command == "accounts" and args.accounts_command == "retire":
+            return emit_json(run_retire(paths, args.id))
         if args.command == "accounts" and args.accounts_command == "onboard":
             return emit_json(
                 run_onboard(

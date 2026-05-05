@@ -450,6 +450,29 @@ class CliTests(unittest.TestCase):
             "    if stderr_text:\n"
             "        print(stderr_text, file=sys.stderr)\n"
             "    raise SystemExit(int(os.environ.get('WBP_TEST_RELEASE_EXIT_CODE', '0')))\n"
+            "if command == 'retire':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    updates = json.loads(os.environ.get('WBP_TEST_RETIRE_BACKEND_UPDATES_JSON', '[]'))\n"
+            "    if not updates and backend_id:\n"
+            "        updates = [{'id': backend_id, 'pool': 'retired', 'manual_hold': False, 'status': 'retired'}]\n"
+            "    updates_by_id = {str(item.get('id')): item for item in updates if item.get('id') is not None}\n"
+            "    if updates_by_id:\n"
+            "        for backend in registry.get('backends', []):\n"
+            "            update = updates_by_id.get(str(backend.get('id')))\n"
+            "            if update:\n"
+            "                backend.update(update)\n"
+            "        registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "        registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "    state_patch = json.loads(os.environ.get('WBP_TEST_RETIRE_STATE_PATCH_JSON', '{}'))\n"
+            "    if state_patch:\n"
+            "        state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "        state = json.loads(state_path.read_text())\n"
+            "        state.update(state_patch)\n"
+            "        state_path.write_text(json.dumps(state) + '\\n')\n"
+            "    stderr_text = os.environ.get('WBP_TEST_RETIRE_STDERR', 'retire-ran')\n"
+            "    if stderr_text:\n"
+            "        print(stderr_text, file=sys.stderr)\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_RETIRE_EXIT_CODE', '0')))\n"
             "print('accounts-ok', file=sys.stderr)\n"
             "raise SystemExit(0)\n"
             "PY\n",
@@ -6464,6 +6487,400 @@ class CliTests(unittest.TestCase):
         self.assertEqual(release["external_command_exit_code"], 7)
         self.assertEqual(release["external_command_status"], "nonzero")
         self.assertEqual(release["final_outcome"], "backend_released_to_reserve")
+
+    def test_accounts_retire_retires_active_backend_with_verified_terminal_routing_removal(
+        self,
+    ) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-retire-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 0,
+                "retired_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-retire-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "retire",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["precondition_status"], "eligible_active_backend_for_retire")
+        self.assertTrue(retire["rollback_point_captured"])
+        self.assertTrue(retire["routing_change_attempted"])
+        self.assertTrue(retire["routing_change_observed"])
+        self.assertTrue(retire["sync_attempted"])
+        self.assertEqual(retire["sync_outcome"], "ok")
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "backend_retired")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        retired = [item for item in registry["backends"] if item["id"] == "backend-a"][0]
+        self.assertEqual(retired["pool"], "retired")
+        self.assertFalse(retired["manual_hold"])
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_retire_retires_reserve_backend_without_false_routing_claims(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        generated_config_path = self.managed_dir / "stable-runtime-config.generated.yaml"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-retire",
+                auth_ref="/tmp/codex-reserve-retire.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        generated_config_path.write_text(
+            "host: 127.0.0.1\nport: 8318\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("accounts", "retire", "backend-reserve-retire", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(
+            retire["precondition_status"], "eligible_reserve_backend_for_retire"
+        )
+        self.assertFalse(retire["routing_change_attempted"])
+        self.assertFalse(retire["routing_change_observed"])
+        self.assertFalse(retire["sync_attempted"])
+        self.assertEqual(retire["sync_outcome"], "not_attempted")
+        self.assertEqual(retire["rollback_outcome"], "not_needed")
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "backend_retired")
+        registry = json.loads(registry_path.read_text())
+        retired = [item for item in registry["backends"] if item["id"] == "backend-reserve-retire"][0]
+        self.assertEqual(retired["pool"], "retired")
+        self.assertIn(str(registry_path), payload["changed_files"])
+        self.assertEqual(
+            payload["changed_files"].count(str(self.managed_dir / "supervisor-state.json")),
+            0,
+        )
+        self.assertNotIn(str(generated_config_path), payload["changed_files"])
+
+    def test_accounts_retire_already_retired_backend_returns_terminal_noop(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-already-retired",
+                auth_ref="/tmp/codex-already-retired.json",
+                pool="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "retire", "backend-already-retired", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["precondition_status"], "already_retired")
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "already_retired")
+        self.assertFalse(retire["rollback_point_captured"])
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_retire_rejects_already_retired_backend_without_terminal_no_return_proof(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        state_path = self.managed_dir / "supervisor-state.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-selected",
+                auth_ref="/tmp/codex-retired-selected.json",
+                pool="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = ["backend-a", "backend-retired-selected"]
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "retire", "backend-retired-selected", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RETIRE_STATUS_FAILED")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["precondition_status"], "already_retired")
+        self.assertFalse(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "precondition_failed")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_retire_status_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        managed_pid_file = self.managed_dir / "managed-proxy.pid"
+        managed_pid_file.write_text("4242\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-retire-unverified.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 0,
+                "reserve_count": 0,
+                "retired_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-retire-unverified",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "retire",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RETIRE_STATUS_FAILED")
+        retire = payload["retire_result"]
+        self.assertTrue(retire["routing_change_attempted"])
+        self.assertFalse(retire["routing_change_observed"])
+        self.assertTrue(retire["rollback_attempted"])
+        self.assertEqual(retire["rollback_outcome"], "completed")
+        self.assertEqual(
+            retire["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+        self.assertEqual(managed_pid_file.read_text(encoding="utf-8"), "4242\n")
+
+    def test_accounts_retire_sync_failure_rolls_back(self) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        managed_pid_file = self.managed_dir / "managed-proxy.pid"
+        managed_pid_file.write_text("5151\n", encoding="utf-8")
+        sync_script = self.profile_dir / "sync-retire-fail.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "from pathlib import Path\n"
+            f"state_path = Path(r'{self.managed_dir / 'supervisor-state.json'}')\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state.update({\n"
+            "    'selected_backend_ids': [],\n"
+            "    'active_count': 0,\n"
+            "    'reserve_count': 0,\n"
+            "    'retired_count': 1,\n"
+            "    'effective_mode': 'managed',\n"
+            "    'last_error': 'sync failed',\n"
+            "})\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            f"Path(r'{managed_pid_file}').unlink(missing_ok=True)\n"
+            "PY\n"
+            "echo sync-retire-fail >&2\n"
+            "exit 7\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(sync_script)},
+            "accounts",
+            "retire",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 7, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RETIRE_SYNC_FAILED")
+        retire = payload["retire_result"]
+        self.assertTrue(retire["sync_attempted"])
+        self.assertEqual(retire["sync_outcome"], "failed")
+        self.assertTrue(retire["rollback_attempted"])
+        self.assertEqual(retire["rollback_outcome"], "completed")
+        self.assertEqual(
+            retire["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+        self.assertEqual(managed_pid_file.read_text(encoding="utf-8"), "5151\n")
+
+    def test_accounts_retire_accepts_verified_terminal_success_after_external_nonzero(
+        self,
+    ) -> None:
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-retire-nonzero-ok.sh",
+            state_patch={
+                "selected_backend_ids": [],
+                "active_count": 0,
+                "reserve_count": 0,
+                "retired_count": 1,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-retire-nonzero-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_RETIRE_EXIT_CODE": "7",
+                },
+                "accounts",
+                "retire",
+                "backend-a",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["external_command_exit_code"], 7)
+        self.assertEqual(retire["external_command_status"], "nonzero")
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "backend_retired")
+
+    def test_accounts_retire_exec_failure_returns_single_json_owner_packet(self) -> None:
+        broken_accounts = self.bin_dir / "broken-accounts-retire"
+        broken_accounts.write_text(
+            "#!/definitely/missing-interpreter\n", encoding="utf-8"
+        )
+        broken_accounts.chmod(0o755)
+        result = self.run_cli_with_env(
+            {"WBP_ACCOUNTS_BIN": str(broken_accounts)},
+            "accounts",
+            "retire",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RETIRE_COMMAND_EXEC_FAILED")
+        retire = payload["retire_result"]
+        self.assertEqual(retire["external_command_status"], "exec_error")
+        self.assertEqual(retire["final_outcome"], "retire_command_failed")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_retire_rejects_illegal_terminal_state_with_hold_still_set(
+        self,
+    ) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_RETIRE_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-a",
+                            "pool": "retired",
+                            "manual_hold": True,
+                            "status": "retired",
+                        }
+                    ]
+                )
+            },
+            "accounts",
+            "retire",
+            "backend-a",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "RETIRE_COMMAND_FAILED")
+        retire = payload["retire_result"]
+        self.assertTrue(retire["rollback_attempted"])
+        self.assertEqual(retire["rollback_outcome"], "completed")
+        self.assertEqual(
+            retire["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
 
     def test_diagnostics_export_creates_bundle(self) -> None:
         result = self.run_cli("diagnostics", "export", "--json")
