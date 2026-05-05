@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -379,6 +380,29 @@ class CliTests(unittest.TestCase):
             "        raise SystemExit(8)\n"
             "    print('validate-ok', file=sys.stderr)\n"
             "    raise SystemExit(0)\n"
+            "if command == 'promote':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    updates = json.loads(os.environ.get('WBP_TEST_PROMOTE_BACKEND_UPDATES_JSON', '[]'))\n"
+            "    if not updates and backend_id:\n"
+            "        updates = [{'id': backend_id, 'pool': 'active'}]\n"
+            "    updates_by_id = {str(item.get('id')): item for item in updates if item.get('id') is not None}\n"
+            "    if updates_by_id:\n"
+            "        for backend in registry.get('backends', []):\n"
+            "            update = updates_by_id.get(str(backend.get('id')))\n"
+            "            if update:\n"
+            "                backend.update(update)\n"
+            "        registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "        registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "    state_patch = json.loads(os.environ.get('WBP_TEST_PROMOTE_STATE_PATCH_JSON', '{}'))\n"
+            "    if state_patch:\n"
+            "        state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "        state = json.loads(state_path.read_text())\n"
+            "        state.update(state_patch)\n"
+            "        state_path.write_text(json.dumps(state) + '\\n')\n"
+            "    stderr_text = os.environ.get('WBP_TEST_PROMOTE_STDERR', 'promote-ran')\n"
+            "    if stderr_text:\n"
+            "        print(stderr_text, file=sys.stderr)\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_PROMOTE_EXIT_CODE', '0')))\n"
             "print('accounts-ok', file=sys.stderr)\n"
             "raise SystemExit(0)\n"
             "PY\n",
@@ -446,6 +470,32 @@ class CliTests(unittest.TestCase):
             "cooldown_until": None,
             "notes": "",
         }
+
+    def write_state_patch_sync_script(
+        self,
+        path: Path,
+        *,
+        state_patch: dict[str, object] | None = None,
+        stderr_text: str = "sync-ran",
+        exit_code: int = 0,
+    ) -> Path:
+        path.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "from pathlib import Path\n"
+            "path = Path(r'" + str(self.managed_dir / "supervisor-state.json") + "')\n"
+            "data = json.loads(path.read_text())\n"
+            "patch = " + repr(json.dumps(state_patch or {})) + "\n"
+            "data.update(json.loads(patch))\n"
+            "path.write_text(json.dumps(data) + '\\n')\n"
+            "PY\n"
+            f"echo {shlex.quote(stderr_text)} >&2\n"
+            f"exit {int(exit_code)}\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
 
     def write_recording_stable_launcher(
         self, path: Path, *, exit_code: int = 0, start_server: bool = False
@@ -5341,6 +5391,341 @@ class CliTests(unittest.TestCase):
         onboarding = payload["onboarding_result"]
         self.assertTrue(onboarding["active_routing_changed"])
         self.assertFalse(onboarding["validate_attempted"])
+
+    def test_accounts_promote_promotes_reserve_backend_with_verified_active_routing(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve",
+                auth_ref="/tmp/codex-promote.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-ok.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-reserve"],
+                "active_count": 2,
+                "reserve_count": 0,
+                "retired_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "promote",
+                "backend-reserve",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "eligible_reserve_backend")
+        self.assertEqual(promotion["previous_pool"], "reserve")
+        self.assertTrue(promotion["rollback_point_captured"])
+        self.assertTrue(promotion["routing_change_attempted"])
+        self.assertTrue(promotion["routing_change_observed"])
+        self.assertTrue(promotion["validate_attempted"])
+        self.assertEqual(promotion["validate_outcome"], "ok")
+        self.assertTrue(promotion["sync_attempted"])
+        self.assertEqual(promotion["sync_outcome"], "ok")
+        self.assertEqual(promotion["rollback_outcome"], "not_needed")
+        self.assertEqual(promotion["final_outcome"], "promoted_to_active")
+        self.assertIsNotNone(promotion["status_observed"])
+        registry = json.loads(registry_path.read_text())
+        promoted = [item for item in registry["backends"] if item["id"] == "backend-reserve"]
+        self.assertEqual(promoted[0]["pool"], "active")
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertIn("backend-reserve", state["selected_backend_ids"])
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_promote_rejects_active_backend_precondition(self) -> None:
+        result = self.run_cli("accounts", "promote", "backend-a", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "backend_not_reserve")
+        self.assertFalse(promotion["rollback_point_captured"])
+        self.assertFalse(promotion["validate_attempted"])
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_rejects_held_backend_precondition(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-held",
+                auth_ref="/tmp/codex-held.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "promote", "backend-held", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "backend_on_hold")
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_rejects_retired_backend_precondition(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired",
+                auth_ref="/tmp/codex-retired.json",
+                pool="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("accounts", "promote", "backend-retired", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_PRECONDITION_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["precondition_status"], "backend_retired")
+        self.assertEqual(promotion["final_outcome"], "precondition_failed")
+
+    def test_accounts_promote_sync_failure_rolls_back_control_state(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-rollback",
+                auth_ref="/tmp/codex-rollback.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-fail.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-rollback"],
+                "active_count": 2,
+                "reserve_count": 0,
+                "last_error": "sync failed after promote",
+            },
+            stderr_text="sync-promote-fail",
+            exit_code=5,
+        )
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(sync_script)},
+            "accounts",
+            "promote",
+            "backend-rollback",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 5, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_SYNC_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["rollback_point_captured"])
+        self.assertTrue(promotion["rollback_attempted"])
+        self.assertEqual(promotion["rollback_outcome"], "completed")
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_promote_status_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-unverified",
+                auth_ref="/tmp/codex-unverified.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-unverified.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a"],
+                "active_count": 2,
+                "reserve_count": 0,
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-unverified",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "promote",
+                "backend-unverified",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_STATUS_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["routing_change_attempted"])
+        self.assertFalse(promotion["routing_change_observed"])
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_promote_missing_sync_script_rolls_back(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-missing-sync",
+                auth_ref="/tmp/codex-missing-sync.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        result = self.run_cli_with_env(
+            {"WBP_SYNC_SCRIPT": str(self.profile_dir / "missing-sync.sh")},
+            "accounts",
+            "promote",
+            "backend-missing-sync",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_SYNC_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["rollback_attempted"])
+        self.assertEqual(promotion["rollback_outcome"], "completed")
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_promote_external_nonzero_with_verified_active_routing_still_succeeds(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-nonzero-promote",
+                auth_ref="/tmp/codex-promote-nonzero.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-nonzero.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-nonzero-promote"],
+                "active_count": 2,
+                "reserve_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-nonzero",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_PROMOTE_EXIT_CODE": "7",
+                },
+                "accounts",
+                "promote",
+                "backend-nonzero-promote",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["external_command_exit_code"], 7)
+        self.assertEqual(promotion["external_command_status"], "nonzero")
+        self.assertEqual(promotion["final_outcome"], "promoted_to_active")
 
     def test_diagnostics_export_creates_bundle(self) -> None:
         result = self.run_cli("diagnostics", "export", "--json")

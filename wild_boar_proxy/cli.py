@@ -16,6 +16,7 @@ from .runtime import (
     run_healthcheck,
     run_launch_smoke,
     run_onboard,
+    run_promote,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
     run_stable_target_switch_contract,
@@ -152,8 +153,9 @@ def main(argv: list[str] | None = None) -> int:
                     failure_message="Account validation failed.",
                 )
             )
+        if args.command == "accounts" and args.accounts_command == "promote":
+            return emit_json(run_promote(paths, args.id))
         if args.command == "accounts" and args.accounts_command in {
-            "promote",
             "demote",
             "release",
             "retire",

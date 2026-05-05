@@ -4221,7 +4221,439 @@ def run_accounts_command(
     )
 
 
-def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
+def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+    if not paths.accounts_bin.exists():
+        raise RuntimeErrorInfo(
+            f"Missing accounts command: {paths.accounts_bin}",
+            machine_error_code="MISSING_ACCOUNTS_BIN",
+            operator_action="user_action",
+        )
+    before = snapshot_known_files(paths)
+    before_registry = read_json(paths.registry_file)
+    before_state = read_json(paths.state_file, required=False)
+    command = ["promote", backend_id]
+    backend_matches = get_registry_backends_by_id(before_registry, backend_id)
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    previous_pool = (
+        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+    )
+    promotion_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "backend_id": backend_id,
+        "precondition_status": "pending",
+        "previous_pool": previous_pool,
+        "requested_pool": "active",
+        "rollback_point_captured": False,
+        "routing_change_attempted": False,
+        "routing_change_observed": False,
+        "validate_attempted": False,
+        "validate_outcome": "not_attempted",
+        "sync_attempted": False,
+        "sync_outcome": "not_attempted",
+        "status_observed": None,
+        "rollback_attempted": False,
+        "rollback_outcome": "not_attempted",
+        "external_command_exit_code": None,
+        "external_command_status": "not_invoked",
+        "final_outcome": "pending_preconditions",
+    }
+
+    def build_promote_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str = "unknown",
+        severity: str = "recoverable",
+        operator_action: str = "none",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "command": command,
+            "promotion_result": promotion_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness=liveness,
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    def rollback_after_failed_verification(
+        *,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str,
+        operator_action: str,
+        exit_code: int | None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        promotion_result["rollback_attempted"] = True
+        try:
+            restore_promotion_owner_path_runtime_surfaces(paths, rollback_snapshots)
+            promotion_result["rollback_outcome"] = "completed"
+            promotion_result["final_outcome"] = (
+                "rollback_completed_after_failed_verification"
+            )
+            return build_promote_payload(
+                ok=False,
+                human_message=human_message,
+                machine_error_code=machine_error_code,
+                liveness=liveness,
+                severity="recoverable",
+                operator_action=operator_action,
+                exit_code=exit_code,
+                extra=extra,
+            )
+        except Exception as exc:  # noqa: BLE001
+            promotion_result["rollback_outcome"] = "failed"
+            promotion_result["final_outcome"] = "rollback_failed"
+            payload_extra = dict(extra or {})
+            payload_extra["rollback_error"] = str(exc)
+            return build_promote_payload(
+                ok=False,
+                human_message=(
+                    f"{human_message} Rollback of control-layer promotion state failed."
+                ),
+                machine_error_code="PROMOTION_ROLLBACK_FAILED",
+                liveness=liveness,
+                severity="fatal",
+                operator_action="stop",
+                exit_code=1,
+                extra=payload_extra,
+            )
+
+    if not backend_matches:
+        promotion_result["precondition_status"] = "backend_missing"
+        promotion_result["final_outcome"] = "precondition_failed"
+        return build_promote_payload(
+            ok=False,
+            human_message="Promotion target backend does not exist.",
+            machine_error_code="PROMOTION_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if len(backend_matches) > 1:
+        promotion_result["precondition_status"] = "ambiguous_backend_id"
+        promotion_result["final_outcome"] = "precondition_failed"
+        return build_promote_payload(
+            ok=False,
+            human_message="Promotion target backend is ambiguous.",
+            machine_error_code="PROMOTION_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if bool(selected_backend.get("manual_hold", False)):
+        promotion_result["precondition_status"] = "backend_on_hold"
+        promotion_result["final_outcome"] = "precondition_failed"
+        return build_promote_payload(
+            ok=False,
+            human_message="Held backend cannot be promoted directly.",
+            machine_error_code="PROMOTION_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if previous_pool == "retired":
+        promotion_result["precondition_status"] = "backend_retired"
+        promotion_result["final_outcome"] = "precondition_failed"
+        return build_promote_payload(
+            ok=False,
+            human_message="Retired backend cannot be promoted.",
+            machine_error_code="PROMOTION_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    if previous_pool != "reserve":
+        promotion_result["precondition_status"] = "backend_not_reserve"
+        promotion_result["final_outcome"] = "precondition_failed"
+        return build_promote_payload(
+            ok=False,
+            human_message="Only reserve backends are eligible for promotion.",
+            machine_error_code="PROMOTION_PRECONDITION_FAILED",
+            operator_action="user_action",
+        )
+
+    promotion_result["precondition_status"] = "eligible_reserve_backend"
+    with serialized_lock(paths):
+        validate_result = subprocess.run(
+            [str(paths.accounts_bin), "validate", backend_id],
+            capture_output=True,
+            text=True,
+            env=sanitized_env(),
+            check=False,
+        )
+        emit_subprocess_output(
+            stdout=validate_result.stdout, stderr=validate_result.stderr
+        )
+        validate_payload = {
+            "status": "ok" if validate_result.returncode == 0 else "error",
+            "machine_error_code": (
+                "OK" if validate_result.returncode == 0 else "ACCOUNTS_COMMAND_FAILED"
+            ),
+            "exit_code": 0 if validate_result.returncode == 0 else validate_result.returncode,
+        }
+        promotion_result["validate_attempted"] = True
+        promotion_result["validate_outcome"] = (
+            "ok" if validate_payload["status"] == "ok" else "failed"
+        )
+        if validate_payload["status"] != "ok":
+            promotion_result["final_outcome"] = "validate_failed"
+            return build_promote_payload(
+                ok=False,
+                human_message="Promotion preflight validation failed.",
+                machine_error_code="PROMOTION_VALIDATE_FAILED",
+                operator_action="user_action",
+                exit_code=int(validate_payload.get("exit_code", 1) or 1),
+                extra={
+                    "validate_result": {
+                        "command_status": validate_payload["status"],
+                        "machine_error_code": validate_payload["machine_error_code"],
+                        "exit_code": validate_payload["exit_code"],
+                    }
+                },
+            )
+
+        rollback_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+        promotion_result["rollback_point_captured"] = True
+        result = subprocess.run(
+            [str(paths.accounts_bin), *command],
+            capture_output=True,
+            text=True,
+            env=sanitized_env(),
+            check=False,
+        )
+        emit_subprocess_output(stdout=result.stdout, stderr=result.stderr)
+        promotion_result["external_command_exit_code"] = int(result.returncode)
+        promotion_result["external_command_status"] = (
+            "ok" if result.returncode == 0 else "nonzero"
+        )
+
+        after_command_registry = read_json(paths.registry_file)
+        after_command_state = read_json(paths.state_file, required=False)
+        after_command_matches = get_registry_backends_by_id(
+            after_command_registry, backend_id
+        )
+        after_command_backend = (
+            after_command_matches[0] if len(after_command_matches) == 1 else None
+        )
+        before_selected_backend_ids = sorted(
+            str(item) for item in before_state.get("selected_backend_ids", []) or []
+        )
+        after_command_selected_backend_ids = sorted(
+            str(item) for item in after_command_state.get("selected_backend_ids", []) or []
+        )
+        promotion_result["routing_change_attempted"] = bool(
+            (
+                isinstance(after_command_backend, dict)
+                and str(after_command_backend.get("pool", "")) != previous_pool
+            )
+            or before_selected_backend_ids != after_command_selected_backend_ids
+        )
+
+        if len(after_command_matches) != 1:
+            promotion_result["final_outcome"] = "promotion_command_failed"
+            return rollback_after_failed_verification(
+                human_message=(
+                    "Promotion did not leave a uniquely identifiable backend state."
+                ),
+                machine_error_code="PROMOTION_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        if bool(after_command_backend.get("manual_hold", False)) or str(
+            after_command_backend.get("pool", "")
+        ) != "active":
+            promotion_result["final_outcome"] = "promotion_command_failed"
+            return rollback_after_failed_verification(
+                human_message="Promotion command did not place the backend into active.",
+                machine_error_code="PROMOTION_COMMAND_FAILED",
+                liveness="unknown",
+                operator_action="user_action",
+                exit_code=result.returncode if result.returncode != 0 else 1,
+            )
+
+        promotion_result["sync_attempted"] = True
+        try:
+            if not paths.sync_script.exists():
+                raise RuntimeErrorInfo(
+                    f"Missing sync script: {paths.sync_script}",
+                    machine_error_code="MISSING_SYNC_SCRIPT",
+                    operator_action="user_action",
+                )
+            sync_result = subprocess.run(
+                [str(paths.sync_script), get_model(paths)],
+                capture_output=True,
+                text=True,
+                env=sanitized_env(),
+                check=False,
+            )
+            emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
+            sync_state = read_json(paths.state_file, required=False)
+            sync_effective_mode = get_effective_mode(paths, sync_state)
+            sync_host, sync_port, _ = get_endpoint(paths, sync_effective_mode)
+            sync_listener_ok = socket_is_listening(sync_host, sync_port)
+            sync_reported_effective_mode = reconcile_effective_mode_for_reporting(
+                sync_effective_mode, listener_ok=sync_listener_ok
+            )
+            _, _, sync_reported_endpoint = get_endpoint(
+                paths, sync_reported_effective_mode
+            )
+            if sync_result.returncode != 0:
+                sync_payload = {
+                    "status": "error",
+                    "machine_error_code": "SYNC_FAILED",
+                    "exit_code": sync_result.returncode,
+                    "liveness": "down" if not sync_listener_ok else "degraded",
+                    "operator_action": "retry",
+                    "effective_mode": sync_reported_effective_mode,
+                    "endpoint": sync_reported_endpoint,
+                }
+            elif not sync_listener_ok:
+                sync_payload = {
+                    "status": "error",
+                    "machine_error_code": "SYNC_HEALTHCHECK_FAILED",
+                    "exit_code": 1,
+                    "liveness": "down",
+                    "operator_action": "retry",
+                    "effective_mode": sync_reported_effective_mode,
+                    "endpoint": sync_reported_endpoint,
+                }
+            else:
+                sync_payload = {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "exit_code": 0,
+                    "liveness": "healthy",
+                    "operator_action": "none",
+                    "effective_mode": sync_reported_effective_mode,
+                    "endpoint": sync_reported_endpoint,
+                }
+            promotion_result["sync_outcome"] = (
+                "ok" if sync_payload["status"] == "ok" else "failed"
+            )
+            if sync_payload["status"] != "ok":
+                promotion_result["status_observed"] = None
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Promotion changed routing inputs, but managed sync verification failed."
+                    ),
+                    machine_error_code="PROMOTION_SYNC_FAILED",
+                    liveness=str(sync_payload.get("liveness", "unknown")),
+                    operator_action=str(sync_payload.get("operator_action", "retry")),
+                    exit_code=int(sync_payload.get("exit_code", 1) or 1),
+                    extra={
+                        "sync_result": {
+                            "command_status": sync_payload["status"],
+                            "machine_error_code": sync_payload["machine_error_code"],
+                            "exit_code": sync_payload["exit_code"],
+                        }
+                    },
+                )
+
+            health_payload = run_healthcheck(
+                paths,
+                allow_recovery=False,
+                allow_last_known_good_proxy_write=False,
+                allow_current_proxy_auto_adoption=False,
+            )
+            status_payload = summarize_status(paths, health_payload=health_payload)
+            promotion_result["status_observed"] = summarize_owner_path_status_observation(
+                status_payload
+            )
+            verified_registry = read_json(paths.registry_file)
+            verified_state = read_json(paths.state_file, required=False)
+            verified_matches = get_registry_backends_by_id(verified_registry, backend_id)
+            verified_backend = (
+                verified_matches[0] if len(verified_matches) == 1 else None
+            )
+            verified_selected_backend_ids = {
+                str(item) for item in verified_state.get("selected_backend_ids", []) or []
+            }
+            promotion_result["routing_change_observed"] = bool(
+                status_payload["status"] == "ok"
+                and isinstance(verified_backend, dict)
+                and str(verified_backend.get("pool", "")) == "active"
+                and not bool(verified_backend.get("manual_hold", False))
+                and backend_id in verified_selected_backend_ids
+            )
+            if status_payload["status"] != "ok" or not promotion_result["routing_change_observed"]:
+                return rollback_after_failed_verification(
+                    human_message=(
+                        "Promotion did not produce verified active routing after status proof."
+                    ),
+                    machine_error_code="PROMOTION_STATUS_FAILED",
+                    liveness=str(status_payload.get("liveness", "unknown")),
+                    operator_action=str(status_payload.get("operator_action", "retry")),
+                    exit_code=int(status_payload.get("exit_code", 1) or 1),
+                    extra={
+                        "sync_result": {
+                            "command_status": sync_payload["status"],
+                            "machine_error_code": sync_payload["machine_error_code"],
+                            "exit_code": sync_payload["exit_code"],
+                        }
+                    },
+                )
+        except RuntimeErrorInfo as exc:
+            return rollback_after_failed_verification(
+                human_message="Promotion post-command verification raised a runtime error.",
+                machine_error_code="PROMOTION_SYNC_FAILED",
+                liveness="unknown",
+                operator_action=exc.operator_action,
+                exit_code=exc.exit_code,
+                extra={"verification_error": str(exc)},
+            )
+        except Exception as exc:  # noqa: BLE001
+            return rollback_after_failed_verification(
+                human_message="Promotion post-command verification raised an unexpected error.",
+                machine_error_code="PROMOTION_STATUS_FAILED",
+                liveness="unknown",
+                operator_action="retry",
+                exit_code=1,
+                extra={"verification_error": str(exc)},
+            )
+
+        promotion_result["rollback_outcome"] = "not_needed"
+        promotion_result["final_outcome"] = "promoted_to_active"
+        return build_promote_payload(
+            ok=True,
+            human_message=(
+                "Account promotion completed with rollback-safe active proof."
+                if result.returncode == 0
+                else "Account promotion completed with rollback-safe active proof after external promote exit non-zero."
+            ),
+            machine_error_code="OK",
+            liveness=str(status_payload.get("liveness", "unknown")),
+            severity="recoverable",
+            operator_action="none",
+            extra={
+                "validate_result": {
+                    "command_status": validate_payload["status"],
+                    "machine_error_code": validate_payload["machine_error_code"],
+                    "exit_code": validate_payload["exit_code"],
+                },
+                "sync_result": {
+                    "command_status": sync_payload["status"],
+                    "machine_error_code": sync_payload["machine_error_code"],
+                    "exit_code": sync_payload["exit_code"],
+                },
+            },
+        )
+
+
+def summarize_owner_path_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "command_status": str(status_payload.get("status", "error")),
         "exit_code": int(status_payload.get("exit_code", 1) or 1),
@@ -4234,6 +4666,10 @@ def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> d
     }
 
 
+def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
+    return summarize_owner_path_status_observation(status_payload)
+
+
 def summarize_registry_pool_counts(registry: dict[str, Any]) -> dict[str, int]:
     counts = {"active": 0, "reserve": 0, "retired": 0}
     for backend in registry.get("backends", []):
@@ -4241,6 +4677,16 @@ def summarize_registry_pool_counts(registry: dict[str, Any]) -> dict[str, int]:
         if pool in counts:
             counts[pool] += 1
     return counts
+
+
+def get_registry_backends_by_id(
+    registry: dict[str, Any], backend_id: str
+) -> list[dict[str, Any]]:
+    return [
+        item
+        for item in registry.get("backends", [])
+        if str(item.get("id")) == backend_id
+    ]
 
 
 def routing_eligible_active_backend_ids(registry: dict[str, Any]) -> list[str]:
@@ -4257,6 +4703,42 @@ def auth_ref_matches(expected_auth_ref: str, backend_auth_ref: Any) -> bool:
     expected_path = Path(str(expected_auth_ref)).expanduser().resolve(strict=False)
     backend_path = Path(str(backend_auth_ref)).expanduser().resolve(strict=False)
     return expected_path == backend_path
+
+
+def snapshot_promotion_owner_path_runtime_surfaces(
+    paths: RuntimePaths,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "registry_file": snapshot_path_state(paths.registry_file),
+        "state_file": snapshot_path_state(paths.state_file),
+        "managed_config_file": snapshot_path_state(paths.managed_config_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+    }
+
+
+def restore_promotion_owner_path_runtime_surfaces(
+    paths: RuntimePaths, snapshots: dict[str, dict[str, Any]]
+) -> None:
+    restore_path_state(
+        paths.registry_file, snapshots.get("registry_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.state_file, snapshots.get("state_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.managed_config_file,
+        snapshots.get("managed_config_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        paths.config_toml, snapshots.get("config_toml", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.runtime_effective_mode_file,
+        snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
 
 
 def classify_onboarded_backend_selection(

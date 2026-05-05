@@ -115,6 +115,58 @@ Reserve-first onboarding remains separate from promotion.
 `active`, and any ambiguous or missing identity proof must stop with
 `operator_action = user_action`.
 
+## Additional promotion owner surface
+
+`accounts promote <id> --json` is the owner surface for single-account
+promotion truth.
+
+Promotion success must not be inferred from external promote subprocess exit
+code alone.
+Successful owner packets must prove, machine-readably:
+
+- a unique eligible backend identity
+- `reserve` precondition truth
+- a rollback point captured before routing-impacting mutation
+- post-promotion sync outcome
+- post-promotion status proof summary
+- an explicit verified active-routing consequence
+
+`accounts promote <id> --json` may expose a nested `promotion_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `backend_id`
+- `precondition_status`
+- `previous_pool`
+- `requested_pool`
+- `rollback_point_captured`
+- `routing_change_attempted`
+- `routing_change_observed`
+- `validate_attempted`
+- `validate_outcome`
+- `sync_attempted`
+- `sync_outcome`
+- `status_observed`
+- `rollback_attempted`
+- `rollback_outcome`
+- `external_command_exit_code`
+- `external_command_status`
+- `final_outcome`
+
+Canonical promotion outcomes include:
+
+- `promoted_to_active`
+- `precondition_failed`
+- `validate_failed`
+- `rollback_completed_after_failed_verification`
+- `rollback_failed`
+- `promotion_command_failed`
+
+Rollback proof is limited to control-layer state and companion-managed
+artifacts.
+It does not imply rollback of engine-internal routing behavior.
+
 ## Additional target-switch contract surface
 
 The current target-switch contour exposes:
