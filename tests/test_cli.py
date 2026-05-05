@@ -280,6 +280,41 @@ class CliTests(unittest.TestCase):
             check=False,
         )
 
+    def assert_missing_json_parser_rejection(
+        self, *args: str, command_path: str
+    ) -> None:
+        result = self.run_cli(*args)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertIn(
+            f"usage: wild-boar-proxy {command_path}",
+            result.stderr,
+        )
+        self.assertIn(
+            "error: the following arguments are required: --json",
+            result.stderr,
+        )
+
+    def test_status_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection("status", command_path="status")
+
+    def test_policy_stage_set_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "policy",
+            "stage",
+            "set",
+            "15",
+            command_path="policy stage set",
+        )
+
+    def test_rollout_rotation_inspect_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "rollout",
+            "rotation",
+            "inspect",
+            command_path="rollout rotation inspect",
+        )
+
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
             os.environ,
