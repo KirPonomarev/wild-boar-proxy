@@ -47,6 +47,24 @@ REGISTRY_IDENTITY_FIELDS = (
     "machine_error_code",
     "next_action",
 )
+ONBOARDING_RESULT_FIELDS = (
+    "input_mode",
+    "explicit_auth_ref",
+    "new_backend_ids",
+    "selected_backend_id",
+    "selection_status",
+    "reserve_first_enforced",
+    "pool_after_onboarding",
+    "validate_attempted",
+    "validate_outcome",
+    "sync_attempted",
+    "sync_outcome",
+    "status_observed",
+    "external_command_exit_code",
+    "external_command_status",
+    "active_routing_changed",
+    "final_outcome",
+)
 ACCOUNT_CAPACITY_TARGET = 20
 
 
@@ -433,6 +451,40 @@ def run_account_mutation_and_refresh(
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
+def run_account_onboard_and_refresh(
+    runner: JsonCommandRunner, command: tuple[str, ...]
+) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
+    action_result = runner.run(*command)
+    accounts_payload = runner.run("accounts", "list", "--json").payload
+    status_payload = runner.run("status", "--json").payload
+    runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
+    account_snapshot = build_account_pool_snapshot(accounts_payload)
+    return action_result.payload, runtime_snapshot, account_snapshot
+
+
+def format_onboarding_value(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
+    return str(value)
+
+
+def build_onboarding_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in ONBOARDING_RESULT_FIELDS}
+    onboarding_result = action_payload.get("onboarding_result")
+    if onboarding_result is None:
+        return result
+    if not isinstance(onboarding_result, dict):
+        raise UiShellError("onboarding_result must be an object when present")
+    for field in ONBOARDING_RESULT_FIELDS:
+        if field in onboarding_result:
+            result[field] = format_onboarding_value(onboarding_result[field])
+    return result
+
+
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
         self.root = root
@@ -462,6 +514,14 @@ class MinimalCompanionShell:
         self.account_counts_var = StringVar(value="A:0 R:0 T:0")
         self.account_capacity_var = StringVar(value=str(ACCOUNT_CAPACITY_TARGET))
         self.account_integration_var = StringVar(value="")
+        self.onboarding_auth_ref_var = StringVar(value="")
+        self.onboarding_command_status_var = StringVar(value="")
+        self.onboarding_machine_error_var = StringVar(value="")
+        self.onboarding_next_action_var = StringVar(value="")
+        self.onboarding_field_vars = {
+            field: StringVar(value="")
+            for field in ONBOARDING_RESULT_FIELDS
+        }
 
         self._build_layout()
         self.root.after(0, self.refresh)
@@ -529,6 +589,53 @@ class MinimalCompanionShell:
             text="Run Managed Sync",
             command=self.run_sync_action,
         ).pack(fill="x", pady=4)
+
+        onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
+        onboarding_box.pack(fill="x", pady=(16, 0))
+
+        onboarding_input = ttk.Frame(onboarding_box)
+        onboarding_input.pack(fill="x")
+        ttk.Label(onboarding_input, text="Explicit auth ref:", width=16).pack(side="left")
+        ttk.Entry(onboarding_input, textvariable=self.onboarding_auth_ref_var).pack(
+            side="left", fill="x", expand=True
+        )
+        ttk.Button(
+            onboarding_input,
+            text="Onboard Explicit Auth",
+            command=self.run_onboard_action,
+        ).pack(side="left", padx=(8, 0))
+
+        onboarding_summary = ttk.Frame(onboarding_box)
+        onboarding_summary.pack(fill="x", pady=(8, 4))
+        self._add_status_row(
+            onboarding_summary, "Command status", self.onboarding_command_status_var
+        )
+        self._add_status_row(
+            onboarding_summary, "Machine error", self.onboarding_machine_error_var
+        )
+        self._add_status_row(
+            onboarding_summary, "Next action", self.onboarding_next_action_var
+        )
+
+        for label, field in (
+            ("Input mode", "input_mode"),
+            ("Explicit auth ref", "explicit_auth_ref"),
+            ("New backend IDs", "new_backend_ids"),
+            ("Selected backend", "selected_backend_id"),
+            ("Selection status", "selection_status"),
+            ("Reserve first", "reserve_first_enforced"),
+            ("Pool after", "pool_after_onboarding"),
+            ("Validate attempted", "validate_attempted"),
+            ("Validate outcome", "validate_outcome"),
+            ("Sync attempted", "sync_attempted"),
+            ("Sync outcome", "sync_outcome"),
+            ("Status observed", "status_observed"),
+            ("External exit code", "external_command_exit_code"),
+            ("External status", "external_command_status"),
+            ("Routing changed", "active_routing_changed"),
+            ("Final outcome", "final_outcome"),
+        ):
+            self._add_status_row(onboarding_box, label, self.onboarding_field_vars[field])
 
         accounts_box = ttk.LabelFrame(container, text="Account Pool", padding=12)
         accounts_box.pack(fill="both", expand=True, pady=(16, 0))
@@ -736,6 +843,32 @@ class MinimalCompanionShell:
         self.banner_var.set("Running operator action...")
         threading.Thread(target=self._sync_worker, daemon=True).start()
 
+    def run_onboard_action(self) -> None:
+        if self._busy:
+            return
+        auth_ref = self.onboarding_auth_ref_var.get().strip()
+        if not auth_ref:
+            messagebox.showinfo(
+                "Explicit auth required",
+                "Enter explicit auth ref before onboarding.",
+                parent=self.root,
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run reserve-first explicit-auth onboarding and refresh command truth?",
+            parent=self.root,
+        ):
+            return
+        command = ["accounts", "onboard", "--json", "--auth-ref", auth_ref, "--non-interactive"]
+        self.set_busy(True)
+        self.banner_var.set("Running onboarding...")
+        threading.Thread(
+            target=self._onboard_worker,
+            args=(tuple(command),),
+            daemon=True,
+        ).start()
+
     def _selected_account_id(self) -> str | None:
         selection = self.accounts_tree.selection()
         if not selection:
@@ -895,6 +1028,54 @@ class MinimalCompanionShell:
                 banner=banner,
             ),
         )
+
+    def _apply_onboarding_payload(self, action_payload: dict[str, Any]) -> None:
+        self.onboarding_command_status_var.set(str(action_payload.get("status", "")))
+        self.onboarding_machine_error_var.set(str(action_payload.get("machine_error_code", "")))
+        self.onboarding_next_action_var.set(str(action_payload.get("next_action", "")))
+        try:
+            field_values = build_onboarding_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in ONBOARDING_RESULT_FIELDS}
+        for field, value in field_values.items():
+            self.onboarding_field_vars[field].set(value)
+
+    def _onboard_worker(self, command: tuple[str, ...]) -> None:
+        try:
+            action_payload, runtime_snapshot, account_snapshot = run_account_onboard_and_refresh(
+                self.runner, command
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "next_action": "retry",
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_onboarding_refresh_results(
+                action_payload,
+                runtime_snapshot,
+                account_snapshot,
+                banner=banner,
+            ),
+        )
+
+    def _apply_onboarding_refresh_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        account_snapshot: AccountPoolSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_onboarding_payload(action_payload)
+        self._apply_refresh_results(runtime_snapshot, account_snapshot, banner=banner)
 
 
 def main() -> int:

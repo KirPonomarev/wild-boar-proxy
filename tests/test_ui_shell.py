@@ -8,16 +8,20 @@ import unittest
 from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
+    ONBOARDING_RESULT_FIELDS,
     AccountPoolSnapshot,
     JsonCommandRunner,
     MinimalCompanionShell,
     UiShellError,
     build_account_pool_snapshot,
+    build_onboarding_field_values,
     build_runtime_snapshot,
+    format_onboarding_value,
     load_account_pool_snapshot,
     load_runtime_snapshot,
     main,
     parse_exact_json_object,
+    run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
     run_mode_control_and_refresh,
@@ -541,6 +545,82 @@ class AccountMutationTests(unittest.TestCase):
         )
 
 
+class OnboardingActionTests(unittest.TestCase):
+    def test_run_account_onboard_and_refresh_uses_onboard_then_accounts_then_status(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"): command_payload(
+                    human_message="Onboarding completed.",
+                    onboarding_result={
+                        "input_mode": "explicit_auth_ref",
+                        "explicit_auth_ref": "/tmp/new-auth.json",
+                        "new_backend_ids": ["backend-new"],
+                        "selected_backend_id": "backend-new",
+                        "selection_status": "selected_unique_backend",
+                        "reserve_first_enforced": True,
+                        "pool_after_onboarding": "reserve",
+                        "validate_attempted": True,
+                        "validate_outcome": "ok",
+                        "sync_attempted": False,
+                        "sync_outcome": "skipped_by_flag",
+                        "status_observed": {"command_status": "ok"},
+                        "external_command_exit_code": 7,
+                        "external_command_status": "nonzero",
+                        "active_routing_changed": False,
+                        "final_outcome": "explicit_auth_imported_to_reserve",
+                    },
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): status_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_account_onboard_and_refresh(
+            runner,
+            ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"),
+        )
+
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(runtime_snapshot.overall_state, "ok")
+        self.assertEqual(account_snapshot.reserve_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"),
+                ("accounts", "list", "--json"),
+                ("status", "--json"),
+            ],
+        )
+
+    def test_build_onboarding_field_values_maps_known_fields_and_missing_as_blank(self) -> None:
+        values = build_onboarding_field_values(
+            command_payload(
+                onboarding_result={
+                    "input_mode": "explicit_auth_ref",
+                    "sync_outcome": "skipped_by_flag",
+                    "reserve_first_enforced": True,
+                }
+            )
+        )
+
+        self.assertEqual(set(values.keys()), set(ONBOARDING_RESULT_FIELDS))
+        self.assertEqual(values["input_mode"], "explicit_auth_ref")
+        self.assertEqual(values["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(values["reserve_first_enforced"], "true")
+        self.assertEqual(values["selected_backend_id"], "")
+
+    def test_build_onboarding_field_values_rejects_non_object_onboarding_result(self) -> None:
+        with self.assertRaisesRegex(UiShellError, "onboarding_result must be an object"):
+            build_onboarding_field_values(command_payload(onboarding_result="broken"))
+
+    def test_format_onboarding_value_serializes_lists_and_dicts(self) -> None:
+        self.assertEqual(format_onboarding_value(["backend-a"]), '["backend-a"]')
+        self.assertEqual(
+            format_onboarding_value({"command_status": "ok"}),
+            '{"command_status": "ok"}',
+        )
+
+
 class UiDispatchTests(unittest.TestCase):
     def test_run_validate_action_delegates_to_account_check_alias(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
@@ -676,6 +756,135 @@ class UiDispatchTests(unittest.TestCase):
     def test_no_restore_or_reactivate_affordance_is_exposed(self) -> None:
         self.assertFalse(hasattr(MinimalCompanionShell, "run_restore_action"))
         self.assertFalse(hasattr(MinimalCompanionShell, "run_reactivate_action"))
+
+    def test_run_onboard_action_requires_explicit_auth_ref(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.onboarding_auth_ref_var = mock.Mock()
+        shell.onboarding_auth_ref_var.get.return_value = "   "
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_onboard_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_onboard_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.onboarding_auth_ref_var = mock.Mock()
+        shell.onboarding_auth_ref_var.get.return_value = "/tmp/new-auth.json"
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_onboard_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_onboard_action_wires_explicit_auth_command(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.onboarding_auth_ref_var = mock.Mock()
+        shell.onboarding_auth_ref_var.get.return_value = "/tmp/new-auth.json"
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_onboard_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._onboard_worker)
+        self.assertEqual(
+            kwargs["args"][0],
+            (
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                "/tmp/new-auth.json",
+                "--non-interactive",
+            ),
+        )
+        thread_instance.start.assert_called_once_with()
+
+    def test_apply_onboarding_payload_blanks_fields_for_malformed_surface(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.onboarding_command_status_var = mock.Mock()
+        shell.onboarding_machine_error_var = mock.Mock()
+        shell.onboarding_next_action_var = mock.Mock()
+        shell.onboarding_field_vars = {
+            field: mock.Mock() for field in ONBOARDING_RESULT_FIELDS
+        }
+
+        shell._apply_onboarding_payload(command_payload(onboarding_result="broken"))
+
+        shell.onboarding_command_status_var.set.assert_called_once_with("ok")
+        for field in ONBOARDING_RESULT_FIELDS:
+            shell.onboarding_field_vars[field].set.assert_called_once_with("")
+
+    def test_apply_onboarding_payload_keeps_reserve_first_and_skipped_sync_visible(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.onboarding_command_status_var = mock.Mock()
+        shell.onboarding_machine_error_var = mock.Mock()
+        shell.onboarding_next_action_var = mock.Mock()
+        shell.onboarding_field_vars = {
+            field: mock.Mock() for field in ONBOARDING_RESULT_FIELDS
+        }
+
+        shell._apply_onboarding_payload(
+            command_payload(
+                onboarding_result={
+                    "reserve_first_enforced": True,
+                    "sync_outcome": "skipped_by_flag",
+                    "status_observed": {"command_status": "ok"},
+                    "active_routing_changed": False,
+                    "final_outcome": "explicit_auth_imported_to_reserve",
+                }
+            )
+        )
+
+        shell.onboarding_field_vars["reserve_first_enforced"].set.assert_called_with("true")
+        shell.onboarding_field_vars["sync_outcome"].set.assert_called_with("skipped_by_flag")
+
+    def test_apply_onboarding_payload_displays_status_failure_fields(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.onboarding_command_status_var = mock.Mock()
+        shell.onboarding_machine_error_var = mock.Mock()
+        shell.onboarding_next_action_var = mock.Mock()
+        shell.onboarding_field_vars = {
+            field: mock.Mock() for field in ONBOARDING_RESULT_FIELDS
+        }
+
+        shell._apply_onboarding_payload(
+            command_payload(
+                status="error",
+                onboarding_result={
+                    "status_observed": None,
+                    "active_routing_changed": False,
+                    "final_outcome": "status_failed",
+                },
+            )
+        )
+
+        shell.onboarding_command_status_var.set.assert_called_once_with("error")
+        shell.onboarding_field_vars["final_outcome"].set.assert_called_with("status_failed")
+        shell.onboarding_field_vars["status_observed"].set.assert_called_with("null")
 
 
 class MainTests(unittest.TestCase):
