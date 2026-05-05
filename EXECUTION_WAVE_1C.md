@@ -79,72 +79,83 @@ Live evidence lane does not authorize additional repo-write work by itself.
 
 ### Preferred candidates
 
-- broader single-writer lock coverage across more than one mutating command
 - direct `accounts onboard --skip-login` owner-surface coverage
+- `rollout stage advance` lock coverage
 
 ### Recently closed contour
 
 Recently closed:
 
-`Wave 1C Repo-Write: Strict JSON Parser Rejection Coverage`
+`Wave 1C Repo-Write: Single-Writer Lock Coverage Expansion`
 
 Closeout:
 
-- representative parser-rejection coverage was added
-- omitted `--json` now has direct tests on:
+- representative `LOCK_HELD` coverage was added for:
   - `policy stage set`
-  - `status`
-  - `rollout rotation inspect`
+  - `accounts onboard`
+- both commands now fail closed with:
+  - `changed_files == []`
+  - no tracked state mutation
+  - no owner-lane progress past lock preflight
 - the contour closed as tests-only
 
 ### Current next contour
 
 The immediate next repo-write contour is:
 
-`Wave 1C Repo-Write: Single-Writer Lock Coverage Expansion`
+`Wave 1C Repo-Write: Accounts Onboard Explicit Skip-Login Owner-Surface Coverage`
 
 Purpose:
 
-- expand representative lock coverage for the single-writer mutation model
-- prove that lock preflight fails closed before mutation on selected mutating
-  command classes
-- strengthen `STATE_SERIALIZATION_GATE` confidence without overclaiming full
-  serialization proof for every mutating path in one contour
+- close the remaining direct coverage gap on the explicit `--skip-login`
+  onboarding lane
+- prove that `accounts onboard --json` forwards `--skip-login` explicitly
+  rather than inferring it
+- strengthen bounded onboarding owner-surface coverage without claiming
+  completion of one-click onboarding, Workstream 03, or the full critical user
+  path
 
 Scope:
 
-- tests only
-- 2 representative mutating command classes
-- preferred representatives:
-  - `policy stage set`
-  - `accounts onboard`
-- lock-level failure expectations only:
-  - `LOCK_HELD`
-  - no registry/state/mode mutation
-  - `changed_files == []`
-  - no owner-lane progress past lock preflight
+- tests first
+- direct coverage for:
+  - `accounts onboard --json --auth-ref <path> --skip-login`
+- prove the external onboarding stub actually receives `--skip-login`
+- prove owner-packet truth remains machine-carried for:
+  - uniquely selected backend identity
+  - resulting placement in `reserve`
+  - no silent active-routing change
+  - post-onboard validate outcome
+  - post-onboard sync outcome, unless explicitly skipped
+  - post-onboard status proof summary
+- allow a minimal test-harness extension only if needed to record forwarded
+  argv or equivalent owner-surface evidence
 
 Acceptance:
 
-- representative lock coverage is added for two distinct mutating classes
-- chosen commands fail closed when the serialized lock is already held
+- direct coverage exists for the explicit `--skip-login` onboarding lane
+- the coverage proves `--skip-login` is forwarded, not merely inferred
+- successful packets still prove reserve-first admission honestly
+- no success claim is emitted when identity proof is missing or ambiguous
 - no new truth surface is introduced
 - full local CLI suite remains green
 - the contour closes as tests-only unless a failing test proves a real defect
 
 Decision rule:
 
-- if the new tests pass once added, close the contour as tests-only
-- if a new test reveals a real defect, fix only that lock-preflight or
-  serialized-path defect in the same contour
-- if a fix would expand beyond serialization behavior, stop and open a
-  separate contour
+- if tests pass with test-only or harness-only additions, close as tests-only
+- if a new test reveals a real defect, fix only the control-layer
+  owner-surface plumbing or packet-shaping defect in the same contour
+- if a fix would require engine-layer auth-flow duplication or broader runtime
+  redesign, stop and open a separate contour
 
 Explicitly deferred from this contour:
 
-- `accounts onboard --skip-login` direct coverage
-- exhaustive lock coverage across every mutating command
 - `rollout stage advance` lock coverage
+- detected-new-auth onboarding lane expansion
+- one-click onboarding completion claims
+- Workstream 03 completion claims
+- Critical User Path Gate completion claims
 
 ### Out of scope
 
