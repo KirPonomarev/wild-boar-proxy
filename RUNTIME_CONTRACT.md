@@ -73,8 +73,13 @@
   `last_known_good_proxy_contract`
 - owner-path proxy packets may expose top-level `last_known_good_proxy`
   with an honest materialization status such as `declared_not_materialized`
+- owner-path healthcheck writes may materialize or refresh
+  `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
+  in `supervisor-state.json`
 - `status --json` may report the same last-known-good proxy surface only as
   delegated readout
+- delegated `status --json` must propagate those owner-path writes honestly in
+  `changed_files`
 - persisted last-known-good proxy truth must remain separate from
   `current_proxy_url`
 - persisted last-known-good proxy truth must never by itself change top-level

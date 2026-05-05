@@ -1044,7 +1044,7 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
         "current_proxy_url_reuse_forbidden": True,
         "separate_metadata_file_default": False,
         "write_owner": "serialized_healthcheck_owner_path",
-        "write_path_status": "contract_fixed_not_implemented",
+        "write_path_status": "owner_path_emitted",
         "refresh_requires_positive_managed_proxy_proof": True,
         "refresh_from_candidate_liveness_alone_forbidden": True,
         "refresh_from_current_proxy_url_alone_forbidden": True,
@@ -1091,6 +1091,38 @@ def build_last_known_good_proxy_surface(
         "current_proxy_url_separate": True,
         "final_live_truth_without_live_checks": False,
     }
+
+
+def refresh_last_known_good_proxy_from_healthcheck(
+    paths: RuntimePaths,
+    state: dict[str, Any],
+    *,
+    current_proxy_url: str,
+    attestation_ok: bool,
+    reported_effective_mode: str,
+) -> dict[str, Any]:
+    if not attestation_ok or reported_effective_mode != "managed":
+        return state
+    if parse_local_proxy_candidate(current_proxy_url) is None:
+        return state
+
+    refreshed_state = dict(state)
+    refreshed_state[LAST_KNOWN_GOOD_PROXY_URL_FIELD] = current_proxy_url
+    refreshed_state[LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD] = now_iso()
+
+    # Refuse to persist if the attested current proxy drifted before the
+    # serialized owner-path write lock was acquired.
+    with serialized_lock(paths):
+        live_state = read_json(paths.state_file, required=False)
+        live_current_proxy_url = str(live_state.get("current_proxy_url") or "")
+        if live_current_proxy_url != current_proxy_url:
+            return state
+        live_state[LAST_KNOWN_GOOD_PROXY_URL_FIELD] = current_proxy_url
+        live_state[LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD] = refreshed_state[
+            LAST_KNOWN_GOOD_PROXY_OBSERVED_AT_FIELD
+        ]
+        write_json_atomic(paths.state_file, live_state)
+    return refreshed_state
 
 
 def get_stable_runtime_consumer_selection_context(
@@ -2547,6 +2579,7 @@ def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
     raw_candidates = []
     env_candidates = os.environ.get("WBP_PROXY_REPROBE_CANDIDATES", "")
     raw_candidates.extend(item.strip() for item in env_candidates.split(","))
+    raw_candidates.append(str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or ""))
     raw_candidates.append(str(state.get("current_proxy_url") or ""))
 
     candidates: list[str] = []
@@ -2790,7 +2823,11 @@ def summarize_status(
 
 
 def run_healthcheck(
-    paths: RuntimePaths, model: str | None = None, *, allow_recovery: bool = True
+    paths: RuntimePaths,
+    model: str | None = None,
+    *,
+    allow_recovery: bool = True,
+    allow_last_known_good_proxy_write: bool = True,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     state = read_json(paths.state_file, required=False)
@@ -3086,6 +3123,16 @@ def run_healthcheck(
                 f"recovery lane; listener is not reachable at {reported_endpoint}."
             )
 
+    current_proxy_url = str(state.get("current_proxy_url", ""))
+    if allow_last_known_good_proxy_write:
+        state = refresh_last_known_good_proxy_from_healthcheck(
+            paths,
+            state,
+            current_proxy_url=current_proxy_url,
+            attestation_ok=ok,
+            reported_effective_mode=reported_effective_mode,
+        )
+    current_proxy_url = str(state.get("current_proxy_url", ""))
     attestation = {
         "listener_ok": listener_ok,
         "models_ok": models_ok,
@@ -3097,7 +3144,6 @@ def run_healthcheck(
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": "healthcheck --json",
     }
-    current_proxy_url = str(state.get("current_proxy_url", ""))
     extra = {
         "desired_mode": desired_mode,
         "effective_mode": reported_effective_mode,
@@ -3242,7 +3288,11 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
     attempt = run_stable_runtime_launcher_attempt(paths, selection)
     emit_subprocess_output(stdout=attempt.stdout, stderr=attempt.stderr)
     stabilization_seconds = get_launch_stabilization_seconds()
-    health_payload = run_healthcheck(paths, allow_recovery=False)
+    health_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+    )
     if (
         attempt.launcher_exit_code == 0
         and health_payload["status"] == "ok"
@@ -3250,13 +3300,21 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
         and stabilization_seconds > 0
     ):
         time.sleep(stabilization_seconds)
-        health_payload = run_healthcheck(paths, allow_recovery=False)
+        health_payload = run_healthcheck(
+            paths,
+            allow_recovery=False,
+            allow_last_known_good_proxy_write=False,
+        )
         if (
             health_payload["status"] != "ok"
             and str(health_payload["effective_mode"]) == "managed"
         ):
             time.sleep(min(0.1, stabilization_seconds))
-            health_payload = run_healthcheck(paths, allow_recovery=False)
+            health_payload = run_healthcheck(
+                paths,
+                allow_recovery=False,
+                allow_last_known_good_proxy_write=False,
+            )
     snapshot_payload: dict[str, Any] | None = None
     if (
         health_payload["status"] == "ok"

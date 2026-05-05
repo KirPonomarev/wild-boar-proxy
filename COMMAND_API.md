@@ -266,8 +266,13 @@ Field meaning rules:
 - owner-path packets may expose top-level `last_known_good_proxy_contract`
 - owner-path packets may expose top-level `last_known_good_proxy`
   with an honest materialization status such as `declared_not_materialized`
+- owner-path healthcheck writes may materialize or refresh
+  `last_known_good_proxy_url` and `last_known_good_proxy_observed_at`
+  in `supervisor-state.json`
 - `status --json` may expose the same `last_known_good_proxy` readout only as
   delegated reporting
+- delegated `status --json` must propagate those owner-path writes honestly in
+  `changed_files`
 - `current_proxy_url` remains separate from persisted
   `last_known_good_proxy.proxy_url`
 - persisted last-known-good proxy truth must never by itself change top-level

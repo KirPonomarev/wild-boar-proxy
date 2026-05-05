@@ -552,6 +552,7 @@ class CliTests(unittest.TestCase):
         last_known_good_contract = payload["last_known_good_proxy_contract"]
         self.assertEqual(last_known_good_contract["status"], "contract_ready")
         self.assertEqual(last_known_good_contract["owner_command_surface"], "healthcheck --json")
+        self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
         self.assertEqual(
             last_known_good_contract["candidate_input_priority"],
             [
@@ -567,11 +568,15 @@ class CliTests(unittest.TestCase):
             ["last_known_good_proxy_url", "last_known_good_proxy_observed_at"],
         )
         last_known_good = payload["last_known_good_proxy"]
-        self.assertEqual(last_known_good["status"], "declared_not_materialized")
-        self.assertEqual(last_known_good["proxy_url"], "")
-        self.assertEqual(last_known_good["observed_at_utc"], "")
-        self.assertFalse(last_known_good["matches_current_proxy_url"])
-        self.assertFalse(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertEqual(last_known_good["status"], "materialized")
+        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10808")
+        self.assertTrue(last_known_good["observed_at_utc"])
+        self.assertTrue(last_known_good["matches_current_proxy_url"])
+        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10808")
+        self.assertTrue(state["last_known_good_proxy_observed_at"])
         recovery_result = payload["deterministic_stable_recovery_result"]
         self.assertEqual(recovery_result["status"], "not_invoked")
         self.assertEqual(recovery_result["entry_lane"], "not_invoked")
@@ -651,11 +656,70 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["liveness"], "degraded")
+        self.assertEqual(payload["changed_files"], [])
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
         self.assertIn(
             f"http://127.0.0.1:{candidate_port}", payload["proxy_reprobe"]["candidates"]
         )
+        self.assertEqual(payload["last_known_good_proxy"]["status"], "declared_not_materialized")
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertNotIn("last_known_good_proxy_url", state)
+        self.assertNotIn("last_known_good_proxy_observed_at", state)
         self.assertIn("proxyconnect tcp", payload["last_error"])
+
+    def test_healthcheck_preserves_materialized_last_known_good_proxy_on_proxy_reprobe_failure(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    f"proxyconnect tcp: dial tcp 127.0.0.1:{candidate_port}: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["current_proxy_url"] = f"http://127.0.0.1:{candidate_port}"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(payload["changed_files"], [])
+        last_known_good = payload["last_known_good_proxy"]
+        self.assertEqual(last_known_good["status"], "materialized")
+        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
+        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10809")
+        self.assertEqual(
+            state["last_known_good_proxy_observed_at"], "2026-05-05T00:00:00+00:00"
+        )
 
     def test_healthcheck_reports_working_reprobe_candidate_without_greenwash(self) -> None:
         port = free_port()
@@ -1256,7 +1320,7 @@ class CliTests(unittest.TestCase):
     ) -> None:
         port = free_port()
         ProbeHandler.response_text = "OK"
-        (self.managed_dir / "managed-config.yaml").write_text(
+        (self.stable_dir / "config.yaml").write_text(
             f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
         )
         (self.profile_dir / "config.toml").write_text(
@@ -1264,11 +1328,11 @@ class CliTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.profile_dir / "runtime-effective-mode.txt").write_text(
-            "managed\n", encoding="utf-8"
+            "stable\n", encoding="utf-8"
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        state["managed_port"] = port
-        state["effective_mode"] = "managed"
+        state["effective_mode"] = "stable"
+        state["selected_backend_ids"] = []
         state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
         state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
         (self.managed_dir / "supervisor-state.json").write_text(
@@ -1295,6 +1359,135 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(last_known_good["matches_current_proxy_url"])
         self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
+        self.assertNotIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_healthcheck_refreshes_last_known_good_proxy_timestamp_on_new_positive_proof(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:10808"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch(
+                    "wild_boar_proxy.runtime.now_iso",
+                    side_effect=[
+                        "2026-05-05T00:00:01+00:00",
+                        "2026-05-05T00:00:02+00:00",
+                    ],
+                ):
+                    payload = runtime_mod.run_healthcheck(paths)
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["last_known_good_proxy"]["observed_at_utc"],
+            "2026-05-05T00:00:01+00:00",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["last_known_good_proxy_observed_at"],
+            "2026-05-05T00:00:01+00:00",
+        )
+        self.assertEqual(
+            payload["attestation"]["observed_at_utc"], "2026-05-05T00:00:02+00:00"
+        )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_healthcheck_proxy_reprobe_uses_last_known_good_before_current_proxy(
+        self,
+    ) -> None:
+        port = free_port()
+        env_candidate_port = free_port()
+        lkg_candidate_port = free_port()
+        current_candidate_port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    f"proxyconnect tcp: dial tcp 127.0.0.1:{current_candidate_port}: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["current_proxy_url"] = f"http://127.0.0.1:{current_candidate_port}"
+        state["last_known_good_proxy_url"] = f"http://127.0.0.1:{lkg_candidate_port}"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        lkg_socket = socket.socket()
+        lkg_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        lkg_socket.bind(("127.0.0.1", lkg_candidate_port))
+        lkg_socket.listen(1)
+        try:
+            thread.start()
+            result = self.run_cli_with_env(
+                {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"http://127.0.0.1:{env_candidate_port}"
+                    )
+                },
+                "healthcheck",
+                "--json",
+            )
+        finally:
+            lkg_socket.close()
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
+        self.assertEqual(
+            payload["proxy_reprobe"]["candidates"],
+            [
+                f"http://127.0.0.1:{env_candidate_port}",
+                f"http://127.0.0.1:{lkg_candidate_port}",
+                f"http://127.0.0.1:{current_candidate_port}",
+            ],
+        )
+        self.assertEqual(
+            payload["proxy_reprobe"]["working_candidate"],
+            f"http://127.0.0.1:{lkg_candidate_port}",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(
+            state["last_known_good_proxy_url"], f"http://127.0.0.1:{lkg_candidate_port}"
+        )
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -2818,6 +3011,7 @@ class CliTests(unittest.TestCase):
                 "current_proxy_url",
             ],
         )
+        self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
         self.assertFalse(last_known_good_contract["historical_truth_promotes_live_truth"])
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "declared_not_materialized")
@@ -3125,6 +3319,119 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("last_known_good_proxy_contract", payload)
         self.assertNotIn("deterministic_stable_recovery_result", consumer)
 
+    def test_launch_smoke_does_not_write_last_known_good_proxy_when_it_is_not_the_owner(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state.pop("last_known_good_proxy_url", None)
+        state.pop("last_known_good_proxy_observed_at", None)
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        launcher = self.profile_dir / "codex-custom-managed-launch-noop.sh"
+        launcher.write_text(
+            "#!/bin/sh\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_LAUNCHER_SCRIPT": str(launcher),
+                    "WBP_LAUNCH_STABILIZATION_SECONDS": "0",
+                },
+                "launch",
+                "smoke",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "managed")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertNotIn("last_known_good_proxy", payload)
+        self.assertNotIn("last_known_good_proxy_contract", payload)
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertNotIn("last_known_good_proxy_url", state)
+        self.assertNotIn("last_known_good_proxy_observed_at", state)
+
+    def test_launch_smoke_nonzero_managed_path_does_not_write_last_known_good_proxy(
+        self,
+    ) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state.pop("last_known_good_proxy_url", None)
+        state.pop("last_known_good_proxy_observed_at", None)
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        launcher = self.profile_dir / "codex-custom-managed-launch-fail.sh"
+        launcher.write_text(
+            "#!/bin/sh\n"
+            "mode=\"$1\"\n"
+            "[ \"$mode\" = smoke ] || exit 7\n"
+            "exit 9\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_LAUNCHER_SCRIPT": str(launcher),
+                    "WBP_LAUNCH_STABILIZATION_SECONDS": "0",
+                },
+                "launch",
+                "smoke",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertNotIn("last_known_good_proxy", payload)
+        self.assertNotIn("last_known_good_proxy_contract", payload)
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertNotIn("last_known_good_proxy_url", state)
+        self.assertNotIn("last_known_good_proxy_observed_at", state)
+
     def test_status_delegates_stable_service_disabled_lane_without_becoming_owner(
         self,
     ) -> None:
@@ -3184,8 +3491,6 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["effective_mode"] = "managed"
-        state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
-        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -3204,13 +3509,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "materialized")
-        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
-        self.assertFalse(last_known_good["matches_current_proxy_url"])
+        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10808")
+        self.assertTrue(last_known_good["matches_current_proxy_url"])
         self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
         self.assertEqual(
             payload["last_known_good_proxy_contract"]["owner_command_surface"],
             "healthcheck --json",
         )
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10808")
+        self.assertTrue(state["last_known_good_proxy_observed_at"])
 
     def test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target(
         self,
