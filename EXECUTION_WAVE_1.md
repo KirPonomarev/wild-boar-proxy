@@ -11,6 +11,10 @@ Execution Wave 1A is `Execution Core Spec Freeze`.
 
 Execution Wave 1B is the later runtime-hardening implementation contour.
 
+Execution Wave 1C is the execution-core closeout and live-evidence separation
+contour.
+Its detailed plan lives in `EXECUTION_WAVE_1C.md`.
+
 ## Wave 1A scope
 
 - freeze runtime truth rules in the existing runtime contract
@@ -46,7 +50,8 @@ The following path must be preserved as the controlling gate for Wave 1 work:
 8. forced managed failure
 9. stable fallback
 
-Without this path, neither pilot-readiness nor stable-pool claims are valid.
+Without this path, neither pilot-readiness nor staged proof claims such as
+`STABLE_10_PROVED`, `STABLE_15_PROVED`, and `STABLE_20_PROVED` are valid.
 
 ## Minimum blocking gates
 
