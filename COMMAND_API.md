@@ -296,6 +296,8 @@ Canonical rotation-evidence outcomes include:
 runtime or supervisor snapshot of selected backends.
 They must not be synthesized from registry active ids, registry active counts,
 or routing-candidate counts.
+Selected backend ids without `observed_at_utc` from the same observation event
+must not be treated as available participation evidence.
 
 `evidence_strength` is the normalized strength axis and must use:
 

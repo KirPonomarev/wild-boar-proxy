@@ -580,6 +580,10 @@ class CliTests(unittest.TestCase):
         state["degraded_count"] = 0
         state["down_count"] = 0
         state["selected_backend_ids"] = selected_backend_ids
+        if selected_backend_ids:
+            state["selected_backend_ids_observed_at"] = runtime_mod.now_iso()
+        else:
+            state.pop("selected_backend_ids_observed_at", None)
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
     def configure_stage_proof_fixture(
@@ -619,6 +623,10 @@ class CliTests(unittest.TestCase):
         state["degraded_count"] = 0
         state["down_count"] = 0
         state["selected_backend_ids"] = list(selected_backend_ids)
+        if selected_backend_ids:
+            state["selected_backend_ids_observed_at"] = runtime_mod.now_iso()
+        else:
+            state.pop("selected_backend_ids_observed_at", None)
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
@@ -6301,7 +6309,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             evidence["evidence_source_layer"], "control_layer_supervisor_snapshot"
         )
-        self.assertEqual(evidence["evidence_freshness"], "unknown")
+        self.assertTrue(evidence["observed_at_utc"])
+        self.assertEqual(evidence["evidence_freshness"], "fresh")
         self.assertTrue(evidence["selected_backend_snapshot_present"])
         self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
         self.assertEqual(
@@ -6500,6 +6509,38 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             evidence["active_routing_candidate_ids_observed"],
             ["backend-a", "backend-b"],
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "observability")
+        self.assertEqual(
+            evidence["final_outcome"], "participation_evidence_unknown"
+        )
+
+    def test_rollout_rotation_inspect_does_not_accept_ids_without_observed_at(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state.pop("selected_backend_ids_observed_at", None)
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertTrue(evidence["selected_backend_snapshot_present"])
+        self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
+        self.assertEqual(evidence["observed_at_utc"], "")
+        self.assertEqual(evidence["evidence_freshness"], "unknown")
+        self.assertEqual(evidence["evidence_strength"], "partial")
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_observation_time_missing_or_invalid",
         )
         self.assertEqual(evidence["participation_status"], "unknown")
         self.assertEqual(evidence["blocker_type"], "observability")

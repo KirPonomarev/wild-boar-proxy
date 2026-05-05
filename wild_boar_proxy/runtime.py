@@ -5038,6 +5038,21 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         evidence_result["blocker_type"] = "observability"
         evidence_result["final_outcome"] = "participation_evidence_unknown"
         ok = False
+    elif not selected_snapshot_observed_at or selected_snapshot_freshness == "unknown":
+        machine_error_code = "ROTATION_EVIDENCE_UNKNOWN"
+        human_message = (
+            "Rotation participation evidence is unknown because selected backend ids lack a same-event observation timestamp."
+        )
+        operator_action = "user_action"
+        evidence_result["evidence_strength"] = "partial"
+        evidence_result["evidence_reason"] = (
+            "selected_backend_snapshot_observation_time_missing_or_invalid"
+        )
+        evidence_result["participation_status"] = "unknown"
+        evidence_result["evidence_status"] = "participation_evidence_unknown"
+        evidence_result["blocker_type"] = "observability"
+        evidence_result["final_outcome"] = "participation_evidence_unknown"
+        ok = False
     elif selected_snapshot_freshness == "stale":
         machine_error_code = "ROTATION_EVIDENCE_STALE"
         human_message = (
