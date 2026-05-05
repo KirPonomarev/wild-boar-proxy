@@ -114,9 +114,11 @@ class CliTests(unittest.TestCase):
         self.profile_dir = root / "profile"
         self.managed_dir = self.profile_dir / "managed"
         self.stable_dir = root / "stable"
+        self.bin_dir = self.managed_dir / "bin"
         self.profile_dir.mkdir(parents=True)
         self.managed_dir.mkdir(parents=True)
         self.stable_dir.mkdir(parents=True)
+        self.bin_dir.mkdir(parents=True)
         (self.profile_dir / "auth.json").write_text(
             json.dumps({"OPENAI_API_KEY": "test-key"}) + "\n", encoding="utf-8"
         )
@@ -208,6 +210,10 @@ class CliTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.sync_script.chmod(0o755)
+        self.accounts_bin = self.bin_dir / "codex-accounts"
+        self.onboard_bin = self.bin_dir / "codex-account-onboard"
+        self.write_test_accounts_bin(self.accounts_bin)
+        self.write_test_onboard_bin(self.onboard_bin)
         self.default_launcher_script = (
             self.profile_dir / runtime_mod.DEFAULT_LAUNCHER_SCRIPT_NAME
         )
@@ -225,10 +231,13 @@ class CliTests(unittest.TestCase):
         env["WBP_STABLE_CONFIG"] = str(self.stable_dir / "config.yaml")
         env["WBP_CONFIG_TOML"] = str(self.profile_dir / "config.toml")
         env["WBP_MANAGED_CONFIG_FILE"] = str(self.managed_dir / "managed-config.yaml")
+        env["WBP_REGISTRY_FILE"] = str(self.managed_dir / "backend-registry.json")
         env["WBP_STATE_FILE"] = str(self.managed_dir / "supervisor-state.json")
         env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(
             self.profile_dir / "runtime-effective-mode.txt"
         )
+        env["WBP_ACCOUNTS_BIN"] = str(self.accounts_bin)
+        env["WBP_ONBOARD_BIN"] = str(self.onboard_bin)
         if include_launcher_override:
             env["WBP_LAUNCHER_SCRIPT"] = str(self.launcher_script)
         else:
@@ -346,6 +355,97 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         return server, thread
+
+    def write_test_accounts_bin(self, path: Path) -> None:
+        path.write_text(
+            "#!/bin/sh\n"
+            "python3 - \"$@\" <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "command = sys.argv[1] if len(sys.argv) > 1 else ''\n"
+            "args = sys.argv[2:]\n"
+            "registry_path = Path(os.environ['WBP_REGISTRY_FILE'])\n"
+            "registry = json.loads(registry_path.read_text())\n"
+            "if command == 'validate':\n"
+            "    backend_id = args[0] if args else ''\n"
+            "    fail_id = os.environ.get('WBP_TEST_VALIDATE_FAIL_BACKEND_ID', '')\n"
+            "    if backend_id == fail_id:\n"
+            "        print('validate-failed', file=sys.stderr)\n"
+            "        raise SystemExit(9)\n"
+            "    if not any(str(item.get('id')) == backend_id for item in registry.get('backends', [])):\n"
+            "        print('validate-missing', file=sys.stderr)\n"
+            "        raise SystemExit(8)\n"
+            "    print('validate-ok', file=sys.stderr)\n"
+            "    raise SystemExit(0)\n"
+            "print('accounts-ok', file=sys.stderr)\n"
+            "raise SystemExit(0)\n"
+            "PY\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+
+    def write_test_onboard_bin(self, path: Path) -> None:
+        path.write_text(
+            "#!/bin/sh\n"
+            "python3 - \"$@\" <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "registry_path = Path(os.environ['WBP_REGISTRY_FILE'])\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "registry = json.loads(registry_path.read_text())\n"
+            "added_backends = json.loads(os.environ.get('WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON', '[]'))\n"
+            "for item in added_backends:\n"
+            "    registry.setdefault('backends', []).append(item)\n"
+            "backend_updates = json.loads(os.environ.get('WBP_TEST_ONBOARD_BACKEND_UPDATES_JSON', '[]'))\n"
+            "updates_by_id = {str(item.get('id')): item for item in backend_updates if item.get('id') is not None}\n"
+            "if updates_by_id:\n"
+            "    for backend in registry.get('backends', []):\n"
+            "        update = updates_by_id.get(str(backend.get('id')))\n"
+            "        if update:\n"
+            "            backend.update(update)\n"
+            "registry['updated_at'] = '2026-05-05T00:00:00+00:00'\n"
+            "registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "state_patch = json.loads(os.environ.get('WBP_TEST_ONBOARD_STATE_PATCH_JSON', '{}'))\n"
+            "if state_patch:\n"
+            "    state = json.loads(state_path.read_text())\n"
+            "    state.update(state_patch)\n"
+            "    state_path.write_text(json.dumps(state) + '\\n')\n"
+            "stderr_text = os.environ.get('WBP_TEST_ONBOARD_STDERR', '')\n"
+            "if stderr_text:\n"
+            "    print(stderr_text, file=sys.stderr)\n"
+            "raise SystemExit(int(os.environ.get('WBP_TEST_ONBOARD_EXIT_CODE', '0')))\n"
+            "PY\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+
+    def build_backend(
+        self,
+        *,
+        backend_id: str,
+        auth_ref: str,
+        pool: str = "reserve",
+        status: str = "healthy",
+        manual_hold: bool = False,
+    ) -> dict[str, object]:
+        return {
+            "id": backend_id,
+            "label": backend_id,
+            "pool": pool,
+            "status": status,
+            "manual_hold": manual_hold,
+            "auth_ref": auth_ref,
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": None,
+            "last_error": "",
+            "cooldown_until": None,
+            "notes": "",
+        }
 
     def write_recording_stable_launcher(
         self, path: Path, *, exit_code: int = 0, start_server: bool = False
@@ -4881,6 +4981,366 @@ class CliTests(unittest.TestCase):
         identity = payload["registry_identity"]
         self.assertEqual(identity["status"], "ambiguous")
         self.assertEqual(identity["invalid_auth_basenames"], ["backend-a"])
+
+    def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-new-auth.json"
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-new",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-new")
+        self.assertEqual(onboarding["selection_status"], "selected_unique_backend")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+        self.assertIsNotNone(onboarding["status_observed"])
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        added = [item for item in registry["backends"] if item["id"] == "backend-new"]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["pool"], "reserve")
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+
+    def test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof(
+        self,
+    ) -> None:
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected",
+                                auth_ref="/tmp/codex-detected.json",
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "detected_new_auth")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-detected")
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertEqual(onboarding["sync_outcome"], "ok")
+        self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
+        self.assertIsNotNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
+        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_accounts_onboard_ambiguous_new_auth_detection_stops_honestly(
+        self,
+    ) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-one",
+                            auth_ref="/tmp/codex-one.json",
+                        ),
+                        self.build_backend(
+                            backend_id="backend-two",
+                            auth_ref="/tmp/codex-two.json",
+                        ),
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_AMBIGUOUS_BACKEND_SELECTION")
+        self.assertEqual(payload["operator_action"], "user_action")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selection_status"], "ambiguous_new_backend_selection")
+        self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["selected_backend_id"], "")
+
+    def test_accounts_onboard_non_interactive_ambiguity_does_not_guess(self) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-three",
+                            auth_ref="/tmp/codex-three.json",
+                        ),
+                        self.build_backend(
+                            backend_id="backend-four",
+                            auth_ref="/tmp/codex-four.json",
+                        ),
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ONBOARD_AMBIGUOUS_BACKEND_SELECTION"
+        )
+        self.assertEqual(payload["operator_action"], "user_action")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "")
+        self.assertEqual(
+            onboarding["selection_status"], "ambiguous_new_backend_selection"
+        )
+
+    def test_accounts_onboard_exit_zero_without_new_backend_is_not_success(self) -> None:
+        result = self.run_cli("accounts", "onboard", "--json", "--non-interactive")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_NO_NEW_BACKEND")
+        self.assertEqual(payload["operator_action"], "user_action")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selection_status"], "no_new_backend_detected")
+        self.assertEqual(onboarding["final_outcome"], "no_new_auth_detected")
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertFalse(onboarding["sync_attempted"])
+
+    def test_accounts_onboard_explicit_auth_mismatch_does_not_match_by_basename(
+        self,
+    ) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-basename-mismatch",
+                            auth_ref="/var/tmp/other/codex-shared.json",
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            "/tmp/requested/codex-shared.json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ONBOARD_AMBIGUOUS_BACKEND_SELECTION"
+        )
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selection_status"], "explicit_auth_ref_mismatch")
+        self.assertEqual(onboarding["selected_backend_id"], "")
+        self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
+
+    def test_accounts_onboard_external_nonzero_with_reserve_proof_still_runs_post_proof(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-nonzero-auth.json"
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-nonzero",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                ),
+                "WBP_TEST_ONBOARD_EXIT_CODE": "7",
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["external_command_exit_code"], 7)
+        self.assertEqual(onboarding["external_command_status"], "nonzero")
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+
+    def test_accounts_onboard_validate_failure_does_not_overclaim_success(self) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-invalid",
+                            auth_ref="/tmp/codex-invalid.json",
+                        )
+                    ]
+                ),
+                "WBP_TEST_VALIDATE_FAIL_BACKEND_ID": "backend-invalid",
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 9, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_VALIDATE_FAILED")
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "failed")
+        self.assertEqual(onboarding["final_outcome"], "validate_failed")
+        self.assertFalse(onboarding["sync_attempted"])
+
+    def test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success(
+        self,
+    ) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-sync",
+                            auth_ref="/tmp/codex-sync.json",
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_SYNC_FAILED")
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["sync_outcome"], "failed")
+        self.assertEqual(onboarding["final_outcome"], "sync_failed")
+        self.assertIsNotNone(onboarding["status_observed"])
+
+    def test_accounts_onboard_blocks_selected_backend_active_routing_change(self) -> None:
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-active",
+                            auth_ref="/tmp/codex-active.json",
+                            pool="active",
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_ACTIVE_ROUTING_CHANGED")
+        self.assertEqual(payload["operator_action"], "stop")
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["active_routing_changed"])
+        self.assertFalse(onboarding["validate_attempted"])
+        self.assertEqual(onboarding["final_outcome"], "active_routing_changed")
+
+    def test_accounts_onboard_blocks_existing_backend_promotion_to_active(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-existing-reserve",
+                auth_ref="/tmp/codex-existing-reserve.json",
+                pool="reserve",
+            )
+        )
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n"
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-added-reserve",
+                            auth_ref="/tmp/codex-added-reserve.json",
+                            pool="reserve",
+                        )
+                    ]
+                ),
+                "WBP_TEST_ONBOARD_BACKEND_UPDATES_JSON": json.dumps(
+                    [
+                        {
+                            "id": "backend-existing-reserve",
+                            "pool": "active",
+                        }
+                    ]
+                ),
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--non-interactive",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_ACTIVE_ROUTING_CHANGED")
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["active_routing_changed"])
+        self.assertFalse(onboarding["validate_attempted"])
 
     def test_diagnostics_export_creates_bundle(self) -> None:
         result = self.run_cli("diagnostics", "export", "--json")

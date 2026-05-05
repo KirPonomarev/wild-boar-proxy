@@ -1913,6 +1913,8 @@ def emit_subprocess_output(*, stdout: str, stderr: str) -> None:
 
 def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
     return [
+        paths.registry_file,
+        paths.managed_config_file,
         paths.config_toml,
         paths.state_file,
         paths.runtime_effective_mode_file,
@@ -4219,6 +4221,83 @@ def run_accounts_command(
     )
 
 
+def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "command_status": str(status_payload.get("status", "error")),
+        "exit_code": int(status_payload.get("exit_code", 1) or 1),
+        "machine_error_code": str(
+            status_payload.get("machine_error_code", "STATUS_UNKNOWN")
+        ),
+        "liveness": str(status_payload.get("liveness", "unknown")),
+        "effective_mode": str(status_payload.get("effective_mode", "unknown")),
+        "endpoint": str(status_payload.get("endpoint", "")),
+    }
+
+
+def summarize_registry_pool_counts(registry: dict[str, Any]) -> dict[str, int]:
+    counts = {"active": 0, "reserve": 0, "retired": 0}
+    for backend in registry.get("backends", []):
+        pool = str(backend.get("pool", ""))
+        if pool in counts:
+            counts[pool] += 1
+    return counts
+
+
+def routing_eligible_active_backend_ids(registry: dict[str, Any]) -> list[str]:
+    return sorted(
+        str(item.get("id"))
+        for item in registry.get("backends", [])
+        if item.get("id") is not None
+        and str(item.get("pool", "")) == "active"
+        and not bool(item.get("manual_hold", False))
+    )
+
+
+def auth_ref_matches(expected_auth_ref: str, backend_auth_ref: Any) -> bool:
+    expected_path = Path(str(expected_auth_ref)).expanduser().resolve(strict=False)
+    backend_path = Path(str(backend_auth_ref)).expanduser().resolve(strict=False)
+    return expected_path == backend_path
+
+
+def classify_onboarded_backend_selection(
+    *,
+    before_registry: dict[str, Any],
+    after_registry: dict[str, Any],
+    explicit_auth_ref: str | None,
+) -> tuple[list[str], dict[str, Any] | None, str]:
+    before_backend_ids = {
+        str(item.get("id"))
+        for item in before_registry.get("backends", [])
+        if item.get("id") is not None
+    }
+    added_backends = [
+        item
+        for item in after_registry.get("backends", [])
+        if str(item.get("id")) not in before_backend_ids
+    ]
+    added_backend_ids = sorted(str(item.get("id")) for item in added_backends)
+    if explicit_auth_ref:
+        matching_backends = [
+            item
+            for item in added_backends
+            if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
+        ]
+        if len(matching_backends) == 1:
+            return added_backend_ids, matching_backends[0], "selected_unique_backend"
+        if len(matching_backends) > 1:
+            return added_backend_ids, None, "ambiguous_new_backend_selection"
+        if len(added_backends) == 1:
+            return added_backend_ids, None, "explicit_auth_ref_mismatch"
+        if not added_backends:
+            return added_backend_ids, None, "no_new_backend_detected"
+        return added_backend_ids, None, "ambiguous_new_backend_selection"
+    if len(added_backends) == 1:
+        return added_backend_ids, added_backends[0], "selected_unique_backend"
+    if not added_backends:
+        return added_backend_ids, None, "no_new_backend_detected"
+    return added_backend_ids, None, "ambiguous_new_backend_selection"
+
+
 def run_onboard(
     paths: RuntimePaths,
     *,
@@ -4234,6 +4313,8 @@ def run_onboard(
             operator_action="user_action",
         )
     before = snapshot_known_files(paths)
+    before_registry = read_json(paths.registry_file)
+    before_state = read_json(paths.state_file, required=False)
     command = [str(paths.onboard_bin), "--once"]
     if auth_ref:
         command.extend(["--auth-ref", auth_ref])
@@ -4255,21 +4336,254 @@ def run_onboard(
         sys.stderr.write(result.stderr)
     if result.stdout:
         sys.stderr.write(result.stdout)
-    changed_files = detect_changed_files(
-        before,
-        [paths.registry_file, paths.state_file, paths.managed_config_file],
+    after_registry = read_json(paths.registry_file)
+    after_state = read_json(paths.state_file, required=False)
+    input_mode = "explicit_auth_ref" if auth_ref else "detected_new_auth"
+    added_backend_ids, selected_backend, selection_status = (
+        classify_onboarded_backend_selection(
+            before_registry=before_registry,
+            after_registry=after_registry,
+            explicit_auth_ref=auth_ref,
+        )
     )
-    ok = result.returncode == 0
-    return build_command_payload(
-        ok=ok,
-        human_message="Account onboarding completed." if ok else "Account onboarding failed.",
-        machine_error_code="OK" if ok else "ONBOARD_FAILED",
-        liveness="unknown",
+    selected_backend_id = (
+        str(selected_backend.get("id")) if isinstance(selected_backend, dict) else ""
+    )
+    selected_backend_pool = (
+        str(selected_backend.get("pool")) if isinstance(selected_backend, dict) else ""
+    )
+    before_active_backend_ids = routing_eligible_active_backend_ids(before_registry)
+    after_active_backend_ids = routing_eligible_active_backend_ids(after_registry)
+    before_selected_backend_ids = sorted(
+        str(item) for item in before_state.get("selected_backend_ids", []) or []
+    )
+    after_selected_backend_ids = sorted(
+        str(item) for item in after_state.get("selected_backend_ids", []) or []
+    )
+    active_routing_changed = (
+        before_active_backend_ids != after_active_backend_ids
+        or selected_backend_pool == "active"
+        or before_selected_backend_ids != after_selected_backend_ids
+        or (
+            selected_backend_id
+            and selected_backend_id in set(after_selected_backend_ids)
+            and selected_backend_id not in set(before_selected_backend_ids)
+        )
+    )
+    reserve_first_enforced = bool(selected_backend) and selected_backend_pool == "reserve"
+    onboarding_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "input_mode": input_mode,
+        "explicit_auth_ref": auth_ref or "",
+        "new_backend_ids": added_backend_ids,
+        "selected_backend_id": selected_backend_id,
+        "selection_status": selection_status,
+        "reserve_first_enforced": reserve_first_enforced,
+        "pool_after_onboarding": summarize_registry_pool_counts(after_registry),
+        "validate_attempted": False,
+        "validate_outcome": "not_attempted",
+        "sync_attempted": False,
+        "sync_outcome": "not_attempted",
+        "status_observed": None,
+        "external_command_exit_code": int(result.returncode),
+        "external_command_status": "ok" if result.returncode == 0 else "nonzero",
+        "active_routing_changed": active_routing_changed,
+        "final_outcome": "pending_post_proof",
+    }
+    def build_onboard_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        liveness: str = "unknown",
+        severity: str = "recoverable",
+        operator_action: str = "none",
+        exit_code: int | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload_extra = {
+            "command": command[1:],
+            "onboarding_result": onboarding_result,
+        }
+        if extra:
+            payload_extra.update(extra)
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness=liveness,
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=detect_changed_files(
+                before, runtime_write_surface_candidates(paths)
+            ),
+            extra=payload_extra,
+            exit_code=exit_code,
+        )
+
+    if selection_status == "no_new_backend_detected":
+        onboarding_result["final_outcome"] = (
+            "import_failed" if result.returncode != 0 else "no_new_auth_detected"
+        )
+        return build_onboard_payload(
+            ok=False,
+            human_message=(
+                "Account onboarding failed without producing a detectable new backend."
+                if result.returncode != 0
+                else "Onboarding did not produce a uniquely detectable new backend."
+            ),
+            machine_error_code=(
+                "ONBOARD_FAILED"
+                if result.returncode != 0
+                else "ONBOARD_NO_NEW_BACKEND"
+            ),
+            operator_action="user_action",
+            exit_code=result.returncode if result.returncode != 0 else None,
+        )
+
+    if selection_status != "selected_unique_backend":
+        onboarding_result["final_outcome"] = "ambiguous_new_auth_detection"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Onboarding outcome is ambiguous and needs operator review.",
+            machine_error_code="ONBOARD_AMBIGUOUS_BACKEND_SELECTION",
+            operator_action="user_action",
+        )
+
+    if active_routing_changed:
+        onboarding_result["final_outcome"] = "active_routing_changed"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Onboarding changed active routing, which is forbidden in the reserve-first lane.",
+            machine_error_code="ONBOARD_ACTIVE_ROUTING_CHANGED",
+            severity="fatal",
+            operator_action="stop",
+        )
+
+    if not reserve_first_enforced:
+        onboarding_result["final_outcome"] = "import_failed"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Onboarding did not leave the selected backend in reserve.",
+            machine_error_code="ONBOARD_RESERVE_FIRST_VIOLATION",
+            severity="fatal",
+            operator_action="stop",
+        )
+
+    validate_payload = run_accounts_command(
+        paths,
+        ["validate", selected_backend_id],
+        success_message="Account validation completed.",
+        failure_message="Account validation failed.",
+    )
+    onboarding_result["validate_attempted"] = True
+    onboarding_result["validate_outcome"] = (
+        "ok" if validate_payload["status"] == "ok" else "failed"
+    )
+    if validate_payload["status"] != "ok":
+        onboarding_result["final_outcome"] = "validate_failed"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Onboarding admitted the backend to reserve, but validate failed.",
+            machine_error_code="ONBOARD_VALIDATE_FAILED",
+            operator_action="user_action",
+            exit_code=int(validate_payload.get("exit_code", 1) or 1),
+            extra={
+                "validate_result": {
+                    "command_status": validate_payload["status"],
+                    "machine_error_code": validate_payload["machine_error_code"],
+                    "exit_code": validate_payload["exit_code"],
+                }
+            },
+        )
+
+    sync_payload: dict[str, Any] | None = None
+    if no_sync:
+        onboarding_result["sync_outcome"] = "skipped_by_flag"
+    else:
+        onboarding_result["sync_attempted"] = True
+        sync_payload = run_sync(paths)
+        onboarding_result["sync_outcome"] = (
+            "ok" if sync_payload["status"] == "ok" else "failed"
+        )
+        if sync_payload["status"] != "ok":
+            try:
+                status_payload = summarize_status(paths)
+                onboarding_result["status_observed"] = (
+                    summarize_onboarding_status_observation(status_payload)
+                )
+            except RuntimeErrorInfo:
+                onboarding_result["status_observed"] = None
+            onboarding_result["final_outcome"] = "sync_failed"
+            return build_onboard_payload(
+                ok=False,
+                human_message="Onboarding admitted the backend to reserve, but managed sync failed.",
+                machine_error_code="ONBOARD_SYNC_FAILED",
+                liveness=str(sync_payload.get("liveness", "unknown")),
+                operator_action=str(sync_payload.get("operator_action", "retry")),
+                exit_code=int(sync_payload.get("exit_code", 1) or 1),
+                extra={
+                    "sync_result": {
+                        "command_status": sync_payload["status"],
+                        "machine_error_code": sync_payload["machine_error_code"],
+                        "exit_code": sync_payload["exit_code"],
+                    }
+                },
+            )
+
+    try:
+        status_payload = summarize_status(paths)
+        onboarding_result["status_observed"] = summarize_onboarding_status_observation(
+            status_payload
+        )
+    except RuntimeErrorInfo as exc:
+        onboarding_result["final_outcome"] = "status_failed"
+        return build_onboard_payload(
+            ok=False,
+            human_message="Onboarding completed reserve admission, but status proof failed.",
+            machine_error_code="ONBOARD_STATUS_FAILED",
+            operator_action="retry",
+            exit_code=exc.exit_code,
+        )
+
+    onboarding_result["final_outcome"] = (
+        "explicit_auth_imported_to_reserve"
+        if auth_ref
+        else "reserve_only_success"
+    )
+    observed = onboarding_result["status_observed"] or {}
+    return build_onboard_payload(
+        ok=True,
+        human_message=(
+            "Account onboarding completed with reserve-first proof."
+            if result.returncode == 0
+            else "Account onboarding completed with reserve-first proof after external onboard exit non-zero."
+        ),
+        machine_error_code="OK",
+        liveness=str(observed.get("liveness", "unknown")),
         severity="recoverable",
-        operator_action="none" if ok else "user_action",
-        changed_files=changed_files,
-        extra={"command": command[1:]},
-        exit_code=result.returncode if not ok else 0,
+        operator_action="none",
+        extra={
+            "validate_result": {
+                "command_status": validate_payload["status"],
+                "machine_error_code": validate_payload["machine_error_code"],
+                "exit_code": validate_payload["exit_code"],
+            },
+            "sync_result": (
+                {
+                    "command_status": sync_payload["status"],
+                    "machine_error_code": sync_payload["machine_error_code"],
+                    "exit_code": sync_payload["exit_code"],
+                }
+                if sync_payload is not None
+                else {
+                    "command_status": "skipped",
+                    "machine_error_code": "ONBOARD_SYNC_SKIPPED",
+                    "exit_code": 0,
+                }
+            ),
+        },
     )
 
 

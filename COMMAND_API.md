@@ -61,6 +61,60 @@ Every command response must include all required fields on both success and fail
 - `needs_user_action`
 - `fatal`
 
+## Additional onboarding owner surface
+
+`accounts onboard --json` is the owner surface for reserve-first onboarding
+truth.
+
+Onboarding success must not be inferred from external onboarding process exit
+code alone.
+Successful owner packets must prove, machine-readably:
+
+- a uniquely selected resulting backend identity
+- resulting placement in `reserve`
+- no silent active-routing change
+- post-onboard validate outcome
+- post-onboard sync outcome, unless explicitly skipped
+- post-onboard status proof summary
+
+`accounts onboard --json` may expose a nested `onboarding_result` surface.
+Preferred fields include:
+
+- `status`
+- `attempted`
+- `input_mode`
+- `explicit_auth_ref`
+- `new_backend_ids`
+- `selected_backend_id`
+- `selection_status`
+- `reserve_first_enforced`
+- `pool_after_onboarding`
+- `validate_attempted`
+- `validate_outcome`
+- `sync_attempted`
+- `sync_outcome`
+- `status_observed`
+- `external_command_exit_code`
+- `external_command_status`
+- `active_routing_changed`
+- `final_outcome`
+
+Canonical onboarding outcomes include:
+
+- `explicit_auth_imported_to_reserve`
+- `reserve_only_success`
+- `no_new_auth_detected`
+- `ambiguous_new_auth_detection`
+- `validate_failed`
+- `sync_failed`
+- `status_failed`
+- `import_failed`
+
+Reserve-first onboarding remains separate from promotion.
+`accounts onboard --json` must not place a newly admitted backend directly into
+`active`, and any ambiguous or missing identity proof must stop with
+`operator_action = user_action`.
+
 ## Additional target-switch contract surface
 
 The current target-switch contour exposes:
