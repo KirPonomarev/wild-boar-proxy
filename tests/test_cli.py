@@ -1344,7 +1344,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(
+            payload["proxy_reprobe"]["candidate_source_order"],
+            [
+                "env.WBP_PROXY_REPROBE_CANDIDATES",
+                "runtime_state.last_known_good_proxy_url",
+                "runtime_state.current_proxy_url",
+            ],
+        )
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 1)
         self.assertIn(
             f"http://127.0.0.1:{candidate_port}", payload["proxy_reprobe"]["candidates"]
         )
@@ -1468,6 +1481,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertTrue(payload["proxy_reprobe"]["found_candidate"])
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 1)
         self.assertEqual(
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{candidate_port}",
@@ -1553,6 +1571,93 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["current_proxy_url"], expected_proxy_url)
+
+    def test_healthcheck_blocks_cross_thread_mode_mutation_during_proxy_reproof_window(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        self.configure_dynamic_proxy_gate(expected_proxy_url=expected_proxy_url)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        concurrent_result: dict[str, object] = {}
+        post_call_count = 0
+        server, thread = self.start_probe_server(port)
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                self.env(include_launcher_override=False)
+                | {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    )
+                },
+                clear=False,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                original_http_post_json = runtime_mod.http_post_json
+
+                def post_side_effect(
+                    url: str, api_key: str, payload: dict[str, object]
+                ) -> dict[str, object]:
+                    nonlocal post_call_count
+                    post_call_count += 1
+                    if post_call_count == 2:
+                        def concurrent_mode_mutation() -> None:
+                            try:
+                                runtime_mod.mode_set(paths, "stable")
+                            except runtime_mod.RuntimeErrorInfo as exc:
+                                concurrent_result["machine_error_code"] = (
+                                    exc.machine_error_code
+                                )
+                                concurrent_result["operator_action"] = (
+                                    exc.operator_action
+                                )
+                            else:
+                                concurrent_result["status"] = "unexpected_success"
+
+                        mutation_thread = threading.Thread(
+                            target=concurrent_mode_mutation, daemon=True
+                        )
+                        mutation_thread.start()
+                        mutation_thread.join(timeout=5)
+                        if mutation_thread.is_alive():
+                            concurrent_result["status"] = "timed_out"
+                    return original_http_post_json(url, api_key, payload)
+
+                with mock.patch(
+                    "wild_boar_proxy.runtime.http_post_json",
+                    side_effect=post_side_effect,
+                ):
+                    payload = runtime_mod.run_healthcheck(paths)
+        finally:
+            candidate_socket.close()
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(post_call_count, 2)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["current_proxy_url"], expected_proxy_url)
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(concurrent_result["operator_action"], "retry")
 
     def test_healthcheck_reconfirms_same_current_proxy_without_rewrite_after_prerequisite_materialization(
         self,
@@ -2490,6 +2595,11 @@ class CliTests(unittest.TestCase):
                 f"http://127.0.0.1:{current_candidate_port}",
             ],
         )
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 2)
         self.assertEqual(
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{lkg_candidate_port}",
@@ -2497,6 +2607,62 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
             state["last_known_good_proxy_url"], f"http://127.0.0.1:{lkg_candidate_port}"
+        )
+
+    def test_healthcheck_proxy_reprobe_caps_candidate_budget_at_eight(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["current_proxy_url"] = "http://127.0.0.1:19999"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:19998"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        env_candidates = ",".join(
+            f"http://127.0.0.1:{18000 + index}" for index in range(10)
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_CANDIDATES": env_candidates},
+                "healthcheck",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        reprobe = payload["proxy_reprobe"]
+        self.assertEqual(reprobe["candidate_budget"], 8)
+        self.assertEqual(reprobe["candidate_count"], 8)
+        self.assertEqual(len(reprobe["candidates"]), 8)
+        self.assertEqual(reprobe["probed_candidate_count"], 8)
+        self.assertEqual(
+            reprobe["candidates"],
+            [f"http://127.0.0.1:{18000 + index}" for index in range(8)],
         )
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:

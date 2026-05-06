@@ -82,6 +82,15 @@ SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
 ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
 BACKEND_REGISTRY_SCHEMA_VERSION = 2
 VALID_BACKEND_REGISTRY_POOLS = {"active", "reserve", "retired"}
+PROXY_REPROBE_MAX_CANDIDATES = 8
+PROXY_REPROBE_CONCURRENCY_LIMIT = 1
+PROXY_REPROBE_DEPTH = "shallow_socket_listener_only"
+PROXY_REPROBE_STRATEGY = "sequential_first_success"
+PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
+    "env.WBP_PROXY_REPROBE_CANDIDATES",
+    "runtime_state.last_known_good_proxy_url",
+    "runtime_state.current_proxy_url",
+]
 SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
     "engine_observed",
     "runtime_observed",
@@ -3707,7 +3716,7 @@ def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
             continue
         candidates.append(candidate)
         seen.add(candidate)
-        if len(candidates) >= 8:
+        if len(candidates) >= PROXY_REPROBE_MAX_CANDIDATES:
             break
     return candidates
 
@@ -3720,24 +3729,46 @@ def probe_proxy_candidate(candidate: str) -> bool:
     return socket_is_listening(host, port)
 
 
-def run_proxy_reprobe(state: dict[str, Any]) -> dict[str, Any]:
-    candidates = get_proxy_reprobe_candidates(state)
-    for candidate in candidates:
-        if probe_proxy_candidate(candidate):
-            return {
-                "attempted": True,
-                "candidate_count": len(candidates),
-                "candidates": candidates,
-                "found_candidate": True,
-                "working_candidate": candidate,
-            }
+def build_proxy_reprobe_result(
+    candidates: list[str],
+    *,
+    found_candidate: bool,
+    working_candidate: str | None,
+    probed_candidate_count: int,
+) -> dict[str, Any]:
     return {
         "attempted": bool(candidates),
         "candidate_count": len(candidates),
         "candidates": candidates,
-        "found_candidate": False,
-        "working_candidate": None,
+        "found_candidate": found_candidate,
+        "working_candidate": working_candidate,
+        "probed_candidate_count": probed_candidate_count,
+        "candidate_budget": PROXY_REPROBE_MAX_CANDIDATES,
+        "probe_concurrency_limit": PROXY_REPROBE_CONCURRENCY_LIMIT,
+        "probe_depth": PROXY_REPROBE_DEPTH,
+        "probe_strategy": PROXY_REPROBE_STRATEGY,
+        "candidate_source_order": list(PROXY_REPROBE_CANDIDATE_SOURCE_ORDER),
     }
+
+
+def run_proxy_reprobe(state: dict[str, Any]) -> dict[str, Any]:
+    candidates = get_proxy_reprobe_candidates(state)
+    probed_candidate_count = 0
+    for candidate in candidates:
+        probed_candidate_count += 1
+        if probe_proxy_candidate(candidate):
+            return build_proxy_reprobe_result(
+                candidates,
+                found_candidate=True,
+                working_candidate=candidate,
+                probed_candidate_count=probed_candidate_count,
+            )
+    return build_proxy_reprobe_result(
+        candidates,
+        found_candidate=False,
+        working_candidate=None,
+        probed_candidate_count=probed_candidate_count,
+    )
 
 
 def process_is_alive(pid_text: str) -> bool:
@@ -4364,94 +4395,96 @@ def run_healthcheck(
         and proxy_reprobe["found_candidate"]
     ):
         working_candidate = str(proxy_reprobe["working_candidate"] or "")
-        activation_attempt = run_current_proxy_owner_path_activation(
-            paths, working_candidate
-        )
-        proxy_reprobe_adoption_result = {
-            "status": "owner_path_emitted",
-            "attempted": activation_attempt.activation_attempted,
-            "working_candidate": working_candidate,
-            "launcher_lane_eligibility": activation_attempt.launcher_lane_eligibility,
-            "launcher_readiness_status": activation_attempt.launcher_readiness_status,
-            "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
-            "prerequisite_materialized": activation_attempt.prerequisite_materialized,
-            "activation_attempted": activation_attempt.activation_attempted,
-            "activation_exit_code": activation_attempt.activation_exit_code,
-            "adoption_outcome": (
-                "launcher_lane_ineligible"
-                if not activation_attempt.activation_attempted
-                else "activation_failed"
-            ),
-            "current_proxy_url_rewritten": False,
-            "live_runtime_observation_confirmed": False,
-            "last_known_good_refreshed": False,
-        }
-        if (
-            activation_attempt.activation_attempted
-            and activation_attempt.activation_exit_code == 0
-        ):
-            reproof_payload = run_healthcheck(
-                paths,
-                model=model,
-                allow_recovery=False,
-                allow_last_known_good_proxy_write=False,
-                allow_current_proxy_auto_adoption=False,
+        # Keep activation and immediate reproof inside one serialized owner
+        # window so cross-thread mutations cannot interleave between them.
+        with serialized_lock(paths):
+            activation_attempt = run_current_proxy_owner_path_activation(
+                paths, working_candidate
             )
-            reproof_ok = (
-                reproof_payload["status"] == "ok"
-                and str(reproof_payload["effective_mode"]) == "managed"
-            )
-            state = read_json(paths.state_file, required=False)
-            reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
-            same_current_reconfirmed = (
-                activation_attempt.prior_current_proxy_url == working_candidate
-                and reproof_ok
-            )
-            candidate_adopted = (
-                activation_attempt.prior_current_proxy_url != working_candidate
-                and reproof_ok
-                and reproof_current_proxy_url == working_candidate
-            )
-            if same_current_reconfirmed or candidate_adopted:
-                attestation = reproof_payload["attestation"]
-                listener_ok = bool(attestation["listener_ok"])
-                models_ok = bool(attestation["models_ok"])
-                responses_ok = bool(attestation["responses_ok"])
-                effective_mode_match = bool(attestation["effective_mode_match"])
-                base_url_match = bool(attestation["base_url_match"])
-                error_detail = str(reproof_payload.get("last_error", ""))
-                effective_mode = str(reproof_payload["effective_mode"])
-                reported_effective_mode = effective_mode
-                _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
-                host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
-                configured_base_url = read_toml_string(paths.config_toml, "base_url")
-                liveness = str(reproof_payload["liveness"])
-                severity = str(reproof_payload["severity"])
-                operator_action = str(reproof_payload["operator_action"])
-                machine_error_code = str(reproof_payload["machine_error_code"])
-                human_message = str(reproof_payload["human_message"])
-                ok = True
-                proxy_reprobe_adoption_result["adoption_outcome"] = (
-                    "same_current_reconfirmed"
-                    if same_current_reconfirmed
-                    else "candidate_adopted"
+            proxy_reprobe_adoption_result = {
+                "status": "owner_path_emitted",
+                "attempted": activation_attempt.activation_attempted,
+                "working_candidate": working_candidate,
+                "launcher_lane_eligibility": activation_attempt.launcher_lane_eligibility,
+                "launcher_readiness_status": activation_attempt.launcher_readiness_status,
+                "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+                "prerequisite_materialized": activation_attempt.prerequisite_materialized,
+                "activation_attempted": activation_attempt.activation_attempted,
+                "activation_exit_code": activation_attempt.activation_exit_code,
+                "adoption_outcome": (
+                    "launcher_lane_ineligible"
+                    if not activation_attempt.activation_attempted
+                    else "activation_failed"
+                ),
+                "current_proxy_url_rewritten": False,
+                "live_runtime_observation_confirmed": False,
+                "last_known_good_refreshed": False,
+            }
+            if (
+                activation_attempt.activation_attempted
+                and activation_attempt.activation_exit_code == 0
+            ):
+                reproof_payload = run_healthcheck(
+                    paths,
+                    model=model,
+                    allow_recovery=False,
+                    allow_last_known_good_proxy_write=False,
+                    allow_current_proxy_auto_adoption=False,
                 )
-                proxy_reprobe_adoption_result["current_proxy_url_rewritten"] = (
-                    candidate_adopted
+                reproof_ok = (
+                    reproof_payload["status"] == "ok"
+                    and str(reproof_payload["effective_mode"]) == "managed"
                 )
-                proxy_reprobe_adoption_result[
-                    "live_runtime_observation_confirmed"
-                ] = True
-            else:
-                with serialized_lock(paths):
+                state = read_json(paths.state_file, required=False)
+                reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
+                same_current_reconfirmed = (
+                    activation_attempt.prior_current_proxy_url == working_candidate
+                    and reproof_ok
+                )
+                candidate_adopted = (
+                    activation_attempt.prior_current_proxy_url != working_candidate
+                    and reproof_ok
+                    and reproof_current_proxy_url == working_candidate
+                )
+                if same_current_reconfirmed or candidate_adopted:
+                    attestation = reproof_payload["attestation"]
+                    listener_ok = bool(attestation["listener_ok"])
+                    models_ok = bool(attestation["models_ok"])
+                    responses_ok = bool(attestation["responses_ok"])
+                    effective_mode_match = bool(attestation["effective_mode_match"])
+                    base_url_match = bool(attestation["base_url_match"])
+                    error_detail = str(reproof_payload.get("last_error", ""))
+                    effective_mode = str(reproof_payload["effective_mode"])
+                    reported_effective_mode = effective_mode
+                    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+                    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                    liveness = str(reproof_payload["liveness"])
+                    severity = str(reproof_payload["severity"])
+                    operator_action = str(reproof_payload["operator_action"])
+                    machine_error_code = str(reproof_payload["machine_error_code"])
+                    human_message = str(reproof_payload["human_message"])
+                    ok = True
+                    proxy_reprobe_adoption_result["adoption_outcome"] = (
+                        "same_current_reconfirmed"
+                        if same_current_reconfirmed
+                        else "candidate_adopted"
+                    )
+                    proxy_reprobe_adoption_result["current_proxy_url_rewritten"] = (
+                        candidate_adopted
+                    )
+                    proxy_reprobe_adoption_result[
+                        "live_runtime_observation_confirmed"
+                    ] = True
+                else:
                     restore_current_proxy_owner_path_runtime_surfaces(
                         paths, activation_attempt.rollback_surface_snapshots
                     )
-                state = read_json(paths.state_file, required=False)
-                error_detail = str(reproof_payload.get("last_error", error_detail))
-                proxy_reprobe_adoption_result["adoption_outcome"] = (
-                    "live_reproof_failed"
-                )
+                    state = read_json(paths.state_file, required=False)
+                    error_detail = str(reproof_payload.get("last_error", error_detail))
+                    proxy_reprobe_adoption_result["adoption_outcome"] = (
+                        "live_reproof_failed"
+                    )
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
