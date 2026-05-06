@@ -13604,18 +13604,36 @@ class CliTests(unittest.TestCase):
         thread.start()
         try:
             for _ in range(5):
-                result = self.run_cli_with_env(
+                launch_result = self.run_cli_with_env(
                     {"PATH": "/definitely/missing"},
                     "launch",
                     "smoke",
                     "--json",
                     include_launcher_override=False,
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                payload = json.loads(result.stdout)
-                self.assertEqual(payload["status"], "ok")
-                self.assertEqual(payload["machine_error_code"], "OK")
-                self.assertEqual(payload["effective_mode"], "stable")
+                self.assertEqual(launch_result.returncode, 0, launch_result.stderr)
+                launch_payload = json.loads(launch_result.stdout)
+                self.assertEqual(launch_payload["status"], "ok")
+                self.assertEqual(launch_payload["machine_error_code"], "OK")
+                self.assertEqual(launch_payload["desired_mode"], "managed")
+                self.assertEqual(launch_payload["effective_mode"], "stable")
+                self.assertEqual(
+                    launch_payload["attestation_summary"]["status"], "ok"
+                )
+
+                status_result = self.run_cli_with_env(
+                    {"PATH": "/definitely/missing"},
+                    "status",
+                    "--json",
+                    include_launcher_override=False,
+                )
+                self.assertEqual(status_result.returncode, 0, status_result.stderr)
+                status_payload = json.loads(status_result.stdout)
+                self.assertEqual(status_payload["status"], "ok")
+                self.assertEqual(status_payload["machine_error_code"], "OK")
+                self.assertEqual(status_payload["desired_mode"], "managed")
+                self.assertEqual(status_payload["effective_mode"], "stable")
+                self.assertEqual(status_payload["attestation_summary"]["status"], "ok")
         finally:
             server.shutdown()
             thread.join()
