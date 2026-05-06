@@ -1076,6 +1076,36 @@ def get_stable_auth_inventory_source(paths: RuntimePaths) -> tuple[Path, dict[st
     }
 
 
+def get_auth_inventory_entries_digest(entries: list[str]) -> str:
+    normalized = sorted(str(item) for item in entries)
+    encoded = json.dumps(normalized, separators=(",", ":"), ensure_ascii=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def get_onboarding_auth_snapshot_before_login(paths: RuntimePaths) -> dict[str, Any]:
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    if not stable_auth_dir.is_dir():
+        return {
+            "status": "source_unavailable",
+            "count": 0,
+            "digest": get_auth_inventory_entries_digest([]),
+            "source": inventory_source,
+        }
+    entries = sorted(
+        path.name
+        for path in stable_auth_dir.glob("codex-*.json")
+        if path.is_file()
+    )
+    return {
+        "status": "ok",
+        "count": len(entries),
+        "digest": get_auth_inventory_entries_digest(entries),
+        "source": inventory_source,
+    }
+
+
 def get_backend_identifier(backend: dict[str, Any], index: int) -> str:
     backend_id = backend.get("id")
     if backend_id:
@@ -9962,6 +9992,7 @@ def run_onboard(
     before = snapshot_known_files(paths)
     before_registry = read_json(paths.registry_file)
     before_state = read_json(paths.state_file, required=False)
+    auth_snapshot_before_login = get_onboarding_auth_snapshot_before_login(paths)
     command = [str(paths.onboard_bin), "--loop" if loop else "--once"]
     if auth_ref:
         command.extend(["--auth-ref", auth_ref])
@@ -10027,6 +10058,18 @@ def run_onboard(
         "selected_backend_id": selected_backend_id,
         "selection_status": selection_status,
         "reserve_first_enforced": reserve_first_enforced,
+        "auth_snapshot_before_login_status": str(
+            auth_snapshot_before_login.get("status", "source_unavailable")
+        ),
+        "auth_snapshot_before_login_count": int(
+            auth_snapshot_before_login.get("count", 0) or 0
+        ),
+        "auth_snapshot_before_login_digest": str(
+            auth_snapshot_before_login.get(
+                "digest", get_auth_inventory_entries_digest([])
+            )
+        ),
+        "auth_snapshot_before_login_source": auth_snapshot_before_login.get("source", {}),
         "pool_after_onboarding": summarize_registry_pool_counts(after_registry),
         "validate_attempted": False,
         "validate_outcome": "not_attempted",

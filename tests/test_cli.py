@@ -5779,6 +5779,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["selected_backend_id"], "backend-new")
         self.assertEqual(onboarding["selection_status"], "selected_unique_backend")
         self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertEqual(onboarding["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(onboarding["auth_snapshot_before_login_count"], 0)
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_digest"],
+            runtime_mod.get_auth_inventory_entries_digest([]),
+        )
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_source"]["source"],
+            "stable_config_parent",
+        )
         self.assertFalse(onboarding["active_routing_changed"])
         self.assertTrue(onboarding["validate_attempted"])
         self.assertEqual(onboarding["validate_outcome"], "ok")
@@ -6074,6 +6084,16 @@ class CliTests(unittest.TestCase):
         )
         onboarding = payload["onboarding_result"]
         self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertEqual(onboarding["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(onboarding["auth_snapshot_before_login_count"], 0)
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_digest"],
+            runtime_mod.get_auth_inventory_entries_digest([]),
+        )
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_source"]["source"],
+            "stable_config_parent",
+        )
         self.assertFalse(onboarding["active_routing_changed"])
         self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
         self.assertEqual(
@@ -6145,6 +6165,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["operator_action"], "user_action")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["selection_status"], "ambiguous_new_backend_selection")
+        self.assertIn("auth_snapshot_before_login_status", onboarding)
+        self.assertIn("auth_snapshot_before_login_count", onboarding)
+        self.assertIn("auth_snapshot_before_login_digest", onboarding)
+        self.assertIn("auth_snapshot_before_login_source", onboarding)
         self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
         self.assertFalse(onboarding["validate_attempted"])
         self.assertFalse(onboarding["sync_attempted"])
@@ -6191,6 +6215,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["operator_action"], "user_action")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["selection_status"], "no_new_backend_detected")
+        self.assertIn("auth_snapshot_before_login_status", onboarding)
+        self.assertIn("auth_snapshot_before_login_count", onboarding)
+        self.assertIn("auth_snapshot_before_login_digest", onboarding)
+        self.assertIn("auth_snapshot_before_login_source", onboarding)
         self.assertEqual(onboarding["final_outcome"], "no_new_auth_detected")
         self.assertFalse(onboarding["validate_attempted"])
         self.assertFalse(onboarding["sync_attempted"])
