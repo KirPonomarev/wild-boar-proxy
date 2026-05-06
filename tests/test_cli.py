@@ -6751,6 +6751,43 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["changed_files"], [str(registry_path)])
 
+    def test_policy_stage_set_updates_pool_policy_to_canonical_stage_20(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        before_registry = json.loads(registry_path.read_text())
+        result = self.run_cli("policy", "stage", "set", "20", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["requested_stage"], "20")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["status"], "owner_path_emitted")
+        self.assertTrue(update["attempted"])
+        self.assertEqual(update["requested_stage"], "20")
+        self.assertEqual(update["previous_pool_policy"], before_registry["pool_policy"])
+        self.assertEqual(
+            update["mapped_pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(
+            update["next_pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(update["policy_validation_status"], "ok")
+        self.assertEqual(update["stage_mapping_status"], "ok")
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["write_attempted"])
+        self.assertTrue(update["write_observed"])
+        self.assertFalse(update["rollback_attempted"])
+        self.assertEqual(update["rollback_outcome"], "not_needed")
+        self.assertEqual(update["final_outcome"], "stage_policy_updated")
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(payload["changed_files"], [str(registry_path)])
+
     def test_policy_stage_set_blocks_held_lock_without_mutation(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
@@ -9243,6 +9280,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "retry")
         self.assertNotIn("stage_advancement_result", payload)
         self.assertEqual(before, after)
+
+    def test_observe_current_stage_from_pool_policy_keeps_near_stage_20_custom(self) -> None:
+        registry = {
+            "pool_policy": {
+                "active_min": 20,
+                "active_target": 20,
+                "reserve_target": 1,
+            }
+        }
+
+        stage_summary = runtime_mod.observe_current_stage_from_pool_policy(registry)
+
+        self.assertEqual(stage_summary["status"], "custom")
+        self.assertEqual(
+            stage_summary["machine_error_code"], "POOL_POLICY_STAGE_CUSTOM"
+        )
+        self.assertEqual(stage_summary["observed_stage"], "")
+        self.assertEqual(stage_summary["pool_policy_summary"]["status"], "ok")
+        self.assertEqual(
+            stage_summary["pool_policy_summary"]["active_target"], 20
+        )
+        self.assertEqual(
+            stage_summary["pool_policy_summary"]["reserve_target"], 1
+        )
 
     def test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion(
         self,
