@@ -954,6 +954,8 @@ class OnboardingActionTests(unittest.TestCase):
                     "input_mode": "explicit_auth_ref",
                     "sync_outcome": "skipped_by_flag",
                     "reserve_first_enforced": True,
+                    "auth_snapshot_before_login_status": "ok",
+                    "auth_snapshot_before_login_count": 2,
                 }
             )
         )
@@ -962,6 +964,8 @@ class OnboardingActionTests(unittest.TestCase):
         self.assertEqual(values["input_mode"], "explicit_auth_ref")
         self.assertEqual(values["sync_outcome"], "skipped_by_flag")
         self.assertEqual(values["reserve_first_enforced"], "true")
+        self.assertEqual(values["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(values["auth_snapshot_before_login_count"], "2")
         self.assertEqual(values["selected_backend_id"], "")
 
     def test_build_onboarding_field_values_rejects_non_object_onboarding_result(self) -> None:
@@ -1548,6 +1552,10 @@ class UiDispatchTests(unittest.TestCase):
             command_payload(
                 onboarding_result={
                     "reserve_first_enforced": True,
+                    "auth_snapshot_before_login_status": "ok",
+                    "auth_snapshot_before_login_count": 0,
+                    "auth_snapshot_before_login_digest": "digest",
+                    "auth_snapshot_before_login_source": {"source": "stable_config_parent"},
                     "sync_outcome": "skipped_by_flag",
                     "status_observed": {"command_status": "ok"},
                     "active_routing_changed": False,
@@ -1557,6 +1565,12 @@ class UiDispatchTests(unittest.TestCase):
         )
 
         shell.onboarding_field_vars["reserve_first_enforced"].set.assert_called_with("true")
+        shell.onboarding_field_vars["auth_snapshot_before_login_status"].set.assert_called_with("ok")
+        shell.onboarding_field_vars["auth_snapshot_before_login_count"].set.assert_called_with("0")
+        shell.onboarding_field_vars["auth_snapshot_before_login_digest"].set.assert_called_with("digest")
+        shell.onboarding_field_vars["auth_snapshot_before_login_source"].set.assert_called_with(
+            '{"source": "stable_config_parent"}'
+        )
         shell.onboarding_field_vars["sync_outcome"].set.assert_called_with("skipped_by_flag")
 
     def test_apply_onboarding_payload_displays_status_failure_fields(self) -> None:
