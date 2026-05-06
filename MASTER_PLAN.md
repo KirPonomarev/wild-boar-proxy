@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.11
+PLAN_VERSION: 1.12
 PLAN_DATE: 2026-05-06
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet captured incomplete; rotation freshness blocker under operational prerequisite closeout
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet captured incomplete; live evidence rerun ready after operational prerequisite closeout
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
