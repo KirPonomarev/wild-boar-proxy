@@ -5435,6 +5435,37 @@ class CliTests(unittest.TestCase):
         self.assertEqual(identity["status"], "ambiguous")
         self.assertEqual(identity["invalid_auth_basenames"], ["backend-a"])
 
+    def test_accounts_list_reports_unsupported_registry_schema_identity_ambiguity(
+        self,
+    ) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["schema_version"] = 3
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertEqual(identity["registry_schema_version"], 3)
+        self.assertEqual(identity["unsupported_schema_versions"], ["3"])
+
+    def test_accounts_list_reports_invalid_backend_pool_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["pool"] = "hold"
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertEqual(identity["invalid_backend_pools"], ["backend-a:hold"])
+
     def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
         self,
     ) -> None:
@@ -7462,6 +7493,50 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
         self.assertEqual(evidence["participation_status"], "contradicted")
         self.assertEqual(evidence["blocker_type"], "contradicted_state")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_invalid_backend_pool(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["pool"] = "hold"
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["registry_identity_status"], "ambiguous")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_unsupported_registry_schema(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["schema_version"] = 3
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["registry_identity_status"], "ambiguous")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["participation_status"], "contradicted")
 
     def test_rollout_rotation_inspect_reports_contradicted_for_policy_drift(
         self,

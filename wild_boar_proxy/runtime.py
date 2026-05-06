@@ -80,6 +80,8 @@ SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
 SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
 ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
+BACKEND_REGISTRY_SCHEMA_VERSION = 2
+VALID_BACKEND_REGISTRY_POOLS = {"active", "reserve", "retired"}
 SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
     "engine_observed",
     "runtime_observed",
@@ -1068,12 +1070,25 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
     missing_auth_refs = []
     empty_auth_ref_backends = []
     invalid_auth_basenames = []
+    invalid_backend_pools = []
+    registry_schema_version = registry.get("schema_version")
+    unsupported_schema_versions = []
+
+    if registry_schema_version != BACKEND_REGISTRY_SCHEMA_VERSION:
+        unsupported_schema_versions.append(
+            "missing"
+            if registry_schema_version is None
+            else str(registry_schema_version)
+        )
 
     for index, backend in enumerate(backends):
         backend_key = get_backend_identifier(backend, index)
         backend_id = backend.get("id")
         if backend_id:
             backend_ids.setdefault(str(backend_id), []).append(backend_key)
+        observed_pool = str(backend.get("pool", ""))
+        if observed_pool not in VALID_BACKEND_REGISTRY_POOLS:
+            invalid_backend_pools.append(f"{backend_key}:{observed_pool or '<missing>'}")
 
         if "auth_ref" not in backend:
             missing_auth_refs.append(backend_key)
@@ -1104,6 +1119,8 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
         or missing_auth_refs
         or empty_auth_ref_backends
         or invalid_auth_basenames
+        or invalid_backend_pools
+        or unsupported_schema_versions
     )
     claim_blockers = [
         "stable-15-proved",
@@ -1118,6 +1135,9 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
         "missing_auth_refs": sorted(missing_auth_refs),
         "empty_auth_ref_backends": sorted(empty_auth_ref_backends),
         "invalid_auth_basenames": sorted(invalid_auth_basenames),
+        "invalid_backend_pools": sorted(invalid_backend_pools),
+        "registry_schema_version": registry_schema_version,
+        "unsupported_schema_versions": unsupported_schema_versions,
         "claim_blockers": claim_blockers if ambiguous else [],
         "next_action": "inspect_registry_identity" if ambiguous else "none",
     }
@@ -1133,6 +1153,8 @@ def stable_repair_registry_identity_requires_block(
             "missing_auth_refs",
             "empty_auth_ref_backends",
             "invalid_auth_basenames",
+            "invalid_backend_pools",
+            "unsupported_schema_versions",
         )
     )
 
