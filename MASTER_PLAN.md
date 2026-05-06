@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.18
-PLAN_DATE: 2026-05-06
+PLAN_VERSION: 1.19
+PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; step-7 runtime hardening ready
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -503,6 +503,17 @@ Staged promotion logic.
 UI capacity model for 20 accounts from day one.
 
 Acceptance: Architecture and data format do not need redesign when moving to 20 accounts.
+
+Current closeout note for implementation-order step 6:
+
+- registry schema v2, lifecycle truth, bounded probing/concurrency, reserve
+  policy, staged promotion logic, and the UI-facing capacity data model all
+  have machine-carried surfaces and acceptance coverage in the current contour
+- for the current control-layer scope, the `Shallow and deep probing` clause is
+  satisfied by bounded shallow reprobe plus same-owner live runtime reproof;
+  no separate control-layer deep-probing truth surface is required by default
+- implementation-order step 6 is therefore closed for the current contour, and
+  the next primary contour is `Finish runtime hardening`
 
 ### Workstream 05: Staged Pool Rollout
 
