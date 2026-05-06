@@ -12,11 +12,12 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -90,6 +91,8 @@ STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
     "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
     "20": {"active_min": 20, "active_target": 20, "reserve_target": 0},
 }
+SERIALIZED_LOCK_LOCAL_OWNERS: dict[str, dict[str, int]] = {}
+SERIALIZED_LOCK_LOCAL_OWNERS_GUARD = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -2438,9 +2441,13 @@ def build_generated_stable_runtime_config_text(paths: RuntimePaths) -> str:
 
 
 def write_stable_runtime_consumer_snapshot(
-    paths: RuntimePaths, snapshot: dict[str, Any]
+    paths: RuntimePaths,
+    snapshot: dict[str, Any],
+    *,
+    lock_acquired: bool = False,
 ) -> None:
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         state = read_json(paths.state_file, required=False)
         state[STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC] = snapshot
         write_json_atomic(paths.state_file, state)
@@ -3781,10 +3788,47 @@ def reconcile_stable_recovery_success(
 
 @contextmanager
 def serialized_lock(paths: RuntimePaths):
+    lock_key = str(paths.lock_file.expanduser().resolve())
+    owner_pid = os.getpid()
+    owner_thread_id = threading.get_ident()
+    created_lock_file = False
+    reentrant = False
+
+    # Nested owner-surface calls inside one composite execution path may
+    # reenter the lock, but cross-thread attempts must still observe LOCK_HELD.
+    with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+        local_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+        if (
+            isinstance(local_owner, dict)
+            and local_owner.get("pid") == owner_pid
+            and local_owner.get("thread_id") == owner_thread_id
+        ):
+            local_owner["depth"] = int(local_owner.get("depth", 1)) + 1
+            reentrant = True
+
+    if reentrant:
+        try:
+            yield
+        finally:
+            with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+                nested_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+                if (
+                    isinstance(nested_owner, dict)
+                    and nested_owner.get("pid") == owner_pid
+                    and nested_owner.get("thread_id") == owner_thread_id
+                ):
+                    nested_owner["depth"] = max(
+                        0, int(nested_owner.get("depth", 1)) - 1
+                    )
+                    if nested_owner["depth"] == 0:
+                        SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
+        return
+
     paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
     while True:
         try:
             fd = os.open(paths.lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            created_lock_file = True
             break
         except FileExistsError:
             holder = read_text(paths.lock_file)
@@ -3799,9 +3843,30 @@ def serialized_lock(paths: RuntimePaths):
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(f"{os.getpid()}\n")
+        with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+            SERIALIZED_LOCK_LOCAL_OWNERS[lock_key] = {
+                "pid": owner_pid,
+                "thread_id": owner_thread_id,
+                "depth": 1,
+            }
         yield
     finally:
-        paths.lock_file.unlink(missing_ok=True)
+        release_lock_file = False
+        with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+            local_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+            if (
+                isinstance(local_owner, dict)
+                and local_owner.get("pid") == owner_pid
+                and local_owner.get("thread_id") == owner_thread_id
+            ):
+                local_owner["depth"] = max(0, int(local_owner.get("depth", 1)) - 1)
+                if local_owner["depth"] == 0:
+                    SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
+                    release_lock_file = True
+            elif created_lock_file:
+                release_lock_file = True
+        if release_lock_file:
+            paths.lock_file.unlink(missing_ok=True)
 
 
 def build_command_payload(
@@ -4655,7 +4720,11 @@ def get_launch_stabilization_seconds() -> float:
     return value if value >= 0 else 30.0
 
 
-def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
+def run_launch_smoke(
+    paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     ensure_repo_owned_default_launcher_consumer(paths)
     if not paths.launcher_script.exists():
@@ -4739,7 +4808,9 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
                 fallback_reason="",
             )
     if snapshot_payload is not None:
-        write_stable_runtime_consumer_snapshot(paths, snapshot_payload)
+        write_stable_runtime_consumer_snapshot(
+            paths, snapshot_payload, lock_acquired=lock_acquired
+        )
     changed_files = detect_changed_files(
         before,
         runtime_write_surface_candidates(paths),
@@ -5131,7 +5202,11 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
     )
 
 
-def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
+def run_rollout_rotation_inspect(
+    paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     evidence_result: dict[str, Any] = {
         "schema_version": ROTATION_EVIDENCE_SCHEMA_VERSION,
         "status": "owner_path_emitted",
@@ -5182,7 +5257,8 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         "final_outcome": "pending_observation",
     }
 
-    with serialized_lock(paths):
+    observation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with observation_lock:
         registry = read_json(paths.registry_file)
         state = read_json(paths.state_file, required=False)
         registry_identity = get_registry_identity(registry)
@@ -6266,7 +6342,12 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     )
 
 
-def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+def run_rollout_stage_prove(
+    paths: RuntimePaths,
+    stage: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     requested_stage_label = str(stage).strip()
     stage_proof_result: dict[str, Any] = {
@@ -6382,7 +6463,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
     rotation_status = str(rotation_result.get("participation_status", "unknown"))
     active_pool_count_observed = coerce_nonnegative_int(
@@ -6559,7 +6642,7 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    smoke_payload = run_launch_smoke(paths)
+    smoke_payload = run_launch_smoke(paths, lock_acquired=lock_acquired)
     stage_proof_result["runtime_smoke_status"] = (
         "passed" if smoke_payload.get("status") == "ok" else "failed"
     )
@@ -6671,6 +6754,8 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
 
 def summarize_rollout_stage_advance_preflight(
     paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
 ) -> tuple[bool, str, str, dict[str, Any]]:
     health_payload = run_healthcheck(
         paths,
@@ -6679,7 +6764,9 @@ def summarize_rollout_stage_advance_preflight(
         allow_current_proxy_auto_adoption=False,
     )
     status_payload = summarize_status(paths, health_payload=health_payload)
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
 
     attestation_ok = (
@@ -6771,6 +6858,7 @@ def summarize_rollout_stage_advance_postflight(
     expected_stage: str,
     backend_id: str,
     active_pool_count_before: int,
+    lock_acquired: bool = False,
 ) -> tuple[bool, str, str, dict[str, Any]]:
     registry = read_json(paths.registry_file)
     observed_stage = observe_current_stage_from_pool_policy(registry)
@@ -6784,7 +6872,9 @@ def summarize_rollout_stage_advance_postflight(
         allow_current_proxy_auto_adoption=False,
     )
     status_payload = summarize_status(paths, health_payload=health_payload)
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
     readiness = summarize_stable_10_rollback_readiness(health_payload, status_payload)
 
@@ -6899,6 +6989,7 @@ def run_rollout_stage_advance(
         "delegated_evidence": {},
         "final_outcome": "pending_preconditions",
     }
+    composite_owner_lock_acquired = False
 
     def build_stage_advance_payload(
         *,
@@ -6951,7 +7042,7 @@ def run_rollout_stage_advance(
 
         stage_advancement_result["rollback_attempted"] = True
         try:
-            with serialized_lock(paths):
+            if composite_owner_lock_acquired:
                 restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
                 stable_auth_entry_snapshot = snapshots.get("stable_auth_entry_file")
                 stable_auth_entry_path = snapshots.get("stable_auth_entry_path")
@@ -6969,6 +7060,25 @@ def run_rollout_stage_advance(
                     restore_rollout_stage_advance_inventory_dir_state(
                         Path(stable_auth_dir_path), stable_auth_dir_snapshot
                     )
+            else:
+                with serialized_lock(paths):
+                    restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
+                    stable_auth_entry_snapshot = snapshots.get("stable_auth_entry_file")
+                    stable_auth_entry_path = snapshots.get("stable_auth_entry_path")
+                    stable_auth_dir_snapshot = snapshots.get("stable_auth_dir")
+                    stable_auth_dir_path = snapshots.get("stable_auth_dir_path")
+                    if isinstance(stable_auth_entry_snapshot, dict) and isinstance(
+                        stable_auth_entry_path, str
+                    ):
+                        restore_path_state(
+                            Path(stable_auth_entry_path), stable_auth_entry_snapshot
+                        )
+                    if isinstance(stable_auth_dir_snapshot, dict) and isinstance(
+                        stable_auth_dir_path, str
+                    ):
+                        restore_rollout_stage_advance_inventory_dir_state(
+                            Path(stable_auth_dir_path), stable_auth_dir_snapshot
+                        )
             stage_advancement_result["rollback_outcome"] = "completed"
             stage_advancement_result["final_outcome"] = final_outcome
             return build_stage_advance_payload(
@@ -7151,245 +7261,271 @@ def run_rollout_stage_advance(
             machine_error_code="OK",
         )
 
-    step_snapshots: dict[str, dict[str, Any]] | None = None
-    if current_stage == source_stage:
-        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
-        if selected_backend_auth_basename:
-            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
-            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
-            extra_write_surfaces.append(stable_auth_entry_path)
-            before_extra_states.setdefault(
-                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+    with serialized_lock(paths):
+        composite_owner_lock_acquired = True
+        step_snapshots: dict[str, dict[str, Any]] | None = None
+        if current_stage == source_stage:
+            step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+            if selected_backend_auth_basename:
+                stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+                stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+                extra_write_surfaces.append(stable_auth_entry_path)
+                before_extra_states.setdefault(
+                    stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+                )
+                if stable_auth_dir not in extra_write_surfaces:
+                    extra_write_surfaces.append(stable_auth_dir)
+                before_extra_states.setdefault(
+                    stable_auth_dir, snapshot_path_state(stable_auth_dir)
+                )
+                step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                    stable_auth_entry_path
+                )
+                step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+                step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+                step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+            proof_payload = run_rollout_stage_prove(
+                paths, source_stage, lock_acquired=True
             )
-            if stable_auth_dir not in extra_write_surfaces:
-                extra_write_surfaces.append(stable_auth_dir)
-            before_extra_states.setdefault(
-                stable_auth_dir, snapshot_path_state(stable_auth_dir)
-            )
-            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
-                stable_auth_entry_path
-            )
-            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
-            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
-            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
-        proof_payload = run_rollout_stage_prove(paths, source_stage)
-        proof_result = proof_payload.get("stage_proof_result", {})
-        stage_advancement_result["delegated_evidence"][
-            f"stable_{source_stage}_proof_summary"
-        ] = {
-            "status": proof_payload.get("status"),
-            "machine_error_code": proof_payload.get("machine_error_code"),
-            "exit_code": proof_payload.get("exit_code"),
-            "proof_gate_status": proof_result.get("proof_gate_status"),
-            "final_outcome": proof_result.get("final_outcome"),
-        }
-        if proof_payload.get("status") != "ok":
-            stage_advancement_result[preflight_status_field] = "failed"
-            return rollback_after_failed_step(
-                human_message=(
-                    f"Rollout stage advance is blocked because stable-{source_stage} "
-                    "proof is not satisfied."
-                ),
-                machine_error_code=str(
-                    proof_payload.get("machine_error_code", "STAGE_ADVANCE_PROOF_FAILED")
-                ),
-                operator_action=str(proof_payload.get("operator_action", "user_action")),
-                exit_code=int(proof_payload.get("exit_code", 1) or 1),
-                snapshots=step_snapshots,
-                final_outcome=proof_failure_outcome,
-            )
-        stage_advancement_result[preflight_status_field] = "passed"
+            proof_result = proof_payload.get("stage_proof_result", {})
+            stage_advancement_result["delegated_evidence"][
+                f"stable_{source_stage}_proof_summary"
+            ] = {
+                "status": proof_payload.get("status"),
+                "machine_error_code": proof_payload.get("machine_error_code"),
+                "exit_code": proof_payload.get("exit_code"),
+                "proof_gate_status": proof_result.get("proof_gate_status"),
+                "final_outcome": proof_result.get("final_outcome"),
+            }
+            if proof_payload.get("status") != "ok":
+                stage_advancement_result[preflight_status_field] = "failed"
+                return rollback_after_failed_step(
+                    human_message=(
+                        f"Rollout stage advance is blocked because stable-{source_stage} "
+                        "proof is not satisfied."
+                    ),
+                    machine_error_code=str(
+                        proof_payload.get(
+                            "machine_error_code", "STAGE_ADVANCE_PROOF_FAILED"
+                        )
+                    ),
+                    operator_action=str(
+                        proof_payload.get("operator_action", "user_action")
+                    ),
+                    exit_code=int(proof_payload.get("exit_code", 1) or 1),
+                    snapshots=step_snapshots,
+                    final_outcome=proof_failure_outcome,
+                )
+            stage_advancement_result[preflight_status_field] = "passed"
 
-        policy_payload = run_policy_stage_set(paths, requested_stage)
-        policy_result = policy_payload.get("pool_policy_update_result", {})
-        stage_advancement_result["delegated_evidence"]["policy_transition_summary"] = {
-            "status": policy_payload.get("status"),
-            "machine_error_code": policy_payload.get("machine_error_code"),
-            "exit_code": policy_payload.get("exit_code"),
-            "final_outcome": policy_result.get("final_outcome"),
-        }
-        if policy_payload.get("status") != "ok":
-            stage_advancement_result["policy_transition_status"] = "failed"
-            return rollback_after_failed_step(
-                human_message=(
-                    "Rollout stage advance failed while updating policy stage to "
-                    f"{requested_stage}."
-                ),
-                machine_error_code=str(
-                    policy_payload.get("machine_error_code", "POOL_POLICY_UPDATE_FAILED")
-                ),
-                operator_action=str(policy_payload.get("operator_action", "retry")),
-                exit_code=int(policy_payload.get("exit_code", 1) or 1),
-                snapshots=step_snapshots,
-                final_outcome="policy_transition_failed",
+            policy_payload = run_policy_stage_set(
+                paths, requested_stage, lock_acquired=True
             )
-        stage_advancement_result["policy_transition_status"] = str(
-            policy_result.get("final_outcome", "updated")
-        )
-    else:
-        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
-        if selected_backend_auth_basename:
-            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
-            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
-            extra_write_surfaces.append(stable_auth_entry_path)
-            before_extra_states.setdefault(
-                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+            policy_result = policy_payload.get("pool_policy_update_result", {})
+            stage_advancement_result["delegated_evidence"]["policy_transition_summary"] = {
+                "status": policy_payload.get("status"),
+                "machine_error_code": policy_payload.get("machine_error_code"),
+                "exit_code": policy_payload.get("exit_code"),
+                "final_outcome": policy_result.get("final_outcome"),
+            }
+            if policy_payload.get("status") != "ok":
+                stage_advancement_result["policy_transition_status"] = "failed"
+                return rollback_after_failed_step(
+                    human_message=(
+                        "Rollout stage advance failed while updating policy stage to "
+                        f"{requested_stage}."
+                    ),
+                    machine_error_code=str(
+                        policy_payload.get(
+                            "machine_error_code", "POOL_POLICY_UPDATE_FAILED"
+                        )
+                    ),
+                    operator_action=str(policy_payload.get("operator_action", "retry")),
+                    exit_code=int(policy_payload.get("exit_code", 1) or 1),
+                    snapshots=step_snapshots,
+                    final_outcome="policy_transition_failed",
+                )
+            stage_advancement_result["policy_transition_status"] = str(
+                policy_result.get("final_outcome", "updated")
             )
-            if stable_auth_dir not in extra_write_surfaces:
-                extra_write_surfaces.append(stable_auth_dir)
-            before_extra_states.setdefault(
-                stable_auth_dir, snapshot_path_state(stable_auth_dir)
+        else:
+            step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+            if selected_backend_auth_basename:
+                stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+                stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+                extra_write_surfaces.append(stable_auth_entry_path)
+                before_extra_states.setdefault(
+                    stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+                )
+                if stable_auth_dir not in extra_write_surfaces:
+                    extra_write_surfaces.append(stable_auth_dir)
+                before_extra_states.setdefault(
+                    stable_auth_dir, snapshot_path_state(stable_auth_dir)
+                )
+                step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                    stable_auth_entry_path
+                )
+                step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+                step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+                step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+            preflight_ok, preflight_code, preflight_action, preflight_summary = (
+                summarize_rollout_stage_advance_preflight(paths, lock_acquired=True)
             )
-            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
-                stable_auth_entry_path
-            )
-            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
-            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
-            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
-        preflight_ok, preflight_code, preflight_action, preflight_summary = (
-            summarize_rollout_stage_advance_preflight(paths)
-        )
-        stage_advancement_result["delegated_evidence"]["preflight_summary"] = preflight_summary
-        if not preflight_ok:
+            stage_advancement_result["delegated_evidence"][
+                "preflight_summary"
+            ] = preflight_summary
+            if not preflight_ok:
+                stage_advancement_result[preflight_status_field] = "not_required"
+                stage_advancement_result["postflight_attestation_status"] = str(
+                    preflight_summary.get("attestation_status", "failed")
+                )
+                stage_advancement_result["postflight_rotation_status"] = str(
+                    preflight_summary.get("rotation_status", "unknown")
+                )
+                stage_advancement_result["rollback_readiness_status"] = str(
+                    preflight_summary.get("readiness_status", "failed")
+                )
+                return rollback_after_failed_step(
+                    human_message=(
+                        "Rollout stage advance is blocked because current "
+                        f"stage-{requested_stage} rollout posture fails bounded "
+                        "preflight verification."
+                    ),
+                    machine_error_code=preflight_code,
+                    operator_action=preflight_action,
+                    snapshots=step_snapshots,
+                    final_outcome="preflight_verification_failed",
+                )
             stage_advancement_result[preflight_status_field] = "not_required"
-            stage_advancement_result["postflight_attestation_status"] = str(
-                preflight_summary.get("attestation_status", "failed")
+            stage_advancement_result["policy_transition_status"] = "already_on_stage"
+
+        promote_payload = run_promote(
+            paths, requested_backend_id, lock_acquired=True
+        )
+        promote_result = promote_payload.get("promotion_result", {})
+        stage_advancement_result["delegated_evidence"]["promotion_summary"] = {
+            "status": promote_payload.get("status"),
+            "machine_error_code": promote_payload.get("machine_error_code"),
+            "exit_code": promote_payload.get("exit_code"),
+            "precondition_status": promote_result.get("precondition_status"),
+            "final_outcome": promote_result.get("final_outcome"),
+        }
+        if promote_payload.get("status") != "ok":
+            stage_advancement_result["promotion_status"] = "failed"
+            return rollback_after_failed_step(
+                human_message="Rollout stage advance failed while promoting the explicit backend id.",
+                machine_error_code=str(
+                    promote_payload.get("machine_error_code", "PROMOTION_FAILED")
+                ),
+                operator_action=str(promote_payload.get("operator_action", "user_action")),
+                exit_code=int(promote_payload.get("exit_code", 1) or 1),
+                snapshots=step_snapshots,
             )
-            stage_advancement_result["postflight_rotation_status"] = str(
-                preflight_summary.get("rotation_status", "unknown")
-            )
-            stage_advancement_result["rollback_readiness_status"] = str(
-                preflight_summary.get("readiness_status", "failed")
-            )
+        stage_advancement_result["promotion_status"] = "promoted"
+        updated_registry = read_json(paths.registry_file)
+        promoted_backend_matches = get_registry_backends_by_id(
+            updated_registry, requested_backend_id
+        )
+        promoted_backend = (
+            promoted_backend_matches[0] if len(promoted_backend_matches) == 1 else None
+        )
+        if not isinstance(promoted_backend, dict):
             return rollback_after_failed_step(
                 human_message=(
-                    "Rollout stage advance is blocked because current "
-                    f"stage-{requested_stage} rollout posture fails bounded "
-                    "preflight verification."
+                    "Rollout stage advance could not verify a uniquely identifiable promoted backend before stable inventory materialization."
                 ),
-                machine_error_code=preflight_code,
-                operator_action=preflight_action,
+                machine_error_code="STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED",
+                operator_action="user_action",
                 snapshots=step_snapshots,
-                final_outcome="preflight_verification_failed",
             )
-        stage_advancement_result[preflight_status_field] = "not_required"
-        stage_advancement_result["policy_transition_status"] = "already_on_stage"
-
-    promote_payload = run_promote(paths, requested_backend_id)
-    promote_result = promote_payload.get("promotion_result", {})
-    stage_advancement_result["delegated_evidence"]["promotion_summary"] = {
-        "status": promote_payload.get("status"),
-        "machine_error_code": promote_payload.get("machine_error_code"),
-        "exit_code": promote_payload.get("exit_code"),
-        "precondition_status": promote_result.get("precondition_status"),
-        "final_outcome": promote_result.get("final_outcome"),
-    }
-    if promote_payload.get("status") != "ok":
-        stage_advancement_result["promotion_status"] = "failed"
-        return rollback_after_failed_step(
-            human_message="Rollout stage advance failed while promoting the explicit backend id.",
-            machine_error_code=str(
-                promote_payload.get("machine_error_code", "PROMOTION_FAILED")
-            ),
-            operator_action=str(promote_payload.get("operator_action", "user_action")),
-            exit_code=int(promote_payload.get("exit_code", 1) or 1),
-            snapshots=step_snapshots,
-        )
-    stage_advancement_result["promotion_status"] = "promoted"
-    updated_registry = read_json(paths.registry_file)
-    promoted_backend_matches = get_registry_backends_by_id(
-        updated_registry, requested_backend_id
-    )
-    promoted_backend = (
-        promoted_backend_matches[0] if len(promoted_backend_matches) == 1 else None
-    )
-    if not isinstance(promoted_backend, dict):
-        return rollback_after_failed_step(
-            human_message=(
-                "Rollout stage advance could not verify a uniquely identifiable promoted backend before stable inventory materialization."
-            ),
-            machine_error_code="STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED",
-            operator_action="user_action",
-            snapshots=step_snapshots,
-        )
-    try:
-        stable_auth_materialization = materialize_rollout_stage_advance_stable_auth(
-            paths, promoted_backend
-        )
-    except RuntimeErrorInfo as exc:
+        try:
+            stable_auth_materialization = materialize_rollout_stage_advance_stable_auth(
+                paths, promoted_backend
+            )
+        except RuntimeErrorInfo as exc:
+            stage_advancement_result["delegated_evidence"][
+                "stable_auth_materialization_summary"
+            ] = {
+                "status": "failed",
+                "machine_error_code": exc.machine_error_code,
+                "operator_action": exc.operator_action,
+            }
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance failed while materializing the promoted backend into stable auth inventory."
+                ),
+                machine_error_code=exc.machine_error_code,
+                operator_action=exc.operator_action,
+                exit_code=exc.exit_code,
+                snapshots=step_snapshots,
+            )
         stage_advancement_result["delegated_evidence"][
             "stable_auth_materialization_summary"
         ] = {
-            "status": "failed",
-            "machine_error_code": exc.machine_error_code,
-            "operator_action": exc.operator_action,
+            "status": "materialized",
+            "machine_error_code": "OK",
+            **stable_auth_materialization,
         }
-        return rollback_after_failed_step(
+
+        postflight_ok, postflight_code, postflight_action, postflight_summary = (
+            summarize_rollout_stage_advance_postflight(
+                paths,
+                expected_stage=requested_stage,
+                backend_id=requested_backend_id,
+                active_pool_count_before=active_count_before,
+                lock_acquired=True,
+            )
+        )
+        stage_advancement_result["postflight_attestation_status"] = str(
+            postflight_summary.get("attestation_status", "failed")
+        )
+        stage_advancement_result["postflight_rotation_status"] = str(
+            postflight_summary.get("rotation_status", "unknown")
+        )
+        stage_advancement_result["rollback_readiness_status"] = str(
+            postflight_summary.get("readiness_status", "failed")
+        )
+        stage_advancement_result["delegated_evidence"][
+            "postflight_summary"
+        ] = postflight_summary
+        if not postflight_ok:
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance step completed, but postflight checks detected a contradiction or readiness gap."
+                ),
+                machine_error_code=postflight_code,
+                operator_action=postflight_action,
+                snapshots=step_snapshots,
+            )
+
+        updated_registry = read_json(paths.registry_file)
+        updated_counts = summarize_registry_pool_counts(updated_registry)
+        stage_advancement_result["delegated_evidence"][
+            "pool_count_summary_after_step"
+        ] = {
+            "active_count_observed": int(updated_counts.get("active", 0) or 0),
+            "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
+            "active_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["active_target"],
+            "reserve_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["reserve_target"],
+        }
+        stage_advancement_result["rollback_outcome"] = "not_needed"
+        stage_advancement_result["final_outcome"] = "advanced_one_step"
+        return build_stage_advance_payload(
+            ok=True,
             human_message=(
-                "Rollout stage advance failed while materializing the promoted backend into stable auth inventory."
+                "Rollout stage advance completed one controlled promotion step "
+                f"toward canonical stage {requested_stage}."
             ),
-            machine_error_code=exc.machine_error_code,
-            operator_action=exc.operator_action,
-            exit_code=exc.exit_code,
-            snapshots=step_snapshots,
-        )
-    stage_advancement_result["delegated_evidence"][
-        "stable_auth_materialization_summary"
-    ] = {
-        "status": "materialized",
-        "machine_error_code": "OK",
-        **stable_auth_materialization,
-    }
-
-    postflight_ok, postflight_code, postflight_action, postflight_summary = (
-        summarize_rollout_stage_advance_postflight(
-            paths,
-            expected_stage=requested_stage,
-            backend_id=requested_backend_id,
-            active_pool_count_before=active_count_before,
-        )
-    )
-    stage_advancement_result["postflight_attestation_status"] = str(
-        postflight_summary.get("attestation_status", "failed")
-    )
-    stage_advancement_result["postflight_rotation_status"] = str(
-        postflight_summary.get("rotation_status", "unknown")
-    )
-    stage_advancement_result["rollback_readiness_status"] = str(
-        postflight_summary.get("readiness_status", "failed")
-    )
-    stage_advancement_result["delegated_evidence"]["postflight_summary"] = postflight_summary
-    if not postflight_ok:
-        return rollback_after_failed_step(
-            human_message=(
-                "Rollout stage advance step completed, but postflight checks detected a contradiction or readiness gap."
-            ),
-            machine_error_code=postflight_code,
-            operator_action=postflight_action,
-            snapshots=step_snapshots,
+            machine_error_code="OK",
         )
 
-    updated_registry = read_json(paths.registry_file)
-    updated_counts = summarize_registry_pool_counts(updated_registry)
-    stage_advancement_result["delegated_evidence"]["pool_count_summary_after_step"] = {
-        "active_count_observed": int(updated_counts.get("active", 0) or 0),
-        "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
-        "active_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["active_target"],
-        "reserve_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["reserve_target"],
-    }
-    stage_advancement_result["rollback_outcome"] = "not_needed"
-    stage_advancement_result["final_outcome"] = "advanced_one_step"
-    return build_stage_advance_payload(
-        ok=True,
-        human_message=(
-            "Rollout stage advance completed one controlled promotion step "
-            f"toward canonical stage {requested_stage}."
-        ),
-        machine_error_code="OK",
-    )
 
-
-def run_policy_stage_set(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+def run_policy_stage_set(
+    paths: RuntimePaths,
+    stage: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     policy_update_result: dict[str, Any] = {
         "status": "owner_path_emitted",
@@ -7436,7 +7572,8 @@ def run_policy_stage_set(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             exit_code=exit_code,
         )
 
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         registry = read_json(paths.registry_file)
         current_pool_policy = registry.get("pool_policy")
         policy_update_result["previous_pool_policy"] = current_pool_policy
@@ -9020,7 +9157,12 @@ def run_protective_lifecycle_owner_path(
         )
 
 
-def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+def run_promote(
+    paths: RuntimePaths,
+    backend_id: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(
             f"Missing accounts command: {paths.accounts_bin}",
@@ -9132,7 +9274,8 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 extra=payload_extra,
             )
 
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         before_registry = read_json(paths.registry_file)
         before_state = read_json(paths.state_file, required=False)
         backend_matches = get_registry_backends_by_id(before_registry, backend_id)
