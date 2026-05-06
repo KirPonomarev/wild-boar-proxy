@@ -234,9 +234,14 @@ activation diagnosis closeout, the truthful rotation freshness prerequisite
 closeout, and the current runtime truth surfaces as factual inputs.
 It must not treat the earlier incomplete packet as a partial success claim.
 
-Required owner marker:
+Required owner authorization:
 
-`GO_FOR_LIVE_CAPTURE: run rollout evidence capture 16 --json once`
+The current thread must contain either:
+
+- the project-scoped standing owner approval recognized by `CANON.md`
+- or the exact one-off marker:
+
+  `GO_FOR_LIVE_CAPTURE: run rollout evidence capture 16 --json once`
 
 Allowed live command:
 
@@ -244,7 +249,7 @@ Allowed live command:
 
 Live rerun contour execution order:
 
-1. require the explicit owner GO marker in the current thread
+1. require owner authorization in the current thread
 2. declare the exact real paths that may be read
 3. declare the exact redacted bundle or temp artifact paths that may be written
 4. declare rollback expectations
@@ -287,8 +292,8 @@ The live rerun contour must not:
 - introduce new scale claims
 - run `sync --json`, repair, mode, lifecycle, onboarding, diagnostics export,
   stage prove, or stage advance commands
-- treat broad operator approval as a substitute for the rerun-specific owner
-  marker
+- treat generic unscoped phrases such as `start`, `go`, or `начинай работу`
+  as a substitute for owner authorization
 
 Outcome routing:
 
@@ -329,9 +334,11 @@ Live evidence is controlled only by `EVIDENCE_CAPTURE_RUNBOOK.md`.
 
 This lane is operational, not repo-authoring.
 
-### Required owner marker
+### Required owner authorization
 
-The current thread must contain an explicit operator marker before execution:
+The current thread must contain owner authorization before execution.
+This may be either the standing owner approval recognized by `CANON.md` or the
+exact one-off operator marker:
 
 ```text
 GO_FOR_LIVE_CAPTURE: run rollout evidence capture 16 --json once
@@ -401,7 +408,9 @@ Wave 1C starts only when:
 - no previous write contour is left local-only
 - no unresolved contradiction with `CANON.md` exists
 - the exact target gap is concrete and bounded
-- no live GO marker is inferred from a generic phrase such as `start` or `go`
+- no live authorization is inferred from a generic phrase such as `start` or
+  `go` unless the thread already contains standing owner approval recognized by
+  `CANON.md`
 
 Additional repo-write entry criteria:
 
@@ -410,7 +419,7 @@ Additional repo-write entry criteria:
 
 Additional live-lane entry criteria:
 
-- the explicit owner GO marker exists in the current thread
+- owner authorization exists in the current thread
 - if the live lane follows repo-write work in the same thread, that repo-write
   contour is already committed and pushed before live execution begins
 - the real paths that may be read are declared before execution
