@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.22
+PLAN_VERSION: 1.23
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; next primary contour is step-10 diagnostics export closeout
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; next primary contour is step-11 installer and legacy import
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -634,6 +634,22 @@ Current closeout note for implementation-order step 9:
 - step-9 closeout commits are `9339ca4` and `bd61ebd`; implementation-order
   step 9 is therefore closed for the current contour, and the next primary
   contour is `Add diagnostics export`
+
+Current closeout note for implementation-order step 10:
+
+- diagnostics export owner path is now integrated and verified across CLI and
+  baseline companion UI through `diagnostics export --json` with strict JSON
+  command/result mapping and bundle-path truth
+- redaction safety surfaces remain control-layer only; diagnostics export and
+  supporting tests verify redacted bundle behavior without engine-layer
+  protocol duplication or claim escalation
+- acceptance/regression verification for step-10 closeout executed with:
+  `python3 -m unittest -q tests.test_ui_shell`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k diagnostics`,
+  `python3 -m unittest -q tests.test_cli.CliTests`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 10 is therefore closed for the current contour,
+  and the next primary contour is `Add installer and legacy import`
 
 ### Workstream 07: Installer And Data Layout
 
