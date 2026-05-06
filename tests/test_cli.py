@@ -7675,11 +7675,46 @@ class CliTests(unittest.TestCase):
         self.assertEqual(packet["packet_status"], "complete")
         self.assertEqual(packet["final_outcome"], "field_evidence_packet_complete")
         self.assertEqual(packet["runtime_attestation_status"], "passed")
+        self.assertEqual(packet["strict_json_command_api_status"], "passed")
+        self.assertEqual(packet["state_serialization_status"], "passed")
         self.assertEqual(packet["rotation_evidence_status"], "available")
         self.assertEqual(packet["fallback_readiness_status"], "ready")
         self.assertEqual(packet["pool_counts_status"], "matched_16")
         self.assertEqual(packet["diagnostics_redaction_status"], "passed")
         self.assertEqual(packet["blocked_reasons"], [])
+        gate_summary = packet["scale_gate_summary"]
+        self.assertEqual(gate_summary["status"], "derived_view")
+        self.assertTrue(gate_summary["derived_only"])
+        self.assertFalse(gate_summary["source_of_truth"])
+        self.assertTrue(gate_summary["all_gates_passed"])
+        self.assertEqual(gate_summary["blocked_gate_names"], [])
+        self.assertEqual(
+            sorted(gate_summary["gates"].keys()),
+            sorted(
+                [
+                    "RUNTIME_ATTESTATION_GATE",
+                    "STRICT_JSON_COMMAND_API_GATE",
+                    "STATE_SERIALIZATION_GATE",
+                    "FALLBACK_DRILL_GATE",
+                    "SCALE_EVIDENCE_PACKET_GATE",
+                ]
+            ),
+        )
+        self.assertEqual(
+            gate_summary["gates"]["RUNTIME_ATTESTATION_GATE"]["status"], "passed"
+        )
+        self.assertEqual(
+            gate_summary["gates"]["STRICT_JSON_COMMAND_API_GATE"]["status"], "passed"
+        )
+        self.assertEqual(
+            gate_summary["gates"]["STATE_SERIALIZATION_GATE"]["status"], "passed"
+        )
+        self.assertEqual(
+            gate_summary["gates"]["FALLBACK_DRILL_GATE"]["status"], "passed"
+        )
+        self.assertEqual(
+            gate_summary["gates"]["SCALE_EVIDENCE_PACKET_GATE"]["status"], "passed"
+        )
         self.assertEqual(before, after)
 
     def test_rollout_evidence_capture_16_reports_attestation_incomplete(self) -> None:
@@ -7697,10 +7732,22 @@ class CliTests(unittest.TestCase):
         packet = payload["scale_evidence_packet_result"]
         self.assertEqual(packet["packet_status"], "incomplete")
         self.assertEqual(packet["runtime_attestation_status"], "failed")
+        self.assertEqual(packet["strict_json_command_api_status"], "passed")
+        self.assertEqual(packet["state_serialization_status"], "passed")
         self.assertEqual(packet["final_outcome"], "field_evidence_packet_incomplete")
         self.assertIn(
             "SCALE_EVIDENCE_ATTESTATION_INCOMPLETE",
             [item["machine_error_code"] for item in packet["blocked_reasons"]],
+        )
+        gate_summary = packet["scale_gate_summary"]
+        self.assertFalse(gate_summary["all_gates_passed"])
+        self.assertIn("RUNTIME_ATTESTATION_GATE", gate_summary["blocked_gate_names"])
+        self.assertIn("SCALE_EVIDENCE_PACKET_GATE", gate_summary["blocked_gate_names"])
+        self.assertEqual(
+            gate_summary["gates"]["RUNTIME_ATTESTATION_GATE"]["status"], "failed"
+        )
+        self.assertEqual(
+            gate_summary["gates"]["SCALE_EVIDENCE_PACKET_GATE"]["status"], "failed"
         )
         self.assertEqual(before, after)
 
@@ -7732,6 +7779,9 @@ class CliTests(unittest.TestCase):
             "SCALE_EVIDENCE_ROTATION_INCOMPLETE",
             [item["machine_error_code"] for item in packet["blocked_reasons"]],
         )
+        gate_summary = packet["scale_gate_summary"]
+        self.assertFalse(gate_summary["all_gates_passed"])
+        self.assertIn("SCALE_EVIDENCE_PACKET_GATE", gate_summary["blocked_gate_names"])
 
     def test_rollout_evidence_capture_16_reports_rotation_contradicted(self) -> None:
         self.configure_scale_evidence_fixture(
@@ -7756,6 +7806,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             packet["final_outcome"], "field_evidence_packet_contradicted"
         )
+        gate_summary = packet["scale_gate_summary"]
+        self.assertFalse(gate_summary["all_gates_passed"])
+        self.assertIn("SCALE_EVIDENCE_PACKET_GATE", gate_summary["blocked_gate_names"])
 
     def test_rollout_evidence_capture_16_reports_snapshot_digest_contradicted(
         self,
@@ -7811,6 +7864,44 @@ class CliTests(unittest.TestCase):
         packet = payload["scale_evidence_packet_result"]
         self.assertEqual(packet["packet_status"], "unsafe_to_claim")
         self.assertEqual(packet["diagnostics_redaction_status"], "failed")
+        gate_summary = packet["scale_gate_summary"]
+        self.assertFalse(gate_summary["all_gates_passed"])
+        self.assertIn("SCALE_EVIDENCE_PACKET_GATE", gate_summary["blocked_gate_names"])
+
+    def test_rollout_evidence_capture_16_reports_strict_json_gate_failure(self) -> None:
+        self.configure_scale_evidence_fixture()
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch(
+                    "wild_boar_proxy.runtime.list_accounts",
+                    return_value={"status": "ok"},
+                ):
+                    payload = runtime_mod.run_rollout_evidence_capture(paths, "16")
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "SCALE_EVIDENCE_INCOMPLETE")
+        packet = payload["scale_evidence_packet_result"]
+        self.assertEqual(packet["strict_json_command_api_status"], "failed")
+        self.assertIn(
+            "SCALE_EVIDENCE_STRICT_JSON_INCOMPLETE",
+            [item["machine_error_code"] for item in packet["blocked_reasons"]],
+        )
+        gate_summary = packet["scale_gate_summary"]
+        self.assertFalse(gate_summary["all_gates_passed"])
+        self.assertIn(
+            "STRICT_JSON_COMMAND_API_GATE", gate_summary["blocked_gate_names"]
+        )
+        self.assertEqual(
+            gate_summary["gates"]["STRICT_JSON_COMMAND_API_GATE"]["status"], "failed"
+        )
 
     def test_rollout_evidence_capture_16_redacts_bundle_secrets(self) -> None:
         self.configure_scale_evidence_fixture()
