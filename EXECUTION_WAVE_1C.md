@@ -204,11 +204,19 @@ The operational prerequisite contour uses the already captured redacted
 evidence packet and bundle artifacts as factual inputs.
 It must not treat the incomplete packet as a partial success claim.
 
+Allowed owner-path refresh command:
+
+`sync --json`
+
+In this contour `runtime_state.selected_backend_snapshot` may be materialized
+only by the serialized runtime-state owner path in `sync --json`, and only
+after sync succeeded with managed-listener health verified.
+
 Operational prerequisite contour execution order:
 
 1. preserve the incomplete packet and bundle artifacts as baseline evidence
-2. refresh rotation participation evidence only through the proper owner path
-   that materializes a fresh `selected_backend_snapshot`
+2. run exactly one `sync --json` as the owner-path refresh attempt for
+   `selected_backend_snapshot`
 3. verify that the refreshed snapshot remains truthful and machine-consistent
    with current registry and runtime state
 4. verify that no forbidden write-surface mutation or unrelated lifecycle
