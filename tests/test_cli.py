@@ -8,6 +8,7 @@ import os
 import shlex
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -255,7 +256,7 @@ class CliTests(unittest.TestCase):
         self, *args: str, include_launcher_override: bool = True
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "wild_boar_proxy", *args],
+            [sys.executable, "-m", "wild_boar_proxy", *args],
             cwd=ROOT,
             env=self.env(include_launcher_override=include_launcher_override),
             text=True,
@@ -272,7 +273,7 @@ class CliTests(unittest.TestCase):
         env = self.env(include_launcher_override=include_launcher_override)
         env.update(env_overrides)
         return subprocess.run(
-            ["python3", "-m", "wild_boar_proxy", *args],
+            [sys.executable, "-m", "wild_boar_proxy", *args],
             cwd=ROOT,
             env=env,
             text=True,
@@ -340,6 +341,7 @@ class CliTests(unittest.TestCase):
             "WBP_CURRENT_PROXY_URL",
         ):
             self.assertNotIn(key, env)
+        self.assertEqual(env["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
         self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
         self.assertEqual(env["no_proxy"], env["NO_PROXY"])
 
@@ -930,6 +932,7 @@ class CliTests(unittest.TestCase):
             "    'ALL_PROXY_present': 'ALL_PROXY' in os.environ,\n"
             "    'WBP_CURRENT_PROXY_URL_present': 'WBP_CURRENT_PROXY_URL' in os.environ,\n"
             "    'NO_PROXY': os.environ.get('NO_PROXY', ''),\n"
+            "    'PATH': os.environ.get('PATH', ''),\n"
             "}\n"
             "trace_path.write_text(json.dumps(payload) + '\\n')\n"
             "PY\n"
@@ -13228,6 +13231,7 @@ class CliTests(unittest.TestCase):
                     "HTTPS_PROXY": "http://example.invalid:2",
                     "ALL_PROXY": "http://example.invalid:3",
                     "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                    "PATH": "/definitely/missing",
                 },
                 "launch",
                 "client",
@@ -13263,6 +13267,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_payload["ALL_PROXY_present"])
         self.assertFalse(trace_payload["WBP_CURRENT_PROXY_URL_present"])
         self.assertEqual(trace_payload["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(trace_payload["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
 
     def test_launch_client_reports_missing_client_path_as_owner_packet(self) -> None:
         missing_path = self.profile_dir / "missing-host-client.sh"
@@ -13513,7 +13518,7 @@ class CliTests(unittest.TestCase):
         try:
             with mock.patch.dict(os.environ, self.env(), clear=True):
                 paths = runtime_mod.RuntimePaths.from_env()
-                with mock.patch.object(runtime_mod.shutil, "which", return_value=None):
+                with mock.patch.object(runtime_mod, "SYSTEM_OPEN_BIN", Path("/definitely/missing/open")):
                     payload = runtime_mod.run_launch_client(paths, str(app_bundle))
         finally:
             server.shutdown()
@@ -13528,6 +13533,93 @@ class CliTests(unittest.TestCase):
         self.assertFalse(launch_result["dispatch_attempted"])
         self.assertEqual(launch_result["dispatch_method"], "")
         self.assertEqual(launch_result["final_outcome"], "unsupported_launch_shape")
+
+    def test_launch_client_uses_absolute_system_open_under_hostile_path(self) -> None:
+        port = free_port()
+        app_bundle = self.profile_dir / "FakeHostClientAbsolute.app"
+        app_bundle.mkdir()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                {**self.env(), "PATH": "/definitely/missing"},
+                clear=True,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch.object(runtime_mod, "SYSTEM_OPEN_BIN", Path("/usr/bin/open")):
+                    with mock.patch.object(runtime_mod.subprocess, "run") as run_mock:
+                        run_mock.return_value = subprocess.CompletedProcess(
+                            ["/usr/bin/open", "-a", str(app_bundle)],
+                            0,
+                            "",
+                            "",
+                        )
+                        payload = runtime_mod.run_launch_client(paths, str(app_bundle))
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        args, kwargs = run_mock.call_args
+        self.assertEqual(args[0][0], "/usr/bin/open")
+        self.assertEqual(kwargs["env"]["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
+
+    def test_launch_smoke_repo_owned_default_launcher_is_deterministic_under_hostile_path(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        self.assertFalse(self.default_launcher_script.exists())
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for _ in range(5):
+                result = self.run_cli_with_env(
+                    {"PATH": "/definitely/missing"},
+                    "launch",
+                    "smoke",
+                    "--json",
+                    include_launcher_override=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = json.loads(result.stdout)
+                self.assertEqual(payload["status"], "ok")
+                self.assertEqual(payload["machine_error_code"], "OK")
+                self.assertEqual(payload["effective_mode"], "stable")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
 
 
 if __name__ == "__main__":
