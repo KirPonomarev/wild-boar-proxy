@@ -5587,18 +5587,35 @@ def summarize_stable_10_rollback_readiness(
         and bool(fallback_contract.get("desired_source_remains_visible"))
         and bool(fallback_contract.get("effective_source_must_report_fallback"))
     )
-    readiness_ok = readiness.get("machine_error_code") == "OK"
+    readiness_machine_error_code = str(readiness.get("machine_error_code", ""))
+    readiness_ok = readiness_machine_error_code == "OK"
+    managed_runtime_with_pending_stable_consumer = (
+        str(health_payload.get("status")) == "ok"
+        and str(status_payload.get("effective_mode")) == "managed"
+        and readiness_machine_error_code
+        in {
+            "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+            "STABLE_RUNTIME_CONSUMER_FALLBACK_ACTIVE",
+        }
+    )
+    fallback_readiness_ok = (
+        readiness_ok or managed_runtime_with_pending_stable_consumer
+    )
 
     if (
         recovery_contract_ready
         and last_known_good_ready
         and fallback_contract_ready
-        and readiness_ok
+        and fallback_readiness_ok
     ):
         return {
             "status": "ready",
             "machine_error_code": "OK",
-            "reason": "bounded_fallback_and_recovery_contracts_ready",
+            "reason": (
+                "bounded_fallback_and_recovery_contracts_ready"
+                if readiness_ok
+                else "bounded_fallback_and_recovery_contracts_ready_while_managed_runtime_pending_stable_consumer_activation"
+            ),
         }
 
     if not recovery_contract_ready:
