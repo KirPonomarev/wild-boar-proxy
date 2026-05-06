@@ -7041,6 +7041,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "valid")
         self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_stale")
 
+    def test_rollout_rotation_inspect_accepts_nested_snapshot_at_exact_freshness_boundary(
+        self,
+    ) -> None:
+        observed_at = "2026-05-06T00:00:00+00:00"
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc=observed_at,
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.now_iso",
+                return_value="2026-05-06T00:15:00+00:00",
+            ):
+                payload = runtime_mod.run_rollout_rotation_inspect(paths)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["observed_at_utc"], observed_at)
+        self.assertEqual(evidence["evidence_freshness"], "fresh")
+        self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "valid")
+        self.assertEqual(evidence["participation_status"], "available")
+        self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
+
+    def test_rollout_rotation_inspect_reports_unknown_for_future_dated_nested_snapshot(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-06T00:00:01+00:00",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.now_iso",
+                return_value="2026-05-06T00:00:00+00:00",
+            ):
+                payload = runtime_mod.run_rollout_rotation_inspect(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["evidence_freshness"], "unknown")
+        self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "invalid")
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_observed_at_invalid",
+        )
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_observed_at_invalid",
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+
     def test_rollout_rotation_inspect_rejects_nested_snapshot_outside_candidates(
         self,
     ) -> None:

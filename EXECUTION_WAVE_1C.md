@@ -158,78 +158,83 @@ set.
 the stage-advance owner path.
 
 This is not a claim that all of Wave 1C is fully complete. The live evidence
-lane remains separately gated and pending operator approval.
+lane executed once and closed as `incomplete`.
 
-Pending live evidence does not block repo-write handoff by itself.
+The freshness blocker diagnosis currently points to an operational prerequisite
+gap.
+No repo-owned defect has been identified in the current control-layer
+freshness logic path.
+
+Pending operational prerequisite closeout does not reopen repo-write lane status
+by itself.
 
 ### Next Handoff Recommendation
 
 The next contour should be chosen in this order:
 
-1. `Wave 1C Live Evidence Lane` through `EVIDENCE_CAPTURE_RUNBOOK.md` when an
-   explicit operator GO marker is present
-2. `Wave 1D Basic Companion UI Readiness` only as a separate fallback or
-   readiness/spec branch after repo-write closeout is committed and pushed
+1. `Wave 1C Rotation Evidence Operational Prerequisite Contour`
+2. `Wave 1C Live Evidence Lane Rerun` only after operational prerequisite
+   closeout and a new explicit operator GO marker
+3. `Wave 1D Basic Companion UI Readiness` only as a separate fallback or
+   readiness/spec branch after the scale lane is explicitly deferred
 
 The Wave 1D handoff is readiness/spec work, not UI implementation.
+It is not a substitute for operational prerequisite closeout while the scale
+lane remains active.
 
 ### Canonical Next Contour Plan
 
 The primary next contour is:
 
-`Wave 1C Live Evidence Lane: 16-account evidence packet capture`
+`Wave 1C Rotation Evidence Operational Prerequisite Contour`
 
-It must be executed as a separate operational contour.
-It must not absorb repo-write closeout steps into the live lane itself.
+It is an operational contour.
+It is not a repo-write defect-fix contour.
+It must not absorb a rerun of the live evidence lane into the prerequisite
+contour itself.
 
-Prerequisite closeout, outside the live contour:
+Starting fact packet:
 
-1. review the repo-write diff for scope and private-data safety
-2. run the required verification commands
-3. commit the repo-write contour
-4. push the branch in the same closeout cycle
+- `packet_status == incomplete`
+- `claim_scope == field_evidence_observed_only`
+- `final_outcome == field_evidence_packet_incomplete`
+- `blocked_reasons == rotation_evidence_stale`
 
-Only after that prerequisite closeout may the live contour begin.
+The operational prerequisite contour uses the already captured redacted
+evidence packet and bundle artifacts as factual inputs.
+It must not treat the incomplete packet as a partial success claim.
 
-Live contour execution order:
+Operational prerequisite contour execution order:
 
-1. require the explicit owner GO marker
-2. declare the exact real paths that may be read
-3. declare the exact artifact paths that may be written
-4. declare rollback expectations
-5. run exactly one `rollout evidence capture 16 --json`
-6. validate the resulting packet only through the owner-surface and runbook
-   rules
-7. run the post-run no-git-artifact checks
-8. produce a factual closeout without upgrading the claim scope
+1. preserve the incomplete packet and bundle artifacts as baseline evidence
+2. refresh rotation participation evidence only through the proper owner path
+   that materializes a fresh `selected_backend_snapshot`
+3. verify that the refreshed snapshot remains truthful and machine-consistent
+   with current registry and runtime state
+4. verify that no forbidden write-surface mutation or unrelated lifecycle
+   mutation occurs
+5. close the contour with a factual operational report
+6. hand off to a separate live evidence rerun contour only after prerequisite
+   closeout
 
-Live contour allowed writes are limited to redacted evidence bundle or temp
-export artifact paths owned by the packet command.
-Artifact copies of `runtime-mode.txt` and `runtime-effective-mode.txt` inside
-the redacted export directory are allowed.
-Live runtime mode files are not.
-The live contour must not mutate runtime state, profile state, policy stage, or
-account lifecycle.
+The operational prerequisite contour must not:
+
+- invent a new truth surface
+- relax the freshness requirement to upgrade a stale packet artificially
+- introduce new scale claims
+- absorb the live evidence rerun into the same contour
+- treat broad operator approval as a substitute for a rerun-specific owner
+  marker when the rerun contour begins
 
 Outcome routing:
 
-- `packet_status == complete` may close only as
-  `field_evidence_observed_only`
-- `packet_status == incomplete` does not close the scale gate and must hand off
-  to a separate narrowly scoped blocker contour
-- `packet_status == contradicted` does not close the scale gate and must hand
-  off to a separate narrowly scoped blocker contour
-- `packet_status == unsafe_to_claim` does not close the scale gate and must hand
-  off to a separate narrowly scoped blocker contour
-
-Fallback branch rule:
-
-- if the exact owner GO marker is not given, `Wave 1C Live Evidence Lane`
-  remains pending and does not auto-close
-- in that case, a separate `Wave 1D Basic Companion UI Readiness` contour may
-  be opened only as a readiness/spec branch
-- `Wave 1D` is not a continuation of the live evidence lane and does not satisfy
-  the evidence gate by substitution
+- if the owner path refreshes rotation evidence truthfully, hand off to
+  `Wave 1C Live Evidence Lane Rerun`
+- if operational refresh cannot produce fresh evidence, open a new narrowly
+  scoped runtime-hardening contour only after a concrete repo-owned blocker is
+  identified
+- if the scale lane is explicitly deferred, `Wave 1D` may open separately as a
+  readiness/spec branch
 
 The first UI contour must:
 
