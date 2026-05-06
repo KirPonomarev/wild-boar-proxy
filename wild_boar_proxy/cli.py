@@ -103,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_onboard = accounts_subparsers.add_parser("onboard")
     accounts_onboard.add_argument("--json", action="store_true", required=True)
     accounts_onboard.add_argument("--auth-ref")
+    accounts_onboard.add_argument("--loop", action="store_true")
     accounts_onboard.add_argument("--skip-login", action="store_true")
     accounts_onboard.add_argument("--no-sync", action="store_true")
     accounts_onboard.add_argument("--non-interactive", action="store_true")
@@ -223,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_onboard(
                     paths,
                     auth_ref=args.auth_ref,
+                    loop=args.loop,
                     skip_login=args.skip_login,
                     no_sync=args.no_sync,
                     non_interactive=args.non_interactive,

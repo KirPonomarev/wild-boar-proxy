@@ -9948,6 +9948,7 @@ def run_onboard(
     paths: RuntimePaths,
     *,
     auth_ref: str | None,
+    loop: bool,
     skip_login: bool,
     no_sync: bool,
     non_interactive: bool,
@@ -9961,7 +9962,7 @@ def run_onboard(
     before = snapshot_known_files(paths)
     before_registry = read_json(paths.registry_file)
     before_state = read_json(paths.state_file, required=False)
-    command = [str(paths.onboard_bin), "--once"]
+    command = [str(paths.onboard_bin), "--loop" if loop else "--once"]
     if auth_ref:
         command.extend(["--auth-ref", auth_ref])
     if skip_login:

@@ -76,6 +76,9 @@ Every command response must include all required fields on both success and fail
 
 `accounts onboard --json` is the owner surface for reserve-first onboarding
 truth.
+The onboarding owner lane supports external launcher invocation modes `--once`
+and `--loop`; the selected mode must remain visible in the emitted owner
+packet command surface.
 
 Onboarding success must not be inferred from external onboarding process exit
 code alone.
