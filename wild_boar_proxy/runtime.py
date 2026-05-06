@@ -48,6 +48,8 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
+DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
@@ -252,13 +254,22 @@ def sanitized_env() -> dict[str, str]:
         CURRENT_PROXY_URL_HANDOFF_ENV,
     ):
         env.pop(key, None)
+    env["PATH"] = DETERMINISTIC_RUNTIME_PATH
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
     return env
 
 
+def get_repo_owned_python_bin() -> str:
+    candidate = Path(sys.executable).expanduser()
+    if candidate.is_absolute() and candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+    return "/usr/bin/python3"
+
+
 def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env = sanitized_env()
+    env["WBP_PYTHON_BIN"] = get_repo_owned_python_bin()
     env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
     env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
     env["WBP_STABLE_CONFIG"] = str(paths.stable_config)
@@ -316,7 +327,7 @@ def dispatch_external_client(
     paths: RuntimePaths, client_path: Path, client_path_kind: str
 ) -> dict[str, Any]:
     if client_path_kind == "macos_app_bundle":
-        open_bin = shutil.which("open")
+        open_bin = str(SYSTEM_OPEN_BIN) if SYSTEM_OPEN_BIN.is_file() and os.access(SYSTEM_OPEN_BIN, os.X_OK) else None
         if not open_bin:
             raise RuntimeErrorInfo(
                 "macOS app-bundle launch is unavailable because `open` is missing.",
@@ -580,7 +591,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             'if [ "$mode" = "smoke" ]; then',
             '  printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
-            "  proxy_env python3 - <<'PY'",
+            '  proxy_env "${WBP_PYTHON_BIN:?}" - <<\'PY\'',
             "import json",
             "import os",
             "from pathlib import Path",
@@ -615,7 +626,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             f'if [ "$mode" = "{CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE}" ]; then',
             '  [ -n "${WBP_CURRENT_PROXY_URL:-}" ] || exit 8',
-            "  proxy_env python3 - <<'PY'",
+            '  proxy_env "${WBP_PYTHON_BIN:?}" - <<\'PY\'',
             "import json",
             "import os",
             "from pathlib import Path",
