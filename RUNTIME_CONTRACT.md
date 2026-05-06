@@ -132,6 +132,13 @@
   only as delegated readout
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
+- current bounded candidate discovery remains
+  `shallow_socket_listener_only` and is limited to local listener reachability
+  rather than a separate deep-probing truth surface
+- top-level current-proxy adoption success still requires same-owner live
+  runtime reproof through `healthcheck.attestation`
+- no separate control-layer deep-probing surface is active by default; deeper
+  runtime validation remains delegated to the live reproof surface above
 - `status --json` may report the same last-known-good proxy surface only as
   delegated readout
 - delegated `status --json` must propagate those owner-path writes honestly in
