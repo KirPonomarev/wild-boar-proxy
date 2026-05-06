@@ -102,6 +102,10 @@ Preferred fields include:
 - `selected_backend_id`
 - `selection_status`
 - `reserve_first_enforced`
+- `auth_snapshot_before_login_status`
+- `auth_snapshot_before_login_count`
+- `auth_snapshot_before_login_digest`
+- `auth_snapshot_before_login_source`
 - `pool_after_onboarding`
 - `validate_attempted`
 - `validate_outcome`
