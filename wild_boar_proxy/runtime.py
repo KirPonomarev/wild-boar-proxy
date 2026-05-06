@@ -3956,6 +3956,7 @@ def summarize_status(
     desired_mode = get_desired_mode(paths)
     health_payload = health_payload or run_healthcheck(paths)
     registry = read_json(paths.registry_file)
+    pool_counts = summarize_registry_pool_counts(registry)
     policy_drift_observed = get_stable_policy_drift(paths, registry)
     state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
@@ -4003,9 +4004,9 @@ def summarize_status(
     if not isinstance(proxy_reprobe_adoption_result, dict):
         proxy_reprobe_adoption_result = None
     pool_summary = {
-        "active": int(state.get("active_count", 0) or 0),
-        "reserve": int(state.get("reserve_count", 0) or 0),
-        "retired": int(state.get("retired_count", 0) or 0),
+        "active": int(pool_counts.get("active", 0) or 0),
+        "reserve": int(pool_counts.get("reserve", 0) or 0),
+        "retired": int(pool_counts.get("retired", 0) or 0),
         "healthy": int(state.get("healthy_count", 0) or 0),
         "degraded": int(state.get("degraded_count", 0) or 0),
         "down": int(state.get("down_count", 0) or 0),

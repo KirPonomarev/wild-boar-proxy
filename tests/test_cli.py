@@ -992,6 +992,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
         self.assertEqual(payload["pool_summary"]["selected_backend_ids"], [])
 
+    def test_status_reports_registry_lifecycle_counts_when_state_is_stale(self) -> None:
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-status",
+                auth_ref="/tmp/codex-reserve-status.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-status",
+                auth_ref="/tmp/codex-retired-status.json",
+                pool="retired",
+                status="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 1
+        state["reserve_count"] = 0
+        state["retired_count"] = 0
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        server, thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["pool_summary"]["active"], 1)
+        self.assertEqual(payload["pool_summary"]["reserve"], 1)
+        self.assertEqual(payload["pool_summary"]["retired"], 1)
+        self.assertEqual(payload["pool_summary"]["healthy"], 1)
+        self.assertEqual(payload["pool_summary"]["degraded"], 0)
+        self.assertEqual(payload["pool_summary"]["down"], 0)
+        self.assertEqual(payload["pool_summary"]["backend_count"], 3)
+
     def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
         stable_port = free_port()
         (self.profile_dir / "runtime-effective-mode.txt").write_text("stable\n", encoding="utf-8")
@@ -5527,6 +5572,40 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["registry_identity"]["machine_error_code"], "OK")
         self.assertEqual(payload["registry_identity"]["next_action"], "none")
         self.assertNotIn("claim_gate", payload)
+
+    def test_summarize_scale_evidence_accounts_reports_lifecycle_counts(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-accounts",
+                auth_ref="/tmp/codex-reserve-accounts.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-accounts",
+                auth_ref="/tmp/codex-retired-accounts.json",
+                pool="retired",
+                status="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        result = self.run_cli("accounts", "list", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        summary = runtime_mod.summarize_scale_evidence_accounts(payload)
+        self.assertEqual(summary["account_count"], 3)
+        self.assertEqual(
+            summary["lifecycle_counts"],
+            {"active": 1, "reserve": 1, "retired": 1},
+        )
+        self.assertEqual(summary["status_counts"]["healthy"], 2)
+        self.assertEqual(summary["status_counts"]["retired"], 1)
+        self.assertEqual(summary["registry_identity_status"], "clear")
 
     def test_accounts_list_reports_duplicate_backend_id_identity_ambiguity(self) -> None:
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
@@ -11770,6 +11849,46 @@ class CliTests(unittest.TestCase):
             0,
         )
         self.assertNotIn(str(generated_config_path), payload["changed_files"])
+
+    def test_accounts_retire_reserve_backend_keeps_status_lifecycle_counts_consistent(
+        self,
+    ) -> None:
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        registry_path = self.managed_dir / "backend-registry.json"
+        generated_config_path = self.managed_dir / "stable-runtime-config.generated.yaml"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-retire-status",
+                auth_ref="/tmp/codex-reserve-retire-status.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        generated_config_path.write_text(
+            f"host: 127.0.0.1\nport: {managed_port}\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(managed_port)
+        try:
+            retire_result = self.run_cli(
+                "accounts", "retire", "backend-reserve-retire-status", "--json"
+            )
+            status_result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(retire_result.returncode, 0, retire_result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        status_payload = json.loads(status_result.stdout)
+        self.assertEqual(status_payload["machine_error_code"], "OK")
+        self.assertEqual(status_payload["pool_summary"]["active"], 1)
+        self.assertEqual(status_payload["pool_summary"]["reserve"], 0)
+        self.assertEqual(status_payload["pool_summary"]["retired"], 1)
+        self.assertEqual(status_payload["pool_summary"]["backend_count"], 2)
 
     def test_accounts_retire_already_retired_backend_returns_terminal_noop(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
