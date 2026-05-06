@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.21
+PLAN_VERSION: 1.22
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; next primary contour is step-9 basic companion UI
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; next primary contour is step-10 diagnostics export closeout
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -613,6 +613,27 @@ Settings:
 - legacy import
 
 Acceptance: Operator can complete core workflows without terminal access.
+
+Current closeout note for implementation-order step 9:
+
+- the baseline companion UI now covers the bounded control-layer workflow for
+  mode control, managed sync, launch smoke, reserve-first onboarding truth,
+  account mutation actions, and diagnostics export owner-path invocation with
+  strict JSON command/result mapping
+- onboarding truth fields include machine-carried pre-login auth snapshot
+  evidence (`auth_snapshot_before_login_status`, count, digest, source) and
+  are rendered in the UI without engine-layer OAuth duplication
+- the diagnostics export owner lane is wired through
+  `diagnostics export --json` and renders command truth plus bundle-path
+  output without log parsing fallback
+- acceptance/regression verification for this step-9 closeout executed with:
+  `python3 -m unittest -q tests.test_ui_shell`,
+  `python3 -m unittest -q -k accounts_onboard tests.test_cli.CliTests`,
+  `python3 -m unittest -q tests.test_cli.CliTests`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- step-9 closeout commits are `9339ca4` and `bd61ebd`; implementation-order
+  step 9 is therefore closed for the current contour, and the next primary
+  contour is `Add diagnostics export`
 
 ### Workstream 07: Installer And Data Layout
 
