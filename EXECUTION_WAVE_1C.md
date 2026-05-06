@@ -79,7 +79,7 @@ Live evidence lane does not authorize additional repo-write work by itself.
 
 ### Preferred candidates
 
-- `rollout stage advance` lock coverage
+- `rollout stage advance` serialized owner-path closure plus interleaving audit
 - detected-new-auth onboarding lane expansion
 
 ### Recently closed contours
@@ -100,20 +100,34 @@ Closeout:
 
 Recently closed:
 
-`Wave 1C Repo-Write: Rollout Stage Advance Lock Coverage`
+`Wave 1C Repo-Write: Rollout Stage Advance Serialized Owner-Path Closure`
 
 Closeout:
 
-- direct owner-surface coverage was added for:
+- composite stage advancement now executes through one serialized owner path
+  across:
+  - proof
+  - policy transition
+  - promotion
+  - stable inventory materialization
+  - postflight verification
+- nested owner helpers in the same thread no longer create a false self-lock
+  outcome while the composite owner path is held
+- the contour now proves:
+  - held-lock results emit non-success owner packets with `LOCK_HELD`
+  - cross-thread competing owner mutation is rejected while stage advance is in
+    flight
+  - `changed_files` remains empty under rejected competing mutation
+  - tracked state remains unchanged under rejected competing mutation
+  - no interleaving window remains between proof, policy mutation, promotion,
+    stable inventory materialization, and postflight verification
+- direct owner-surface verification now covers:
   - `rollout stage advance 15 <id> --json` from canonical source stage `10`
   - `rollout stage advance 20 <id> --json` from canonical requested stage `20`
     when target posture is not yet satisfied
-- the contour now proves:
-  - held-lock results emit non-success owner packets with `LOCK_HELD`
-  - `changed_files` remains empty under held-lock conditions
-  - tracked state remains unchanged under held-lock conditions
-  - no nested stage-advancement success surface is emitted after lock rejection
-- the contour closed as tests-only
+  - cross-thread competing `mode set stable --json` rejection during in-flight
+    stage advancement
+- the contour closed with runtime hardening plus direct tests
 
 Recently closed:
 
@@ -140,6 +154,9 @@ The Wave 1C repo-write lane preferred candidates are closed.
 No known repo-authored execution-core delta remains in the preferred candidate
 set.
 
+`STATE_SERIALIZATION_GATE` no longer has a known repo-authored reopen window in
+the stage-advance owner path.
+
 This is not a claim that all of Wave 1C is fully complete. The live evidence
 lane remains separately gated and pending operator approval.
 
@@ -147,11 +164,48 @@ Pending live evidence does not block repo-write handoff by itself.
 
 ### Next Handoff Recommendation
 
-The next repo/product contour may move to:
+The next contour should be chosen in this order:
 
-`Wave 1D Basic Companion UI Readiness`
+1. `Wave 1C Live Evidence Lane` through `EVIDENCE_CAPTURE_RUNBOOK.md` when an
+   explicit operator GO marker is present
+2. `Wave 1D Basic Companion UI Readiness` after repo-write closeout is committed
+   and pushed
 
-This handoff is readiness/spec work, not UI implementation.
+The Wave 1D handoff is readiness/spec work, not UI implementation.
+
+### Canonical Next Contour Plan
+
+The next contour is:
+
+`Wave 1C Live Evidence Lane: 16-account evidence packet capture`
+
+It must be executed as a separate operational contour.
+It must not absorb repo-write closeout steps into the live lane itself.
+
+Prerequisite closeout, outside the live contour:
+
+1. review the repo-write diff for scope and private-data safety
+2. run the required verification commands
+3. commit the repo-write contour
+4. push the branch in the same closeout cycle
+
+Only after that prerequisite closeout may the live contour begin.
+
+Live contour execution order:
+
+1. require the explicit owner GO marker
+2. declare the exact real paths that may be read
+3. declare the exact artifact paths that may be written
+4. declare rollback expectations
+5. run exactly one `rollout evidence capture 16 --json`
+6. validate the resulting packet only through the owner-surface and runbook
+   rules
+7. produce a factual closeout without upgrading the claim scope
+
+Live contour allowed writes are limited to redacted evidence bundle or temp
+export artifact paths owned by the packet command.
+The live contour must not mutate runtime state, profile state, policy stage, or
+account lifecycle.
 
 The first UI contour must:
 
@@ -247,7 +301,11 @@ Additional repo-write entry criteria:
 Additional live-lane entry criteria:
 
 - the explicit owner GO marker exists in the current thread
-- the real paths that may be read or written are declared before execution
+- if the live lane follows repo-write work in the same thread, that repo-write
+  contour is already committed and pushed before live execution begins
+- the real paths that may be read are declared before execution
+- the exact redacted evidence bundle or temp export artifact paths that may be
+  written are declared before execution
 - rollback expectations are declared before execution
 
 ## Acceptance Criteria
@@ -266,6 +324,7 @@ Additional live-lane entry criteria:
 - no forbidden mutation occurs
 - bundle redaction passes
 - factual report names packet status and blocked reasons honestly
+- only redacted evidence bundle or temp export artifact paths are written
 - runtime artifacts stay out of git history
 
 ## Handoff Rule

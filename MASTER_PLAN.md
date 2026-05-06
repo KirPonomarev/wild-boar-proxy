@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.8
-PLAN_DATE: 2026-05-05
+PLAN_VERSION: 1.9
+PLAN_DATE: 2026-05-06
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; live evidence lane pending operator approval
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -50,6 +50,9 @@ Required evidence artifacts:
 - commit hash, observation date, and environment note
 
 Evidence packets must not include auth files, private tokens, raw unredacted logs, real account secrets, or private runtime dumps.
+
+Thread exports, planning logs, chat transcripts, and extracted user-turn histories are not accepted as implementation evidence, rollout proof, or scale evidence packets.
+They may help reconstruct chronology, but they do not replace a redacted machine-carried evidence packet.
 
 ## Canonicalization Rule
 
@@ -461,6 +464,7 @@ Enforce lock discipline.
 Implement reliable fallback to stable.
 Implement runtime attestation.
 Implement single-writer state mutation.
+Close rollout stage-advance serialization so proof, policy transition, promotion, stable inventory materialization, and postflight verification execute through one serialized owner path or one equivalent owner primitive.
 Implement proxy candidate reprobe.
 Persist last-known-good outbound proxy.
 Classify proxy-path failure separately from listener failure when evidence supports it.
@@ -471,6 +475,7 @@ Acceptance:
 - Five consecutive launches without false healthy and without effective-mode drift.
 - Runtime attestation is valid.
 - No stale-green behavior remains in the main launch path.
+- No lock handoff or interleaving window remains inside `rollout stage advance 15/20`.
 - Broken outbound proxy path does not silently masquerade as generic runtime death.
 - Stable recovery path remains deterministic under network-environment drift.
 
@@ -595,7 +600,7 @@ Acceptance: There is a short and clear notice about the external or bundled engi
 
 ### Workstream 10: QA And SRE
 
-Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, 16-account evidence capture, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, and stable service disabled then recovered.
+Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, 16-account evidence capture, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, stable service disabled then recovered, and concurrent mutation or interleaving attempts during `rollout stage advance 15/20`.
 Observability includes status report, machine error codes, diagnostics bundle, and runtime attestation.
 Pilot SLO includes launch success rate, onboarding success rate, managed health stability, and mean recovery time.
 
@@ -769,12 +774,14 @@ This surface may produce only `field_evidence_observed_only`.
 It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
 `pilot_ready`, or `production_ready`.
 
+`STATE_SERIALIZATION_GATE` is satisfied only when composite stage-advance execution does not reopen lock boundaries between proof, policy mutation, promotion, stable inventory materialization, and postflight verification.
+
 ## Implementation Order
 
 1. Freeze execution core.
 2. Freeze state schema and state transitions.
 3. Freeze command API.
-4. Close the current stage-20 command API work.
+4. Close the current stage-20 command API work, including serialized stage-advance owner-path closure and interleaving tests.
 5. Capture the 16-account evidence packet.
 6. Upgrade registry and probing architecture for 20-account capacity.
 7. Finish runtime hardening.
