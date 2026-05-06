@@ -9,6 +9,7 @@ from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
+    DIAGNOSTICS_RESULT_FIELDS,
     ONBOARDING_RESULT_FIELDS,
     SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
@@ -17,6 +18,7 @@ from wild_boar_proxy.ui_shell import (
     UiShellError,
     build_account_pool_snapshot,
     build_client_launch_field_values,
+    build_diagnostics_field_values,
     build_smoke_field_values,
     classify_client_launch_rendered_state,
     classify_smoke_rendered_state,
@@ -33,6 +35,7 @@ from wild_boar_proxy.ui_shell import (
     run_launch_client_and_refresh,
     run_mode_control_and_refresh,
     run_smoke_and_refresh,
+    run_diagnostics_export_and_refresh,
     run_sync_and_refresh,
 )
 
@@ -450,6 +453,37 @@ class ModeControlTests(unittest.TestCase):
             UiShellError, "status pool_summary and accounts list disagree"
         ):
             run_sync_and_refresh(runner)
+
+    def test_run_diagnostics_export_and_refresh_includes_runtime_and_accounts_refresh(self) -> None:
+        runner = FakeRunner(
+            {
+                ("diagnostics", "export", "--json"): command_payload(
+                    human_message="Diagnostics bundle exported.",
+                    bundle_path="/tmp/wbp-diag",
+                ),
+                ("status", "--json"): status_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_diagnostics_export_and_refresh(
+            runner
+        )
+
+        self.assertEqual(action_payload["human_message"], "Diagnostics bundle exported.")
+        self.assertEqual(action_payload["bundle_path"], "/tmp/wbp-diag")
+        self.assertEqual(runtime_snapshot.effective_mode, "managed")
+        self.assertEqual(account_snapshot.active_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("diagnostics", "export", "--json"),
+                ("status", "--json"),
+                ("accounts", "list", "--json"),
+                ("mode", "get", "--json"),
+            ],
+        )
 
 
 class LaunchClientTests(unittest.TestCase):
@@ -979,6 +1013,13 @@ class OnboardingActionTests(unittest.TestCase):
             '{"command_status": "ok"}',
         )
 
+    def test_build_diagnostics_field_values_maps_bundle_path(self) -> None:
+        values = build_diagnostics_field_values(
+            command_payload(bundle_path="/tmp/wbp-diag")
+        )
+        self.assertEqual(set(values.keys()), set(DIAGNOSTICS_RESULT_FIELDS))
+        self.assertEqual(values["bundle_path"], "/tmp/wbp-diag")
+
 
 class UiDispatchTests(unittest.TestCase):
     def test_run_validate_action_delegates_to_account_check_alias(self) -> None:
@@ -1299,6 +1340,41 @@ class UiDispatchTests(unittest.TestCase):
         self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
         thread_instance.start.assert_called_once_with()
 
+    def test_run_diagnostics_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_diagnostics_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_diagnostics_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_diagnostics_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._diagnostics_worker)
+        self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
+        thread_instance.start.assert_called_once_with()
+
     def test_apply_smoke_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell.smoke_command_status_var = mock.Mock()
@@ -1340,6 +1416,40 @@ class UiDispatchTests(unittest.TestCase):
         )
 
         shell.smoke_rendered_state_var.set.assert_called_once_with("failure")
+
+    def test_apply_diagnostics_payload_maps_command_and_bundle_path(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.diagnostics_command_status_var = mock.Mock()
+        shell.diagnostics_command_exit_code_var = mock.Mock()
+        shell.diagnostics_command_human_message_var = mock.Mock()
+        shell.diagnostics_command_machine_error_var = mock.Mock()
+        shell.diagnostics_command_changed_files_var = mock.Mock()
+        shell.diagnostics_command_next_action_var = mock.Mock()
+        shell.diagnostics_field_vars = {
+            field: mock.Mock() for field in DIAGNOSTICS_RESULT_FIELDS
+        }
+
+        shell._apply_diagnostics_payload(
+            command_payload(
+                human_message="Diagnostics bundle exported.",
+                changed_files=["/tmp/wbp-diag"],
+                bundle_path="/tmp/wbp-diag",
+            )
+        )
+
+        shell.diagnostics_command_status_var.set.assert_called_once_with("ok")
+        shell.diagnostics_command_exit_code_var.set.assert_called_once_with("0")
+        shell.diagnostics_command_human_message_var.set.assert_called_once_with(
+            "Diagnostics bundle exported."
+        )
+        shell.diagnostics_command_machine_error_var.set.assert_called_once_with("OK")
+        shell.diagnostics_command_changed_files_var.set.assert_called_once_with(
+            '["/tmp/wbp-diag"]'
+        )
+        shell.diagnostics_command_next_action_var.set.assert_called_once_with("none")
+        shell.diagnostics_field_vars["bundle_path"].set.assert_called_once_with(
+            "/tmp/wbp-diag"
+        )
 
     def test_smoke_worker_keeps_action_payload_when_status_refresh_fails(self) -> None:
         class BrokenStatusRunner:
