@@ -224,6 +224,34 @@ Live rerun contour execution order:
 7. run the post-run no-git-artifact checks
 8. close the contour with a factual report without upgrading the claim scope
 
+Required validations:
+
+- `stdout` is exactly one JSON object
+- `status` is present
+- `exit_code` is present
+- `human_message` is present
+- `machine_error_code` is present
+- `changed_files` is present
+- `next_action` is present
+- `liveness` is present
+- `severity` is present
+- `operator_action` is present
+- `scale_evidence_packet_result` is present
+- `claim_target == "16"`
+- `claim_scope == "field_evidence_observed_only"`
+- `packet_status` is one of:
+  - `complete`
+  - `incomplete`
+  - `contradicted`
+  - `unsafe_to_claim`
+- `final_outcome` is one of the documented field-evidence outcomes
+- `blocked_reasons` is machine-readable
+- `runtime_attestation_summary.attestation` is present
+- `rotation_evidence_summary` is present
+- `fallback_readiness_summary` is present
+- `diagnostics_bundle_summary.redaction_status` is present
+- `changed_files` lists bundle artifact file paths only, not live runtime files
+
 The live rerun contour must not:
 
 - invent a new truth surface
