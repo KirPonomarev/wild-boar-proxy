@@ -213,91 +213,193 @@ The evidence-capture regression blocker investigation then observed:
 - no repo-owned defect has yet been proven in the current activation or
   fallback classification paths
 
-The next contour is now a multi-axis live readiness operational prerequisite
-contour.
+The multi-axis live readiness operational prerequisite contour then observed:
+
+- current `healthcheck --json` returned `machine_error_code == OK`
+- current `healthcheck --json` reported attestation pass on
+  `effective_mode == stable`
+- current `status --json` returned
+  `consumer_activation_readiness.machine_error_code == OK`
+- current `status --json` returned
+  `consumer_activation_readiness.status == aligned`
+- current `rollout rotation inspect --json` remained
+  `ROTATION_EVIDENCE_STALE` with
+  `evidence_reason == selected_backend_snapshot_stale`
+- exactly one `sync --json` completed successfully
+- immediate parallel post-sync validation produced `LOCK_HELD` on
+  `healthcheck --json` and `status --json` while
+  `rollout rotation inspect --json` already reported fresh participation
+  evidence
+- that `LOCK_HELD` episode was treated as operator-induced contention rather
+  than a contour blocker because the later sequential revalidation succeeded
+- sequential revalidation then returned:
+  - `healthcheck --json` `machine_error_code == OK`
+  - current attestation `listener_ok == true`
+  - current attestation `models_ok == true`
+  - current attestation `responses_ok == true`
+  - current attestation `effective_mode_match == true`
+  - current attestation `base_url_match == true`
+  - `status --json`
+    `consumer_activation_readiness.machine_error_code == OK`
+  - `status --json`
+    `consumer_activation_readiness.status == aligned`
+  - `rollout rotation inspect --json` `machine_error_code == OK`
+  - current rotation evidence `evidence_freshness == fresh`
+  - current rotation evidence `participation_status == available`
+
+The live-readiness prerequisite contour was closed through truthful owner-path
+refresh and sequential revalidation.
+The next contour is now a separate live evidence rerun contour.
 
 ### Next Handoff Recommendation
 
 The next contour should be chosen in this order:
 
-1. `Wave 1C Multi-Axis Live Readiness Operational Prerequisite Contour`
-2. `Wave 1C Live Evidence Lane Rerun` only after live readiness prerequisite
+1. `Wave 1C Live Evidence Lane Rerun` only after live-readiness prerequisite
    closeout and owner authorization exists in the current thread
+2. if needed, a new narrowly scoped blocker contour based on the rerun outcome
 3. `Wave 1D Basic Companion UI Readiness` only as a separate fallback or
    readiness/spec branch after the scale lane is explicitly deferred
 
 The Wave 1D handoff is readiness/spec work, not UI implementation.
-It is not a substitute for live readiness prerequisite closeout or the future
-live evidence rerun while the scale lane remains active.
+It is not a substitute for the live evidence rerun while the scale lane
+remains active.
 
 ### Canonical Next Contour Plan
 
 The primary next contour is:
 
-`Wave 1C Multi-Axis Live Readiness Operational Prerequisite Contour`
+`Wave 1C Live Evidence Lane Rerun: 16-account evidence packet capture`
 
-It is a narrow operational prerequisite contour.
-It is not a repo-write defect-fix contour.
-It is not a live evidence rerun contour.
-It must not absorb a new live evidence rerun into the prerequisite contour
-itself.
+Position:
+
+This is the primary next contour after the truthful activation diagnosis
+closeout, the truthful rotation freshness prerequisite closeout, and the
+truthful multi-axis live-readiness prerequisite closeout.
+It is a separate live contour.
+It is not a repo-write contour.
+It must not absorb prerequisite refresh, repair, sync, or any new code changes
+into the rerun contour itself.
+
+Purpose:
+
+- rerun the 16-account live evidence packet capture after the live-readiness
+  prerequisite was truthfully refreshed
+- attempt to close the `SCALE_EVIDENCE_PACKET_GATE`
+- preserve strict claim discipline at `field_evidence_observed_only` only
+- produce a factual closeout without inventing a stronger scale claim
 
 Starting fact packet:
 
 - `packet_status == incomplete`
 - `claim_scope == field_evidence_observed_only`
 - `final_outcome == field_evidence_packet_incomplete`
-- `runtime_attestation_summary.machine_error_code == LISTENER_DOWN`
-- `runtime_attestation_summary.effective_mode == stable`
-- `rotation_evidence_summary.machine_error_code == ROTATION_EVIDENCE_STALE`
-- `rotation_evidence_summary.evidence_reason == selected_backend_snapshot_stale`
-- `fallback_readiness_summary.machine_error_code == STAGE_PROOF_ROLLBACK_READINESS_FAILED`
-- `fallback_readiness_summary.reason == consumer_activation_readiness_not_ok`
-- `diagnostics_bundle_summary.redaction_status == passed`
+- earlier `runtime_attestation_summary.machine_error_code == LISTENER_DOWN`
+- earlier `rotation_evidence_summary.machine_error_code == ROTATION_EVIDENCE_STALE`
+- earlier
+  `fallback_readiness_summary.machine_error_code == STAGE_PROOF_ROLLBACK_READINESS_FAILED`
+- post-prerequisite `healthcheck --json` returned `machine_error_code == OK`
+- post-prerequisite `status --json` returned
+  `consumer_activation_readiness.machine_error_code == OK`
+- post-prerequisite `status --json` returned
+  `consumer_activation_readiness.status == aligned`
+- post-prerequisite `rotation_evidence_result.participation_status == available`
+- post-prerequisite `rotation_evidence_result.evidence_freshness == fresh`
 
-The prerequisite contour uses the latest incomplete rerun packet, the earlier
-activation diagnosis closeout, the earlier rotation freshness prerequisite
-closeout, and the current runtime truth surfaces as factual inputs.
-It must not treat the latest incomplete packet as a partial success claim.
+Source inputs:
 
-Allowed owner-path commands in this contour:
+- the already captured incomplete redacted evidence packet artifact
+- the already captured redacted evidence bundle artifacts
+- the truthful activation diagnosis closeout
+- the truthful rotation freshness prerequisite closeout
+- the truthful multi-axis live-readiness prerequisite closeout
+- the current runtime truth surfaces
+- canon and command-contract documents
 
-- `healthcheck --json`
-- `status --json`
-- `sync --json`
-- `rollout rotation inspect --json`
+The rerun contour must not treat the earlier incomplete packet as a partial
+success claim.
 
-Prerequisite contour execution order:
+Required owner authorization:
 
-1. preserve the latest rerun packet and bundle artifacts as baseline evidence
-2. inspect current attestation, rotation, and fallback-adjacent readiness
-   surfaces as separate axes
-3. perform only the minimum owner-path refresh needed to re-establish the three
-   live-readiness axes together
-4. verify whether the following are simultaneously true:
-   - runtime attestation passes
-   - rotation evidence is available and fresh
-   - fallback readiness reports ready or a canonically accepted equivalent
-5. close the contour with a factual operational report
-6. return to a new live rerun contour only after live-readiness prerequisite
-   closeout
+The current thread must contain either:
 
-Required prerequisite boundaries:
+- the project-scoped standing owner approval recognized by `CANON.md`
+- or the exact one-off marker:
 
-- no new `rollout evidence capture 16 --json`
-- no hidden repo-fix work inside this contour
-- no single-root-cause claim unless newly proven
-- no new truth surface
-- no stronger scale claim
+  `GO_FOR_LIVE_CAPTURE: run rollout evidence capture 16 --json once`
+
+Allowed live command:
+
+`rollout evidence capture 16 --json`
+
+Live rerun contour execution order:
+
+1. require owner authorization in the current thread
+2. declare the exact real paths that may be read
+3. declare the exact redacted bundle or temp artifact paths that may be written
+4. declare rollback expectations
+5. run exactly one `rollout evidence capture 16 --json`
+6. validate only the returned JSON packet and redacted artifact paths
+7. run the post-run no-git-artifact checks
+8. close the contour with a factual report without upgrading the claim scope
+
+Required validations:
+
+- `stdout` is exactly one JSON object
+- `status` is present
+- `exit_code` is present
+- `human_message` is present
+- `machine_error_code` is present
+- `changed_files` is present
+- `next_action` is present
+- `liveness` is present
+- `severity` is present
+- `operator_action` is present
+- `scale_evidence_packet_result` is present
+- `claim_target == "16"`
+- `claim_scope == "field_evidence_observed_only"`
+- `packet_status` is one of:
+  - `complete`
+  - `incomplete`
+  - `contradicted`
+  - `unsafe_to_claim`
+- `final_outcome` is one of the documented field-evidence outcomes
+- `blocked_reasons` is machine-readable
+- `runtime_attestation_summary.attestation` is present
+- `rotation_evidence_summary` is present
+- `fallback_readiness_summary` is present
+- `diagnostics_bundle_summary.redaction_status` is present
+- `changed_files` lists bundle artifact file paths only, not live runtime files
+
+The live rerun contour must not:
+
+- invent a new truth surface
+- introduce new scale claims
+- run `sync --json`, repair, mode, lifecycle, onboarding, diagnostics export,
+  stage prove, or stage advance commands
+- treat generic unscoped phrases such as `start`, `go`, or `начинай работу`
+  as a substitute for owner authorization
+
+Required post-run checks:
+
+- `git status --short --branch`
+- `git diff --name-only --cached`
+
+No bundle artifact, auth file, runtime state, log, or private config path may
+be staged.
 
 Outcome routing:
 
-- if all three live-readiness axes are re-established together, hand off to a
-  new live rerun contour
-- if one sibling blocker remains independently active, open a narrower
-  follow-up contour for that blocker
-- if a concrete repo-owned defect is finally proven, open a narrow repo-fix or
-  runtime-hardening contour only then
+- if `packet_status == complete`, close only as
+  `field_evidence_observed_only`
+- if `packet_status == incomplete`, open a new narrowly scoped blocker contour
+- if `packet_status == contradicted`, open a new narrowly scoped blocker
+  contour
+- if `packet_status == unsafe_to_claim`, open a new narrowly scoped blocker
+  contour
+- if rerun exposes a new concrete repo-owned defect, open a new narrowly scoped
+  runtime-hardening contour only after a concrete repo-owned blocker is
+  identified
 - if the scale lane is explicitly deferred, `Wave 1D` may open separately as a
   readiness/spec branch
 
