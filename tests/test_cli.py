@@ -4863,6 +4863,69 @@ class CliTests(unittest.TestCase):
             "approved_repair_target",
         )
 
+    def test_status_uses_approved_target_policy_drift_surface_when_live_activation_evidence_is_valid(
+        self,
+    ) -> None:
+        source_auth = self.profile_dir / "sources" / "codex-active.json"
+        source_auth.parent.mkdir(parents=True, exist_ok=True)
+        source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["auth_ref"] = str(source_auth)
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        stable_port = free_port()
+        observed_drift_dir = self.stable_dir / "observed-drift"
+        observed_drift_dir.mkdir(parents=True, exist_ok=True)
+        (observed_drift_dir / "codex-foreign.json").write_text("{}", encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n"
+            f'auth-dir: "{observed_drift_dir}"\n',
+            encoding="utf-8",
+        )
+        launcher = self.write_recording_stable_launcher(
+            self.profile_dir / "codex-custom-status-claim-surface.sh"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            launch_result = self.run_cli_with_env(
+                {"WBP_LAUNCHER_SCRIPT": str(launcher)}, "launch", "smoke", "--json"
+            )
+            status_result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(launch_result.returncode, 0, launch_result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        payload = json.loads(status_result.stdout)
+        self.assertEqual(
+            payload["stable_runtime_consumer"]["effective_stable_runtime_consumer_source"][
+                "status"
+            ],
+            "approved_target_active_by_activation_evidence",
+        )
+        self.assertEqual(payload["policy_drift"]["status"], "clear")
+        self.assertEqual(payload["policy_drift"]["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["policy_drift"]["stable_auth_inventory_source"]["source"],
+            "approved_repair_target",
+        )
+        self.assertEqual(payload["policy_drift_observed"]["status"], "detected")
+        self.assertEqual(
+            payload["policy_drift_observed"]["stable_auth_inventory_source"]["source"],
+            "auth-dir",
+        )
+        self.assertEqual(payload["claim_gate"]["status"], "clear")
+        self.assertEqual(payload["claim_gate"]["sources"], [])
+
     def test_launch_smoke_records_conservative_observed_source_fallback_when_launcher_exits_nonzero_during_approved_target_attempt(
         self,
     ) -> None:
@@ -6778,6 +6841,38 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["claim_scope"], runtime_mod.ROTATION_EVIDENCE_CLAIM_SCOPE)
         self.assertEqual(before, after)
 
+    def test_rollout_rotation_inspect_reads_sync_materialized_nested_snapshot(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        port = free_port()
+        self.configure_managed_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            sync_result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(sync_result.returncode, 0, sync_result.stderr)
+        sync_payload = json.loads(sync_result.stdout)
+        self.assertEqual(sync_payload["machine_error_code"], "OK")
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["evidence_source_class"], "supervisor_owner_observed")
+        self.assertEqual(evidence["evidence_source_name"], "sync --json")
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_status"], "valid"
+        )
+        self.assertEqual(evidence["selected_backend_ids"], ["backend-a", "backend-b"])
+
     def test_rollout_rotation_inspect_prefers_nested_snapshot_over_flat_fields(
         self,
     ) -> None:
@@ -7317,6 +7412,57 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["evidence_reason"], "policy_drift_detected")
         self.assertEqual(evidence["participation_status"], "contradicted")
         self.assertEqual(evidence["blocker_type"], "contradicted_state")
+
+    def test_rollout_rotation_inspect_uses_approved_target_policy_surface_when_activation_evidence_is_valid(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        source_dir = Path(self.temp_dir.name) / "rotation-source-auths"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_a = source_dir / "codex-a.json"
+        source_b = source_dir / "codex-b.json"
+        source_a.write_text("{}", encoding="utf-8")
+        source_b.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["auth_ref"] = str(source_a)
+        registry["backends"][1]["auth_ref"] = str(source_b)
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        switched = self.run_cli("stable", "target", "switch", "--apply", "--json")
+        self.assertEqual(switched.returncode, 0, switched.stderr)
+        repaired = self.run_cli("stable", "repair", "--apply", "--json")
+        self.assertEqual(repaired.returncode, 0, repaired.stderr)
+        (self.stable_dir / "codex-b.json").unlink()
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["stable_runtime_consumer_snapshot"] = {
+            "schema_version": 1,
+            "activation_method": "process_local_env_override",
+            "selected_config_file": str(
+                self.managed_dir / "stable-runtime-config.generated.yaml"
+            ),
+            "selected_source_kind": "approved_repair_target",
+            "selected_source_path": str(self.managed_dir / "stable-repair-target"),
+            "activation_outcome": "approved_target_activated",
+            "fallback_reason": "",
+            "observed_at_utc": runtime_mod.now_iso(),
+        }
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["policy_drift_observed_status"], "detected")
+        self.assertEqual(evidence["policy_drift_status"], "clear")
+        self.assertEqual(
+            evidence["policy_drift_claim_surface_source"],
+            "approved_repair_target",
+        )
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_present")
+        self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
 
     def test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence(
         self,
@@ -11209,6 +11355,111 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-ran")
+
+    def test_sync_materializes_selected_backend_snapshot_on_success(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        port = free_port()
+        self.configure_managed_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        snapshot = state.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(
+            snapshot.get("schema_version"),
+            runtime_mod.SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION,
+        )
+        self.assertEqual(
+            snapshot.get("snapshot_kind"),
+            runtime_mod.SELECTED_BACKEND_SNAPSHOT_KIND,
+        )
+        self.assertEqual(snapshot.get("source_class"), "supervisor_owner_observed")
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertEqual(snapshot.get("claim_scope"), runtime_mod.ROTATION_EVIDENCE_CLAIM_SCOPE)
+        self.assertEqual(snapshot.get("selected_backend_ids"), ["backend-a", "backend-b"])
+        self.assertEqual(
+            snapshot.get("selected_backends_digest"),
+            runtime_mod.get_selected_backend_ids_digest(["backend-a", "backend-b"]),
+        )
+        self.assertEqual(
+            snapshot.get("observed_at_utc"),
+            state.get("selected_backend_ids_observed_at"),
+        )
+
+    def test_sync_refreshes_selected_backend_snapshot_observed_at_on_success(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        stale_observed_at = "2026-05-03T00:00:00+00:00"
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids_observed_at"] = stale_observed_at
+        state["selected_backend_snapshot"] = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc=stale_observed_at,
+            source_class="external_owner_path_observed",
+            source_name="old-owner-path",
+            source_run_id="old-run",
+            producer_version="old-producer",
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        port = free_port()
+        self.configure_managed_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+
+        after = json.loads(state_path.read_text())
+        refreshed_observed_at = after.get("selected_backend_ids_observed_at")
+        self.assertNotEqual(refreshed_observed_at, stale_observed_at)
+        snapshot = after.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(snapshot.get("observed_at_utc"), refreshed_observed_at)
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertTrue(str(snapshot.get("source_run_id", "")).startswith("sync:"))
+
+    def test_sync_failure_does_not_mutate_selected_backend_snapshot(self) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        expected_snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-03T00:00:00+00:00",
+            source_class="external_owner_path_observed",
+            source_name="preexisting-owner",
+            source_run_id="run-preexisting",
+            producer_version="producer-preexisting",
+        )
+        state["selected_backend_snapshot"] = expected_snapshot
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        result = self.run_cli("sync", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        after = json.loads(state_path.read_text())
+        self.assertEqual(after.get("selected_backend_snapshot"), expected_snapshot)
 
     def test_sync_does_not_expose_deterministic_stable_recovery_result(self) -> None:
         result = self.run_cli("sync", "--json")
