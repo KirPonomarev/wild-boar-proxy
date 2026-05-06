@@ -146,10 +146,11 @@ If `selected_backend_snapshot` is materialized, it is:
 
 - cached bounded local participation evidence
 - a read/validation contract for rollout evidence surfaces
+- materialized only by the serialized runtime-state owner path in `sync --json`
+  after successful sync with managed-listener health verified
 - separate from registry lifecycle truth
 - separate from active-pool counts
 - not final runtime truth without live checks
-- not a production writer contract in the current contour
 - not sufficient by itself for `STABLE_20_PROVED`, `SCALE_COMPLETE`, or
   `PILOT_READY`
 
@@ -335,6 +336,8 @@ attempt rather than treating a stale artifact as authoritative truth.
   mutation path
 - `supervisor-state.json` may be mutated only by the serialized runtime-state
   mutation path
+- `supervisor-state.json.selected_backend_snapshot` may be materialized or
+  refreshed only by the serialized runtime-state owner path in `sync --json`
 - `runtime-mode.txt` may be mutated only by the mode-selection path
 - `runtime-effective-mode.txt` may be mutated only by successful live
   preflight, fallback, or recovery completion
