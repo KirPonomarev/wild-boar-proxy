@@ -7019,6 +7019,41 @@ def summarize_rollout_stage_advance_postflight(
     return True, "OK", "none", summary
 
 
+def allow_stage_advance_source_proof_with_one_explicit_reserve_candidate(
+    *,
+    proof_payload: dict[str, Any],
+    proof_result: dict[str, Any],
+    source_stage: str,
+    backend_precondition_status: str,
+    active_count_before: int,
+    reserve_count_before: int,
+) -> bool:
+    source_policy = STAGED_POOL_POLICY_PACKETS.get(source_stage, {})
+    source_active_target = coerce_nonnegative_int(source_policy.get("active_target"))
+    source_reserve_target = coerce_nonnegative_int(source_policy.get("reserve_target"))
+    active_pool_count_observed = coerce_nonnegative_int(
+        proof_result.get("active_pool_count_observed")
+    )
+    reserve_pool_count_observed = coerce_nonnegative_int(
+        proof_result.get("reserve_pool_count_observed")
+    )
+    return bool(
+        proof_payload.get("status") != "ok"
+        and proof_payload.get("machine_error_code")
+        == "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+        and backend_precondition_status == "eligible_reserve_backend"
+        and source_active_target is not None
+        and source_reserve_target is not None
+        and active_count_before == source_active_target
+        and reserve_count_before == source_reserve_target + 1
+        and active_pool_count_observed == source_active_target
+        and reserve_pool_count_observed == source_reserve_target + 1
+        and str(proof_result.get("rotation_evidence_status", "unknown")) == "available"
+        and str(proof_result.get("runtime_attestation_status", "failed")) == "passed"
+        and str(proof_result.get("rollback_readiness_status", "failed")) == "ready"
+    )
+
+
 def run_rollout_stage_advance(
     paths: RuntimePaths, stage: str, backend_id: str
 ) -> dict[str, Any]:
@@ -7354,24 +7389,38 @@ def run_rollout_stage_advance(
                 "final_outcome": proof_result.get("final_outcome"),
             }
             if proof_payload.get("status") != "ok":
-                stage_advancement_result[preflight_status_field] = "failed"
-                return rollback_after_failed_step(
-                    human_message=(
-                        f"Rollout stage advance is blocked because stable-{source_stage} "
-                        "proof is not satisfied."
-                    ),
-                    machine_error_code=str(
-                        proof_payload.get(
-                            "machine_error_code", "STAGE_ADVANCE_PROOF_FAILED"
-                        )
-                    ),
-                    operator_action=str(
-                        proof_payload.get("operator_action", "user_action")
-                    ),
-                    exit_code=int(proof_payload.get("exit_code", 1) or 1),
-                    snapshots=step_snapshots,
-                    final_outcome=proof_failure_outcome,
-                )
+                if allow_stage_advance_source_proof_with_one_explicit_reserve_candidate(
+                    proof_payload=proof_payload,
+                    proof_result=proof_result,
+                    source_stage=source_stage,
+                    backend_precondition_status=backend_precondition_status,
+                    active_count_before=active_count_before,
+                    reserve_count_before=reserve_count_before,
+                ):
+                    stage_advancement_result["delegated_evidence"][
+                        f"stable_{source_stage}_proof_summary"
+                    ]["reserve_candidate_override_status"] = (
+                        "accepted_single_explicit_reserve_candidate"
+                    )
+                else:
+                    stage_advancement_result[preflight_status_field] = "failed"
+                    return rollback_after_failed_step(
+                        human_message=(
+                            f"Rollout stage advance is blocked because stable-{source_stage} "
+                            "proof is not satisfied."
+                        ),
+                        machine_error_code=str(
+                            proof_payload.get(
+                                "machine_error_code", "STAGE_ADVANCE_PROOF_FAILED"
+                            )
+                        ),
+                        operator_action=str(
+                            proof_payload.get("operator_action", "user_action")
+                        ),
+                        exit_code=int(proof_payload.get("exit_code", 1) or 1),
+                        snapshots=step_snapshots,
+                        final_outcome=proof_failure_outcome,
+                    )
             stage_advancement_result[preflight_status_field] = "passed"
 
             policy_payload = run_policy_stage_set(
@@ -9240,6 +9289,9 @@ def run_promote(
         "active_target_observed": None,
         "reserve_count_before": None,
         "reserve_target_observed": None,
+        "active_pool_count_after": None,
+        "reserve_count_after": None,
+        "policy_verification_status": "not_verified",
         "rollback_point_captured": False,
         "routing_change_attempted": False,
         "routing_change_observed": False,
@@ -9627,21 +9679,42 @@ def run_promote(
             verified_backend = (
                 verified_matches[0] if len(verified_matches) == 1 else None
             )
+            verified_pool_counts = summarize_registry_pool_counts(verified_registry)
             verified_selected_backend_ids = {
                 str(item) for item in verified_state.get("selected_backend_ids", []) or []
             }
+            active_pool_count_after = int(verified_pool_counts.get("active", 0) or 0)
+            reserve_count_after = int(verified_pool_counts.get("reserve", 0) or 0)
+            promotion_result["active_pool_count_after"] = active_pool_count_after
+            promotion_result["reserve_count_after"] = reserve_count_after
+            if lock_acquired:
+                promotion_policy_verified = True
+                promotion_result["policy_verification_status"] = "delegated_to_caller"
+            else:
+                promotion_policy_verified = bool(
+                    active_pool_count_after == active_pool_count_before + 1
+                    and active_pool_count_after <= active_target
+                    and reserve_count_after == reserve_target
+                )
+                promotion_result["policy_verification_status"] = (
+                    "passed" if promotion_policy_verified else "failed"
+                )
             promotion_result["routing_change_observed"] = bool(
                 status_payload["status"] == "ok"
                 and isinstance(verified_backend, dict)
                 and str(verified_backend.get("pool", "")) == "active"
                 and not bool(verified_backend.get("manual_hold", False))
                 and backend_id in verified_selected_backend_ids
+                and promotion_policy_verified
             )
             if status_payload["status"] != "ok" or not promotion_result["routing_change_observed"]:
+                failure_message = (
+                    "Promotion did not preserve staged reserve/active pool policy after status proof."
+                    if status_payload["status"] == "ok" and not promotion_policy_verified
+                    else "Promotion did not produce verified active routing after status proof."
+                )
                 return rollback_after_failed_verification(
-                    human_message=(
-                        "Promotion did not produce verified active routing after status proof."
-                    ),
+                    human_message=failure_message,
                     machine_error_code="PROMOTION_STATUS_FAILED",
                     liveness=str(status_payload.get("liveness", "unknown")),
                     operator_action=str(status_payload.get("operator_action", "retry")),

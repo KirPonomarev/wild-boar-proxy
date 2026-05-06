@@ -8746,6 +8746,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["preflight_policy_status"], "matched")
         self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
         self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(
+            advance["delegated_evidence"]["stable_10_proof_summary"][
+                "reserve_candidate_override_status"
+            ],
+            "accepted_single_explicit_reserve_candidate",
+        )
         self.assertEqual(advance["postflight_attestation_status"], "passed")
         self.assertEqual(advance["postflight_rotation_status"], "available")
         self.assertEqual(advance["rollback_readiness_status"], "ready")
@@ -9032,6 +9038,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["preflight_policy_status"], "matched")
         self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
         self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(
+            advance["delegated_evidence"]["stable_15_proof_summary"][
+                "reserve_candidate_override_status"
+            ],
+            "accepted_single_explicit_reserve_candidate",
+        )
         self.assertEqual(advance["postflight_attestation_status"], "passed")
         self.assertEqual(advance["postflight_rotation_status"], "available")
         self.assertEqual(advance["rollback_readiness_status"], "ready")
@@ -9049,6 +9061,57 @@ class CliTests(unittest.TestCase):
         self.assertIn(
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
+
+    def test_rollout_stage_advance_20_blocks_multiple_reserve_candidates_at_source_stage(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-stage20-primary"
+        extra_reserve_backend_id = "backend-reserve-advance-stage20-extra"
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref="/tmp/codex-reserve-advance-stage20-primary.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=extra_reserve_backend_id,
+                auth_ref="/tmp/codex-reserve-advance-stage20-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli(
+                "rollout",
+                "stage",
+                "advance",
+                "20",
+                reserve_backend_id,
+                "--json",
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage15_proof_status"], "failed")
+        self.assertEqual(advance["policy_transition_status"], "not_invoked")
+        self.assertEqual(advance["promotion_status"], "not_invoked")
+        self.assertEqual(advance["final_outcome"], "stable_15_proof_failed")
+        self.assertEqual(payload["changed_files"], [])
 
     def test_rollout_stage_advance_20_blocks_when_stable_15_proof_fails(self) -> None:
         self.configure_stable_fifteen_proof_fixture()
@@ -10818,6 +10881,101 @@ class CliTests(unittest.TestCase):
         promotion = payload["promotion_result"]
         self.assertTrue(promotion["routing_change_attempted"])
         self.assertFalse(promotion["routing_change_observed"])
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_promote_policy_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 1,
+            "active_target": 2,
+            "reserve_target": 1,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-policy-target",
+                auth_ref="/tmp/codex-policy-target.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-policy-extra",
+                auth_ref="/tmp/codex-policy-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-policy-drift.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-policy-target"],
+                "active_count": 2,
+                "reserve_count": 1,
+                "retired_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-policy-drift",
+            exit_code=0,
+        )
+        promote_updates = json.dumps(
+            [
+                {"id": "backend-policy-target", "pool": "active"},
+                {"id": "backend-policy-extra", "pool": "active"},
+            ]
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_PROMOTE_BACKEND_UPDATES_JSON": promote_updates,
+                },
+                "accounts",
+                "promote",
+                "backend-policy-target",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_STATUS_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["routing_change_attempted"])
+        self.assertFalse(promotion["routing_change_observed"])
+        self.assertEqual(promotion["policy_verification_status"], "failed")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_pool_count_after"], 3)
+        self.assertEqual(promotion["reserve_count_before"], 2)
+        self.assertEqual(promotion["reserve_count_after"], 0)
         self.assertEqual(
             promotion["final_outcome"], "rollback_completed_after_failed_verification"
         )
