@@ -7214,6 +7214,33 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(evidence["blocker_type"], "schema_gap")
 
+    def test_rollout_rotation_inspect_rejects_snapshot_claim_scope(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            claim_scope=runtime_mod.SCALE_EVIDENCE_CLAIM_SCOPE,
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_claim_scope_invalid",
+        )
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_claim_scope_invalid",
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
     def test_rollout_rotation_inspect_reports_stale_nested_snapshot(self) -> None:
         snapshot = self.build_selected_backend_snapshot(
             ["backend-a", "backend-b"],
