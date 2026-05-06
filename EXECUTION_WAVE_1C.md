@@ -168,14 +168,14 @@ The next contour should be chosen in this order:
 
 1. `Wave 1C Live Evidence Lane` through `EVIDENCE_CAPTURE_RUNBOOK.md` when an
    explicit operator GO marker is present
-2. `Wave 1D Basic Companion UI Readiness` after repo-write closeout is committed
-   and pushed
+2. `Wave 1D Basic Companion UI Readiness` only as a separate fallback or
+   readiness/spec branch after repo-write closeout is committed and pushed
 
 The Wave 1D handoff is readiness/spec work, not UI implementation.
 
 ### Canonical Next Contour Plan
 
-The next contour is:
+The primary next contour is:
 
 `Wave 1C Live Evidence Lane: 16-account evidence packet capture`
 
@@ -221,6 +221,15 @@ Outcome routing:
   off to a separate narrowly scoped blocker contour
 - `packet_status == unsafe_to_claim` does not close the scale gate and must hand
   off to a separate narrowly scoped blocker contour
+
+Fallback branch rule:
+
+- if the exact owner GO marker is not given, `Wave 1C Live Evidence Lane`
+  remains pending and does not auto-close
+- in that case, a separate `Wave 1D Basic Companion UI Readiness` contour may
+  be opened only as a readiness/spec branch
+- `Wave 1D` is not a continuation of the live evidence lane and does not satisfy
+  the evidence gate by substitution
 
 The first UI contour must:
 
