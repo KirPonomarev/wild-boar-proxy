@@ -9620,6 +9620,139 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(before, self.state_snapshot())
 
+    def test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-stage15-outer-lock"
+        reserve_auth_path = self.profile_dir / "codex-reserve-stage15-outer-lock.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            lock_observations: list[str] = []
+
+            def proof_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("proof")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                }
+
+            def policy_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("policy")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "pool_policy_update_result": {
+                        "final_outcome": "stage_policy_updated",
+                    },
+                }
+
+            def promote_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("promote")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "promotion_result": {
+                        "precondition_status": "eligible_reserve_backend",
+                        "final_outcome": "promoted_active",
+                    },
+                }
+
+            def materialize_side_effect(
+                *_args: object, **_kwargs: object
+            ) -> dict[str, object]:
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("materialize")
+                return {
+                    "auth_basename": reserve_auth_path.name,
+                    "source_auth_ref": str(reserve_auth_path),
+                    "target_path": str(reserve_auth_path),
+                    "target_dir": str(reserve_auth_path.parent),
+                    "inventory_source": "stable_config_auth_dir",
+                }
+
+            def postflight_side_effect(
+                *_args: object, **kwargs: object
+            ) -> tuple[bool, str, str, dict[str, object]]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("postflight")
+                return (
+                    True,
+                    "OK",
+                    "none",
+                    {
+                        "attestation_status": "passed",
+                        "rotation_status": "available",
+                        "readiness_status": "ready",
+                    },
+                )
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_policy_stage_set",
+                    side_effect=policy_side_effect,
+                ):
+                    with mock.patch(
+                        "wild_boar_proxy.runtime.run_promote",
+                        side_effect=promote_side_effect,
+                    ):
+                        with mock.patch(
+                            "wild_boar_proxy.runtime.materialize_rollout_stage_advance_stable_auth",
+                            side_effect=materialize_side_effect,
+                        ):
+                            with mock.patch(
+                                "wild_boar_proxy.runtime.summarize_rollout_stage_advance_postflight",
+                                side_effect=postflight_side_effect,
+                            ):
+                                payload = runtime_mod.run_rollout_stage_advance(
+                                    paths, "15", reserve_backend_id
+                                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
+        self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["final_outcome"], "advanced_one_step")
+        self.assertEqual(
+            lock_observations,
+            ["proof", "policy", "promote", "materialize", "postflight"],
+        )
+        self.assertFalse(paths.lock_file.exists())
+
     def test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion(
         self,
     ) -> None:
@@ -9797,6 +9930,105 @@ class CliTests(unittest.TestCase):
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
         self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+
+    def test_rollout_stage_advance_15_blocks_cross_thread_mode_mutation_during_policy_step(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-interleaving"
+        reserve_auth_path = self.profile_dir / "codex-reserve-advance-interleaving.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-interleaving.sh",
+            state_patch={
+                "selected_backend_ids": [
+                    *[f"backend-{index:02d}" for index in range(10)],
+                    reserve_backend_id,
+                ],
+                "active_count": 11,
+                "reserve_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-interleaving",
+            exit_code=0,
+        )
+        concurrent_result: dict[str, object] = {}
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                self.env() | {"WBP_SYNC_SCRIPT": str(sync_script)},
+                clear=False,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                original_run_policy_stage_set = runtime_mod.run_policy_stage_set
+
+                def policy_side_effect(*args: object, **kwargs: object) -> dict[str, object]:
+                    def concurrent_mode_mutation() -> None:
+                        try:
+                            runtime_mod.mode_set(paths, "stable")
+                        except runtime_mod.RuntimeErrorInfo as exc:
+                            concurrent_result["machine_error_code"] = exc.machine_error_code
+                            concurrent_result["operator_action"] = exc.operator_action
+                        else:
+                            concurrent_result["status"] = "unexpected_success"
+
+                    thread = threading.Thread(target=concurrent_mode_mutation, daemon=True)
+                    thread.start()
+                    thread.join(timeout=5)
+                    self.assertFalse(thread.is_alive())
+                    return original_run_policy_stage_set(*args, **kwargs)
+
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "operator_action": "none",
+                        "exit_code": 0,
+                        "stage_proof_result": {
+                            "proof_gate_status": "passed",
+                            "final_outcome": "stable_10_proved",
+                        },
+                    },
+                ):
+                    with mock.patch(
+                        "wild_boar_proxy.runtime.run_policy_stage_set",
+                        side_effect=policy_side_effect,
+                    ):
+                        payload = runtime_mod.run_rollout_stage_advance(
+                            paths, "15", reserve_backend_id
+                        )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(concurrent_result["operator_action"], "retry")
+        self.assertEqual(
+            (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "managed",
+        )
 
     def test_rollout_stage_advance_15_fails_when_postflight_reserve_posture_remains_nonzero(
         self,
