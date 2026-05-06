@@ -811,6 +811,60 @@ def get_selected_backend_ids_digest(ids: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def build_selected_backend_snapshot_payload(
+    *,
+    selected_backend_ids: list[str],
+    observed_at_utc: str,
+    source_class: str,
+    source_name: str,
+    source_run_id: str,
+    producer_version: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION,
+        "snapshot_kind": SELECTED_BACKEND_SNAPSHOT_KIND,
+        "source_class": source_class,
+        "source_name": source_name,
+        "source_run_id": source_run_id,
+        "producer_version": producer_version,
+        "observed_at_utc": observed_at_utc,
+        "selected_backend_ids": list(selected_backend_ids),
+        "selected_backends_digest": get_selected_backend_ids_digest(selected_backend_ids),
+        "claim_scope": ROTATION_EVIDENCE_CLAIM_SCOPE,
+    }
+
+
+def materialize_selected_backend_snapshot_for_sync(paths: RuntimePaths) -> None:
+    with serialized_lock(paths):
+        state = read_json(paths.state_file, required=False)
+        selected_backend_ids = normalize_selected_backend_ids(
+            state.get("selected_backend_ids")
+        )
+        if not selected_backend_ids:
+            if SELECTED_BACKEND_SNAPSHOT_FIELD in state:
+                state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
+                write_json_atomic(paths.state_file, state)
+            return
+
+        # Refresh observation time on every successful owner-path materialization
+        # so rotation evidence freshness can advance after each sync.
+        observed_at_utc = now_iso()
+
+        snapshot = build_selected_backend_snapshot_payload(
+            selected_backend_ids=selected_backend_ids,
+            observed_at_utc=observed_at_utc,
+            source_class="supervisor_owner_observed",
+            source_name="sync --json",
+            source_run_id=f"sync:{observed_at_utc}",
+            producer_version=str(
+                state.get("version", state.get("schema_version", "unknown"))
+            ),
+        )
+        state["selected_backend_ids_observed_at"] = observed_at_utc
+        state[SELECTED_BACKEND_SNAPSHOT_FIELD] = snapshot
+        write_json_atomic(paths.state_file, state)
+
+
 def parse_utc_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -1072,7 +1126,11 @@ def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
     return not reasons, reasons
 
 
-def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> dict[str, Any]:
+def get_stable_policy_drift_for_inventory_source(
+    registry: dict[str, Any],
+    stable_auth_dir: Path,
+    inventory_source: dict[str, Any],
+) -> dict[str, Any]:
     backends = registry.get("backends") or []
     mapped_backends = {
         auth_basename: backend
@@ -1092,7 +1150,6 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         for backend in backends
         if backend.get("pool") == "active" and backend.get("enabled", True) is not False
     )
-    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
     claim_blockers = [
         "stable-15-proved",
         "active-only-traffic",
@@ -1164,6 +1221,81 @@ def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> di
         "claim_blockers": claim_blockers if detected else [],
         "next_action": "inspect_stable_policy_drift" if detected else "none",
     }
+
+
+def get_stable_policy_drift(paths: RuntimePaths, registry: dict[str, Any]) -> dict[str, Any]:
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    return get_stable_policy_drift_for_inventory_source(
+        registry, stable_auth_dir, inventory_source
+    )
+
+
+def get_approved_target_inventory_source(paths: RuntimePaths) -> dict[str, Any]:
+    return {
+        "source": "approved_repair_target",
+        "path": str(paths.repair_target_inventory_dir),
+        "path_resolution": "control_owned_inventory_path",
+        "exists": paths.repair_target_inventory_dir.is_dir(),
+    }
+
+
+def snapshot_confirms_approved_target_activation(
+    paths: RuntimePaths, state: dict[str, Any]
+) -> bool:
+    snapshot = get_valid_stable_runtime_consumer_snapshot(state)
+    if snapshot is None:
+        return False
+    return (
+        str(snapshot.get("activation_outcome"))
+        == STABLE_RUNTIME_APPROVED_TARGET_ACTIVATION_OUTCOME
+        and str(snapshot.get("selected_source_kind")) == "approved_repair_target"
+        and Path(str(snapshot.get("selected_source_path")))
+        == paths.repair_target_inventory_dir
+        and str(snapshot.get("activation_method")) == "process_local_env_override"
+        and str(snapshot.get("selected_config_file"))
+        == str(paths.stable_runtime_generated_config_file)
+    )
+
+
+def should_use_approved_target_policy_drift(
+    paths: RuntimePaths,
+    registry: dict[str, Any],
+    observed_policy_drift: dict[str, Any],
+    state: dict[str, Any],
+    *,
+    require_live_stable_runtime: bool,
+    health_payload: dict[str, Any] | None = None,
+    stable_runtime_consumer: dict[str, Any] | None = None,
+) -> bool:
+    selection = get_stable_runtime_consumer_selection_context(
+        paths, registry, observed_policy_drift
+    )
+    if not selection.get("approved_target_ready"):
+        return False
+    if not snapshot_confirms_approved_target_activation(paths, state):
+        return False
+    if not require_live_stable_runtime:
+        return True
+    if not (
+        health_payload
+        and health_payload.get("status") == "ok"
+        and str(health_payload.get("effective_mode")) == "stable"
+    ):
+        return False
+    if not isinstance(stable_runtime_consumer, dict):
+        return False
+    effective_source = stable_runtime_consumer.get(
+        "effective_stable_runtime_consumer_source"
+    )
+    if not isinstance(effective_source, dict):
+        return False
+    return (
+        str(effective_source.get("status"))
+        == "approved_target_active_by_activation_evidence"
+        and str(effective_source.get("source_kind")) == "approved_repair_target"
+        and Path(str(effective_source.get("resolved_path")))
+        == paths.repair_target_inventory_dir
+    )
 
 
 def get_active_routing_candidate_backend_ids(registry: dict[str, Any]) -> list[str]:
@@ -3683,11 +3815,27 @@ def summarize_status(
     desired_mode = get_desired_mode(paths)
     health_payload = health_payload or run_healthcheck(paths)
     registry = read_json(paths.registry_file)
-    policy_drift = get_stable_policy_drift(paths, registry)
+    policy_drift_observed = get_stable_policy_drift(paths, registry)
     state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
-        paths, registry, policy_drift, state, health_payload
+        paths, registry, policy_drift_observed, state, health_payload
     )
+    if should_use_approved_target_policy_drift(
+        paths,
+        registry,
+        policy_drift_observed,
+        state,
+        require_live_stable_runtime=True,
+        health_payload=health_payload,
+        stable_runtime_consumer=stable_runtime_consumer,
+    ):
+        policy_drift = get_stable_policy_drift_for_inventory_source(
+            registry,
+            paths.repair_target_inventory_dir,
+            get_approved_target_inventory_source(paths),
+        )
+    else:
+        policy_drift = policy_drift_observed
     recovery_result = health_payload.get("deterministic_stable_recovery_result")
     if isinstance(recovery_result, dict):
         stable_runtime_consumer = dict(stable_runtime_consumer)
@@ -3754,6 +3902,7 @@ def summarize_status(
             ),
             "pool_summary": pool_summary,
             "policy_drift": policy_drift,
+            "policy_drift_observed": policy_drift_observed,
             "stable_runtime_consumer": stable_runtime_consumer,
             "registry_identity_summary": summarize_registry_identity(registry_identity),
             "claim_gate": get_claim_gate(policy_drift, registry_identity),
@@ -4864,17 +5013,14 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     if result.stdout:
         sys.stderr.write(result.stdout)
 
-    changed_files = detect_changed_files(
-        before,
-        [
-            paths.registry_file,
-            paths.state_file,
-            paths.managed_config_file,
-            paths.config_toml,
-            paths.runtime_effective_mode_file,
-            managed_pid_path(paths),
-        ],
-    )
+    changed_surface_candidates = [
+        paths.registry_file,
+        paths.state_file,
+        paths.managed_config_file,
+        paths.config_toml,
+        paths.runtime_effective_mode_file,
+        managed_pid_path(paths),
+    ]
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -4886,6 +5032,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
 
     if result.returncode != 0:
+        changed_files = detect_changed_files(before, changed_surface_candidates)
         return build_command_payload(
             ok=False,
             human_message="Managed sync failed.",
@@ -4904,6 +5051,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         )
 
     if not listener_ok:
+        changed_files = detect_changed_files(before, changed_surface_candidates)
         return build_command_payload(
             ok=False,
             human_message="Managed sync completed but managed listener is unavailable.",
@@ -4921,6 +5069,9 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             exit_code=1,
         )
 
+    materialize_selected_backend_snapshot_for_sync(paths)
+    state = read_json(paths.state_file, required=False)
+    changed_files = detect_changed_files(before, changed_surface_candidates)
     return build_command_payload(
         ok=True,
         human_message="Managed sync completed.",
@@ -4989,6 +5140,8 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         "active_pool_count_agreement_status": "pending",
         "stable_inventory_status": "pending",
         "policy_drift_status": "pending",
+        "policy_drift_observed_status": "pending",
+        "policy_drift_claim_surface_source": "pending",
         "registry_identity_status": "pending",
         "evidence_sources": [
             "runtime_state.selected_backend_snapshot",
@@ -5010,7 +5163,21 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         registry = read_json(paths.registry_file)
         state = read_json(paths.state_file, required=False)
         registry_identity = get_registry_identity(registry)
-        policy_drift = get_stable_policy_drift(paths, registry)
+        policy_drift_observed = get_stable_policy_drift(paths, registry)
+        if should_use_approved_target_policy_drift(
+            paths,
+            registry,
+            policy_drift_observed,
+            state,
+            require_live_stable_runtime=False,
+        ):
+            policy_drift = get_stable_policy_drift_for_inventory_source(
+                registry,
+                paths.repair_target_inventory_dir,
+                get_approved_target_inventory_source(paths),
+            )
+        else:
+            policy_drift = policy_drift_observed
         pool_counts = summarize_registry_pool_counts(registry)
         selected_snapshot = get_rotation_selected_backend_snapshot(state)
         selected_backend_ids = selected_snapshot["selected_backend_ids"]
@@ -5068,6 +5235,12 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
     )
     evidence_result["stable_inventory_status"] = stable_inventory_status
     evidence_result["policy_drift_status"] = str(policy_drift.get("status", "unknown"))
+    evidence_result["policy_drift_observed_status"] = str(
+        policy_drift_observed.get("status", "unknown")
+    )
+    evidence_result["policy_drift_claim_surface_source"] = str(
+        (policy_drift.get("stable_auth_inventory_source") or {}).get("source", "unknown")
+    )
     evidence_result["registry_identity_status"] = str(
         registry_identity.get("status", "unknown")
     )

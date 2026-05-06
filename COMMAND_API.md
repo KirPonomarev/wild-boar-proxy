@@ -306,9 +306,11 @@ Preferred selected-backend evidence source is
 Legacy flat `runtime_state.selected_backend_ids` remains accepted only as a
 compatibility surface when it carries a same-event observation timestamp.
 
-`runtime_state.selected_backend_snapshot` is a read contract for a cached
-external owner or runtime observation.
-It is not a production write contract in this contour.
+`runtime_state.selected_backend_snapshot` is a read contract for cached bounded
+runtime participation evidence.
+In this contour it may be materialized only by the serialized runtime-state
+owner path in `sync --json`, and only after sync succeeded with managed-listener
+health verified.
 `rollout rotation inspect --json` validates it but does not create, repair, or
 mutate it.
 
