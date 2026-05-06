@@ -1158,6 +1158,14 @@ class CliTests(unittest.TestCase):
             "owner_path_success_only_write_available",
         )
         self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_depth"],
+            "shallow_socket_listener_only",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_scope"],
+            "bounded_local_listener_reachability_only",
+        )
+        self.assertEqual(
             current_proxy_adoption_contract["activation_surface_status"],
             "owner_path_private_launcher_activation_available",
         )
@@ -1271,6 +1279,15 @@ class CliTests(unittest.TestCase):
         )
         self.assertTrue(
             current_proxy_adoption_contract["top_level_ok_requires_live_runtime_reproof"]
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["post_adoption_runtime_validation_surface"],
+            "healthcheck.attestation",
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract[
+                "separate_control_layer_deep_probe_surface_default"
+            ]
         )
         self.assertTrue(
             current_proxy_adoption_contract[
@@ -4328,8 +4345,25 @@ class CliTests(unittest.TestCase):
             "owner_path_success_only_write_available",
         )
         self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_depth"],
+            "shallow_socket_listener_only",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_scope"],
+            "bounded_local_listener_reachability_only",
+        )
+        self.assertEqual(
             current_proxy_adoption_contract["effectful_runtime_wiring_status"],
             "bounded_private_launcher_lane_available",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["post_adoption_runtime_validation_surface"],
+            "healthcheck.attestation",
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract[
+                "separate_control_layer_deep_probe_surface_default"
+            ]
         )
         self.assertTrue(
             current_proxy_adoption_contract[
