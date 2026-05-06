@@ -429,6 +429,26 @@ def build_account_pool_snapshot(accounts_payload: dict[str, Any]) -> AccountPool
     )
 
 
+def ensure_capacity_data_consistency(
+    runtime_snapshot: RuntimeSnapshot, account_snapshot: AccountPoolSnapshot
+) -> None:
+    runtime_counts = (
+        runtime_snapshot.active_count,
+        runtime_snapshot.reserve_count,
+        runtime_snapshot.retired_count,
+    )
+    account_counts = (
+        account_snapshot.active_count,
+        account_snapshot.reserve_count,
+        account_snapshot.retired_count,
+    )
+    if runtime_counts != account_counts:
+        raise UiShellError(
+            "status pool_summary and accounts list disagree about "
+            "active, reserve, or retired counts"
+        )
+
+
 def load_runtime_snapshot(runner: JsonCommandRunner) -> RuntimeSnapshot:
     return build_runtime_snapshot(
         status_payload=runner.run("status", "--json").payload,
@@ -478,6 +498,7 @@ def run_sync_and_refresh(
         mode_payload=mode_payload,
     )
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -497,6 +518,7 @@ def run_account_mutation_and_refresh(
     status_payload = runner.run("status", "--json").payload
     runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -508,6 +530,7 @@ def run_account_onboard_and_refresh(
     status_payload = runner.run("status", "--json").payload
     runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -1012,6 +1035,12 @@ class MinimalCompanionShell:
             account_snapshot = load_account_pool_snapshot(self.runner)
         except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+        if not runtime_snapshot.integration_error and not account_snapshot.integration_error:
+            try:
+                ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+            except UiShellError as exc:
+                runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+                account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
         self.root.after(
             0,
             lambda: self._apply_refresh_results(runtime_snapshot, account_snapshot),
@@ -1282,6 +1311,7 @@ class MinimalCompanionShell:
         try:
             action_payload, runtime_snapshot = run_mode_control_and_refresh(self.runner, command)
             account_snapshot = load_account_pool_snapshot(self.runner)
+            ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
             banner = str(action_payload["human_message"])
         except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
