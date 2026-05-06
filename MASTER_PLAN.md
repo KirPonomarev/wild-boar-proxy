@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.19
+PLAN_VERSION: 1.20
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; step-7 runtime hardening ready
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; step-8 onboarding ready
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -478,6 +478,20 @@ Acceptance:
 - No lock handoff or interleaving window remains inside `rollout stage advance 15/20`.
 - Broken outbound proxy path does not silently masquerade as generic runtime death.
 - Stable recovery path remains deterministic under network-environment drift.
+
+Current closeout note for implementation-order step 7:
+
+- launch-chain stabilization, listener truth, deterministic PATH/dependency
+  checks, stale-pid cleanup, lock discipline, reliable stable fallback,
+  runtime attestation, single-writer mutation discipline, serialized
+  stage-advance owner path, proxy reprobe, last-known-good proxy persistence,
+  proxy-path classification, and deterministic stable-service recovery all
+  have machine-carried surfaces and acceptance coverage in the current contour
+- the `Five consecutive launches without false healthy and without
+  effective-mode drift` acceptance bullet is covered by a five-iteration
+  machine-checked launch and status proof slice in the current owner path
+- implementation-order step 7 is therefore closed for the current contour, and
+  the next primary contour is `Productize onboarding`
 
 ### Workstream 03: Onboarding
 
