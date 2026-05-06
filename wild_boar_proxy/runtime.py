@@ -52,6 +52,29 @@ ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
 SCALE_EVIDENCE_FIELD_TARGET = "16"
 SCALE_EVIDENCE_CLAIM_SCOPE = "field_evidence_observed_only"
+SCALE_GATE_RUNTIME_ATTESTATION = "RUNTIME_ATTESTATION_GATE"
+SCALE_GATE_STRICT_JSON_COMMAND_API = "STRICT_JSON_COMMAND_API_GATE"
+SCALE_GATE_STATE_SERIALIZATION = "STATE_SERIALIZATION_GATE"
+SCALE_GATE_FALLBACK_DRILL = "FALLBACK_DRILL_GATE"
+SCALE_GATE_EVIDENCE_PACKET = "SCALE_EVIDENCE_PACKET_GATE"
+SCALE_GATE_ORDER = [
+    SCALE_GATE_RUNTIME_ATTESTATION,
+    SCALE_GATE_STRICT_JSON_COMMAND_API,
+    SCALE_GATE_STATE_SERIALIZATION,
+    SCALE_GATE_FALLBACK_DRILL,
+    SCALE_GATE_EVIDENCE_PACKET,
+]
+COMMAND_PAYLOAD_REQUIRED_FIELDS = [
+    "status",
+    "exit_code",
+    "human_message",
+    "machine_error_code",
+    "changed_files",
+    "next_action",
+    "liveness",
+    "severity",
+    "operator_action",
+]
 SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
 SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
@@ -5793,6 +5816,114 @@ def summarize_scale_evidence_accounts(accounts_payload: dict[str, Any]) -> dict[
     }
 
 
+def has_command_payload_shape(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    return all(field in payload for field in COMMAND_PAYLOAD_REQUIRED_FIELDS)
+
+
+def evaluate_scale_evidence_strict_json_contract(
+    command_payloads: dict[str, Any],
+) -> dict[str, Any]:
+    invalid_payload_surfaces = [
+        surface
+        for surface, payload in command_payloads.items()
+        if not has_command_payload_shape(payload)
+    ]
+    status = "passed" if not invalid_payload_surfaces else "failed"
+    return {
+        "status": status,
+        "machine_error_code": (
+            "OK" if status == "passed" else "STRICT_JSON_COMMAND_API_GATE_FAILED"
+        ),
+        "invalid_payload_surfaces": invalid_payload_surfaces,
+    }
+
+
+def build_scale_gate_summary(
+    *,
+    runtime_attestation_status: str,
+    strict_json_contract: dict[str, Any],
+    runtime_changed_files: list[str],
+    fallback_readiness: dict[str, Any],
+    packet_status: str,
+    packet_machine_error_code: str,
+) -> dict[str, Any]:
+    fallback_status = str(fallback_readiness.get("status", "failed"))
+    strict_json_status = str(strict_json_contract.get("status", "failed"))
+    gates = {
+        SCALE_GATE_RUNTIME_ATTESTATION: {
+            "status": "passed" if runtime_attestation_status == "passed" else "failed",
+            "machine_error_code": (
+                "OK"
+                if runtime_attestation_status == "passed"
+                else "RUNTIME_ATTESTATION_GATE_FAILED"
+            ),
+        },
+        SCALE_GATE_STRICT_JSON_COMMAND_API: {
+            "status": "passed" if strict_json_status == "passed" else "failed",
+            "machine_error_code": str(
+                strict_json_contract.get("machine_error_code", "UNKNOWN")
+            ),
+            "invalid_payload_surfaces": list(
+                strict_json_contract.get("invalid_payload_surfaces") or []
+            ),
+        },
+        SCALE_GATE_STATE_SERIALIZATION: {
+            "status": "passed" if not runtime_changed_files else "failed",
+            "machine_error_code": (
+                "OK" if not runtime_changed_files else "STATE_SERIALIZATION_GATE_FAILED"
+            ),
+            "runtime_changed_files": list(runtime_changed_files),
+        },
+        SCALE_GATE_FALLBACK_DRILL: {
+            "status": "passed" if fallback_status == "ready" else "failed",
+            "machine_error_code": (
+                "OK"
+                if fallback_status == "ready"
+                else str(
+                    fallback_readiness.get(
+                        "machine_error_code", "FALLBACK_DRILL_GATE_FAILED"
+                    )
+                )
+            ),
+        },
+        SCALE_GATE_EVIDENCE_PACKET: {
+            "status": "passed" if packet_status == "complete" else "failed",
+            "machine_error_code": (
+                "OK"
+                if packet_status == "complete"
+                else (
+                    packet_machine_error_code
+                    if packet_machine_error_code != "OK"
+                    else "SCALE_EVIDENCE_PACKET_GATE_FAILED"
+                )
+            ),
+            "packet_status": packet_status,
+        },
+    }
+    blocked_gate_names = [
+        gate_name
+        for gate_name in SCALE_GATE_ORDER
+        if str(gates.get(gate_name, {}).get("status", "failed")) != "passed"
+    ]
+    return {
+        "status": "derived_view",
+        "derived_only": True,
+        "source_of_truth": False,
+        "truth_sources": [
+            "runtime_attestation_status",
+            "strict_json_command_api_status",
+            "state_serialization_status",
+            "fallback_readiness_status",
+            "packet_status",
+        ],
+        "gates": gates,
+        "all_gates_passed": not blocked_gate_names,
+        "blocked_gate_names": blocked_gate_names,
+    }
+
+
 def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, Any]:
     if target != SCALE_EVIDENCE_FIELD_TARGET:
         return build_command_payload(
@@ -5809,6 +5940,15 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
                     "claim_target": str(target),
                     "claim_scope": SCALE_EVIDENCE_CLAIM_SCOPE,
                     "packet_status": "unsafe_to_claim",
+                    "scale_gate_summary": {
+                        "status": "derived_view",
+                        "derived_only": True,
+                        "source_of_truth": False,
+                        "truth_sources": [],
+                        "gates": {},
+                        "all_gates_passed": False,
+                        "blocked_gate_names": [SCALE_GATE_EVIDENCE_PACKET],
+                    },
                     "observed_at_utc": now_iso(),
                     "blocked_reasons": [
                         {
@@ -5839,6 +5979,14 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     fallback_readiness = summarize_stable_10_rollback_readiness(
         health_payload, status_payload
     )
+    strict_json_contract = evaluate_scale_evidence_strict_json_contract(
+        {
+            "healthcheck": health_payload,
+            "status": status_payload,
+            "accounts_list": accounts_payload,
+            "rotation_inspect": rotation_payload,
+        }
+    )
     runtime_changed_files = detect_changed_files_by_state(before, write_candidates)
     pool_counts = summarize_registry_pool_counts(registry)
     accounts_summary = summarize_scale_evidence_accounts(accounts_payload)
@@ -5853,6 +6001,8 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     runtime_attestation_status = (
         "passed" if health_payload.get("status") == "ok" else "failed"
     )
+    strict_json_status = str(strict_json_contract.get("status", "failed"))
+    state_serialization_status = "passed" if not runtime_changed_files else "failed"
     fallback_readiness_status = str(fallback_readiness.get("status", "failed"))
     pool_counts_status = (
         "matched_16"
@@ -5860,11 +6010,15 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         and coerce_nonnegative_int(state.get("active_count")) == 16
         else "not_matched_16"
     )
-    accounts_summary_status = (
-        "clear"
-        if accounts_summary.get("registry_identity_status") == "clear"
-        else "ambiguous"
+    registry_identity_status = str(
+        accounts_summary.get("registry_identity_status", "unknown")
     )
+    if registry_identity_status == "clear":
+        accounts_summary_status = "clear"
+    elif registry_identity_status == "ambiguous":
+        accounts_summary_status = "ambiguous"
+    else:
+        accounts_summary_status = "unknown"
     commit_hash = get_repo_commit_hash()
     runtime_version = str(state.get("version", state.get("schema_version", "unknown")))
 
@@ -5875,6 +6029,16 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
                 "machine_error_code": "SCALE_EVIDENCE_RUNTIME_MUTATION_DETECTED",
                 "reason": "runtime_write_surface_changed",
                 "changed_files": runtime_changed_files,
+            }
+        )
+    if strict_json_status != "passed":
+        blocked_reasons.append(
+            {
+                "machine_error_code": "SCALE_EVIDENCE_STRICT_JSON_INCOMPLETE",
+                "reason": "strict_json_command_api_gate_failed",
+                "invalid_payload_surfaces": list(
+                    strict_json_contract.get("invalid_payload_surfaces") or []
+                ),
             }
         )
     if runtime_attestation_status != "passed":
@@ -5913,12 +6077,20 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
             }
         )
     if accounts_summary_status != "clear":
-        blocked_reasons.append(
-            {
-                "machine_error_code": "SCALE_EVIDENCE_REGISTRY_CONTRADICTED",
-                "reason": "registry_identity_not_clear",
-            }
-        )
+        if accounts_summary_status == "ambiguous":
+            blocked_reasons.append(
+                {
+                    "machine_error_code": "SCALE_EVIDENCE_REGISTRY_CONTRADICTED",
+                    "reason": "registry_identity_not_clear",
+                }
+            )
+        else:
+            blocked_reasons.append(
+                {
+                    "machine_error_code": "SCALE_EVIDENCE_ACCOUNTS_SUMMARY_INCOMPLETE",
+                    "reason": "accounts_summary_not_machine_complete",
+                }
+            )
     if selected_snapshot_status not in {"valid", "legacy"}:
         blocked_reasons.append(
             {
@@ -5944,6 +6116,8 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         "runtime_version": runtime_version,
         "environment_note": "local_mac_control_layer_evidence_packet",
         "runtime_attestation_status": runtime_attestation_status,
+        "strict_json_command_api_status": strict_json_status,
+        "state_serialization_status": state_serialization_status,
         "rotation_evidence_status": rotation_status,
         "fallback_readiness_status": fallback_readiness_status,
         "pool_counts_status": pool_counts_status,
@@ -5980,6 +6154,7 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         "fallback_readiness_summary": fallback_readiness,
         "diagnostics_bundle_summary": {},
         "blocked_reasons": blocked_reasons,
+        "scale_gate_summary": {},
         "final_outcome": "pending",
     }
 
@@ -6039,6 +6214,14 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
 
     packet_result["packet_status"] = packet_status
     packet_result["final_outcome"] = final_outcome
+    packet_result["scale_gate_summary"] = build_scale_gate_summary(
+        runtime_attestation_status=runtime_attestation_status,
+        strict_json_contract=strict_json_contract,
+        runtime_changed_files=runtime_changed_files,
+        fallback_readiness=fallback_readiness,
+        packet_status=packet_status,
+        packet_machine_error_code=machine_error_code,
+    )
     packet_artifact_path = Path(str(bundle_summary["bundle_path"])) / "evidence-packet.json"
     write_json_artifact(
         packet_artifact_path,
