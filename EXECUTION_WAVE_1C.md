@@ -200,8 +200,8 @@ The next contour is now a separate live evidence rerun contour.
 
 The next contour should be chosen in this order:
 
-1. `Wave 1C Live Evidence Lane Rerun` only after a new explicit operator GO
-   marker
+1. `Wave 1C Live Evidence Lane Rerun` only after owner authorization exists in
+   the current thread
 2. `Wave 1D Basic Companion UI Readiness` only as a separate fallback or
    readiness/spec branch after the scale lane is explicitly deferred
 
