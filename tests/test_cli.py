@@ -6025,6 +6025,61 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_loop_mode_forwards_flag_and_keeps_reserve_first_proof(
+        self,
+    ) -> None:
+        auth_ref = str(self.profile_dir / "codex-loop-login.json")
+        Path(auth_ref).write_text("{}", encoding="utf-8")
+        argv_file = self.managed_dir / "onboard-argv-loop.json"
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [self.build_backend(backend_id="backend-loop-login", auth_ref=auth_ref)]
+                    ),
+                    "WBP_TEST_ONBOARD_ARGV_FILE": str(argv_file),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--loop",
+                "--no-sync",
+                "--skip-login",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["command"],
+            ["--loop", "--auth-ref", auth_ref, "--skip-login", "--no-sync"],
+        )
+        self.assertEqual(
+            json.loads(argv_file.read_text(encoding="utf-8")),
+            ["--loop", "--auth-ref", auth_ref, "--skip-login", "--no-sync"],
+        )
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+
     def test_accounts_onboard_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
