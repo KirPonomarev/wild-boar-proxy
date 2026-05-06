@@ -195,7 +195,7 @@ Before any dry-run or live step:
    ```
 
 5. Confirm the live step has not been approved by accident.
-   If no explicit owner GO exists, stop after fixture dry-run and tests.
+   If no owner authorization exists, stop after fixture dry-run and tests.
 
 ## Dry-Run Procedure
 
@@ -237,9 +237,15 @@ git status --short --branch
 
 ## Optional Live Capture Gate
 
-Live capture is optional and requires explicit owner GO in the current thread.
+Live capture is optional and requires owner authorization in the current
+thread.
 
-Without explicit owner GO:
+Owner authorization may be either:
+
+- the current project-scoped standing approval defined by `CANON.md`
+- a later explicit one-off owner GO marker
+
+Without owner authorization:
 
 - do not run `rollout evidence capture 16 --json` against live paths
 - do not inspect private runtime dumps
@@ -247,7 +253,7 @@ Without explicit owner GO:
 - do not touch proxy config
 - close this runbook contour through `DELIVERY_RULES.md` without a live capture
 
-If explicit owner GO is given later, run only:
+If owner authorization is given later, run only:
 
 ```sh
 rollout evidence capture 16 --json
@@ -258,7 +264,7 @@ prove, or stage advance commands as part of the live capture.
 
 ## Live Capture Validation
 
-If live capture is explicitly approved and run, validate only the returned JSON
+If live capture is owner-authorized and run, validate only the returned JSON
 and the redacted bundle artifact paths.
 
 Required top-level checks:
@@ -383,7 +389,7 @@ Contour:
 Branch:
 Commit:
 Capture mode: dry-run fixture | live approved
-Owner GO for live capture: yes | no
+Owner authorization for live capture: standing approval | exact marker | no
 Command:
 Exit code:
 Machine error code:
@@ -417,7 +423,7 @@ This contour is closed only when:
 - full CLI tests pass
 - `git diff --check` passes
 - independent audit reports no P0/P1/P2 findings
-- live capture is either explicitly skipped or explicitly approved
+- live capture is either explicitly skipped or owner-authorized
 - no live runtime, proxy, or auth config was modified
 - no evidence bundle or runtime dump is staged
 - changes are committed
