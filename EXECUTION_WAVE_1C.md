@@ -200,12 +200,27 @@ Live contour execution order:
 5. run exactly one `rollout evidence capture 16 --json`
 6. validate the resulting packet only through the owner-surface and runbook
    rules
-7. produce a factual closeout without upgrading the claim scope
+7. run the post-run no-git-artifact checks
+8. produce a factual closeout without upgrading the claim scope
 
 Live contour allowed writes are limited to redacted evidence bundle or temp
 export artifact paths owned by the packet command.
+Artifact copies of `runtime-mode.txt` and `runtime-effective-mode.txt` inside
+the redacted export directory are allowed.
+Live runtime mode files are not.
 The live contour must not mutate runtime state, profile state, policy stage, or
 account lifecycle.
+
+Outcome routing:
+
+- `packet_status == complete` may close only as
+  `field_evidence_observed_only`
+- `packet_status == incomplete` does not close the scale gate and must hand off
+  to a separate narrowly scoped blocker contour
+- `packet_status == contradicted` does not close the scale gate and must hand
+  off to a separate narrowly scoped blocker contour
+- `packet_status == unsafe_to_claim` does not close the scale gate and must hand
+  off to a separate narrowly scoped blocker contour
 
 The first UI contour must:
 
@@ -262,7 +277,20 @@ rollout evidence capture 16 --json
 - rotation evidence summary is present
 - fallback readiness summary is present
 - diagnostics bundle is redacted
+- `changed_files` list bundle artifact file paths only, not live runtime files
 - no forbidden write-surface mutation occurred
+
+### Required post-run checks
+
+After the live command and before any closeout statement:
+
+```sh
+git status --short --branch
+git diff --name-only --cached
+```
+
+No redacted evidence bundle, temp export artifact, auth file, runtime state,
+log, or private config path may be staged.
 
 ### Forbidden outcomes
 
@@ -325,6 +353,8 @@ Additional live-lane entry criteria:
 - bundle redaction passes
 - factual report names packet status and blocked reasons honestly
 - only redacted evidence bundle or temp export artifact paths are written
+- artifact copies of runtime mode files are allowed only inside the redacted
+  export directory, never on live runtime paths
 - runtime artifacts stay out of git history
 
 ## Handoff Rule
