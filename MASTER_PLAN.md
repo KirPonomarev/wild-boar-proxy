@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.20
+PLAN_VERSION: 1.21
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; step-8 onboarding ready
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; next primary contour is step-9 basic companion UI
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -505,6 +505,24 @@ Fallback to manual auth selection.
 Print final backend report.
 
 Acceptance: A new account is added without manual JSON editing and without degrading the working pool.
+
+Current closeout note for implementation-order step 8:
+
+- onboarding owner lane now exposes `--once` and `--loop` command-path truth,
+  reserve-first enforcement proof, and strict machine-carried onboarding
+  outcomes without claim escalation beyond control-layer scope
+- pre-login auth snapshot evidence is emitted in onboarding owner packets as
+  `auth_snapshot_before_login_status`, `auth_snapshot_before_login_count`,
+  `auth_snapshot_before_login_digest`, and
+  `auth_snapshot_before_login_source`; these fields provide control-layer
+  evidence only and do not duplicate engine-layer OAuth semantics
+- acceptance and regression verification for this closeout was executed with
+  `python3 -m unittest -q -k accounts_onboard tests.test_cli.CliTests` and
+  `python3 -m unittest -q tests.test_cli.CliTests` on branch
+  `codex/wave-1c-prereq-closeout`
+- onboarding step-8 closeout commits are `6105fde` and `e52f704`, and
+  implementation-order step 8 is therefore closed for the current contour;
+  the next primary contour is `Build basic companion UI`
 
 ### Workstream 04: Pool Architecture 20
 
