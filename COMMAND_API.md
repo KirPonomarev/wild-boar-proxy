@@ -421,6 +421,8 @@ Required fields include:
 - `runtime_version`
 - `environment_note`
 - `runtime_attestation_status`
+- `strict_json_command_api_status`
+- `state_serialization_status`
 - `rotation_evidence_status`
 - `fallback_readiness_status`
 - `pool_counts_status`
@@ -434,6 +436,7 @@ Required fields include:
 - `rotation_evidence_summary`
 - `fallback_readiness_summary`
 - `diagnostics_bundle_summary`
+- `scale_gate_summary`
 - `blocked_reasons`
 - `final_outcome`
 
@@ -478,6 +481,19 @@ The evidence packet must treat runtime attestation, rotation evidence, fallback
 readiness, accounts summary, and diagnostics redaction as separate axes.
 It must not infer selected backend participation from registry active ids,
 registry active counts, or pool policy.
+`scale_gate_summary` is a derived gate view over existing packet fields and
+must not become a new source-of-truth surface.
+
+`scale_gate_summary` must include gates:
+
+- `RUNTIME_ATTESTATION_GATE`
+- `STRICT_JSON_COMMAND_API_GATE`
+- `STATE_SERIALIZATION_GATE`
+- `FALLBACK_DRILL_GATE`
+- `SCALE_EVIDENCE_PACKET_GATE`
+
+`STRICT_JSON_COMMAND_API_GATE` must fail if delegated owner-payload shapes are
+not valid command-packet JSON surfaces.
 
 `diagnostics_redaction_status=failed` or any runtime write-surface mutation
 must produce `packet_status=unsafe_to_claim`.
