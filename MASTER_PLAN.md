@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.29
+PLAN_VERSION: 1.30
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; next primary contour is release-gate alignment for scale decision and pilot-entry prep
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); next primary contour is pilot-entry evidence closure and release-gate blocker burn-down
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -824,6 +824,51 @@ Current closeout note for implementation-order step 16:
   on branch `codex/wave-1c-prereq-closeout`
 - implementation-order step 16 is therefore closed for the current contour,
   and the next primary contour is `Release-gate alignment for scale decision and pilot-entry prep`
+
+Current closeout note for implementation-order step 17:
+
+- release-gate alignment and pilot-entry prep contour was executed as a
+  machine-only synthesis over `MASTER_PLAN.md` and step13..step16 artifacts;
+  decision artifacts are:
+  `audit_results/step17_release_gate_decision_packet.json`,
+  `audit_results/step17_fact_dump.json`, and
+  `audit_results/step17_release_gate_alignment_report.md`
+- canonical machine decision is `decision_status=blocked`; alpha and
+  scale-prep gates are ready, while pilot/scale/external-package gates remain
+  blocked by missing machine evidence and incomplete stage-20 rollout
+  (`active_count_observed=16`, `active_target=20`)
+- unresolved blocker set is captured with explicit IDs, including
+  `PILOT_ENTRY_ONBOARDING_EVIDENCE_MISSING`,
+  `PILOT_ENTRY_UI_COMPLETION_EVIDENCE_MISSING`,
+  `PILOT_ENTRY_SECURITY_EVIDENCE_MISSING`,
+  `PILOT_ENTRY_LEGACY_IMPORT_EVIDENCE_MISSING`,
+  `PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING`,
+  `SCALE_GATE_20_NOT_COMPLETED`, and
+  `EXTERNAL_PACKAGE_GATE_EVIDENCE_MISSING`
+- independent audit replay confirmed PASS with no P0/P1/P2/P3 findings; the
+  blocked verdict is factual and no forbidden claim-escalation tokens were
+  found in step13..step16 artifacts
+- acceptance/regression verification for step-17 closeout executed with:
+  `jq empty audit_results/step15_owner_surface_capture.json`,
+  `jq empty audit_results/step15_negative_fixture_checks.json`,
+  `jq empty audit_results/step15_test_runs.json`,
+  `jq empty audit_results/step16_owner_surface_capture.json`,
+  `jq empty audit_results/step16_negative_checks.json`,
+  `jq empty audit_results/step16_test_runs.json`,
+  `jq empty audit_results/step17_fact_dump.json`,
+  `jq empty audit_results/step17_release_gate_decision_packet.json`,
+  `jq -e '.decision_status=="blocked" and ([.unresolved_blockers[].blocker_id] | index("SCALE_GATE_20_NOT_COMPLETED") != null)' audit_results/step17_release_gate_decision_packet.json >/dev/null`,
+  `jq -e '.packet.claim_scope=="field_evidence_observed_only" and .acceptance_all_passed==true' audit_results/step15_owner_surface_capture.json >/dev/null`,
+  `jq '.lanes[] | select(.fixture.source_stage=="15" and .fixture.target_stage=="20") | {lane_stage:(.fixture.source_stage + "->" + .fixture.target_stage), active_count_observed:(.commands[] | select(.command=="rollout stage advance 20 backend-reserve-advance-stage20-step --json") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_count_observed), active_target:(.commands[] | select(.command=="rollout stage advance 20 backend-reserve-advance-stage20-step --json") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_target)}' audit_results/step16_owner_surface_capture.json`,
+  `rg -n --no-heading -i "pilot_ready|scale_complete|stable_20_proved|production_ready" audit_results/step13_* audit_results/step14_* audit_results/step15_* audit_results/step16_*`,
+  `python3 -m unittest -q tests.test_cli -k stage_advance_15`,
+  `python3 -m unittest -q tests.test_cli -k stage_advance_20`,
+  `python3 -m unittest -q tests.test_cli -k evidence_capture`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 17 is therefore closed for the current contour,
+  and the next primary contour is
+  `Pilot-entry evidence closure and release-gate blocker burn-down`
 
 ### Workstream 08: Experiment Package
 
