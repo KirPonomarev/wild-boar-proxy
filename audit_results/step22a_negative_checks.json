@@ -1,0 +1,37 @@
+{
+  "step": "STEP-22A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T06:00:10Z",
+  "checks": [
+    {
+      "name": "required_commands_present",
+      "passed": true,
+      "observed_missing_commands": []
+    },
+    {
+      "name": "required_runs_exit_zero",
+      "passed": true,
+      "non_zero_commands": []
+    },
+    {
+      "name": "required_runs_report_tests_ran",
+      "passed": true,
+      "missing_tests_ran_commands": []
+    },
+    {
+      "name": "scale_gate_not_closed_by_unit_tests_only",
+      "passed": true,
+      "fact": "Required stage_advance_20 test contour passed, but gate closure still requires operator-approved live proof with active_count_observed=20."
+    },
+    {
+      "name": "scale_gate_block_reason_code_enforced",
+      "passed": true,
+      "fact": "Scale blocker reason code remains SCALE_GATE_FIELD_PROOF_INSUFFICIENT."
+    },
+    {
+      "name": "forbidden_claim_tokens_absent_in_step22a_outputs",
+      "passed": true,
+      "fact": "No forbidden claim tokens were added in step22a owned artifacts."
+    }
+  ],
+  "overall_passed": true
+}
