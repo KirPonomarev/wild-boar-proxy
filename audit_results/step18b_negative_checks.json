@@ -1,0 +1,37 @@
+{
+  "step": "STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE",
+  "generated_at_utc": "2026-05-07T05:10:11.550603Z",
+  "checks": [
+    {
+      "name": "required_commands_present",
+      "passed": true,
+      "observed_missing_commands": []
+    },
+    {
+      "name": "required_runs_exit_zero",
+      "passed": true,
+      "non_zero_commands": []
+    },
+    {
+      "name": "required_runs_report_tests_ran",
+      "passed": true,
+      "missing_tests_ran_commands": []
+    },
+    {
+      "name": "scale_gate_stage20_command_set_passes_but_does_not_close_scale_gate",
+      "passed": true,
+      "fact": "All six required stage_advance_20 commands passed with tests_ran >= 1, but canonical scale-gate closure still requires controlled rollout-to-20 evidence beyond unit-test contour coverage."
+    },
+    {
+      "name": "two_week_metrics_blocker_remains_explicit_if_evidence_missing",
+      "passed": true,
+      "fact": "No dedicated two-week metrics command/artifact detected; blocker reason is kept as TWO_WEEK_METRICS_EVIDENCE_MISSING."
+    },
+    {
+      "name": "forbidden_claim_tokens_absent_from_positive_claim_fields",
+      "passed": true,
+      "violations": []
+    }
+  ],
+  "overall_passed": true
+}
