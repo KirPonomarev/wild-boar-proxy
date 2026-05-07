@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.25
+PLAN_VERSION: 1.26
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; next primary contour is step-13 alpha run preparation
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; next primary contour is step-14 prove stable 10
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -702,6 +702,34 @@ Current closeout note for implementation-order step 12:
   on branch `codex/wave-1c-prereq-closeout`
 - implementation-order step 12 is therefore closed for the current contour,
   and the next primary contour is `Run alpha`
+
+Current closeout note for implementation-order step 13:
+
+- alpha-run preparation contour was executed in isolated-runtime and test-fixture
+  lanes with machine-carried gate evidence for `RUNTIME_ATTESTATION_GATE`,
+  `STRICT_JSON_COMMAND_API_GATE`, `STATE_SERIALIZATION_GATE`, and
+  `FALLBACK_DRILL_GATE`
+- command replay and gate verdict evidence is captured in
+  `audit_results/step13_alpha_gate_report.md`; the replay explicitly marks
+  zero-test command selections as non-gating and excludes them from coverage
+- independent audit replay confirmed PASS across all four alpha gates and found
+  no P0/P1 issues; one P3 reporting-clarity finding (`Ran 0 tests` wording) was
+  remediated in the report without changing gate outcomes
+- acceptance/regression verification for step-13 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_healthcheck_returns_attestation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_status_uses_live_attestation_for_green_state`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_sync_returns_single_json_object`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_cross_thread_mode_mutation_during_policy_step`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_healthcheck_owner_path_reports_observed_source_fallback_recovery`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_complete_packet`,
+  `python3 -m unittest -q tests.test_cli -k healthcheck`,
+  `python3 -m unittest -q tests.test_cli -k status`,
+  `python3 -m unittest -q tests.test_cli -k advance`,
+  `python3 -m unittest -q tests.test_cli -k fallback`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 13 is therefore closed for the current contour,
+  and the next primary contour is `Prove stable 10`
 
 ### Workstream 08: Experiment Package
 
