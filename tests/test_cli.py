@@ -9,6 +9,7 @@ import shlex
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -346,6 +347,231 @@ class CliTests(unittest.TestCase):
             "uninstall",
             command_path="companion uninstall",
         )
+
+    def test_package_experimental_build_requires_json_flag(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-output-missing-json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            command_path="package experimental build",
+        )
+
+    def test_package_experimental_verify_requires_json_flag(self) -> None:
+        manifest_path = Path(self.temp_dir.name) / "missing.manifest.json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            command_path="package experimental verify",
+        )
+
+    def test_package_experimental_build_success_reports_changed_files(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-build-output"
+        result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        for required_field in (
+            "status",
+            "exit_code",
+            "human_message",
+            "machine_error_code",
+            "changed_files",
+            "next_action",
+        ):
+            self.assertIn(required_field, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["severity"], "recoverable")
+        package_result = payload["package_result"]
+        self.assertEqual(package_result["status"], "built")
+        artifact_path = output_dir.resolve() / "experimental-package.tar.gz"
+        manifest_path = output_dir.resolve() / "experimental-package.manifest.json"
+        metadata_path = output_dir.resolve() / "experimental-package.metadata.json"
+        self.assertTrue(artifact_path.is_file())
+        self.assertTrue(manifest_path.is_file())
+        self.assertTrue(metadata_path.is_file())
+        self.assertCountEqual(
+            payload["changed_files"],
+            [str(artifact_path), str(manifest_path), str(metadata_path)],
+        )
+
+    def test_package_experimental_build_excludes_private_runtime_patterns_via_allowlist(
+        self,
+    ) -> None:
+        package_root = Path(self.temp_dir.name) / "package-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "module.py").write_text(
+            "value = 1\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (package_root / ".env").write_text("SECRET=1\n", encoding="utf-8")
+        (package_root / "auth.json").write_text('{"OPENAI_API_KEY":"x"}\n', encoding="utf-8")
+        (package_root / "logs").mkdir(parents=True)
+        (package_root / "logs" / "runtime.log").write_text("secret log\n", encoding="utf-8")
+        (package_root / ".codex-custom-cli").mkdir(parents=True)
+        (package_root / ".codex-custom-cli" / "token.txt").write_text(
+            "token\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / ".env").write_text(
+            "INNER_SECRET=1\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "auth.json").write_text(
+            '{"OPENAI_API_KEY":"inner"}\n', encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "logs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "logs" / "internal.log").write_text(
+            "internal log\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / ".secret").write_text(
+            "secret file\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.dump").write_text(
+            "runtime dump\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.tmp").write_text(
+            "tmp\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "api_token.txt").write_text(
+            "token\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "private-key.md").write_text(
+            "# private\n", encoding="utf-8"
+        )
+        (package_root / "docs" / ".hidden-notes.md").write_text(
+            "# hidden\n", encoding="utf-8"
+        )
+        output_dir = Path(self.temp_dir.name) / "package-build-allowlist-output"
+        result = self.run_cli_with_env(
+            {"WBP_PACKAGE_SOURCE_ROOT": str(package_root)},
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        artifact_path = Path(payload["package_result"]["artifact_path"])
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            archive_entries = sorted(archive.getnames())
+        self.assertIn("wild_boar_proxy/module.py", archive_entries)
+        self.assertIn("docs/guide.md", archive_entries)
+        self.assertNotIn(".env", archive_entries)
+        self.assertNotIn("auth.json", archive_entries)
+        self.assertNotIn("logs/runtime.log", archive_entries)
+        self.assertNotIn(".codex-custom-cli/token.txt", archive_entries)
+        self.assertNotIn("wild_boar_proxy/.env", archive_entries)
+        self.assertNotIn("wild_boar_proxy/auth.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/logs/internal.log", archive_entries)
+        self.assertNotIn("wild_boar_proxy/.secret", archive_entries)
+        self.assertNotIn("wild_boar_proxy/session.dump", archive_entries)
+        self.assertNotIn("wild_boar_proxy/session.tmp", archive_entries)
+        self.assertNotIn("wild_boar_proxy/api_token.txt", archive_entries)
+        self.assertNotIn("docs/private-key.md", archive_entries)
+        self.assertNotIn("docs/.hidden-notes.md", archive_entries)
+
+    def test_package_experimental_build_uses_repo_root_when_cwd_is_foreign(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-build-foreign-cwd-output"
+        foreign_cwd = Path(self.temp_dir.name) / "foreign-cwd"
+        foreign_cwd.mkdir(parents=True, exist_ok=True)
+        env = self.env()
+        env.pop("WBP_PACKAGE_SOURCE_ROOT", None)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "wild_boar_proxy",
+                "package",
+                "experimental",
+                "build",
+                "--output-dir",
+                str(output_dir),
+                "--json",
+            ],
+            cwd=foreign_cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["severity"], "recoverable")
+        self.assertEqual(payload["package_result"]["source_root"], str(ROOT.resolve()))
+        self.assertNotEqual(payload["package_result"]["source_root"], str(foreign_cwd))
+
+    def test_package_experimental_verify_success(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-verify-success"
+        build_result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "ok")
+        self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertEqual(verify_payload["severity"], "recoverable")
+        self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertEqual(verify_payload["changed_files"], [])
+
+    def test_package_experimental_verify_checksum_mismatch_failure(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-verify-mismatch"
+        build_result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        artifact_path = Path(build_payload["package_result"]["artifact_path"])
+        artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered")
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
+        self.assertFalse(verify_payload["package_result"]["checksum_match"])
 
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(

@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.24
+PLAN_VERSION: 1.25
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; next primary contour is step-12 experimental package baseline
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; next primary contour is step-13 alpha run preparation
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -683,6 +683,26 @@ Current closeout note for implementation-order step 11:
   on branch `codex/wave-1c-prereq-closeout`
 - implementation-order step 11 is therefore closed for the current contour,
   and the next primary contour is `Prepare experimental package`
+
+Current closeout note for implementation-order step 12:
+
+- experimental package owner surfaces now include
+  `package experimental build --output-dir <path> --json` and
+  `package experimental verify --manifest <path> --json` with strict JSON
+  command/result packets and control-layer-only packaging scope
+- package build emits artifact, checksum manifest, and metadata, while package
+  verify enforces checksum truth and artifact presence without log parsing
+- packaging boundary hardening excludes runtime/private material (auth/state,
+  dumps, logs, token/key-like files, hidden runtime traces) and uses a
+  deterministic repo-root source default instead of launch-directory drift
+- acceptance/regression verification for step-12 closeout executed with:
+  `python3 -m unittest -q tests/test_cli.py -k package`,
+  `python3 -m unittest -q tests/test_cli.py`,
+  `python3 -m unittest -q tests/test_ui_shell.py`, plus manual owner-path smoke
+  checks for private-artifact exclusion and foreign-cwd source-root stability
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 12 is therefore closed for the current contour,
+  and the next primary contour is `Run alpha`
 
 ### Workstream 08: Experiment Package
 

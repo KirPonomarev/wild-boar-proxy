@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -103,6 +104,64 @@ STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
     "10": {"active_min": 10, "active_target": 10, "reserve_target": 0},
     "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
     "20": {"active_min": 20, "active_target": 20, "reserve_target": 0},
+}
+EXPERIMENTAL_PACKAGE_SCHEMA_VERSION = 1
+EXPERIMENTAL_PACKAGE_ARTIFACT_NAME = "experimental-package.tar.gz"
+EXPERIMENTAL_PACKAGE_MANIFEST_NAME = "experimental-package.manifest.json"
+EXPERIMENTAL_PACKAGE_METADATA_NAME = "experimental-package.metadata.json"
+EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
+EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
+EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "MASTER_PLAN.md"
+EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR = "wild_boar_proxy"
+EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
+    ".env",
+    ".env.local",
+    ".env.production",
+    "auth.json",
+    "auth.yaml",
+    "auth.yml",
+    "auth.toml",
+    "backend-registry.json",
+    "supervisor-state.json",
+    "runtime-mode.txt",
+    "runtime-effective-mode.txt",
+    "stable-runtime-config.generated.yaml",
+    "evidence-packet.json",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS = {
+    ".codex-custom-cli",
+    "__pycache__",
+    "cache",
+    "caches",
+    "log",
+    "logs",
+    "temp",
+    "tmp",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_FILE_SUFFIXES = {
+    ".dump",
+    ".dmp",
+    ".key",
+    ".lock",
+    ".log",
+    ".pid",
+    ".secret",
+    ".sqlite",
+    ".sqlite3",
+    ".temp",
+    ".tmp",
+    ".token",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS = {
+    "dump",
+    "dmp",
+    "key",
+    "private",
+    "secret",
+    "session",
+    "temp",
+    "tmp",
+    "token",
 }
 SERIALIZED_LOCK_LOCAL_OWNERS: dict[str, dict[str, int]] = {}
 SERIALIZED_LOCK_LOCAL_OWNERS_GUARD = threading.Lock()
@@ -2969,6 +3028,294 @@ def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
 
 def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def discover_experimental_package_repo_root() -> Path:
+    module_dir = Path(__file__).resolve().parent
+    for candidate in (module_dir, *module_dir.parents):
+        if (
+            (candidate / EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE).is_file()
+            and (candidate / EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR).is_dir()
+        ):
+            return candidate
+    raise RuntimeErrorInfo(
+        (
+            "Failed to determine experimental package source root from module location. "
+            "Set WBP_PACKAGE_SOURCE_ROOT explicitly."
+        ),
+        machine_error_code="PACKAGE_SOURCE_ROOT_UNRESOLVED",
+        severity="recoverable",
+        operator_action="user_action",
+    )
+
+
+def get_experimental_package_source_root() -> Path:
+    configured_root = os.environ.get("WBP_PACKAGE_SOURCE_ROOT")
+    source_root = (
+        Path(configured_root).expanduser().resolve()
+        if configured_root
+        else discover_experimental_package_repo_root()
+    )
+    if not source_root.exists() or not source_root.is_dir():
+        raise RuntimeErrorInfo(
+            f"Experimental package source root is not a directory: {source_root}",
+            machine_error_code="PACKAGE_SOURCE_ROOT_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    return source_root
+
+
+def is_experimental_package_root_file_allowed(relative_path: Path) -> bool:
+    return (
+        len(relative_path.parts) == 1
+        and relative_path.suffix.lower() in EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES
+    )
+
+
+def is_experimental_package_path_excluded(relative_path: Path) -> bool:
+    lowered_parts = [part.lower() for part in relative_path.parts]
+    basename = relative_path.name.lower()
+    if basename.startswith("."):
+        return True
+    if any(part.startswith(".") for part in lowered_parts):
+        return True
+    if basename in EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES:
+        return True
+    if any(part in EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS for part in lowered_parts):
+        return True
+    suffixes = {suffix.lower() for suffix in relative_path.suffixes}
+    if suffixes.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_FILE_SUFFIXES):
+        return True
+    stem_tokens = {
+        token for token in re.split(r"[^a-z0-9]+", relative_path.stem.lower()) if token
+    }
+    if stem_tokens.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS):
+        return True
+    return False
+
+
+def list_experimental_package_files(source_root: Path, output_dir: Path) -> list[Path]:
+    package_files: list[Path] = []
+    for root_entry in sorted(source_root.iterdir(), key=lambda item: item.name):
+        if root_entry.name.startswith("."):
+            continue
+        if root_entry.resolve() == output_dir:
+            continue
+        if root_entry.is_file():
+            relative_path = root_entry.relative_to(source_root)
+            if is_experimental_package_root_file_allowed(relative_path):
+                package_files.append(root_entry)
+            continue
+        if not root_entry.is_dir():
+            continue
+        if root_entry.name not in EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS:
+            continue
+        for entry in sorted(root_entry.rglob("*")):
+            if not entry.is_file() or entry.is_symlink():
+                continue
+            if "__pycache__" in entry.parts:
+                continue
+            if output_dir in entry.parents:
+                continue
+            if is_experimental_package_path_excluded(entry.relative_to(source_root)):
+                continue
+            package_files.append(entry)
+    return package_files
+
+
+def read_experimental_plan_metadata(source_root: Path) -> dict[str, str]:
+    plan_path = source_root / "MASTER_PLAN.md"
+    if not plan_path.is_file():
+        return {}
+    plan_version = ""
+    plan_date = ""
+    for raw_line in plan_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("PLAN_VERSION:"):
+            plan_version = line.split(":", 1)[1].strip()
+        if line.startswith("PLAN_DATE:"):
+            plan_date = line.split(":", 1)[1].strip()
+    metadata: dict[str, str] = {}
+    if plan_version:
+        metadata["plan_version"] = plan_version
+    if plan_date:
+        metadata["plan_date"] = plan_date
+    return metadata
+
+
+def run_package_experimental_build(
+    _paths: RuntimePaths, output_dir_raw: str
+) -> dict[str, Any]:
+    output_dir = Path(output_dir_raw).expanduser().resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to prepare output directory: {output_dir} ({exc})",
+            machine_error_code="PACKAGE_OUTPUT_DIR_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+
+    source_root = get_experimental_package_source_root()
+    package_files = list_experimental_package_files(source_root, output_dir)
+    artifact_path = output_dir / EXPERIMENTAL_PACKAGE_ARTIFACT_NAME
+    manifest_path = output_dir / EXPERIMENTAL_PACKAGE_MANIFEST_NAME
+    metadata_path = output_dir / EXPERIMENTAL_PACKAGE_METADATA_NAME
+
+    try:
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            for file_path in package_files:
+                archive.add(file_path, arcname=str(file_path.relative_to(source_root)))
+        artifact_sha256 = hash_file(artifact_path)
+        metadata = {
+            "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "source_root": str(source_root),
+            "allowlist": {
+                "top_level_dirs": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS),
+                "root_file_suffixes": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES),
+            },
+            "included_file_count": len(package_files),
+            "included_files": [
+                str(path.relative_to(source_root)) for path in package_files
+            ],
+            **read_experimental_plan_metadata(source_root),
+        }
+        manifest = {
+            "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "artifact_path": artifact_path.name,
+            "artifact_sha256": artifact_sha256,
+            "artifact_format": "tar.gz",
+            "metadata_path": metadata_path.name,
+        }
+        write_json_artifact(metadata_path, metadata)
+        write_json_artifact(manifest_path, manifest)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to build experimental package: {exc}",
+            machine_error_code="PACKAGE_BUILD_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+
+    changed_files = [str(artifact_path), str(manifest_path), str(metadata_path)]
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            f"Experimental package built with {len(package_files)} allowlisted files."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "package_result": {
+                "status": "built",
+                "source_root": str(source_root),
+                "artifact_path": str(artifact_path),
+                "manifest_path": str(manifest_path),
+                "metadata_path": str(metadata_path),
+                "artifact_sha256": artifact_sha256,
+                "included_file_count": len(package_files),
+            }
+        },
+    )
+
+
+def run_package_experimental_verify(
+    _paths: RuntimePaths, manifest_raw: str
+) -> dict[str, Any]:
+    manifest_path = Path(manifest_raw).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing experimental package manifest: {manifest_path}",
+            machine_error_code="PACKAGE_MANIFEST_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid experimental package manifest JSON: {exc}",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeErrorInfo(
+            "Experimental package manifest must be a JSON object.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_raw = manifest.get("artifact_path")
+    expected_sha256 = manifest.get("artifact_sha256")
+    if not artifact_path_raw or not expected_sha256:
+        raise RuntimeErrorInfo(
+            "Experimental package manifest is missing required checksum fields.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_candidate = Path(str(artifact_path_raw))
+    artifact_path = (
+        artifact_path_candidate
+        if artifact_path_candidate.is_absolute()
+        else (manifest_path.parent / artifact_path_candidate).resolve()
+    )
+    if not artifact_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing experimental package artifact: {artifact_path}",
+            machine_error_code="PACKAGE_ARTIFACT_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_sha256 = hash_file(artifact_path)
+    checksum_match = observed_sha256 == str(expected_sha256)
+    if not checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Experimental package checksum verification failed.",
+            machine_error_code="PACKAGE_CHECKSUM_MISMATCH",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "checksum_mismatch",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": False,
+                }
+            },
+        )
+    return build_command_payload(
+        ok=True,
+        human_message="Experimental package checksum verification passed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "package_result": {
+                "status": "verified",
+                "manifest_path": str(manifest_path),
+                "artifact_path": str(artifact_path),
+                "artifact_sha256_expected": str(expected_sha256),
+                "artifact_sha256_observed": observed_sha256,
+                "checksum_match": True,
+            }
+        },
+    )
 
 
 def list_target_inventory_entries(path: Path) -> list[str]:

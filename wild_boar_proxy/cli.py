@@ -32,6 +32,8 @@ from .runtime import (
     run_rollout_rotation_inspect,
     run_rollout_stage_advance,
     run_rollout_stage_prove,
+    run_package_experimental_build,
+    run_package_experimental_verify,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -187,6 +189,19 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_advance.add_argument("id")
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
 
+    package = subparsers.add_parser("package")
+    package_subparsers = package.add_subparsers(dest="package_command", required=True)
+    package_experimental = package_subparsers.add_parser("experimental")
+    package_experimental_subparsers = package_experimental.add_subparsers(
+        dest="package_experimental_command", required=True
+    )
+    package_experimental_build = package_experimental_subparsers.add_parser("build")
+    package_experimental_build.add_argument("--output-dir", required=True)
+    package_experimental_build.add_argument("--json", action="store_true", required=True)
+    package_experimental_verify = package_experimental_subparsers.add_parser("verify")
+    package_experimental_verify.add_argument("--manifest", required=True)
+    package_experimental_verify.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -299,6 +314,18 @@ def main(argv: list[str] | None = None) -> int:
             and args.rollout_stage_command == "advance"
         ):
             return emit_json(run_rollout_stage_advance(paths, args.value, args.id))
+        if (
+            args.command == "package"
+            and args.package_command == "experimental"
+            and args.package_experimental_command == "build"
+        ):
+            return emit_json(run_package_experimental_build(paths, args.output_dir))
+        if (
+            args.command == "package"
+            and args.package_command == "experimental"
+            and args.package_experimental_command == "verify"
+        ):
+            return emit_json(run_package_experimental_verify(paths, args.manifest))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

@@ -42,6 +42,8 @@ All operator commands must support `--json`.
 - `legacy import --source-dir <path> --json`
 - `companion reset --json`
 - `companion uninstall --json`
+- `package experimental build --output-dir <path> --json`
+- `package experimental verify --manifest <path> --json`
 
 ## Required response fields
 
@@ -70,11 +72,28 @@ Every command response must include all required fields on both success and fail
 - commands that carry runtime attestation must expose an `attestation` object
   containing the required attestation fields from `RUNTIME_CONTRACT.md`
 
-## Error classes
+## Severity classes
 
 - `recoverable`
-- `needs_user_action`
 - `fatal`
+
+## Additional experimental package owner surface
+
+`package experimental build --output-dir <path> --json` is the owner surface for
+local experimental package materialization.
+
+It must emit:
+
+- a package artifact (`tar.gz` or `zip`) built from allowlisted repo
+  source/docs material only
+- a checksum manifest for the artifact
+- metadata with plan version/date when available
+
+The package surface must not include runtime/private data such as auth files,
+runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+`package experimental verify --manifest <path> --json` is the owner surface for
+artifact existence + checksum verification from the manifest.
 
 ## Additional onboarding owner surface
 
