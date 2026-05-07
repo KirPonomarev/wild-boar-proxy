@@ -4,7 +4,7 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.3
+PLAN_VERSION: 1.4
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
 PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
@@ -229,3 +229,12 @@ This contour cannot by itself imply:
 
 Pilot and release claims require their own gates from `MASTER_PLAN.md` and are
 out of scope for this contour closeout.
+
+## Plan Validity Check
+
+- Practicality: the contour is executable in one day because it is limited to
+  live-gate closure, preflight, day-of load run, evidence packet, and audit.
+- Canon alignment: no deviation from source-of-truth order, live authorization
+  rule, strict JSON rule, or staged-claim discipline.
+- Layer discipline: no engine-layer fixes are allowed inside this contour; any
+  proven engine blocker triggers separate blocker contour opening.
