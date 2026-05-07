@@ -1,0 +1,110 @@
+{
+  "step": "STEP-19B_TWO_WEEK_METRICS_WINDOW_LANE",
+  "captured_at_utc": "2026-05-07T05:24:45.087308Z",
+  "runtime_scope": "machine_evidence_repo_scan_only",
+  "claim_scope": "machine-evidence-only",
+  "source_artifacts": [
+    {
+      "path": "audit_results/step18a_decision_packet.json",
+      "size_bytes": 3298,
+      "sha256": "f11a1fd0ecdfe9eb5e11f00615c3e9075e457938ea36dd5eade62dee0dd9a56a",
+      "last_modified_utc": "2026-05-07T05:00:16.578494Z"
+    },
+    {
+      "path": "audit_results/step18b_decision_packet.json",
+      "size_bytes": 3480,
+      "sha256": "5d12c42035f4113c4c18d5d4d7ee93bd118ec67b6e78eb766842ebc938136bff",
+      "last_modified_utc": "2026-05-07T05:13:41.511233Z"
+    },
+    {
+      "path": "MASTER_PLAN.md",
+      "size_bytes": 57395,
+      "sha256": "b10430968ecbf0e60f8816bf4414d6d9b2d8495f05ce351f2e487084c7259bed",
+      "last_modified_utc": "2026-05-07T05:16:08.150257Z"
+    },
+    {
+      "path": "EVIDENCE_CAPTURE_RUNBOOK.md",
+      "size_bytes": 11486,
+      "sha256": "fcea94d6ed842fbeba77898c2a157ec141d4fae0b802bfbffc048c630800c9f0",
+      "last_modified_utc": "2026-05-06T18:07:18.948577Z"
+    }
+  ],
+  "scan_results": [
+    {
+      "name": "telemetry_files_scan",
+      "command": "rg --files | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'",
+      "exit_code": 1,
+      "stdout_line_count": 0,
+      "sample": []
+    },
+    {
+      "name": "telemetry_command_scan",
+      "command": "rg -n --no-heading \"\\\"command\\\"\\s*:\\s*\\\"[^\\\"]*(telemetry|metric|metrics|two[-_ ]week|2w|14[-_ ]day|window)[^\\\"]*\\\"\" audit_results/*.json",
+      "exit_code": 0,
+      "stdout_line_count": 1,
+      "sample": [
+        "audit_results/step18b_owner_surface_capture.json:96:        \"command\": \"rg --files | rg -i 'two.?week|two_week|metrics|metric'\","
+      ]
+    },
+    {
+      "name": "telemetry_text_scan",
+      "command": "rg -n --no-heading \"two-week|two week|two_week|2w metrics|TWO_WEEK|TWO-WEEK|14-day|14 day|14_day|telemetry|metrics window|metric window\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy",
+      "exit_code": 0,
+      "stdout_line_count": 63,
+      "sample_head": [
+        "MASTER_PLAN.md:10:PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); step-18B scale-gate and two-week-metrics evidence lane closed with independent audit (blocked decision is canonical); next primary contour is step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane",
+        "MASTER_PLAN.md:892:  (installer evidence closed; two-week metrics evidence missing)",
+        "MASTER_PLAN.md:918:  `Step-18B scale-gate closure and two-week metrics evidence lane`",
+        "MASTER_PLAN.md:922:- step-18B scale-gate and two-week-metrics contour was executed in",
+        "MASTER_PLAN.md:938:- two-week metrics machine-evidence remains missing as a dedicated artifact or",
+        "MASTER_PLAN.md:939:  command path (`TWO_WEEK_METRICS_EVIDENCE_MISSING`)",
+        "MASTER_PLAN.md:958:  `Step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane`",
+        "MASTER_PLAN.md:982:Acceptance: Pilot metrics remain stable for two weeks.",
+        "MASTER_PLAN.md:1059:4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.",
+        "audit_results/step17_fact_dump.json:68:      \"Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.\","
+      ],
+      "sample_tail": [
+        "audit_results/step18b_negative_checks.json:2:  \"step\": \"STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE\",",
+        "audit_results/step18b_negative_checks.json:26:      \"name\": \"two_week_metrics_blocker_remains_explicit_if_evidence_missing\",",
+        "audit_results/step18b_negative_checks.json:28:      \"fact\": \"No dedicated two-week metrics command/artifact detected; blocker reason is kept as TWO_WEEK_METRICS_EVIDENCE_MISSING.\"",
+        "audit_results/step18a_owner_surface_capture.json:82:      \"fact\": \"installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope\",",
+        "audit_results/step18a_owner_surface_capture.json:84:        \"TWO_WEEK_METRICS_EVIDENCE_MISSING\"",
+        "audit_results/step18a_owner_surface_capture.json:88:        \"two_week_metrics_evidence\": \"still_blocked\"",
+        "audit_results/step18b_scale_gate_report.md:3:- Step: `STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE`",
+        "audit_results/step18b_scale_gate_report.md:30:| `rg --files | rg -i 'two.?week|two_week|metrics|metric'` | 1 | 0 |",
+        "audit_results/step18b_scale_gate_report.md:32:| `rg -n \"two-week|two week|two_week|2w metrics|TWO_WEEK|TWO-WEEK|metrics\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy` | 0 | 21 |",
+        "audit_results/step18b_scale_gate_report.md:39:| two-week metrics evidence | still_blocked | reason_code=TWO_WEEK_METRICS_EVIDENCE_MISSING; no dedicated machine-evidence command/artifact detected. |"
+      ]
+    },
+    {
+      "name": "metrics_window_scan",
+      "command": "rg -n --no-heading \"14-day|14 day|14_day|two-week|two week|two_week|metrics window|window evidence|telemetry window\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy",
+      "exit_code": 0,
+      "stdout_line_count": 81,
+      "sample_head": [
+        "MASTER_PLAN.md:10:PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); step-18B scale-gate and two-week-metrics evidence lane closed with independent audit (blocked decision is canonical); next primary contour is step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane",
+        "MASTER_PLAN.md:892:  (installer evidence closed; two-week metrics evidence missing)",
+        "MASTER_PLAN.md:918:  `Step-18B scale-gate closure and two-week metrics evidence lane`",
+        "MASTER_PLAN.md:922:- step-18B scale-gate and two-week-metrics contour was executed in",
+        "MASTER_PLAN.md:938:- two-week metrics machine-evidence remains missing as a dedicated artifact or",
+        "MASTER_PLAN.md:958:  `Step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane`",
+        "MASTER_PLAN.md:982:Acceptance: Pilot metrics remain stable for two weeks.",
+        "MASTER_PLAN.md:1059:4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.",
+        "audit_results/step17_fact_dump.json:68:      \"Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.\",",
+        "audit_results/step18b_owner_surface_capture.json:62:        \"rg --files | rg -i 'two.?week|two_week|metrics|metric'\","
+      ]
+    }
+  ],
+  "window_assessment": {
+    "required_window_days": 14,
+    "machine_window_artifact_detected": false,
+    "machine_window_command_detected": false,
+    "conclusion": "no_14_day_machine_metrics_window_evidence_detected",
+    "status": "still_blocked",
+    "reason_code": "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+  },
+  "forbidden_claim_scan": {
+    "exit_code": 1,
+    "matches": []
+  }
+}

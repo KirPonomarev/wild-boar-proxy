@@ -1,0 +1,22 @@
+{
+  "step": "STEP-19B_TWO_WEEK_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T05:24:45.087308Z",
+  "checks": [
+    {
+      "name": "metrics_window_artifact_or_command_detected",
+      "passed": false,
+      "fact": "No dedicated machine telemetry artifact/command proving a 14-day metrics window was detected."
+    },
+    {
+      "name": "two_week_metrics_blocker_remains_explicit_if_window_incomplete",
+      "passed": true,
+      "fact": "Blocker is kept as still_blocked with reason code TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE."
+    },
+    {
+      "name": "forbidden_claim_scan_on_step19_surface_clean",
+      "passed": true,
+      "violations": []
+    }
+  ],
+  "overall_passed": false
+}
