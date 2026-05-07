@@ -1,0 +1,53 @@
+{
+  "step": "STEP-24B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T06:21:38Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k installer\"' audit_results/step18a_test_runs.json",
+        "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k legacy_import\"' audit_results/step18a_test_runs.json",
+        "rg -n --no-heading 'test_diagnostics_export_redacts_runtime_state_and_registry_secrets|test_rollout_evidence_capture_16_redacts_bundle_secrets' audit_results/step18a_test_runs.json",
+        "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k package_experimental\"' audit_results/step18a_test_runs.json",
+        "rg --files audit_results | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'",
+        "rg -n --no-heading '\"command\"\\s*:\\s*\"[^\\\"]*(telemetry|metric|metrics|two[-_ ]week|2w|14[-_ ]day|window)[^\\\"]*\"' audit_results/*.json",
+        "rg -n --no-heading '\"machine_window_artifact_detected\"\\s*:\\s*false' audit_results/step19b_metrics_capture.json",
+        "rg -n --no-heading '\"reason_code\"\\s*:\\s*\"TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE\"' audit_results/step19b_metrics_capture.json"
+      ],
+      "fact": "Installer/legacy/security/license machine signals are present through prior canonical refs, but repository evidence still does not provide a complete 14-day machine metrics window artifact/command trail.",
+      "blocked_reasons": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ],
+      "partial_closure": {
+        "installer_evidence": "closed_by_machine_evidence_in_step18a",
+        "legacy_import_evidence": "closed_by_machine_evidence_in_step18a",
+        "security_evidence": "closed_by_machine_evidence_in_step18a",
+        "license_signal_evidence": "observed_in_step18a_package_experimental_command",
+        "two_week_metrics_evidence_window": "still_blocked"
+      }
+    }
+  ],
+  "closed_blocker_count": 0,
+  "still_blocked_count": 1,
+  "still_blocked_reasons": [
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "reason": "A complete 14-day machine metrics window artifact/command trail was not evidenced in repository scope.",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ]
+    }
+  ],
+  "pilot_blocker_capture_ref": "audit_results/step24b_pilot_blocker_capture.json",
+  "negative_checks_ref": "audit_results/step24b_negative_checks.json",
+  "prior_context_refs": [
+    "audit_results/step23b_decision_packet.json",
+    "audit_results/step19b_metrics_capture.json"
+  ],
+  "forbidden_claim_scan": {
+    "status": "recorded_in_step24b_negative_checks"
+  }
+}
