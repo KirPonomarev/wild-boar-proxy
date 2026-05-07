@@ -4,7 +4,7 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.5
+PLAN_VERSION: 1.6
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
 PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
@@ -254,3 +254,30 @@ During same-day 20-account validation, the team must not:
 
 If any of these conditions occurs, the run must stop with explicit blocker
 codes and reopen as a separate blocker contour.
+
+## Next Contour Operational Plan
+
+1. Obtain explicit owner authorization in the current thread.
+2. Record live-operation declaration before any live command:
+   exact commands, read paths, write paths, rollback or backup expectation.
+3. Execute mandatory preflight JSON packet:
+   `status --json`, `healthcheck --json`, `accounts list --json`,
+   `rollout rotation inspect --json`, `diagnostics export --json`.
+4. Apply preflight decision gate:
+   if preflight fails, issue `NO_GO` with blocker codes;
+   if preflight passes, proceed to same-day load run.
+5. Execute same-day 20-account validation in control-layer scope only:
+   reserve-first lifecycle, validate, controlled promotion, high-load run.
+6. Build redacted evidence packet:
+   attestation, rotation participation, truthful pool counts,
+   fallback readiness, commit hash, observation date, environment note.
+7. Run independent audit and publish final contour verdict:
+   `GO_NEXT_CONTOUR` or `NO_GO` with explicit blocker codes.
+
+## Layer-Mixing Stop Triggers
+
+The contour must stop immediately and reopen as a separate blocker contour if:
+
+- engine-layer patching is attempted
+- canonical JSON surfaces are replaced by log parsing
+- runtime-validation lane is converted into refactor work
