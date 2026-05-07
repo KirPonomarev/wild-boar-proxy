@@ -10319,3 +10319,228 @@ def export_diagnostics(paths: RuntimePaths) -> dict[str, Any]:
         changed_files=[str(export_dir)],
         extra={"bundle_path": str(export_dir)},
     )
+
+
+def build_installer_default_registry_payload() -> dict[str, Any]:
+    return {
+        "schema_version": BACKEND_REGISTRY_SCHEMA_VERSION,
+        "version": BACKEND_REGISTRY_SCHEMA_VERSION,
+        "updated_at": now_iso(),
+        "stable_default_backend_id": "",
+        "pool_policy": {"active_min": 0, "active_target": 0, "reserve_target": 0},
+        "backends": [],
+    }
+
+
+def build_installer_default_state_payload() -> dict[str, Any]:
+    return {
+        "schema_version": 2,
+        "version": 2,
+        "status": "unknown",
+        "effective_mode": "stable",
+        "last_sync_at": "",
+        "last_error": "",
+        "selected_backend_ids": [],
+        "managed_port": 8320,
+        "current_proxy_url": "",
+        "stable_default_backend_id": "",
+        "active_count": 0,
+        "reserve_count": 0,
+        "retired_count": 0,
+        "healthy_count": 0,
+        "degraded_count": 0,
+        "down_count": 0,
+    }
+
+
+def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
+    before_state = snapshot_path_states(
+        [
+            paths.profile_dir,
+            paths.managed_dir,
+            paths.managed_dir / "bin",
+            paths.registry_file,
+            paths.state_file,
+            paths.config_toml,
+            paths.runtime_mode_file,
+            paths.runtime_effective_mode_file,
+        ]
+    )
+    with serialized_lock(paths):
+        paths.profile_dir.mkdir(parents=True, exist_ok=True)
+        paths.managed_dir.mkdir(parents=True, exist_ok=True)
+        (paths.managed_dir / "bin").mkdir(parents=True, exist_ok=True)
+        if not paths.runtime_mode_file.exists():
+            write_text_atomic(paths.runtime_mode_file, "stable")
+        if not paths.runtime_effective_mode_file.exists():
+            write_text_atomic(paths.runtime_effective_mode_file, "stable")
+        if not paths.registry_file.exists():
+            write_json_atomic(paths.registry_file, build_installer_default_registry_payload())
+        if not paths.state_file.exists():
+            write_json_atomic(paths.state_file, build_installer_default_state_payload())
+        if not paths.config_toml.exists():
+            write_text_atomic(paths.config_toml, 'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8318/v1"')
+    changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
+    return build_command_payload(
+        ok=True,
+        human_message="Installer baseline initialization completed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "installer_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "baseline_initialized",
+            }
+        },
+    )
+
+
+def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
+    source_dir = Path(source_dir_raw).expanduser()
+    write_targets = [
+        paths.registry_file,
+        paths.state_file,
+        paths.config_toml,
+        paths.runtime_mode_file,
+        paths.runtime_effective_mode_file,
+    ]
+    before_state = snapshot_path_states(write_targets)
+    legacy_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "source_dir": str(source_dir),
+        "transaction_phase": "snapshot",
+        "rollback_attempted": False,
+        "rollback_outcome": "not_needed",
+        "final_outcome": "pending",
+    }
+    if not source_dir.exists() or not source_dir.is_dir():
+        legacy_result["final_outcome"] = "source_missing"
+        return build_command_payload(
+            ok=False,
+            human_message="Legacy import source directory is missing.",
+            machine_error_code="LEGACY_IMPORT_SOURCE_MISSING",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={"legacy_import_result": legacy_result},
+        )
+    try:
+        with serialized_lock(paths):
+            legacy_result["transaction_phase"] = "stage"
+            staged_registry = read_json(source_dir / "backend-registry.json")
+            staged_state = read_json(source_dir / "supervisor-state.json")
+            staged_config = read_text(source_dir / "config.toml")
+            staged_mode = read_text(source_dir / "runtime-mode.txt", default="stable")
+            staged_effective = read_text(
+                source_dir / "runtime-effective-mode.txt", default=staged_mode
+            )
+
+            legacy_result["transaction_phase"] = "verify"
+            if not isinstance(staged_registry.get("backends"), list):
+                raise RuntimeErrorInfo(
+                    "Legacy import registry backends must be a list.",
+                    machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
+                    operator_action="user_action",
+                )
+            if not isinstance(staged_state, dict):
+                raise RuntimeErrorInfo(
+                    "Legacy import state must be a JSON object.",
+                    machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
+                    operator_action="user_action",
+                )
+
+            legacy_result["transaction_phase"] = "switch"
+            write_json_atomic(paths.registry_file, staged_registry)
+            write_json_atomic(paths.state_file, staged_state)
+            if staged_config:
+                write_text_atomic(paths.config_toml, staged_config)
+            write_text_atomic(paths.runtime_mode_file, staged_mode or "stable")
+            write_text_atomic(paths.runtime_effective_mode_file, staged_effective or "stable")
+    except RuntimeErrorInfo as exc:
+        legacy_result["rollback_attempted"] = True
+        legacy_result["transaction_phase"] = "rollback"
+        for path, snapshot in before_state.items():
+            restore_path_state(path, snapshot)
+        legacy_result["rollback_outcome"] = "completed"
+        legacy_result["final_outcome"] = "rollback_completed_after_failed_import"
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=detect_changed_files_by_state(before_state, write_targets),
+            extra={"legacy_import_result": legacy_result},
+            exit_code=exc.exit_code,
+        )
+    legacy_result["final_outcome"] = "import_completed"
+    return build_command_payload(
+        ok=True,
+        human_message="Legacy import completed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before_state, write_targets),
+        extra={"legacy_import_result": legacy_result},
+    )
+
+
+def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict[str, Any]:
+    targets = [
+        paths.managed_dir,
+        paths.registry_file,
+        paths.state_file,
+        paths.managed_config_file,
+        paths.config_toml,
+        paths.runtime_mode_file,
+        paths.runtime_effective_mode_file,
+        paths.stable_runtime_generated_config_file,
+        paths.launcher_script,
+    ]
+    before_state = snapshot_path_states(targets)
+    reset_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "uninstall_mode": uninstall,
+        "auth_file_preserved": bool(paths.auth_file.exists()),
+        "final_outcome": "pending",
+    }
+    with serialized_lock(paths):
+        if paths.managed_dir.exists():
+            shutil.rmtree(paths.managed_dir)
+        for file_path in (
+            paths.config_toml,
+            paths.runtime_mode_file,
+            paths.runtime_effective_mode_file,
+            paths.stable_runtime_generated_config_file,
+            paths.launcher_script,
+        ):
+            if file_path.exists():
+                file_path.unlink()
+        if uninstall and paths.profile_dir.exists() and paths.profile_dir.is_dir():
+            try:
+                next(paths.profile_dir.iterdir())
+            except StopIteration:
+                paths.profile_dir.rmdir()
+    reset_result["auth_file_preserved"] = bool(paths.auth_file.exists())
+    reset_result["final_outcome"] = "companion_data_removed"
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Companion uninstall completed."
+            if uninstall
+            else "Companion reset completed."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before_state, targets),
+        extra={"reset_result": reset_result},
+    )

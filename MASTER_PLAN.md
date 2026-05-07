@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.23
+PLAN_VERSION: 1.24
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; next primary contour is step-11 installer and legacy import
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; next primary contour is step-12 experimental package baseline
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -661,6 +661,28 @@ Checksums exist.
 Codesign and notarization are deferred until the experiment goes wider.
 
 Acceptance: Clean install and legacy migration work without manual config edits.
+
+Current closeout note for implementation-order step 11:
+
+- baseline installer/data-layout owner surfaces now include
+  `installer init --json`, `legacy import --source-dir <path> --json`,
+  `companion reset --json`, and `companion uninstall --json` with strict JSON
+  command/result packets and control-layer-only scope
+- legacy import uses explicit transaction phases and rollback restoration over
+  companion-managed write targets, and baseline reset/uninstall paths preserve
+  auth file boundaries by default while removing companion-managed state
+- command list and coverage were expanded with parser-guard tests and baseline
+  installer/import/reset behavior tests in `tests.test_cli.CliTests`
+- acceptance/regression verification for step-11 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests -k diagnostics`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k legacy`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k installer`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k companion`,
+  `python3 -m unittest -q tests.test_cli.CliTests`,
+  `python3 -m unittest -q tests.test_ui_shell`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 11 is therefore closed for the current contour,
+  and the next primary contour is `Prepare experimental package`
 
 ### Workstream 08: Experiment Package
 

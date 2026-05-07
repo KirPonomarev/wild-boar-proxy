@@ -38,6 +38,10 @@ All operator commands must support `--json`.
 - `accounts retire <id> --json`
 - `accounts onboard --json`
 - `diagnostics export --json`
+- `installer init --json`
+- `legacy import --source-dir <path> --json`
+- `companion reset --json`
+- `companion uninstall --json`
 
 ## Required response fields
 
