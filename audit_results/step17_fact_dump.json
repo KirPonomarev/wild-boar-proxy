@@ -1,0 +1,383 @@
+{
+  "step": "STEP-17_RELEASE_GATE_ALIGNMENT_AND_PILOT_ENTRY_PREP_CANON",
+  "generated_at_utc": "2026-05-07T01:40:00.580Z",
+  "source_artifacts": [
+    {
+      "path": "MASTER_PLAN.md",
+      "last_modified_utc": "2026-05-07T01:32:25.564Z",
+      "sha256": "9ebfe73187cab76c9ef022924b43b6724130b20029dd8350651919b064bbcf2f"
+    },
+    {
+      "path": "audit_results/step13_alpha_gate_report.md",
+      "last_modified_utc": "2026-05-07T00:57:52.608Z",
+      "sha256": "8d7a764ffae4d15a44a75f2865f5195a9f2c1e1bbdda57c3c5d5ebdd8df2e7cf"
+    },
+    {
+      "path": "audit_results/step14_stable10_proof_report.md",
+      "last_modified_utc": "2026-05-07T01:04:49.926Z",
+      "sha256": "2b0ccf00aa466609ffb34a8fdcdbe36cc3a54052bb5ff8d2ac8a074488be0001"
+    },
+    {
+      "path": "audit_results/step15_consolidate_16_evidence_report.md",
+      "last_modified_utc": "2026-05-07T01:15:01.504Z",
+      "sha256": "a9698e8f3741504081a651f8f0c6690b970c83ae8be2ee5a665251544a9ab0c6"
+    },
+    {
+      "path": "audit_results/step15_owner_surface_capture.json",
+      "last_modified_utc": "2026-05-07T01:12:50.136Z",
+      "sha256": "8ff32d61ced6db18cda03770bbf5c35071974661085b0518214dd9237287e761"
+    },
+    {
+      "path": "audit_results/step15_negative_fixture_checks.json",
+      "last_modified_utc": "2026-05-07T01:14:03.414Z",
+      "sha256": "0d9d2914319ed2efeb1cf50ae116c817a29c24b71961d893d8a146d811e7b06c"
+    },
+    {
+      "path": "audit_results/step15_test_runs.json",
+      "last_modified_utc": "2026-05-07T01:13:18.576Z",
+      "sha256": "6e73d897b059c89d2390bed2a08973717281d7b97698936dc18cc9619ad8c845"
+    },
+    {
+      "path": "audit_results/step16_controlled_updates_toward20_report.md",
+      "last_modified_utc": "2026-05-07T01:26:47.256Z",
+      "sha256": "cffa83053914abebc9bc25d64ce85157a51a685c3d8b53d194648c92b338034a"
+    },
+    {
+      "path": "audit_results/step16_owner_surface_capture.json",
+      "last_modified_utc": "2026-05-07T01:23:39.123Z",
+      "sha256": "02c7ebb0384a3a5d85463e8ae766065916632e7a533ad46567af4f7bfc691ef7"
+    },
+    {
+      "path": "audit_results/step16_negative_checks.json",
+      "last_modified_utc": "2026-05-07T01:25:20.180Z",
+      "sha256": "62a7031ba052dba107aeda1e9492cec60698217ab7ee0844747a0f2fc0e623fb"
+    },
+    {
+      "path": "audit_results/step16_test_runs.json",
+      "last_modified_utc": "2026-05-07T01:24:38.240Z",
+      "sha256": "4f8f12227e7b822d944dcf85bf59b0cc34b6761100eaa903ce95b4a64ada2358"
+    }
+  ],
+  "extracted_master_plan_facts": {
+    "plan_version": "1.29",
+    "release_gates_ref": "MASTER_PLAN.md:923",
+    "release_gates": [
+      "Alpha gate includes runtime attestation, strict JSON command API, stable fallback, single-writer state mutation, and 20-account registry capacity.",
+      "Closed beta gate includes onboarding, diagnostics, stable 10-account pool, and staged rollout plan to 20.",
+      "Scale-prep gate includes documented 16-account field evidence with machine-carried attestation, rotation evidence, fallback readiness, and no stale-green behavior.",
+      "Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.",
+      "Scale gate includes controlled staged rollout to 20.",
+      "Experimental external package gate requires no private runtime data, working checksums, and a basic README."
+    ],
+    "pilot_entry_criteria_ref": "MASTER_PLAN.md:932",
+    "pilot_entry_criteria": [
+      "Runtime hardening completed.",
+      "Command API with strict JSON completed.",
+      "Registry architecture supports 20 accounts.",
+      "Onboarding completed.",
+      "Basic companion UI completed.",
+      "Minimum security completed.",
+      "Legacy import path tested."
+    ]
+  },
+  "extracted_step13_facts": {
+    "artifact_ref": "audit_results/step13_alpha_gate_report.md",
+    "gate_verdicts_ref": "audit_results/step13_alpha_gate_report.md:26",
+    "alpha_gate_statuses": {
+      "RUNTIME_ATTESTATION_GATE": "PASS",
+      "STRICT_JSON_COMMAND_API_GATE": "PASS",
+      "STATE_SERIALIZATION_GATE": "PASS",
+      "FALLBACK_DRILL_GATE": "PASS"
+    },
+    "stop_condition_result_ref": "audit_results/step13_alpha_gate_report.md:45",
+    "stop_condition_result": "no stop-condition trigger detected"
+  },
+  "extracted_step14_facts": {
+    "artifact_ref": "audit_results/step14_stable10_proof_report.md",
+    "outcome_ref": "audit_results/step14_stable10_proof_report.md:53",
+    "achieved": "stable_10_proved",
+    "proof_fact_ref": "audit_results/step14_stable10_proof_report.md:28",
+    "proof_fact": {
+      "machine_error_code": "OK",
+      "proof_gate_status": "stable_10_gate_closed",
+      "final_outcome": "stable_10_proved",
+      "runtime_attestation_status": "passed",
+      "rotation_evidence_status": "available",
+      "rollback_readiness_status": "ready"
+    }
+  },
+  "extracted_step15_machine_facts": {
+    "owner_surface_ref": "audit_results/step15_owner_surface_capture.json",
+    "packet_summary": {
+      "packet_status": "complete",
+      "final_outcome": "field_evidence_packet_complete",
+      "claim_scope": "field_evidence_observed_only",
+      "blocked_reasons": [],
+      "blocked_gate_names": [],
+      "all_gates_passed": true,
+      "gates": {
+        "RUNTIME_ATTESTATION_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK"
+        },
+        "STRICT_JSON_COMMAND_API_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "invalid_payload_surfaces": []
+        },
+        "STATE_SERIALIZATION_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "runtime_changed_files": []
+        },
+        "FALLBACK_DRILL_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK"
+        },
+        "SCALE_EVIDENCE_PACKET_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "packet_status": "complete"
+        }
+      }
+    },
+    "acceptance": {
+      "acceptance_all_passed": true,
+      "checklist": {
+        "packet_status_is_complete": true,
+        "final_outcome_is_field_evidence_packet_complete": true,
+        "blocked_reasons_empty": true,
+        "blocked_gate_names_empty": true,
+        "claim_scope_observed_only": true
+      }
+    },
+    "negative_fixture_checks": {
+      "attestation_incomplete": {
+        "command": "rollout evidence capture 16 --json",
+        "exit_code": 1,
+        "machine_error_code": "SCALE_EVIDENCE_INCOMPLETE",
+        "packet_status": "incomplete",
+        "runtime_attestation_status": "failed",
+        "final_outcome": "field_evidence_packet_incomplete",
+        "blocked_reason_codes": [
+          "SCALE_EVIDENCE_ATTESTATION_INCOMPLETE"
+        ],
+        "blocked_gate_names": [
+          "RUNTIME_ATTESTATION_GATE",
+          "SCALE_EVIDENCE_PACKET_GATE"
+        ]
+      },
+      "rotation_contradicted": {
+        "command": "rollout evidence capture 16 --json",
+        "exit_code": 1,
+        "machine_error_code": "SCALE_EVIDENCE_CONTRADICTED",
+        "packet_status": "contradicted",
+        "rotation_evidence_status": "contradicted",
+        "final_outcome": "field_evidence_packet_contradicted",
+        "blocked_gate_names": [
+          "SCALE_EVIDENCE_PACKET_GATE"
+        ]
+      },
+      "rotation_stale": {
+        "command": "rollout evidence capture 16 --json",
+        "exit_code": 1,
+        "machine_error_code": "SCALE_EVIDENCE_INCOMPLETE",
+        "packet_status": "incomplete",
+        "rotation_evidence_status": "stale",
+        "blocked_reason_codes": [
+          "SCALE_EVIDENCE_ROTATION_INCOMPLETE"
+        ],
+        "blocked_gate_names": [
+          "SCALE_EVIDENCE_PACKET_GATE"
+        ]
+      },
+      "redaction_failure_unsafe": {
+        "command": "runtime.run_rollout_evidence_capture(paths, \"16\") [fixture + mock redacted_json_has_secret_leak=True]",
+        "exit_code": 1,
+        "machine_error_code": "SCALE_EVIDENCE_UNSAFE_TO_CLAIM",
+        "packet_status": "unsafe_to_claim",
+        "diagnostics_redaction_status": "failed",
+        "final_outcome": "field_evidence_packet_unsafe_to_claim",
+        "blocked_gate_names": [
+          "SCALE_EVIDENCE_PACKET_GATE"
+        ]
+      }
+    },
+    "test_runs_summary": {
+      "total_runs": 6,
+      "all_exit_code_zero": true
+    }
+  },
+  "extracted_step16_machine_facts": {
+    "owner_surface_ref": "audit_results/step16_owner_surface_capture.json",
+    "lane_count": 2,
+    "lane_summaries": [
+      {
+        "fixture": {
+          "source_stage": "10",
+          "target_stage": "15",
+          "reserve_backend_id": "backend-reserve-advance-step"
+        },
+        "prove": {
+          "command": "rollout stage prove 10 --json",
+          "exit_code": 0,
+          "machine_error_code": "OK",
+          "proof_gate_status": "stable_10_gate_closed",
+          "final_outcome": "stable_10_proved",
+          "runtime_attestation_status": "passed",
+          "rotation_evidence_status": "available",
+          "rollback_readiness_status": "ready"
+        },
+        "advance": {
+          "command": "rollout stage advance 15 backend-reserve-advance-step --json",
+          "exit_code": 0,
+          "machine_error_code": "OK",
+          "final_outcome": "advanced_one_step",
+          "preflight_policy_status": "matched",
+          "preflight_stage10_proof_status": "passed",
+          "preflight_stage15_proof_status": "not_invoked",
+          "policy_transition_status": "stage_policy_updated",
+          "promotion_status": "promoted",
+          "postflight_attestation_status": "passed",
+          "postflight_rotation_status": "available",
+          "rollback_readiness_status": "ready",
+          "rollback_attempted": false,
+          "rollback_outcome": "not_needed",
+          "pool_count_after_step": {
+            "active_count_observed": 11,
+            "reserve_count_observed": 0,
+            "active_target": 15,
+            "reserve_target": 0
+          }
+        }
+      },
+      {
+        "fixture": {
+          "source_stage": "15",
+          "target_stage": "20",
+          "reserve_backend_id": "backend-reserve-advance-stage20-step"
+        },
+        "prove": {
+          "command": "rollout stage prove 15 --json",
+          "exit_code": 0,
+          "machine_error_code": "OK",
+          "proof_gate_status": "stable_15_gate_closed",
+          "final_outcome": "stable_15_proved",
+          "runtime_attestation_status": "passed",
+          "rotation_evidence_status": "available",
+          "rollback_readiness_status": "ready"
+        },
+        "advance": {
+          "command": "rollout stage advance 20 backend-reserve-advance-stage20-step --json",
+          "exit_code": 0,
+          "machine_error_code": "OK",
+          "final_outcome": "advanced_one_step",
+          "preflight_policy_status": "matched",
+          "preflight_stage10_proof_status": "not_invoked",
+          "preflight_stage15_proof_status": "passed",
+          "policy_transition_status": "stage_policy_updated",
+          "promotion_status": "promoted",
+          "postflight_attestation_status": "passed",
+          "postflight_rotation_status": "available",
+          "rollback_readiness_status": "ready",
+          "rollback_attempted": false,
+          "rollback_outcome": "not_needed",
+          "pool_count_after_step": {
+            "active_count_observed": 16,
+            "reserve_count_observed": 0,
+            "active_target": 20,
+            "reserve_target": 0
+          }
+        }
+      }
+    ],
+    "negative_checks_ref": "audit_results/step16_negative_checks.json",
+    "negative_checks_overall_passed": true,
+    "negative_check_categories": [
+      {
+        "name": "held_lock_block",
+        "all_passed": true,
+        "check_count": 2
+      },
+      {
+        "name": "invalid_or_ineligible_backend_reject",
+        "all_passed": true,
+        "check_count": 2
+      },
+      {
+        "name": "postflight_contradiction_rollback",
+        "all_passed": true,
+        "check_count": 2
+      },
+      {
+        "name": "failed_proof_policy_promotion_stable_auth_rollbacks",
+        "all_passed": true,
+        "check_count": 7
+      }
+    ],
+    "test_runs_ref": "audit_results/step16_test_runs.json",
+    "test_runs_all_passed": true,
+    "test_run_count": 21
+  },
+  "replay_checks_step17": [
+    {
+      "command": "jq empty audit_results/step15_owner_surface_capture.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq empty audit_results/step15_negative_fixture_checks.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq empty audit_results/step15_test_runs.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq empty audit_results/step16_owner_surface_capture.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq empty audit_results/step16_negative_checks.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq empty audit_results/step16_test_runs.json",
+      "exit_code": 0,
+      "purpose": "JSON parse verification"
+    },
+    {
+      "command": "jq -e '<acceptance expression>' audit_results/step15_owner_surface_capture.json >/dev/null",
+      "exit_code": 0,
+      "purpose": "Acceptance fields verification"
+    },
+    {
+      "command": "jq -e '<lane outcomes expression>' audit_results/step16_owner_surface_capture.json >/dev/null",
+      "exit_code": 0,
+      "purpose": "Lane outcomes verification"
+    }
+  ],
+  "claim_escalation_forbidden_tokens_scan": {
+    "tokens": [
+      "stable_20_proved",
+      "scale_complete",
+      "pilot_ready",
+      "production_ready"
+    ],
+    "step13_to_step16_scan_command": "rg -n --no-heading -i \"pilot_ready|scale_complete|stable_20_proved|production_ready\" audit_results/step13_* audit_results/step14_* audit_results/step15_* audit_results/step16_*",
+    "step13_to_step16_rg_exit_code": 1,
+    "step13_to_step16_matches": [],
+    "master_plan_guardrail_matches": [
+      "MASTER_PLAN.md:27",
+      "MASTER_PLAN.md:83",
+      "MASTER_PLAN.md:812",
+      "MASTER_PLAN.md:813",
+      "MASTER_PLAN.md:1018",
+      "MASTER_PLAN.md:1019"
+    ]
+  }
+}
