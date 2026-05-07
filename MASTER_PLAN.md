@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.27
+PLAN_VERSION: 1.28
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; next primary contour is step-15 consolidate observed 16-account evidence
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; next primary contour is step-16 controlled updates toward 20
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -758,6 +758,37 @@ Current closeout note for implementation-order step 14:
   on branch `codex/wave-1c-prereq-closeout`
 - implementation-order step 14 is therefore closed for the current contour,
   and the next primary contour is `Consolidate observed 16-account evidence`
+
+Current closeout note for implementation-order step 15:
+
+- observed 16-account evidence consolidation contour was executed in isolated
+  fixture lanes through owner surfaces `healthcheck --json`, `status --json`,
+  `accounts list --json`, `rollout rotation inspect --json`, and
+  `rollout evidence capture 16 --json`
+- command replay, acceptance checklist, and negative-lane evidence are captured
+  in:
+  `audit_results/step15_consolidate_16_evidence_report.md`,
+  `audit_results/step15_owner_surface_capture.json`,
+  `audit_results/step15_negative_fixture_checks.json`, and
+  `audit_results/step15_test_runs.json`
+- acceptance fields were confirmed machine-readably with
+  `packet_status=complete`,
+  `final_outcome=field_evidence_packet_complete`,
+  `blocked_reasons=[]`,
+  `scale_gate_summary.blocked_gate_names=[]`, and
+  `claim_scope=field_evidence_observed_only`
+- independent audit replay confirmed PASS with no P0/P1/P2/P3 findings and no
+  claim-escalation beyond observed-only scope
+- acceptance/regression verification for step-15 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_complete_packet`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_attestation_incomplete`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_rotation_contradicted`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_redaction_failure_unsafe`,
+  `python3 -m unittest -q tests.test_cli -k evidence_capture`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 15 is therefore closed for the current contour,
+  and the next primary contour is `Expand by controlled updates toward 20`
 
 ### Workstream 08: Experiment Package
 

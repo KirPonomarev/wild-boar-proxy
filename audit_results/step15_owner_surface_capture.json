@@ -1,0 +1,1467 @@
+{
+  "scenario": "step15_owner_surface_capture_complete",
+  "commands": [
+    {
+      "command": "healthcheck --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Runtime attestation passed.",
+        "machine_error_code": "OK",
+        "changed_files": [
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json"
+        ],
+        "next_action": "none",
+        "liveness": "healthy",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "desired_mode": "managed",
+        "effective_mode": "managed",
+        "endpoint": "http://127.0.0.1:55374/v1",
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "attestation": {
+          "listener_ok": true,
+          "models_ok": true,
+          "responses_ok": true,
+          "effective_mode_match": true,
+          "base_url_match": true,
+          "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+          "observed_at_utc": "2026-05-07T01:12:49.337043+00:00",
+          "runtime_version": "2",
+          "attestation_source": "healthcheck --json"
+        },
+        "last_error": "",
+        "current_proxy_adoption_contract": {
+          "status": "contract_ready",
+          "owner_command_surface": "healthcheck --json",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "launch_smoke_owner_forbidden": true,
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "activation_surface_status": "owner_path_private_launcher_activation_available",
+          "activation_surface_kind": "repo_owned_handoff_env_var",
+          "handoff_env_var": "WBP_CURRENT_PROXY_URL",
+          "activation_value_source_field": "proxy_reprobe.working_candidate",
+          "owner_activation_lane": "serialized_healthcheck_owner_path",
+          "handoff_carrier_contract": {
+            "status": "contract_ready",
+            "env_var": "WBP_CURRENT_PROXY_URL",
+            "surface_kind": "launcher_scoped_process_local_carrier",
+            "current_proxy_truth_surface_field": "current_proxy_url",
+            "persisted_truth_surface_forbidden": true,
+            "working_candidate_truth_by_presence_forbidden": true,
+            "top_level_runtime_truth_by_presence_forbidden": true,
+            "ambient_authoritative_forbidden": true
+          },
+          "external_launcher_path_surface": {
+            "status": "path_present",
+            "env_var": "WBP_LAUNCHER_SCRIPT",
+            "resolved_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/codex-custom-launch-override.sh",
+            "exists": true,
+            "role": "launcher_executable_path_surface",
+            "path_kind": "explicit_external_override",
+            "default_owned_provisioning_target": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/codex-custom-launch.sh",
+            "repo_managed_marker_present": false,
+            "repo_managed_marker_valid": false,
+            "repo_managed_marker_recognized": false,
+            "consumer_capability_by_path_presence_forbidden": true,
+            "provisioning_ownership_by_path_presence_forbidden": true,
+            "truth_surface": false
+          },
+          "launcher_consumer_contract": {
+            "status": "repo_owned_default_consumer_provisioning_available",
+            "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+            "consumer_kind": "bounded_launcher_script",
+            "handoff_carrier_env_var": "WBP_CURRENT_PROXY_URL",
+            "repo_owned_default_consumer_provisioned": false,
+            "external_launcher_readiness_status": "external_script_path_present_consumer_capability_unverified",
+            "path_presence_not_capability_proof": true,
+            "repo_managed_marker_required_for_refresh": true,
+            "repo_managed_marker_present": false,
+            "repo_managed_marker_valid": false,
+            "repo_managed_marker_recognized": false,
+            "default_path_non_clobber_required": true,
+            "owner_controlled_activation_only": true
+          },
+          "engine_local_proxy_routing_contract": {
+            "status": "contract_ready",
+            "allowed": true,
+            "routing_scope": "managed_runtime_child_process_only",
+            "derived_from_handoff_carrier_only": true,
+            "derived_proxy_env_keys": [
+              "HTTP_PROXY",
+              "HTTPS_PROXY",
+              "ALL_PROXY",
+              "http_proxy",
+              "https_proxy",
+              "all_proxy"
+            ],
+            "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+            "current_engine_consumption_claimed": false
+          },
+          "effectful_runtime_wiring_status": "bounded_private_launcher_lane_available",
+          "managed_runtime_subprocess_only": true,
+          "ambient_proxy_env_authoritative_forbidden": true,
+          "control_plane_proxyless": true,
+          "base_url_proxy_selection_surface_forbidden": true,
+          "launcher_protocol_change_outside_repo_owned_handoff_forbidden": true,
+          "managed_config_schema_widening_default": false,
+          "config_toml_schema_widening_default": false,
+          "absent_default_path_prerequisite_materialization_separate_from_eligibility": true,
+          "launcher_consumer_status": "repo_owned_default_consumer_provisioning_available",
+          "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+          "engine_local_proxy_routing_allowed": true,
+          "engine_local_proxy_routing_scope": "managed_runtime_child_process_only",
+          "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+          "external_launcher_readiness_status": "external_script_path_present_consumer_capability_unverified",
+          "repo_owned_default_consumer_provisioned": false,
+          "current_proxy_truth_surface": {
+            "status": "contract_ready",
+            "field": "current_proxy_url",
+            "meaning": "current_live_outbound_proxy_truth",
+            "persisted_last_known_good_separate": true,
+            "working_candidate_separate": true
+          },
+          "working_candidate_surface": {
+            "status": "contract_ready",
+            "field": "proxy_reprobe.working_candidate",
+            "nested_evidence_only": true,
+            "current_proxy_truth_by_presence_forbidden": true,
+            "persisted_history_by_presence_forbidden": true
+          },
+          "write_owner": "serialized_healthcheck_owner_path",
+          "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
+          "candidate_probe_depth": "shallow_socket_listener_only",
+          "candidate_probe_scope": "bounded_local_listener_reachability_only",
+          "adoption_requires_same_owner_path_live_reproof": true,
+          "post_adoption_runtime_validation_surface": "healthcheck.attestation",
+          "separate_control_layer_deep_probe_surface_default": false,
+          "adoption_from_candidate_liveness_alone_forbidden": true,
+          "adoption_from_last_known_good_alone_forbidden": true,
+          "adoption_from_working_candidate_alone_forbidden": true,
+          "same_current_reconfirm_not_adoption": true,
+          "candidate_existence_alone_not_ok": true,
+          "top_level_ok_requires_live_runtime_reproof": true,
+          "proxy_path_broken_remains_valid_without_live_reproof": true,
+          "proxy_reprobe_failed_remains_valid_without_candidate": true,
+          "changed_files_visibility_required": true,
+          "new_persisted_adoption_metadata_default": false,
+          "nested_adoption_result_surface": {
+            "status": "owner_path_emitted",
+            "field": "proxy_reprobe_adoption_result",
+            "command_packet_only_default": true
+          }
+        },
+        "last_known_good_proxy_contract": {
+          "status": "contract_ready",
+          "owner_command_surface": "healthcheck --json",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "launch_smoke_owner_forbidden": true,
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "current_proxy_url_field": "current_proxy_url",
+          "current_proxy_url_reuse_forbidden": true,
+          "separate_metadata_file_default": false,
+          "write_owner": "serialized_healthcheck_owner_path",
+          "write_path_status": "owner_path_emitted",
+          "refresh_requires_positive_managed_proxy_proof": true,
+          "refresh_from_candidate_liveness_alone_forbidden": true,
+          "refresh_from_current_proxy_url_alone_forbidden": true,
+          "failed_reprobe_clears_persisted_value": false,
+          "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            "last_known_good_proxy_url",
+            "current_proxy_url"
+          ],
+          "candidate_inputs_bounded_local_only": true,
+          "candidate_input_deduped_after_filter": true,
+          "changed_files_visibility_required": true,
+          "historical_truth_promotes_live_truth": false
+        },
+        "last_known_good_proxy": {
+          "status": "materialized",
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "proxy_url": "http://127.0.0.1:10808",
+          "observed_at_utc": "2026-05-07T01:12:49.336228+00:00",
+          "matches_current_proxy_url": true,
+          "eligible_for_bounded_reprobe": true,
+          "current_proxy_url_separate": true,
+          "final_live_truth_without_live_checks": false
+        },
+        "deterministic_stable_recovery_contract": {
+          "status": "contract_ready",
+          "entry_owner": "healthcheck_live_attestation_path",
+          "owner_command_surface": "healthcheck --json",
+          "status_delegates_to_owner": true,
+          "sync_hidden_owner_forbidden": true,
+          "new_generic_cli_default": false,
+          "eligible_failure_lanes": [
+            "managed_preflight_failure",
+            "stable_service_disabled",
+            "explicit_stable_recovery_lane"
+          ],
+          "entry_lane_surface": {
+            "status": "owner_path_emitted",
+            "field": "deterministic_stable_recovery_result.entry_lane",
+            "nested_recovery_surface": true,
+            "top_level_machine_error_code_separate": true,
+            "allowed_values": [
+              "managed_preflight_failure",
+              "stable_service_disabled",
+              "explicit_stable_recovery_lane",
+              "not_invoked"
+            ]
+          },
+          "failure_taxonomy_redesign_forbidden": true,
+          "shared_activation_mechanics": {
+            "status": "contract_fixed_not_implemented",
+            "reuse_existing_launch_smoke_activation_helper": true,
+            "generated_config_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/stable-runtime-config.generated.yaml",
+            "handoff_env_var": "WBP_STABLE_CONFIG",
+            "snapshot_topic": "stable_runtime_consumer_snapshot"
+          },
+          "generated_config_regeneration_status": "contract_fixed_not_implemented",
+          "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+          "generated_config_derivation_source": "current_baseline_stable_config_plus_current_approved_target_reference",
+          "stale_generated_config_authoritative": false,
+          "generated_config_existence_alone_sufficient": false,
+          "snapshot_refresh_status": "contract_fixed_not_implemented",
+          "snapshot_refresh_after_stable_live_outcome": true,
+          "snapshot_schema_widening_required": false,
+          "new_persisted_recovery_metadata_required": false,
+          "stable_service_disabled_classification": {
+            "status": "owner_path_emitted",
+            "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+            "control_layer_classification": true,
+            "persisted_engine_state_flag": false,
+            "positive_evidence_required": true,
+            "desired_mode_alone_sufficient": false,
+            "generated_config_existence_alone_sufficient": false,
+            "snapshot_presence_alone_sufficient": false,
+            "bounded_reenable_lane_eligible_required": true,
+            "proxy_path_failure_codes_separate": [
+              "PROXY_PATH_BROKEN",
+              "PROXY_REPROBE_FAILED"
+            ],
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "overclassification_forbidden": true
+          },
+          "re_enable_method_contract": {
+            "status": "owner_path_emitted",
+            "owner_path_scope": "bounded_control_layer_recovery_action",
+            "owner_command_surface": "healthcheck --json",
+            "reuse_private_launch_smoke_helper_allowed": true,
+            "launcher_protocol_widening_required": false,
+            "launchd_integration_forbidden": true,
+            "os_service_manager_integration_forbidden": true,
+            "generic_service_supervision_forbidden": true
+          },
+          "approved_target_recovery_outcome": "separate",
+          "observed_source_fallback_recovery_outcome": "separate",
+          "recovery_failure_outcome": "separate",
+          "top_level_truth_boundaries": {
+            "status": "contract_ready",
+            "top_level_final_truth_fields": [
+              "status",
+              "machine_error_code",
+              "liveness",
+              "endpoint"
+            ],
+            "nested_recovery_surface": "deterministic_stable_recovery_result",
+            "final_live_truth_separate": true,
+            "launch_smoke_owner_lane_fields_forbidden": true,
+            "status_second_owner_forbidden": true,
+            "sync_owner_lane_forbidden": true
+          },
+          "top_level_machine_error_code_rules": {
+            "status": "owner_path_emitted",
+            "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+            "stable_service_disabled_requires_final_unhealthy": true,
+            "ok_after_successful_reenable": "OK",
+            "generic_listener_down_fallback": "LISTENER_DOWN",
+            "proxy_path_codes_remain_separate": true
+          },
+          "live_runtime_observation_required": true,
+          "mode_truth_redefinition_forbidden": true,
+          "last_known_good_proxy_persistence_in_scope": false
+        },
+        "deterministic_stable_recovery_result": {
+          "status": "not_invoked",
+          "owner_command_surface": "healthcheck --json",
+          "delegated_from_status": false,
+          "attempted": false,
+          "entry_lane": "not_invoked",
+          "outcome": "not_invoked",
+          "re_enable_method": "",
+          "selected_source_kind": "",
+          "selected_source_path": "",
+          "generated_config_regenerated": false,
+          "snapshot_refreshed": false,
+          "fallback_reason": "",
+          "live_runtime_observation_confirmed": false
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "command": "status --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Runtime status summary is available.",
+        "machine_error_code": "OK",
+        "changed_files": [
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json"
+        ],
+        "next_action": "none",
+        "liveness": "healthy",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "desired_mode": "managed",
+        "effective_mode": "managed",
+        "endpoint": "http://127.0.0.1:55374/v1",
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "current_proxy_adoption_contract": {
+          "status": "contract_ready",
+          "owner_command_surface": "healthcheck --json",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "launch_smoke_owner_forbidden": true,
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "activation_surface_status": "owner_path_private_launcher_activation_available",
+          "activation_surface_kind": "repo_owned_handoff_env_var",
+          "handoff_env_var": "WBP_CURRENT_PROXY_URL",
+          "activation_value_source_field": "proxy_reprobe.working_candidate",
+          "owner_activation_lane": "serialized_healthcheck_owner_path",
+          "handoff_carrier_contract": {
+            "status": "contract_ready",
+            "env_var": "WBP_CURRENT_PROXY_URL",
+            "surface_kind": "launcher_scoped_process_local_carrier",
+            "current_proxy_truth_surface_field": "current_proxy_url",
+            "persisted_truth_surface_forbidden": true,
+            "working_candidate_truth_by_presence_forbidden": true,
+            "top_level_runtime_truth_by_presence_forbidden": true,
+            "ambient_authoritative_forbidden": true
+          },
+          "external_launcher_path_surface": {
+            "status": "path_present",
+            "env_var": "WBP_LAUNCHER_SCRIPT",
+            "resolved_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/codex-custom-launch-override.sh",
+            "exists": true,
+            "role": "launcher_executable_path_surface",
+            "path_kind": "explicit_external_override",
+            "default_owned_provisioning_target": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/codex-custom-launch.sh",
+            "repo_managed_marker_present": false,
+            "repo_managed_marker_valid": false,
+            "repo_managed_marker_recognized": false,
+            "consumer_capability_by_path_presence_forbidden": true,
+            "provisioning_ownership_by_path_presence_forbidden": true,
+            "truth_surface": false
+          },
+          "launcher_consumer_contract": {
+            "status": "repo_owned_default_consumer_provisioning_available",
+            "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+            "consumer_kind": "bounded_launcher_script",
+            "handoff_carrier_env_var": "WBP_CURRENT_PROXY_URL",
+            "repo_owned_default_consumer_provisioned": false,
+            "external_launcher_readiness_status": "external_script_path_present_consumer_capability_unverified",
+            "path_presence_not_capability_proof": true,
+            "repo_managed_marker_required_for_refresh": true,
+            "repo_managed_marker_present": false,
+            "repo_managed_marker_valid": false,
+            "repo_managed_marker_recognized": false,
+            "default_path_non_clobber_required": true,
+            "owner_controlled_activation_only": true
+          },
+          "engine_local_proxy_routing_contract": {
+            "status": "contract_ready",
+            "allowed": true,
+            "routing_scope": "managed_runtime_child_process_only",
+            "derived_from_handoff_carrier_only": true,
+            "derived_proxy_env_keys": [
+              "HTTP_PROXY",
+              "HTTPS_PROXY",
+              "ALL_PROXY",
+              "http_proxy",
+              "https_proxy",
+              "all_proxy"
+            ],
+            "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+            "current_engine_consumption_claimed": false
+          },
+          "effectful_runtime_wiring_status": "bounded_private_launcher_lane_available",
+          "managed_runtime_subprocess_only": true,
+          "ambient_proxy_env_authoritative_forbidden": true,
+          "control_plane_proxyless": true,
+          "base_url_proxy_selection_surface_forbidden": true,
+          "launcher_protocol_change_outside_repo_owned_handoff_forbidden": true,
+          "managed_config_schema_widening_default": false,
+          "config_toml_schema_widening_default": false,
+          "absent_default_path_prerequisite_materialization_separate_from_eligibility": true,
+          "launcher_consumer_status": "repo_owned_default_consumer_provisioning_available",
+          "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+          "engine_local_proxy_routing_allowed": true,
+          "engine_local_proxy_routing_scope": "managed_runtime_child_process_only",
+          "derived_proxy_env_authoritative_for_control_plane_forbidden": true,
+          "external_launcher_readiness_status": "external_script_path_present_consumer_capability_unverified",
+          "repo_owned_default_consumer_provisioned": false,
+          "current_proxy_truth_surface": {
+            "status": "contract_ready",
+            "field": "current_proxy_url",
+            "meaning": "current_live_outbound_proxy_truth",
+            "persisted_last_known_good_separate": true,
+            "working_candidate_separate": true
+          },
+          "working_candidate_surface": {
+            "status": "contract_ready",
+            "field": "proxy_reprobe.working_candidate",
+            "nested_evidence_only": true,
+            "current_proxy_truth_by_presence_forbidden": true,
+            "persisted_history_by_presence_forbidden": true
+          },
+          "write_owner": "serialized_healthcheck_owner_path",
+          "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
+          "candidate_probe_depth": "shallow_socket_listener_only",
+          "candidate_probe_scope": "bounded_local_listener_reachability_only",
+          "adoption_requires_same_owner_path_live_reproof": true,
+          "post_adoption_runtime_validation_surface": "healthcheck.attestation",
+          "separate_control_layer_deep_probe_surface_default": false,
+          "adoption_from_candidate_liveness_alone_forbidden": true,
+          "adoption_from_last_known_good_alone_forbidden": true,
+          "adoption_from_working_candidate_alone_forbidden": true,
+          "same_current_reconfirm_not_adoption": true,
+          "candidate_existence_alone_not_ok": true,
+          "top_level_ok_requires_live_runtime_reproof": true,
+          "proxy_path_broken_remains_valid_without_live_reproof": true,
+          "proxy_reprobe_failed_remains_valid_without_candidate": true,
+          "changed_files_visibility_required": true,
+          "new_persisted_adoption_metadata_default": false,
+          "nested_adoption_result_surface": {
+            "status": "owner_path_emitted",
+            "field": "proxy_reprobe_adoption_result",
+            "command_packet_only_default": true
+          }
+        },
+        "last_known_good_proxy_contract": {
+          "status": "contract_ready",
+          "owner_command_surface": "healthcheck --json",
+          "status_delegates_to_owner": true,
+          "sync_owner_forbidden": true,
+          "launch_smoke_owner_forbidden": true,
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "current_proxy_url_field": "current_proxy_url",
+          "current_proxy_url_reuse_forbidden": true,
+          "separate_metadata_file_default": false,
+          "write_owner": "serialized_healthcheck_owner_path",
+          "write_path_status": "owner_path_emitted",
+          "refresh_requires_positive_managed_proxy_proof": true,
+          "refresh_from_candidate_liveness_alone_forbidden": true,
+          "refresh_from_current_proxy_url_alone_forbidden": true,
+          "failed_reprobe_clears_persisted_value": false,
+          "candidate_input_priority": [
+            "WBP_PROXY_REPROBE_CANDIDATES",
+            "last_known_good_proxy_url",
+            "current_proxy_url"
+          ],
+          "candidate_inputs_bounded_local_only": true,
+          "candidate_input_deduped_after_filter": true,
+          "changed_files_visibility_required": true,
+          "historical_truth_promotes_live_truth": false
+        },
+        "last_known_good_proxy": {
+          "status": "materialized",
+          "state_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+          "state_fields": [
+            "last_known_good_proxy_url",
+            "last_known_good_proxy_observed_at"
+          ],
+          "proxy_url": "http://127.0.0.1:10808",
+          "observed_at_utc": "2026-05-07T01:12:49.410581+00:00",
+          "matches_current_proxy_url": true,
+          "eligible_for_bounded_reprobe": true,
+          "current_proxy_url_separate": true,
+          "final_live_truth_without_live_checks": false
+        },
+        "pool_summary": {
+          "active": 16,
+          "reserve": 0,
+          "retired": 0,
+          "healthy": 16,
+          "degraded": 0,
+          "down": 0,
+          "selected_backend_ids": [
+            "backend-00",
+            "backend-01"
+          ],
+          "backend_count": 16
+        },
+        "policy_drift": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "configured_active_count": 16,
+          "allowed_stable_auth_count": 16,
+          "stable_auth_inventory_count": 16,
+          "stable_auth_inventory_source": {
+            "source": "stable_config_parent",
+            "path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+            "path_resolution": "fallback",
+            "exists": true
+          },
+          "disallowed_configured_auths": [],
+          "missing_auths": [],
+          "unknown_auths": [],
+          "claim_blockers": [],
+          "next_action": "none"
+        },
+        "policy_drift_observed": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "configured_active_count": 16,
+          "allowed_stable_auth_count": 16,
+          "stable_auth_inventory_count": 16,
+          "stable_auth_inventory_source": {
+            "source": "stable_config_parent",
+            "path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+            "path_resolution": "fallback",
+            "exists": true
+          },
+          "disallowed_configured_auths": [],
+          "missing_auths": [],
+          "unknown_auths": [],
+          "claim_blockers": [],
+          "next_action": "none"
+        },
+        "stable_runtime_consumer": {
+          "status": "contract_ready",
+          "observed_stable_inventory_source": {
+            "source": "stable_config_parent",
+            "path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+            "path_resolution": "fallback",
+            "exists": true
+          },
+          "approved_repair_target_reference": {
+            "status": "fixed_not_materialized",
+            "schema_version": 1,
+            "target_identity": "companion_managed_stable_auth_inventory",
+            "target_kind": "control_owned_inventory_path",
+            "inventory_dir": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/stable-repair-target",
+            "reference_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/approved-repair-target.json",
+            "ownership": "control_layer",
+            "location_scope": "companion_managed_data",
+            "reference_file_exists": false,
+            "inventory_dir_exists": false
+          },
+          "desired_stable_runtime_consumer_source": {
+            "status": "observed_source_selected",
+            "source_kind": "observed_stable_inventory_source",
+            "resolved_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+            "selection_reason": "approved_target_not_ready_for_runtime_consumption"
+          },
+          "effective_stable_runtime_consumer_source": {
+            "status": "observed_source_active",
+            "source_kind": "observed_stable_inventory_source",
+            "resolved_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+            "observation_reason": "stable_runtime_observation_still_points_to_observed_source",
+            "matches_desired": true
+          },
+          "derived_stable_runtime_config_surface": {
+            "status": "declared_not_materialized",
+            "config_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/stable-runtime-config.generated.yaml",
+            "ownership": "control_layer",
+            "location_scope": "companion_managed_data",
+            "artifact_kind": "generated_runtime_config",
+            "truth_surface": false,
+            "activation_method": "control_owned_generated_config",
+            "exists": false
+          },
+          "launcher_handoff_contract": {
+            "status": "contract_ready",
+            "handoff_method": "process_local_env_override",
+            "env_var": "WBP_STABLE_CONFIG",
+            "generated_config_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/stable-runtime-config.generated.yaml",
+            "scope": "launcher_subprocess_only",
+            "recovery_scope": "explicit_stable_runtime_recovery_only",
+            "baseline_config_rewrite_forbidden": true,
+            "generic_config_routing_forbidden": true
+          },
+          "activation_evidence_surface": {
+            "status": "declared_not_materialized",
+            "snapshot_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/supervisor-state.json",
+            "snapshot_topic": "stable_runtime_consumer_snapshot",
+            "classification": "runtime_state_snapshot_evidence",
+            "owner": "serialized_runtime_state_mutation_path",
+            "final_truth_without_live_checks": false,
+            "live_runtime_observation_required": true,
+            "required_fields": [
+              "schema_version",
+              "activation_method",
+              "selected_config_file",
+              "selected_source_kind",
+              "selected_source_path",
+              "activation_outcome",
+              "fallback_reason",
+              "observed_at_utc"
+            ],
+            "snapshot_present": false,
+            "snapshot_shape_valid": false
+          },
+          "effective_truth_contract": {
+            "status": "contract_ready",
+            "truth_source": "live_runtime_observation_plus_snapshot_evidence",
+            "desired_source_alone_sufficient": false,
+            "generated_config_existence_alone_sufficient": false,
+            "activation_evidence_snapshot_alone_sufficient": false,
+            "live_runtime_observation_required": true,
+            "baseline_config_is_observation_surface": true
+          },
+          "baseline_stable_config_surface": {
+            "config_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable/config.yaml",
+            "ownership": "engine_adjacent",
+            "role": "observed_source_discovery_surface"
+          },
+          "fallback_contract": {
+            "status": "contract_ready",
+            "fallback_allowed": true,
+            "fallback_source_kind": "observed_stable_inventory_source",
+            "silent_fallback_forbidden": true,
+            "desired_source_remains_visible": true,
+            "effective_source_must_report_fallback": true
+          },
+          "deterministic_stable_recovery_contract": {
+            "status": "contract_ready",
+            "entry_owner": "healthcheck_live_attestation_path",
+            "owner_command_surface": "healthcheck --json",
+            "status_delegates_to_owner": true,
+            "sync_hidden_owner_forbidden": true,
+            "new_generic_cli_default": false,
+            "eligible_failure_lanes": [
+              "managed_preflight_failure",
+              "stable_service_disabled",
+              "explicit_stable_recovery_lane"
+            ],
+            "entry_lane_surface": {
+              "status": "owner_path_emitted",
+              "field": "deterministic_stable_recovery_result.entry_lane",
+              "nested_recovery_surface": true,
+              "top_level_machine_error_code_separate": true,
+              "allowed_values": [
+                "managed_preflight_failure",
+                "stable_service_disabled",
+                "explicit_stable_recovery_lane",
+                "not_invoked"
+              ]
+            },
+            "failure_taxonomy_redesign_forbidden": true,
+            "shared_activation_mechanics": {
+              "status": "contract_fixed_not_implemented",
+              "reuse_existing_launch_smoke_activation_helper": true,
+              "generated_config_file": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/profile/managed/stable-runtime-config.generated.yaml",
+              "handoff_env_var": "WBP_STABLE_CONFIG",
+              "snapshot_topic": "stable_runtime_consumer_snapshot"
+            },
+            "generated_config_regeneration_status": "contract_fixed_not_implemented",
+            "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
+            "generated_config_derivation_source": "current_baseline_stable_config_plus_current_approved_target_reference",
+            "stale_generated_config_authoritative": false,
+            "generated_config_existence_alone_sufficient": false,
+            "snapshot_refresh_status": "contract_fixed_not_implemented",
+            "snapshot_refresh_after_stable_live_outcome": true,
+            "snapshot_schema_widening_required": false,
+            "new_persisted_recovery_metadata_required": false,
+            "stable_service_disabled_classification": {
+              "status": "owner_path_emitted",
+              "classification_surface": "deterministic_stable_recovery_result.entry_lane",
+              "control_layer_classification": true,
+              "persisted_engine_state_flag": false,
+              "positive_evidence_required": true,
+              "desired_mode_alone_sufficient": false,
+              "generated_config_existence_alone_sufficient": false,
+              "snapshot_presence_alone_sufficient": false,
+              "bounded_reenable_lane_eligible_required": true,
+              "proxy_path_failure_codes_separate": [
+                "PROXY_PATH_BROKEN",
+                "PROXY_REPROBE_FAILED"
+              ],
+              "generic_listener_down_fallback": "LISTENER_DOWN",
+              "overclassification_forbidden": true
+            },
+            "re_enable_method_contract": {
+              "status": "owner_path_emitted",
+              "owner_path_scope": "bounded_control_layer_recovery_action",
+              "owner_command_surface": "healthcheck --json",
+              "reuse_private_launch_smoke_helper_allowed": true,
+              "launcher_protocol_widening_required": false,
+              "launchd_integration_forbidden": true,
+              "os_service_manager_integration_forbidden": true,
+              "generic_service_supervision_forbidden": true
+            },
+            "approved_target_recovery_outcome": "separate",
+            "observed_source_fallback_recovery_outcome": "separate",
+            "recovery_failure_outcome": "separate",
+            "top_level_truth_boundaries": {
+              "status": "contract_ready",
+              "top_level_final_truth_fields": [
+                "status",
+                "machine_error_code",
+                "liveness",
+                "endpoint"
+              ],
+              "nested_recovery_surface": "deterministic_stable_recovery_result",
+              "final_live_truth_separate": true,
+              "launch_smoke_owner_lane_fields_forbidden": true,
+              "status_second_owner_forbidden": true,
+              "sync_owner_lane_forbidden": true
+            },
+            "top_level_machine_error_code_rules": {
+              "status": "owner_path_emitted",
+              "stable_service_disabled_final_code": "STABLE_SERVICE_DISABLED",
+              "stable_service_disabled_requires_final_unhealthy": true,
+              "ok_after_successful_reenable": "OK",
+              "generic_listener_down_fallback": "LISTENER_DOWN",
+              "proxy_path_codes_remain_separate": true
+            },
+            "live_runtime_observation_required": true,
+            "mode_truth_redefinition_forbidden": true,
+            "last_known_good_proxy_persistence_in_scope": false
+          },
+          "consumer_activation_readiness": {
+            "status": "aligned",
+            "machine_error_code": "OK",
+            "reason": "desired_consumer_source_matches_effective_observation",
+            "next_step": "none"
+          },
+          "deterministic_stable_recovery_result": {
+            "status": "not_invoked",
+            "owner_command_surface": "healthcheck --json",
+            "delegated_from_status": true,
+            "attempted": false,
+            "entry_lane": "not_invoked",
+            "outcome": "not_invoked",
+            "re_enable_method": "",
+            "selected_source_kind": "",
+            "selected_source_path": "",
+            "generated_config_regenerated": false,
+            "snapshot_refreshed": false,
+            "fallback_reason": "",
+            "live_runtime_observation_confirmed": false
+          }
+        },
+        "registry_identity_summary": {
+          "status": "clear",
+          "machine_error_code": "OK"
+        },
+        "claim_gate": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "blocked_claims": [],
+          "sources": [],
+          "next_action": "none"
+        },
+        "last_error": "",
+        "attestation_summary": {
+          "status": "ok",
+          "machine_error_code": "OK",
+          "attestation_source": "healthcheck --json",
+          "observed_at_utc": "2026-05-07T01:12:49.411431+00:00"
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "command": "accounts list --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Account registry snapshot is available.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "unknown",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "accounts": [
+          {
+            "id": "backend-00",
+            "label": "backend-00",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-00.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-01",
+            "label": "backend-01",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-01.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-02",
+            "label": "backend-02",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-02.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-03",
+            "label": "backend-03",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-03.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-04",
+            "label": "backend-04",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-04.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-05",
+            "label": "backend-05",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-05.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-06",
+            "label": "backend-06",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-06.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-07",
+            "label": "backend-07",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-07.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-08",
+            "label": "backend-08",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-08.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-09",
+            "label": "backend-09",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-09.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-10",
+            "label": "backend-10",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-10.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-11",
+            "label": "backend-11",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-11.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-12",
+            "label": "backend-12",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-12.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-13",
+            "label": "backend-13",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-13.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-14",
+            "label": "backend-14",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-14.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          },
+          {
+            "id": "backend-15",
+            "label": "backend-15",
+            "pool": "active",
+            "status": "healthy",
+            "manual_hold": false,
+            "auth_ref": "/tmp/codex-15.json",
+            "fail_count": 0,
+            "success_count": 0,
+            "last_success": null,
+            "last_error": "",
+            "cooldown_until": null,
+            "notes": ""
+          }
+        ],
+        "registry_identity": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "duplicate_backend_ids": [],
+          "duplicate_auth_basenames": [],
+          "missing_auth_refs": [],
+          "empty_auth_ref_backends": [],
+          "invalid_auth_basenames": [],
+          "invalid_backend_pools": [],
+          "registry_schema_version": 2,
+          "unsupported_schema_versions": [],
+          "claim_blockers": [],
+          "next_action": "none"
+        },
+        "pool_policy": {
+          "active_min": 16,
+          "active_target": 16,
+          "reserve_target": 0
+        },
+        "stable_default_backend_id": "backend-00"
+      },
+      "stderr": ""
+    },
+    {
+      "command": "rollout rotation inspect --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "Bounded local rotation participation evidence is available.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "unknown",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "rotation_evidence_result": {
+          "schema_version": 1,
+          "status": "owner_path_emitted",
+          "attempted": true,
+          "requested_scope": "expanded-active-pool",
+          "observed_at_utc": "2026-05-07T01:12:49.261268+00:00",
+          "evidence_status": "participation_evidence_present",
+          "evidence_strength": "partial",
+          "evidence_reason": "multi_backend_snapshot",
+          "evidence_source": "runtime_state.selected_backend_ids",
+          "evidence_source_layer": "legacy_flat_compatibility",
+          "evidence_source_class": "legacy_flat_compatibility",
+          "evidence_source_name": "",
+          "evidence_source_run_id": "",
+          "evidence_producer_version": "",
+          "evidence_freshness": "fresh",
+          "selected_backend_snapshot_validation_status": "legacy",
+          "selected_backend_snapshot_validation_error": "",
+          "selected_backend_snapshot_compatibility": "legacy_flat",
+          "selected_backend_snapshot_present": true,
+          "selected_backend_ids": [
+            "backend-00",
+            "backend-01"
+          ],
+          "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+          "expected_selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+          "selected_backend_ids_observed": [
+            "backend-00",
+            "backend-01"
+          ],
+          "active_pool_count_observed": 16,
+          "runtime_active_pool_count_observed": 16,
+          "registry_active_pool_count_observed": 16,
+          "active_routing_candidate_ids_observed": [
+            "backend-00",
+            "backend-01",
+            "backend-02",
+            "backend-03",
+            "backend-04",
+            "backend-05",
+            "backend-06",
+            "backend-07",
+            "backend-08",
+            "backend-09",
+            "backend-10",
+            "backend-11",
+            "backend-12",
+            "backend-13",
+            "backend-14",
+            "backend-15"
+          ],
+          "active_pool_count_agreement_status": "matched",
+          "stable_inventory_status": "available",
+          "policy_drift_status": "clear",
+          "policy_drift_observed_status": "clear",
+          "policy_drift_claim_surface_source": "stable_config_parent",
+          "registry_identity_status": "clear",
+          "evidence_sources": [
+            "runtime_state.selected_backend_snapshot",
+            "runtime_state.selected_backend_ids",
+            "runtime_state.active_count",
+            "backend_registry.active_pool",
+            "backend_registry.routing_candidate_backends",
+            "stable_policy_drift",
+            "registry_identity"
+          ],
+          "participation_status": "available",
+          "participation_summary": {
+            "status": "available",
+            "final_outcome": "participation_evidence_available",
+            "selected_backend_count": 2,
+            "active_routing_candidate_count": 16,
+            "registry_active_pool_count": 16,
+            "runtime_active_pool_count": 16,
+            "active_pool_count_agreement_status": "matched"
+          },
+          "blocker_type": "none",
+          "claim_scope": "bounded_local_participation_evidence_only",
+          "final_outcome": "participation_evidence_available"
+        },
+        "delegated_evidence": {
+          "pool_summary": {
+            "active": 16,
+            "runtime_active_count": 16,
+            "selected_backend_ids": [
+              "backend-00",
+              "backend-01"
+            ],
+            "backend_count": 16
+          },
+          "policy_drift_summary": {
+            "status": "clear",
+            "machine_error_code": "OK",
+            "configured_active_count": 16,
+            "allowed_stable_auth_count": 16,
+            "stable_auth_inventory_count": 16,
+            "stable_auth_inventory_source": {
+              "source": "stable_config_parent",
+              "path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/tmpetuocdoh/stable",
+              "path_resolution": "fallback",
+              "exists": true
+            }
+          },
+          "registry_identity_summary": {
+            "status": "clear",
+            "machine_error_code": "OK"
+          }
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "command": "rollout evidence capture 16 --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "16-account field evidence packet is complete.",
+        "machine_error_code": "OK",
+        "changed_files": [
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/backend-registry.redacted.json",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/supervisor-state.redacted.json",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-summary.redacted.json",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/metadata.json",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-packet.json",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-mode.txt",
+          "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-effective-mode.txt"
+        ],
+        "next_action": "none",
+        "liveness": "unknown",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "scale_evidence_packet_result": {
+          "schema_version": 1,
+          "claim_target": "16",
+          "claim_scope": "field_evidence_observed_only",
+          "packet_status": "complete",
+          "observed_at_utc": "2026-05-07T01:12:49.614898+00:00",
+          "commit_hash": "215ace46b6935dfbf4bdb7e1342e6a5c55a99883",
+          "runtime_version": "2",
+          "environment_note": "local_mac_control_layer_evidence_packet",
+          "runtime_attestation_status": "passed",
+          "strict_json_command_api_status": "passed",
+          "state_serialization_status": "passed",
+          "rotation_evidence_status": "available",
+          "fallback_readiness_status": "ready",
+          "pool_counts_status": "matched_16",
+          "diagnostics_redaction_status": "passed",
+          "selected_backend_snapshot_status": "legacy",
+          "accounts_summary_status": "clear",
+          "pool_counts": {
+            "active": 16,
+            "reserve": 0,
+            "retired": 0
+          },
+          "selected_backend_snapshot_summary": {
+            "status": "legacy",
+            "compatibility": "legacy_flat",
+            "source": "runtime_state.selected_backend_ids",
+            "source_class": "legacy_flat_compatibility",
+            "freshness": "fresh",
+            "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+            "selected_backend_count": 2
+          },
+          "accounts_summary": {
+            "account_count": 16,
+            "lifecycle_counts": {
+              "active": 16,
+              "reserve": 0,
+              "retired": 0
+            },
+            "status_counts": {
+              "healthy": 16
+            },
+            "registry_identity_status": "clear"
+          },
+          "runtime_attestation_summary": {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "effective_mode": "managed",
+            "attestation": {
+              "listener_ok": true,
+              "models_ok": true,
+              "responses_ok": true,
+              "effective_mode_match": true,
+              "base_url_match": true,
+              "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+              "observed_at_utc": "2026-05-07T01:12:49.620549+00:00",
+              "runtime_version": "2",
+              "attestation_source": "healthcheck --json"
+            }
+          },
+          "rotation_evidence_summary": {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "participation_status": "available",
+            "evidence_status": "participation_evidence_present",
+            "evidence_reason": "multi_backend_snapshot",
+            "active_pool_count_agreement_status": "matched"
+          },
+          "fallback_readiness_summary": {
+            "status": "ready",
+            "machine_error_code": "OK",
+            "reason": "bounded_fallback_and_recovery_contracts_ready"
+          },
+          "diagnostics_bundle_summary": {
+            "status": "exported",
+            "bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5",
+            "artifact_paths": [
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/backend-registry.redacted.json",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/supervisor-state.redacted.json",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-summary.redacted.json",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/metadata.json",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-packet.json",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-mode.txt",
+              "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-effective-mode.txt"
+            ],
+            "file_count": 7,
+            "redaction_status": "passed",
+            "forbidden_content_detected": false
+          },
+          "blocked_reasons": [],
+          "scale_gate_summary": {
+            "status": "derived_view",
+            "derived_only": true,
+            "source_of_truth": false,
+            "truth_sources": [
+              "runtime_attestation_status",
+              "strict_json_command_api_status",
+              "state_serialization_status",
+              "fallback_readiness_status",
+              "packet_status"
+            ],
+            "gates": {
+              "RUNTIME_ATTESTATION_GATE": {
+                "status": "passed",
+                "machine_error_code": "OK"
+              },
+              "STRICT_JSON_COMMAND_API_GATE": {
+                "status": "passed",
+                "machine_error_code": "OK",
+                "invalid_payload_surfaces": []
+              },
+              "STATE_SERIALIZATION_GATE": {
+                "status": "passed",
+                "machine_error_code": "OK",
+                "runtime_changed_files": []
+              },
+              "FALLBACK_DRILL_GATE": {
+                "status": "passed",
+                "machine_error_code": "OK"
+              },
+              "SCALE_EVIDENCE_PACKET_GATE": {
+                "status": "passed",
+                "machine_error_code": "OK",
+                "packet_status": "complete"
+              }
+            },
+            "all_gates_passed": true,
+            "blocked_gate_names": []
+          },
+          "final_outcome": "field_evidence_packet_complete"
+        }
+      },
+      "stderr": ""
+    }
+  ],
+  "errors": [],
+  "packet": {
+    "schema_version": 1,
+    "claim_target": "16",
+    "claim_scope": "field_evidence_observed_only",
+    "packet_status": "complete",
+    "observed_at_utc": "2026-05-07T01:12:49.614898+00:00",
+    "commit_hash": "215ace46b6935dfbf4bdb7e1342e6a5c55a99883",
+    "runtime_version": "2",
+    "environment_note": "local_mac_control_layer_evidence_packet",
+    "runtime_attestation_status": "passed",
+    "strict_json_command_api_status": "passed",
+    "state_serialization_status": "passed",
+    "rotation_evidence_status": "available",
+    "fallback_readiness_status": "ready",
+    "pool_counts_status": "matched_16",
+    "diagnostics_redaction_status": "passed",
+    "selected_backend_snapshot_status": "legacy",
+    "accounts_summary_status": "clear",
+    "pool_counts": {
+      "active": 16,
+      "reserve": 0,
+      "retired": 0
+    },
+    "selected_backend_snapshot_summary": {
+      "status": "legacy",
+      "compatibility": "legacy_flat",
+      "source": "runtime_state.selected_backend_ids",
+      "source_class": "legacy_flat_compatibility",
+      "freshness": "fresh",
+      "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+      "selected_backend_count": 2
+    },
+    "accounts_summary": {
+      "account_count": 16,
+      "lifecycle_counts": {
+        "active": 16,
+        "reserve": 0,
+        "retired": 0
+      },
+      "status_counts": {
+        "healthy": 16
+      },
+      "registry_identity_status": "clear"
+    },
+    "runtime_attestation_summary": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "managed",
+      "attestation": {
+        "listener_ok": true,
+        "models_ok": true,
+        "responses_ok": true,
+        "effective_mode_match": true,
+        "base_url_match": true,
+        "selected_backends_digest": "a39c6f953bca6a5c1dc28aabd03634734274114d4d2ce2925dad97882ebc6f0c",
+        "observed_at_utc": "2026-05-07T01:12:49.620549+00:00",
+        "runtime_version": "2",
+        "attestation_source": "healthcheck --json"
+      }
+    },
+    "rotation_evidence_summary": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "participation_status": "available",
+      "evidence_status": "participation_evidence_present",
+      "evidence_reason": "multi_backend_snapshot",
+      "active_pool_count_agreement_status": "matched"
+    },
+    "fallback_readiness_summary": {
+      "status": "ready",
+      "machine_error_code": "OK",
+      "reason": "bounded_fallback_and_recovery_contracts_ready"
+    },
+    "diagnostics_bundle_summary": {
+      "status": "exported",
+      "bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5",
+      "artifact_paths": [
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/backend-registry.redacted.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/supervisor-state.redacted.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-summary.redacted.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/metadata.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/evidence-packet.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-mode.txt",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5/runtime-effective-mode.txt"
+      ],
+      "file_count": 7,
+      "redaction_status": "passed",
+      "forbidden_content_detected": false
+    },
+    "blocked_reasons": [],
+    "scale_gate_summary": {
+      "status": "derived_view",
+      "derived_only": true,
+      "source_of_truth": false,
+      "truth_sources": [
+        "runtime_attestation_status",
+        "strict_json_command_api_status",
+        "state_serialization_status",
+        "fallback_readiness_status",
+        "packet_status"
+      ],
+      "gates": {
+        "RUNTIME_ATTESTATION_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK"
+        },
+        "STRICT_JSON_COMMAND_API_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "invalid_payload_surfaces": []
+        },
+        "STATE_SERIALIZATION_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "runtime_changed_files": []
+        },
+        "FALLBACK_DRILL_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK"
+        },
+        "SCALE_EVIDENCE_PACKET_GATE": {
+          "status": "passed",
+          "machine_error_code": "OK",
+          "packet_status": "complete"
+        }
+      },
+      "all_gates_passed": true,
+      "blocked_gate_names": []
+    },
+    "final_outcome": "field_evidence_packet_complete"
+  },
+  "bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-scale-evidence-h4dz1zq5",
+  "acceptance": {
+    "packet_status_is_complete": true,
+    "final_outcome_is_field_evidence_packet_complete": true,
+    "blocked_reasons_empty": true,
+    "blocked_gate_names_empty": true,
+    "claim_scope_observed_only": true
+  },
+  "acceptance_all_passed": true
+}
