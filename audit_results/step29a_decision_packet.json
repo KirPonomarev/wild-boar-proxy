@@ -1,0 +1,23 @@
+{
+  "step": "STEP-29A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T08:29:27Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ],
+      "evidence_refs": {
+        "test_runs": "audit_results/step29a_test_runs.json",
+        "owner_surface_capture": "audit_results/step29a_owner_surface_capture.json",
+        "negative_checks": "audit_results/step29a_negative_checks.json"
+      },
+      "fact": "Required stage_advance_20 tests passed, but repo-scope proof for active_count_observed=20 and operator approval is absent."
+    }
+  ],
+  "closed_blocker_count": 0,
+  "still_blocked_count": 1
+}

@@ -1,0 +1,43 @@
+{
+  "step": "STEP-29B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T08:29:27Z",
+  "claim_scope": "machine-evidence-only",
+  "metrics_window_checks": [
+    {
+      "command": "rg --files audit_results | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'",
+      "exit_code": 0,
+      "matched_lines": [
+        "audit_results/step25b_metrics_window_report.md",
+        "audit_results/step19b_metrics_window_report.md",
+        "audit_results/step26b_metrics_window_capture.json",
+        "audit_results/step28b_metrics_window_capture.json",
+        "audit_results/step22b_metrics_window_report.md",
+        "audit_results/step19b_metrics_capture.json",
+        "audit_results/step20b_metrics_window_report.md",
+        "audit_results/step21b_metrics_window_report.md",
+        "audit_results/step23b_metrics_window_report.md",
+        "audit_results/step27b_metrics_window_capture.json",
+        "audit_results/step24b_metrics_window_report.md"
+      ],
+      "fact": "Metrics-related files exist, but this does not prove a complete 14-day machine evidence window."
+    },
+    {
+      "command": "rg -n --no-heading '\"machine_window_artifact_detected\"\\s*:\\s*false' audit_results/step19b_metrics_capture.json",
+      "exit_code": 0,
+      "matched_lines": [
+        "100:    \"machine_window_artifact_detected\": false,"
+      ]
+    },
+    {
+      "command": "rg -n --no-heading '\"reason_code\"\\s*:\\s*\"TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE\"' audit_results/step19b_metrics_capture.json",
+      "exit_code": 0,
+      "matched_lines": [
+        "104:    \"reason_code\": \"TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE\""
+      ]
+    }
+  ],
+  "conclusion": {
+    "machine_window_artifact_detected": false,
+    "reason_code": "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+  }
+}
