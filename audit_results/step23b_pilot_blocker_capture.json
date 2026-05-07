@@ -1,0 +1,103 @@
+{
+  "step": "STEP-23B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "captured_at_utc": "2026-05-07T06:10:32Z",
+  "runtime_scope": "machine_evidence_repo_scan_only",
+  "claim_scope": "machine-evidence-only",
+  "source_artifacts": [
+    "audit_results/step22b_decision_packet.json",
+    "audit_results/step22b_pilot_blocker_capture.json",
+    "audit_results/step18a_test_runs.json",
+    "audit_results/step19b_metrics_capture.json",
+    "MASTER_PLAN.md"
+  ],
+  "pilot_blocker_component_checks": [
+    {
+      "component": "installer",
+      "command": "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k installer\"' audit_results/step18a_test_runs.json",
+      "exit_code": 0,
+      "matches": [
+        "28:      \"command\": \"python3 -m unittest -q tests.test_cli -k installer\"," 
+      ],
+      "status": "machine_evidence_found",
+      "canonical_ref": "audit_results/step18a_test_runs.json"
+    },
+    {
+      "component": "legacy_import",
+      "command": "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k legacy_import\"' audit_results/step18a_test_runs.json",
+      "exit_code": 0,
+      "matches": [
+        "38:      \"command\": \"python3 -m unittest -q tests.test_cli -k legacy_import\"," 
+      ],
+      "status": "machine_evidence_found",
+      "canonical_ref": "audit_results/step18a_test_runs.json"
+    },
+    {
+      "component": "security",
+      "command": "rg -n --no-heading 'test_diagnostics_export_redacts_runtime_state_and_registry_secrets|test_rollout_evidence_capture_16_redacts_bundle_secrets' audit_results/step18a_test_runs.json",
+      "exit_code": 0,
+      "matches": [
+        "58:      \"command\": \"python3 -m unittest -q tests.test_cli.CliTests.test_diagnostics_export_redacts_runtime_state_and_registry_secrets\",",
+        "68:      \"command\": \"python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_redacts_bundle_secrets\","
+      ],
+      "status": "machine_evidence_found",
+      "canonical_ref": "audit_results/step18a_test_runs.json"
+    },
+    {
+      "component": "license",
+      "command": "rg -n --no-heading '\"command\"\\s*:\\s*\"python3 -m unittest -q tests\\.test_cli -k package_experimental\"' audit_results/step18a_test_runs.json",
+      "exit_code": 0,
+      "matches": [
+        "48:      \"command\": \"python3 -m unittest -q tests.test_cli -k package_experimental\"," 
+      ],
+      "status": "machine_evidence_found",
+      "canonical_ref": "audit_results/step18a_test_runs.json"
+    }
+  ],
+  "metrics_window_checks": [
+    {
+      "name": "metrics_named_files_scan",
+      "command": "rg --files audit_results | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'",
+      "exit_code": 0,
+      "sample": [
+        "audit_results/step19b_metrics_window_report.md",
+        "audit_results/step22b_metrics_window_report.md",
+        "audit_results/step19b_metrics_capture.json",
+        "audit_results/step20b_metrics_window_report.md",
+        "audit_results/step21b_metrics_window_report.md"
+      ]
+    },
+    {
+      "name": "metrics_command_mentions_scan",
+      "command": "rg -n --no-heading '\"command\"\\s*:\\s*\"[^\\\"]*(telemetry|metric|metrics|two[-_ ]week|2w|14[-_ ]day|window)[^\\\"]*\"' audit_results/*.json",
+      "exit_code": 0,
+      "sample": [
+        "audit_results/step18b_owner_surface_capture.json:96:        \"command\": \"rg --files | rg -i 'two.?week|two_week|metrics|metric'\",",
+        "audit_results/step19b_metrics_capture.json:35:      \"command\": \"rg --files | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'\",",
+        "audit_results/step22b_pilot_blocker_capture.json:55:      \"command\": \"rg --files audit_results | rg -i 'telemetry|metric|metrics|two.?week|2w|14.?day|window'\","
+      ]
+    },
+    {
+      "name": "prior_window_assessment_flag_scan",
+      "command": "rg -n --no-heading '\"machine_window_artifact_detected\"\\s*:\\s*false' audit_results/step19b_metrics_capture.json",
+      "exit_code": 0,
+      "sample": [
+        "100:    \"machine_window_artifact_detected\": false,"
+      ]
+    },
+    {
+      "name": "prior_window_reason_code_scan",
+      "command": "rg -n --no-heading '\"reason_code\"\\s*:\\s*\"TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE\"' audit_results/step19b_metrics_capture.json",
+      "exit_code": 0,
+      "sample": [
+        "104:    \"reason_code\": \"TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE\""
+      ]
+    }
+  ],
+  "window_assessment": {
+    "required_window_days": 14,
+    "complete_window_machine_evidence_detected": false,
+    "status": "still_blocked",
+    "reason_code": "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE",
+    "fact": "No complete 14-day machine metrics window artifact/command trail was detected in repository scope."
+  }
+}
