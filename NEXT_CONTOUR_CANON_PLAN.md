@@ -4,10 +4,10 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.1
+PLAN_VERSION: 1.2
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Draft for immediate execution
+PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
 PLAN_SCOPE: Day-of 20-account validation prerequisites and go or no-go decision
 
 ## Canon Priority
@@ -84,6 +84,16 @@ Note:
 - evidence is assembled as a redacted machine-carried packet from existing
   canonical command outputs and runtime attestations
 
+## Live Start Gate
+
+Live lane may start only when all conditions are true:
+
+1. `PLAN_NOT_CANONICALIZED` is closed by commit and push.
+2. Owner authorization for live-runtime actions is explicit in the current
+   thread according to `CANON.md`.
+3. Live operation declaration is recorded before command execution.
+4. Mandatory preflight packet is captured in strict JSON form.
+
 ## Execution Steps
 
 1. Canonicalization pre-check
@@ -119,6 +129,9 @@ Note:
    - validate then controlled promotion path
    - run high-load traffic for same-day contour window
    - collect rotation participation and pool health evidence
+   - do not patch engine-layer code during this step
+   - if an engine blocker is proven, stop this contour and open a separate
+     blocker contour
 
 6. Evidence packet build
    - include redacted outputs required by master plan
@@ -161,10 +174,16 @@ Decision packet blocker-code mapping:
   one or more mandatory runtime-attestation fields are absent
 - `STRICT_JSON_CONTRACT_BROKEN`:
   command `stdout` is not exactly one JSON object
+- `LOG_PARSING_FALLBACK_USED`:
+  operator decision or audit relied on log parsing instead of canonical JSON
+  command surfaces
 - `STATE_SERIALIZATION_BREACH`:
   evidence shows interleaving or split ownership in serialized mutation path
 - `FALLBACK_DRILL_FAILED`:
   deterministic stable fallback or stable recovery readiness is not proven
+- `ENGINE_BLOCKER_ESCALATION_REQUIRED`:
+  proven engine-layer blocker exists and requires a separate contour outside the
+  current control-layer scope
 
 ## Dispute Resolution Rule
 
