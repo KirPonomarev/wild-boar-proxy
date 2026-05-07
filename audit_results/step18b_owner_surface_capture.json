@@ -1,0 +1,121 @@
+{
+  "step": "STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE",
+  "captured_at_utc": "2026-05-07T05:10:11.550603Z",
+  "runtime_scope": "test_harness_machine_evidence_only",
+  "claim_scope": "machine-evidence-only",
+  "source_artifacts": [
+    {
+      "path": "audit_results/step18a_decision_packet.json",
+      "size_bytes": 3298,
+      "sha256": "f11a1fd0ecdfe9eb5e11f00615c3e9075e457938ea36dd5eade62dee0dd9a56a",
+      "last_modified_utc": "2026-05-07T05:00:16.578494Z"
+    },
+    {
+      "path": "audit_results/step17_release_gate_decision_packet.json",
+      "size_bytes": 6557,
+      "sha256": "c8efe4dc867ab8547b7ded7eeed7b70fc72de25328118b6febbc0559adcc7257",
+      "last_modified_utc": "2026-05-07T01:48:10.452112Z"
+    },
+    {
+      "path": "audit_results/step18b_test_runs.json",
+      "size_bytes": 3323,
+      "sha256": "73e9cba0d7a19e1dbb8f15f8b181a57defa74c2876b9d1f2daf6367c1c8aa1f6",
+      "last_modified_utc": "2026-05-07T05:10:11.597946Z"
+    },
+    {
+      "path": "MASTER_PLAN.md",
+      "size_bytes": 54145,
+      "sha256": "18dda3174e7d229bd7eb3bb7f332089597b9778c3f25d3c696b5b2d5a8e1eb49",
+      "last_modified_utc": "2026-05-07T05:03:24.678035Z"
+    }
+  ],
+  "required_commands": [
+    "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_returns_noop_when_target_is_already_satisfied",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_existing_stage_20_policy_promotes_one_backend",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization"
+  ],
+  "required_commands_present": true,
+  "blocker_surface_mapping": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_returns_noop_when_target_is_already_satisfied",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_existing_stage_20_policy_promotes_one_backend",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization"
+      ],
+      "fact": "Stage-20 advance command set executed with exit_code=0 across six required runs; all runs reported tests_ran >= 1, but this remains insufficient for canonical scale-gate closure evidence.",
+      "blocked_reasons": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "rg --files | rg -i 'two.?week|two_week|metrics|metric'",
+        "rg -n '\\\"command\\\"\\s*:\\s*\\\"[^\\\"]*(two[-_ ]week|metrics)[^\\\"]*\\\"' audit_results/*.json",
+        "rg -n \"two-week|two week|two_week|2w metrics|TWO_WEEK|TWO-WEEK|metrics\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy"
+      ],
+      "fact": "No dedicated two-week metrics machine-evidence command/artifact was found; only textual requirement/blocker mentions were found in docs and prior decision artifacts.",
+      "blocked_reasons": [
+        "TWO_WEEK_METRICS_EVIDENCE_MISSING"
+      ],
+      "partial_closure": {
+        "installer_evidence": "closed_by_machine_evidence_in_step18a",
+        "two_week_metrics_evidence": "still_blocked"
+      }
+    }
+  ],
+  "two_week_metrics_scan": {
+    "artifact_file_hits": [],
+    "command_field_hits": [],
+    "text_only_hits_count": 21,
+    "text_only_hits_sample": [
+      "audit_results/step17_fact_dump.json:68:      \"Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.\",",
+      "audit_results/step18a_decision_packet.json:46:      \"fact\": \"installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope\",",
+      "audit_results/step18a_decision_packet.json:48:        \"TWO_WEEK_METRICS_EVIDENCE_MISSING\"",
+      "audit_results/step18a_decision_packet.json:52:        \"two_week_metrics_evidence\": \"still_blocked\"",
+      "audit_results/step18a_decision_packet.json:69:      \"reason\": \"Installer evidence is present, but two-week metrics evidence is still missing in step18A scope.\"",
+      "audit_results/step17_release_gate_alignment_report.md:14:| pilot_gate | blocked | `MASTER_PLAN.md:927` | 2026-05-07T01:32:25Z | Missing machine evidence for installer, legacy import, minimum security, and two-week metrics. |",
+      "audit_results/step18b_runs_raw.json:2:  \"step\": \"STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE\",",
+      "MASTER_PLAN.md:10:PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); next primary contour is step-18B scale-gate closure and two-week metrics evidence lane",
+      "MASTER_PLAN.md:892:  (installer evidence closed; two-week metrics evidence missing)",
+      "MASTER_PLAN.md:918:  `Step-18B scale-gate closure and two-week metrics evidence lane`",
+      "MASTER_PLAN.md:942:Acceptance: Pilot metrics remain stable for two weeks.",
+      "MASTER_PLAN.md:1019:4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics."
+    ],
+    "scan_results": [
+      {
+        "command": "rg --files | rg -i 'two.?week|two_week|metrics|metric'",
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "command": "rg -n '\\\"command\\\"\\s*:\\s*\\\"[^\\\"]*(two[-_ ]week|metrics)[^\\\"]*\\\"' audit_results/*.json",
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "command": "rg -n \"two-week|two week|two_week|2w metrics|TWO_WEEK|TWO-WEEK|metrics\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy",
+        "exit_code": 0,
+        "stdout": "audit_results/step17_fact_dump.json:68:      \"Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.\",\naudit_results/step18a_decision_packet.json:46:      \"fact\": \"installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope\",\naudit_results/step18a_decision_packet.json:48:        \"TWO_WEEK_METRICS_EVIDENCE_MISSING\"\naudit_results/step18a_decision_packet.json:52:        \"two_week_metrics_evidence\": \"still_blocked\"\naudit_results/step18a_decision_packet.json:69:      \"reason\": \"Installer evidence is present, but two-week metrics evidence is still missing in step18A scope.\"\naudit_results/step17_release_gate_alignment_report.md:14:| pilot_gate | blocked | `MASTER_PLAN.md:927` | 2026-05-07T01:32:25Z | Missing machine evidence for installer, legacy import, minimum security, and two-week metrics. |\naudit_results/step18b_runs_raw.json:2:  \"step\": \"STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE\",\nMASTER_PLAN.md:10:PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); next primary contour is step-18B scale-gate closure and two-week metrics evidence lane\nMASTER_PLAN.md:892:  (installer evidence closed; two-week metrics evidence missing)\nMASTER_PLAN.md:918:  `Step-18B scale-gate closure and two-week metrics evidence lane`\nMASTER_PLAN.md:942:Acceptance: Pilot metrics remain stable for two weeks.\nMASTER_PLAN.md:1019:4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.\naudit_results/step17_release_gate_decision_packet.json:31:      \"blocking_reason\": \"No machine evidence in step13-16 artifacts for installer completion, legacy import path testing, minimum security completion, or two-week metrics.\"\naudit_results/step17_release_gate_decision_packet.json:114:      \"detail\": \"Pilot gate requires installer and two-week metrics; neither is machine-proven in step13-16 artifacts.\"\naudit_results/step18a_negative_checks.json:21:      \"name\": \"pilot_gate_two_week_metrics_remain_blocked_if_no_new_evidence\",\naudit_results/step18a_negative_checks.json:23:      \"fact\": \"No two-week metrics command/artifact exists in required step18A test scope; blocker remains explicit.\"\naudit_results/step18a_owner_surface_capture.json:82:      \"fact\": \"installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope\",\naudit_results/step18a_owner_surface_capture.json:84:        \"TWO_WEEK_METRICS_EVIDENCE_MISSING\"\naudit_results/step18a_owner_surface_capture.json:88:        \"two_week_metrics_evidence\": \"still_blocked\"\naudit_results/step18a_release_gate_alignment_report.md:27:| PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING | still_blocked | installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope |\naudit_results/step18a_release_gate_alignment_report.md:34:| two-week metrics evidence | still_blocked | Required for pilot gate completion; no new machine evidence in step18A test scope. |\n",
+        "stderr": ""
+      }
+    ],
+    "conclusion": "no_machine_evidence_command_or_artifact_for_two_week_metrics_detected"
+  },
+  "residual_release_gate_context": {
+    "scale20_status_for_step18b_scope": "still_blocked",
+    "two_week_metrics_status_for_step18b_scope": "still_blocked",
+    "source_ref": "audit_results/step18a_decision_packet.json"
+  }
+}
