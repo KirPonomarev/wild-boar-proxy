@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.38
+PLAN_VERSION: 1.40
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); step-18B scale-gate and two-week-metrics evidence lane closed with independent audit (blocked decision is canonical); step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane closed with independent audit (blocked decision is canonical); step-20 scale-gate completion and two-week metrics evidence completion lane closed with independent audit (blocked decision is canonical); step-21 operator-approved live field proof and 14-day metrics window acquisition lane closed with independent audit (blocked decision is canonical); step-22 operator-approved live evidence execution and 14-day metrics window capture continuation lane closed with independent audit (blocked decision is canonical); step-23 operator-approved live proof execution lane closed with independent audit (blocked decision is canonical); step-24 operator-approved live proof closure lane closed with independent audit (blocked decision is canonical); next primary contour is step-25 operator-approved live proof closure continuation lane
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; step-15 observed-16 evidence consolidation closed with independent audit; step-16 controlled updates toward 20 closed with independent audit; step-17 release-gate alignment and pilot-entry prep closed with independent audit (blocked decision is canonical); step-18A pilot-entry evidence closure and release-gate blocker burn-down closed with independent audit (partially blocked decision is canonical); step-18B scale-gate and two-week-metrics evidence lane closed with independent audit (blocked decision is canonical); step-19 live scale-to-20 evidence capture and two-week metrics telemetry evidence lane closed with independent audit (blocked decision is canonical); step-20 scale-gate completion and two-week metrics evidence completion lane closed with independent audit (blocked decision is canonical); step-21 operator-approved live field proof and 14-day metrics window acquisition lane closed with independent audit (blocked decision is canonical); step-22 operator-approved live evidence execution and 14-day metrics window capture continuation lane closed with independent audit (blocked decision is canonical); step-23 operator-approved live proof execution lane closed with independent audit (blocked decision is canonical); step-24 operator-approved live proof closure lane closed with independent audit (blocked decision is canonical); step-25 operator-approved live proof closure continuation lane closed with independent audit (blocked decision is canonical); step-26 canonical scale-evidence and metrics-window closure lane closed with independent audit (blocked decision is canonical); next primary contour is step-27 canonical scale-evidence and metrics-window closure continuation lane
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -1259,6 +1259,106 @@ Current closeout note for implementation-order step 24:
 - implementation-order step 24 is therefore closed for the current contour,
   and the next primary contour is
   `Step-25 operator-approved live proof closure continuation lane`
+
+Current closeout note for implementation-order step 25:
+
+- step-25 operator-approved live proof closure continuation lane was executed in
+  machine-evidence mode only; decision artifacts are:
+  `audit_results/step25a_owner_surface_capture.json`,
+  `audit_results/step25a_negative_checks.json`,
+  `audit_results/step25a_test_runs.json`,
+  `audit_results/step25a_decision_packet.json`,
+  `audit_results/step25a_scale_report.md`,
+  `audit_results/step25b_pilot_blocker_capture.json`,
+  `audit_results/step25b_negative_checks.json`,
+  `audit_results/step25b_metrics_window_report.md`,
+  `audit_results/step25b_decision_packet.json`,
+  `audit_results/step25_decision_packet.json`, and
+  `audit_results/step25_closeout_report.md`
+- canonical machine decision is `decision_status=blocked` with
+  `claim_scope=machine-evidence-only`
+- blocker resolution remains explicitly blocked in canonical packet:
+  `SCALE_GATE_20_NOT_COMPLETED=still_blocked` with
+  `SCALE_GATE_FIELD_PROOF_INSUFFICIENT`, and
+  `PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING=still_blocked` with
+  `TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE`
+- required verification contour passed; closure remained blocked because
+  repository-scope machine evidence still does not prove
+  `active_count_observed=20` with operator-approved live proof
+- pilot-blocker lane preserved canonical refs for
+  installer/legacy import/security/license evidence, but left blocker open due
+  to missing complete 14-day machine metrics window evidence
+- independent skeptical audit confirmed file set presence, JSON validity,
+  blocker-code consistency, closeout consistency, and absence of forbidden
+  positive-claim tokens
+- acceptance/regression verification for step-25 closeout executed with:
+  `python3 -m unittest -q tests.test_cli -k stage_advance_20`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization`,
+  `jq empty audit_results/step25a_owner_surface_capture.json`,
+  `jq empty audit_results/step25a_negative_checks.json`,
+  `jq empty audit_results/step25a_test_runs.json`,
+  `jq empty audit_results/step25a_decision_packet.json`,
+  `jq empty audit_results/step25b_pilot_blocker_capture.json`,
+  `jq empty audit_results/step25b_negative_checks.json`,
+  `jq empty audit_results/step25b_decision_packet.json`,
+  `jq empty audit_results/step25_decision_packet.json`,
+  `jq -e '.decision_status=="blocked" and ((.unresolved_blockers|length)==2) and ([.unresolved_blockers[]|select(.blocker_id=="SCALE_GATE_20_NOT_COMPLETED")|.reason_codes[]]|index("SCALE_GATE_FIELD_PROOF_INSUFFICIENT")!=null) and ([.unresolved_blockers[]|select(.blocker_id=="PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING")|.reason_codes[]]|index("TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE")!=null)' audit_results/step25_decision_packet.json >/dev/null`,
+  `rg -n --no-heading -i "pilot_ready|scale_complete|stable_20_proved|production_ready" audit_results/step25*`, and
+  `rg -n --no-heading '"active_count_observed"\\s*:\\s*20' audit_results/*.json`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 25 is therefore closed for the current contour,
+  and the next primary contour is
+  `Step-26 canonical scale-evidence and metrics-window closure lane`
+
+Current closeout note for implementation-order step 26:
+
+- step-26 canonical scale-evidence and metrics-window closure lane was executed
+  in machine-evidence mode only; decision artifacts are:
+  `audit_results/step26a_owner_surface_capture.json`,
+  `audit_results/step26a_negative_checks.json`,
+  `audit_results/step26a_test_runs.json`,
+  `audit_results/step26a_decision_packet.json`,
+  `audit_results/step26b_scale_evidence_packet.json`,
+  `audit_results/step26b_metrics_window_capture.json`,
+  `audit_results/step26b_decision_packet.json`,
+  `audit_results/step26_decision_packet.json`, and
+  `audit_results/step26_closeout_report.md`
+- canonical machine decision is `decision_status=blocked` with
+  `claim_scope=machine-evidence-only`
+- blocker resolution remains explicitly blocked in canonical packet:
+  `SCALE_GATE_20_NOT_COMPLETED=still_blocked` with
+  `SCALE_GATE_FIELD_PROOF_INSUFFICIENT`, and
+  `PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING=still_blocked` with
+  `TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE`
+- required verification contour passed; closure remained blocked because
+  repository-scope machine evidence still does not prove
+  `active_count_observed=20` with operator-approved live proof
+- metrics-window lane remained blocked because machine capture still records
+  incomplete 14-day metrics evidence window
+- independent skeptical audit confirmed required file presence, JSON validity,
+  packet-policy consistency, closeout-to-packet consistency, and absence of
+  forbidden positive-claim tokens
+- acceptance/regression verification for step-26 closeout executed with:
+  `python3 -m unittest -q tests.test_cli -k stage_advance_20`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization`,
+  `jq empty audit_results/step26a_owner_surface_capture.json`,
+  `jq empty audit_results/step26a_negative_checks.json`,
+  `jq empty audit_results/step26a_test_runs.json`,
+  `jq empty audit_results/step26a_decision_packet.json`,
+  `jq empty audit_results/step26b_scale_evidence_packet.json`,
+  `jq empty audit_results/step26b_metrics_window_capture.json`,
+  `jq empty audit_results/step26b_decision_packet.json`,
+  `jq empty audit_results/step26_decision_packet.json`,
+  `jq -e '.decision_status=="blocked" and ((.unresolved_blockers|length)==2) and ([.unresolved_blockers[]|select(.blocker_id=="SCALE_GATE_20_NOT_COMPLETED")|.reason_codes[]]|index("SCALE_GATE_FIELD_PROOF_INSUFFICIENT")!=null) and ([.unresolved_blockers[]|select(.blocker_id=="PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING")|.reason_codes[]]|index("TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE")!=null)' audit_results/step26_decision_packet.json >/dev/null`,
+  `rg -n --no-heading -i "stable_16_proved|stable_20_proved|scale_complete|pilot_ready|production_ready" audit_results/step26*`,
+  `rg -n --no-heading '"active_count_observed"\\s*:\\s*20' audit_results/*.json`, and
+  `rg -n --no-heading 'TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE' audit_results/step19b_metrics_capture.json`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 26 is therefore closed for the current contour,
+  and the next primary contour is
+  `Step-27 canonical scale-evidence and metrics-window closure continuation lane`
 
 ### Workstream 08: Experiment Package
 

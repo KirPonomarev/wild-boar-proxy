@@ -1,0 +1,27 @@
+{
+  "step": "STEP-25B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T07:38:43Z",
+  "checks": [
+    {
+      "name": "pilot_components_checked_for_installer_legacy_security_license",
+      "passed": true,
+      "missing_components": []
+    },
+    {
+      "name": "installer_legacy_security_license_have_machine_signals",
+      "passed": true,
+      "fact": "Installer, legacy import, security commands, and package_experimental command are present in step18a_test_runs artifact."
+    },
+    {
+      "name": "two_week_metrics_window_must_stay_blocked_when_incomplete",
+      "passed": true,
+      "fact": "Window reason code TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE is present and complete 14-day window evidence is not detected."
+    },
+    {
+      "name": "forbidden_claim_tokens_absent_in_step25b_outputs",
+      "passed": true,
+      "fact": "No forbidden claim tokens were added in step25b owned artifacts."
+    }
+  ],
+  "overall_passed": true
+}
