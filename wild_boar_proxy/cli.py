@@ -18,12 +18,15 @@ from .runtime import (
     run_accounts_command,
     run_demote,
     run_healthcheck,
+    run_installer_init,
     run_hold,
     run_launch_client,
     run_launch_smoke,
+    run_legacy_import,
     run_onboard,
     run_policy_stage_set,
     run_promote,
+    run_companion_reset,
     run_release,
     run_rollout_evidence_capture,
     run_rollout_rotation_inspect,
@@ -114,6 +117,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diagnostics_export = diagnostics_subparsers.add_parser("export")
     diagnostics_export.add_argument("--json", action="store_true", required=True)
+
+    installer = subparsers.add_parser("installer")
+    installer_subparsers = installer.add_subparsers(
+        dest="installer_command", required=True
+    )
+    installer_init = installer_subparsers.add_parser("init")
+    installer_init.add_argument("--json", action="store_true", required=True)
+
+    legacy = subparsers.add_parser("legacy")
+    legacy_subparsers = legacy.add_subparsers(dest="legacy_command", required=True)
+    legacy_import = legacy_subparsers.add_parser("import")
+    legacy_import.add_argument("--source-dir", required=True)
+    legacy_import.add_argument("--json", action="store_true", required=True)
+
+    companion = subparsers.add_parser("companion")
+    companion_subparsers = companion.add_subparsers(
+        dest="companion_command", required=True
+    )
+    companion_reset = companion_subparsers.add_parser("reset")
+    companion_reset.add_argument("--json", action="store_true", required=True)
+    companion_uninstall = companion_subparsers.add_parser("uninstall")
+    companion_uninstall.add_argument("--json", action="store_true", required=True)
 
     mode = subparsers.add_parser("mode")
     mode_subparsers = mode.add_subparsers(dest="mode_command", required=True)
@@ -232,6 +257,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "diagnostics" and args.diagnostics_command == "export":
             return emit_json(export_diagnostics(paths))
+        if args.command == "installer" and args.installer_command == "init":
+            return emit_json(run_installer_init(paths))
+        if args.command == "legacy" and args.legacy_command == "import":
+            return emit_json(run_legacy_import(paths, args.source_dir))
+        if args.command == "companion" and args.companion_command == "reset":
+            return emit_json(run_companion_reset(paths, uninstall=False))
+        if args.command == "companion" and args.companion_command == "uninstall":
+            return emit_json(run_companion_reset(paths, uninstall=True))
         if args.command == "mode" and args.mode_command == "get":
             return emit_json(mode_get(paths))
         if args.command == "mode" and args.mode_command == "set":

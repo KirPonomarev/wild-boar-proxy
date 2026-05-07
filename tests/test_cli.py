@@ -316,6 +316,37 @@ class CliTests(unittest.TestCase):
             command_path="rollout rotation inspect",
         )
 
+    def test_installer_init_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "installer",
+            "init",
+            command_path="installer init",
+        )
+
+    def test_legacy_import_requires_json_flag(self) -> None:
+        result = self.run_cli("legacy", "import", "--source-dir", "/tmp/example")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("usage: wild-boar-proxy legacy import", result.stderr)
+        self.assertIn(
+            "error: the following arguments are required: --json",
+            result.stderr,
+        )
+
+    def test_companion_reset_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "companion",
+            "reset",
+            command_path="companion reset",
+        )
+
+    def test_companion_uninstall_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "companion",
+            "uninstall",
+            command_path="companion uninstall",
+        )
+
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
             os.environ,
@@ -12505,6 +12536,186 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("user:pass@", bundle_text)
         self.assertNotIn("swordfish", bundle_text)
         self.assertNotIn("sessionid", bundle_text)
+
+    def test_installer_init_creates_baseline_companion_layout(self) -> None:
+        fresh_profile = Path(self.temp_dir.name) / "fresh-profile"
+        fresh_managed = fresh_profile / "managed"
+        fresh_stable = Path(self.temp_dir.name) / "fresh-stable"
+        fresh_stable.mkdir(parents=True, exist_ok=True)
+        (fresh_stable / "config.yaml").write_text(
+            "host: 127.0.0.1\nport: 8318\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_PROFILE_DIR": str(fresh_profile),
+                "WBP_MANAGED_DIR": str(fresh_managed),
+                "WBP_STABLE_CONFIG": str(fresh_stable / "config.yaml"),
+                "WBP_CONFIG_TOML": str(fresh_profile / "config.toml"),
+                "WBP_REGISTRY_FILE": str(fresh_managed / "backend-registry.json"),
+                "WBP_STATE_FILE": str(fresh_managed / "supervisor-state.json"),
+                "WBP_MANAGED_CONFIG_FILE": str(fresh_managed / "managed-config.yaml"),
+                "WBP_RUNTIME_EFFECTIVE_MODE_FILE": str(
+                    fresh_profile / "runtime-effective-mode.txt"
+                ),
+                "WBP_LAUNCHER_SCRIPT": str(fresh_profile / "launcher.sh"),
+            },
+            "installer",
+            "init",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertTrue((fresh_managed / "backend-registry.json").is_file())
+        self.assertTrue((fresh_managed / "supervisor-state.json").is_file())
+        self.assertTrue((fresh_profile / "config.toml").is_file())
+        self.assertEqual(
+            (fresh_profile / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "stable",
+        )
+        registry = json.loads((fresh_managed / "backend-registry.json").read_text())
+        self.assertEqual(registry["schema_version"], 2)
+        self.assertEqual(registry["backends"], [])
+        state = json.loads((fresh_managed / "supervisor-state.json").read_text())
+        self.assertEqual(state["schema_version"], 2)
+        self.assertEqual(state["effective_mode"], "stable")
+
+    def test_legacy_import_updates_registry_and_state(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_registry = {
+            "schema_version": 2,
+            "version": 2,
+            "updated_at": "2026-05-07T00:00:00+00:00",
+            "stable_default_backend_id": "legacy-backend",
+            "pool_policy": {"active_min": 1, "active_target": 1, "reserve_target": 0},
+            "backends": [
+                self.build_backend(
+                    backend_id="legacy-backend",
+                    auth_ref="/tmp/legacy.json",
+                    pool="active",
+                )
+            ],
+        }
+        source_state = {
+            "schema_version": 2,
+            "version": 2,
+            "status": "healthy",
+            "effective_mode": "managed",
+            "last_sync_at": "2026-05-07T00:00:00+00:00",
+            "last_error": "",
+            "selected_backend_ids": ["legacy-backend"],
+            "managed_port": 9999,
+            "current_proxy_url": "http://127.0.0.1:10808",
+            "stable_default_backend_id": "legacy-backend",
+            "active_count": 1,
+            "reserve_count": 0,
+            "retired_count": 0,
+            "healthy_count": 1,
+            "degraded_count": 0,
+            "down_count": 0,
+        }
+        (source_dir / "backend-registry.json").write_text(
+            json.dumps(source_registry) + "\n", encoding="utf-8"
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            json.dumps(source_state) + "\n", encoding="utf-8"
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["legacy_import_result"]["final_outcome"], "import_completed"
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(registry["stable_default_backend_id"], "legacy-backend")
+        self.assertEqual(state["selected_backend_ids"], ["legacy-backend"])
+        self.assertEqual(
+            (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "managed",
+        )
+
+    def test_legacy_import_rolls_back_on_invalid_source_state(self) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        source_dir = Path(self.temp_dir.name) / "legacy-broken"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            "{broken-json}\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn(
+            payload["machine_error_code"],
+            {"INVALID_JSON_FILE", "LEGACY_IMPORT_VERIFY_FAILED"},
+        )
+        legacy_result = payload["legacy_import_result"]
+        self.assertTrue(legacy_result["rollback_attempted"])
+        self.assertEqual(legacy_result["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_companion_reset_removes_companion_data_and_preserves_auth_file(self) -> None:
+        (self.profile_dir / "auth.json").write_text("{\"token\": \"keep\"}\n", encoding="utf-8")
+        (self.profile_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("companion", "reset", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse(self.managed_dir.exists())
+        self.assertFalse((self.profile_dir / "runtime-mode.txt").exists())
+        self.assertFalse((self.profile_dir / "runtime-effective-mode.txt").exists())
+        self.assertFalse((self.profile_dir / "config.toml").exists())
+        self.assertTrue((self.profile_dir / "auth.json").exists())
+        self.assertTrue(payload["reset_result"]["auth_file_preserved"])
 
     def test_sync_returns_single_json_object(self) -> None:
         result = self.run_cli("sync", "--json")
