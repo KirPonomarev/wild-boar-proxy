@@ -1,0 +1,27 @@
+{
+  "step": "STEP-27A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T08:13:42Z",
+  "claim_scope": "machine-evidence-only",
+  "negative_checks": [
+    {
+      "check_id": "NO_ACTIVE_COUNT_20_REPO_PROOF",
+      "source_ref": "audit_results/step27a_owner_surface_capture.json",
+      "command": "rg -n --no-heading '\"active_count_observed\"\\s*:\\s*20' audit_results/*.json",
+      "exit_code": 1,
+      "status": "confirmed"
+    },
+    {
+      "check_id": "NO_OPERATOR_APPROVAL_REPO_PROOF",
+      "source_ref": "audit_results/step27a_owner_surface_capture.json",
+      "command": "rg -n --no-heading '\"operator_approved\"\\s*:\\s*true|\"approved_by_operator\"\\s*:\\s*true|\"operator_approval\"\\s*:\\s*\"approved\"' audit_results/*.json",
+      "exit_code": 1,
+      "status": "confirmed"
+    },
+    {
+      "check_id": "FORBIDDEN_CLAIMS_NOT_ASSERTED",
+      "status": "confirmed",
+      "fact": "No forbidden release-readiness assertions are present in step27a owned outputs."
+    }
+  ],
+  "overall_passed": true
+}
