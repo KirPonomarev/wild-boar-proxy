@@ -16,3 +16,9 @@ logs
 runtime
 tmp
 cache
+
+# Local live-operation evidence may contain private runtime details.
+# Force-add only after explicit redaction and review.
+audit_results/2026-05-07_*
+audit_results/final_closure_reaudit_*.json
+audit_results/preflight_unblock_v2/
