@@ -101,7 +101,8 @@ SMOKE_RESULT_FIELDS = (
     "stable_runtime_consumer",
 )
 DIAGNOSTICS_RESULT_FIELDS = ("bundle_path",)
-ACCOUNT_CAPACITY_TARGET = 20
+ACCOUNT_CAPACITY_TARGET = 25
+DEFAULT_ACTIVE_WINDOW_TARGET = 10
 
 
 class UiShellError(Exception):
@@ -686,6 +687,7 @@ class MinimalCompanionShell:
         self.effective_mode_var = StringVar(value="unknown")
         self.endpoint_var = StringVar(value="")
         self.current_proxy_var = StringVar(value="")
+        self.health_var = StringVar(value="unknown / ")
         self.liveness_var = StringVar(value="unknown")
         self.severity_var = StringVar(value="recoverable")
         self.operator_action_var = StringVar(value="none")
@@ -696,7 +698,12 @@ class MinimalCompanionShell:
         self.integration_var = StringVar(value="")
         self.account_registry_var = StringVar(value="unknown")
         self.account_counts_var = StringVar(value="A:0 R:0 T:0")
-        self.account_capacity_var = StringVar(value=str(ACCOUNT_CAPACITY_TARGET))
+        self.account_capacity_var = StringVar(
+            value=(
+                f"{ACCOUNT_CAPACITY_TARGET} managed / "
+                f"{DEFAULT_ACTIVE_WINDOW_TARGET} active default"
+            )
+        )
         self.account_integration_var = StringVar(value="")
         self.onboarding_auth_ref_var = StringVar(value="")
         self.onboarding_command_status_var = StringVar(value="")
@@ -774,6 +781,7 @@ class MinimalCompanionShell:
         self._add_status_row(status_box, "Effective mode", self.effective_mode_var)
         self._add_status_row(status_box, "Endpoint", self.endpoint_var)
         self._add_status_row(status_box, "Current proxy", self.current_proxy_var)
+        self._add_status_row(status_box, "Health", self.health_var)
         self._add_status_row(status_box, "Liveness", self.liveness_var)
         self._add_status_row(status_box, "Severity", self.severity_var)
         self._add_status_row(status_box, "Operator action", self.operator_action_var)
@@ -1033,7 +1041,7 @@ class MinimalCompanionShell:
         account_summary.pack(fill="x")
         self._add_status_row(account_summary, "Registry identity", self.account_registry_var)
         self._add_status_row(account_summary, "Account counts", self.account_counts_var)
-        self._add_status_row(account_summary, "Capacity target", self.account_capacity_var)
+        self._add_status_row(account_summary, "Managed contour", self.account_capacity_var)
         self._add_status_row(account_summary, "Integration", self.account_integration_var)
 
         account_actions = ttk.Frame(accounts_box)
@@ -1140,6 +1148,9 @@ class MinimalCompanionShell:
         self.effective_mode_var.set(snapshot.effective_mode)
         self.endpoint_var.set(snapshot.endpoint)
         self.current_proxy_var.set(snapshot.current_proxy_url)
+        self.health_var.set(
+            f"{snapshot.liveness} / {snapshot.machine_error_code}"
+        )
         self.liveness_var.set(snapshot.liveness)
         self.severity_var.set(snapshot.severity)
         self.operator_action_var.set(snapshot.operator_action)
@@ -1179,7 +1190,10 @@ class MinimalCompanionShell:
                 retired=snapshot.retired_count,
             )
         )
-        self.account_capacity_var.set(str(snapshot.capacity_target))
+        self.account_capacity_var.set(
+            f"{snapshot.capacity_target} managed / "
+            f"{DEFAULT_ACTIVE_WINDOW_TARGET} active default"
+        )
         self.account_integration_var.set(snapshot.integration_error)
 
         for item in self.accounts_tree.get_children():

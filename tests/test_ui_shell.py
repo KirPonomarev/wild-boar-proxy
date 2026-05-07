@@ -319,7 +319,7 @@ class AccountPoolSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.registry_identity_status, "clear")
         self.assertEqual(snapshot.active_count, 1)
         self.assertEqual(snapshot.reserve_count, 1)
-        self.assertEqual(snapshot.capacity_target, 20)
+        self.assertEqual(snapshot.capacity_target, 25)
         self.assertEqual(snapshot.accounts[0].backend_id, "backend-a")
 
     def test_build_account_pool_snapshot_rejects_missing_accounts_field(self) -> None:
@@ -1104,6 +1104,49 @@ class UiDispatchTests(unittest.TestCase):
             "Promote selected reserve account into active routing?",
             "promote",
         )
+
+    def test_run_mode_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_mode_action(
+                    "Switch desired mode to stable?",
+                    ("mode", "set", "stable", "--json"),
+                )
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_mode_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_mode_action(
+                    "Switch desired mode to managed?",
+                    ("mode", "set", "managed", "--json"),
+                )
+
+        shell.set_busy.assert_called_once_with(True)
+        shell.banner_var.set.assert_called_once_with("Running operator action...")
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._action_worker)
+        self.assertEqual(kwargs["args"], (("mode", "set", "managed", "--json"),))
+        thread_instance.start.assert_called_once_with()
 
     def test_run_demote_action_maps_to_generic_mutation_handler(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
