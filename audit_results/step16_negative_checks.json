@@ -1,0 +1,109 @@
+{
+  "step": "STEP-16_CONTROLLED_UPDATES_TOWARD_20_CANON",
+  "generated_at_utc": "2026-05-07T01:25:20+00:00",
+  "categories": [
+    {
+      "name": "held_lock_block",
+      "all_passed": true,
+      "checks": [
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.515s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_blocks_held_lock_without_mutation",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.515s OK"
+        }
+      ]
+    },
+    {
+      "name": "invalid_or_ineligible_backend_reject",
+      "all_passed": true,
+      "checks": [
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rejects_invalid_or_ineligible_backend",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.072s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rejects_invalid_or_ineligible_backend",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.077s OK"
+        }
+      ]
+    },
+    {
+      "name": "postflight_contradiction_rollback",
+      "all_passed": true,
+      "checks": [
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "validate-ok promote-ran sync-advance-contradicted ---------------------------------------------------------------------- Ran 1 test in 1.311s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "validate-ok promote-ran sync-advance-stage20-contradicted ---------------------------------------------------------------------- Ran 1 test in 1.198s OK"
+        }
+      ]
+    },
+    {
+      "name": "failed_proof_policy_promotion_stable_auth_rollbacks",
+      "all_passed": true,
+      "checks": [
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_stage10_proof_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.011s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stage15_proof_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.012s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_policy_transition_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.011s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_policy_transition_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.011s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_promotion_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.011s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_promotion_side_effects",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "---------------------------------------------------------------------- Ran 1 test in 0.012s OK"
+        },
+        {
+          "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+          "exit_code": 0,
+          "passed": true,
+          "evidence_excerpt": "validate-ok promote-ran sync-advance-stage20-stable-auth-failure ---------------------------------------------------------------------- Ran 1 test in 1.316s OK"
+        }
+      ]
+    }
+  ],
+  "overall_passed": true
+}

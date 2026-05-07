@@ -1,0 +1,196 @@
+{
+  "step": "STEP-16_CONTROLLED_UPDATES_TOWARD_20_CANON",
+  "generated_at_utc": "2026-05-07T01:24:38+00:00",
+  "runs": [
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_from_stage_10_updates_policy_one_step",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:08+00:00",
+      "ended_at_utc": "2026-05-07T01:24:09+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 1.714s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:09+00:00",
+      "ended_at_utc": "2026-05-07T01:24:11+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 1.309s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:11+00:00",
+      "ended_at_utc": "2026-05-07T01:24:11+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.515s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_blocks_held_lock_without_mutation",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:11+00:00",
+      "ended_at_utc": "2026-05-07T01:24:12+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.515s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:12+00:00",
+      "ended_at_utc": "2026-05-07T01:24:13+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-contradicted\n----------------------------------------------------------------------\nRan 1 test in 1.198s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:13+00:00",
+      "ended_at_utc": "2026-05-07T01:24:13+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.009s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_reports_truthful_changed_files_after_promotion",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:13+00:00",
+      "ended_at_utc": "2026-05-07T01:24:15+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 1.272s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k stage_advance_15",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:15+00:00",
+      "ended_at_utc": "2026-05-07T01:24:24+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-inline-auth\nvalidate-ok\npromote-ran\nsync-advance-interleaving\nvalidate-ok\npromote-ran\nsync-advance-contradicted\n----------------------------------------------------------------------\nRan 17 tests in 9.009s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:24+00:00",
+      "ended_at_utc": "2026-05-07T01:24:32+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-inline-auth\nvalidate-ok\npromote-ran\nsync-advance-stage20-contradicted\nvalidate-ok\npromote-ran\nsync-advance-stage20-stable-auth-failure\n----------------------------------------------------------------------\nRan 14 tests in 8.410s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests/test_ui_shell.py",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:32+00:00",
+      "ended_at_utc": "2026-05-07T01:24:33+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 82 tests in 0.033s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rejects_invalid_or_ineligible_backend",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:33+00:00",
+      "ended_at_utc": "2026-05-07T01:24:33+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.072s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rejects_invalid_or_ineligible_backend",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:33+00:00",
+      "ended_at_utc": "2026-05-07T01:24:33+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.077s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:33+00:00",
+      "ended_at_utc": "2026-05-07T01:24:34+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-contradicted\n----------------------------------------------------------------------\nRan 1 test in 1.311s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_stage10_proof_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:34+00:00",
+      "ended_at_utc": "2026-05-07T01:24:34+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.011s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stage15_proof_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:34+00:00",
+      "ended_at_utc": "2026-05-07T01:24:35+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.012s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_policy_transition_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:35+00:00",
+      "ended_at_utc": "2026-05-07T01:24:35+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.011s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_policy_transition_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:35+00:00",
+      "ended_at_utc": "2026-05-07T01:24:35+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.011s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_rolls_back_failed_promotion_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:35+00:00",
+      "ended_at_utc": "2026-05-07T01:24:35+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.011s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_promotion_side_effects",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:35+00:00",
+      "ended_at_utc": "2026-05-07T01:24:35+00:00",
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.012s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:35+00:00",
+      "ended_at_utc": "2026-05-07T01:24:36+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-stable-auth-failure\n----------------------------------------------------------------------\nRan 1 test in 1.316s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_cross_thread_mode_mutation_during_policy_step",
+      "kind": "additional_negative",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T01:24:36+00:00",
+      "ended_at_utc": "2026-05-07T01:24:38+00:00",
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-interleaving\n----------------------------------------------------------------------\nRan 1 test in 1.318s\n\nOK\n"
+    }
+  ],
+  "all_passed": true
+}
