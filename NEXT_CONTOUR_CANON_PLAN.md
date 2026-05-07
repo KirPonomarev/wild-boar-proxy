@@ -4,7 +4,7 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.2
+PLAN_VERSION: 1.3
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
 PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
@@ -151,6 +151,19 @@ Live lane may start only when all conditions are true:
    - if `GO_NEXT_CONTOUR`: move to remaining development closeout, basic UI,
      and pre-release testing
    - if `NO_GO`: reopen only the blocking execution-core contour
+
+## Immediate One-Pass Run Order
+
+This ordered checklist is the default execution path for the next contour:
+
+1. Confirm live gate readiness (`PLAN_NOT_CANONICALIZED` must stay closed).
+2. Obtain explicit owner authorization in the current thread.
+3. Record live operation declaration (commands, read paths, write paths,
+   rollback expectation).
+4. Execute mandatory preflight JSON packet and reject invalid JSON output.
+5. Execute day-of 20-account high-load validation in control-layer scope only.
+6. Build evidence packet, run independent audit, and publish `GO_NEXT_CONTOUR`
+   or `NO_GO` with blocker codes.
 
 ## Mandatory Artifacts
 
