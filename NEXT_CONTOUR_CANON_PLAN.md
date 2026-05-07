@@ -4,7 +4,7 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.4
+PLAN_VERSION: 1.5
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
 PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
@@ -238,3 +238,19 @@ out of scope for this contour closeout.
   rule, strict JSON rule, or staged-claim discipline.
 - Layer discipline: no engine-layer fixes are allowed inside this contour; any
   proven engine blocker triggers separate blocker contour opening.
+
+## No-Deviation Statement
+
+This contour does not deviate from `MASTER_PLAN.md` or `CANON.md`.
+Any conflict must be resolved in favor of `CANON.md`, then `MASTER_PLAN.md`.
+
+## Day-Of Layer Guardrail
+
+During same-day 20-account validation, the team must not:
+
+- patch engine-layer code
+- replace canonical JSON command surfaces with log parsing
+- convert runtime-validation lane into refactor lane
+
+If any of these conditions occurs, the run must stop with explicit blocker
+codes and reopen as a separate blocker contour.
