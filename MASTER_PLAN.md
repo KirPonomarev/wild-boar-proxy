@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.26
+PLAN_VERSION: 1.27
 PLAN_DATE: 2026-05-07
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; next primary contour is step-14 prove stable 10
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; evidence packet rerun captured complete; field evidence packet complete; Wave 1C live evidence lane closed; Workstream 04 closed for step-6 scope; Workstream 02 closed for step-7 scope; Workstream 03 closed for step-8 scope; Workstream 06 baseline closed for step-9 scope; diagnostics export closed for step-10 scope; Workstream 07 baseline closed for step-11 scope; Workstream 08 baseline closed for step-12 scope; step-13 alpha run prep closed with independent audit; step-14 stable-10 proof closed with independent audit; next primary contour is step-15 consolidate observed 16-account evidence
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -730,6 +730,33 @@ Current closeout note for implementation-order step 13:
   on branch `codex/wave-1c-prereq-closeout`
 - implementation-order step 13 is therefore closed for the current contour,
   and the next primary contour is `Prove stable 10`
+
+Current closeout note for implementation-order step 14:
+
+- stable-10 proof contour was executed in isolated-runtime fixture lanes through
+  owner-surface `rollout stage prove 10 --json` with supporting
+  `healthcheck --json`, `status --json`, and `rollout rotation inspect --json`
+  replay evidence
+- command replay and gate verdict evidence is captured in
+  `audit_results/step14_stable10_proof_report.md`, including explicit non-gating
+  labeling for grouped `-k` expressions that selected zero tests
+- independent audit replay confirmed PASS for stable-10 contour coverage and
+  found no P0/P1/P2/P3 findings; claim scope remains bounded to
+  `stable_10_proved`
+- acceptance/regression verification for step-14 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_runtime_attestation_failure`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_rotation_insufficiency`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion`,
+  `python3 -m unittest -q tests.test_cli -k stage_prove`,
+  `python3 -m unittest -q tests.test_cli -k rollback_readiness`,
+  `python3 -m unittest -q tests.test_cli -k prove_10`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 14 is therefore closed for the current contour,
+  and the next primary contour is `Consolidate observed 16-account evidence`
 
 ### Workstream 08: Experiment Package
 
