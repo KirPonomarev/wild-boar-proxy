@@ -1,0 +1,22 @@
+{
+  "step": "STEP-27B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T08:13:42Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ],
+      "evidence_refs": {
+        "metrics_window_capture": "audit_results/step27b_metrics_window_capture.json",
+        "negative_checks": "audit_results/step27b_negative_checks.json"
+      },
+      "fact": "Repository evidence still indicates missing complete 14-day machine metrics window artifact."
+    }
+  ],
+  "closed_blocker_count": 0,
+  "still_blocked_count": 1
+}
