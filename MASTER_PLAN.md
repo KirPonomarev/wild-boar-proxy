@@ -61,6 +61,22 @@ Required evidence for same-day 20-account validation:
 This contour may support a `scale-to-20 validated` claim.
 It must not silently imply `pilot_ready` or `production_ready`.
 
+## Managed Pool Operating Contour
+
+The current local contour has exercised a managed pool of 25 accounts under real-load testing.
+
+Default operating contour uses a 10-account active window.
+The wider managed pool remains available for ranking, replacement, and staged expansion.
+
+Accounts outside the current active window may remain managed, validated, and eligible for promotion into active routing when higher-ranked accounts degrade, hit quota limits, fail authentication, or are placed on hold.
+
+Observed `401`, `429`, quota exhaustion, or other account-level failures inside the wider managed pool do not, by themselves, invalidate the runtime architecture claim, provided that runtime truth remains correct, fallback remains available, and the system continues selecting a healthy working subset without stale-green behavior.
+
+Current evidence indicates 25-account managed-pool readiness for this experimental contour.
+Canonical closeout for this claim still requires committed-and-pushed evidence and governing-document closeout.
+It does not claim that all 25 accounts will remain simultaneously healthy under all upstream conditions.
+The canonical default operating contour remains the active window, while the wider managed pool provides resilience, replacement depth, and controlled scale headroom.
+
 ## Field Evidence Capture Requirements
 
 The 16-account field contour may be promoted from observation to formal evidence only when a redacted evidence packet exists.

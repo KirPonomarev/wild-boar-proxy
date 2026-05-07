@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -510,6 +511,10 @@ def read_toml_string(path: Path, key: str) -> str:
     return ""
 
 
+def read_stable_proxy_url(paths: RuntimePaths) -> str:
+    return read_yaml_value(paths.stable_config, "proxy-url")
+
+
 def write_text_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")
@@ -601,6 +606,82 @@ def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str,
                 operator_action="retry",
             )
         return data
+
+
+def is_transient_attestation_timeout_error(error_detail: str) -> bool:
+    normalized = error_detail.strip().lower()
+    return bool(normalized) and (
+        "timed out" in normalized or "timeout" in normalized
+    )
+
+
+def get_rollout_attestation_retry_delay_seconds() -> float:
+    raw = os.environ.get("WBP_ROLLOUT_ATTESTATION_RETRY_SECONDS", "0.5").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.5
+    return value if value >= 0 else 0.5
+
+
+def run_rollout_attestation_healthcheck(
+    paths: RuntimePaths,
+    *,
+    allow_stable_fallback_write: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=allow_stable_fallback_write,
+    )
+    last_error = str(payload.get("last_error", ""))
+    retry_summary = {
+        "status": "not_invoked",
+        "attempted": False,
+        "eligible": payload.get("machine_error_code") == "ATTESTATION_FAILED"
+        and is_transient_attestation_timeout_error(last_error),
+        "retry_delay_seconds": 0.0,
+        "initial_status": str(payload.get("status", "")),
+        "initial_machine_error_code": str(payload.get("machine_error_code", "")),
+        "initial_last_error": last_error,
+        "final_status": str(payload.get("status", "")),
+        "final_machine_error_code": str(payload.get("machine_error_code", "")),
+        "final_last_error": last_error,
+        "outcome": "not_needed",
+    }
+    if not retry_summary["eligible"]:
+        return payload, retry_summary
+
+    retry_delay_seconds = get_rollout_attestation_retry_delay_seconds()
+    retry_summary["status"] = "owner_path_emitted"
+    retry_summary["attempted"] = True
+    retry_summary["retry_delay_seconds"] = retry_delay_seconds
+    retry_summary["outcome"] = "retry_failed"
+    if retry_delay_seconds > 0:
+        time.sleep(retry_delay_seconds)
+
+    retried_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=allow_stable_fallback_write,
+    )
+    retried_last_error = str(retried_payload.get("last_error", ""))
+    retry_summary["final_status"] = str(retried_payload.get("status", ""))
+    retry_summary["final_machine_error_code"] = str(
+        retried_payload.get("machine_error_code", "")
+    )
+    retry_summary["final_last_error"] = retried_last_error
+    retry_summary["outcome"] = (
+        "recovered_on_retry"
+        if retried_payload.get("status") == "ok"
+        and str(retried_payload.get("effective_mode")) == "managed"
+        else "retry_failed"
+    )
+    return retried_payload, retry_summary
 
 
 def get_model(paths: RuntimePaths, fallback: str = "gpt-5.4") -> str:
@@ -1812,6 +1893,74 @@ def restore_current_proxy_owner_path_runtime_surfaces(
     )
 
 
+def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
+    try:
+        pid = int(pid_text.strip())
+    except ValueError:
+        return False
+    command_line = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "command="],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    expected = f"{paths.managed_config_file}"
+    return bool(command_line) and expected in command_line
+
+
+def snapshot_sync_current_proxy_recovery_runtime_surfaces(
+    paths: RuntimePaths,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "state_file": snapshot_path_state(paths.state_file),
+        "managed_config_file": snapshot_path_state(paths.managed_config_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+        "managed_pid_file": snapshot_path_state(managed_pid_path(paths)),
+    }
+
+
+def restore_sync_current_proxy_recovery_runtime_surfaces(
+    paths: RuntimePaths, snapshots: dict[str, dict[str, Any]]
+) -> None:
+    current_pid_text = read_text(managed_pid_path(paths))
+    snapshot_pid_text = str(
+        snapshots.get("managed_pid_file", {}).get("text", "")
+        if snapshots.get("managed_pid_file", {}).get("state") == "file"
+        else ""
+    ).strip()
+    if (
+        current_pid_text.strip()
+        and current_pid_text.strip() != snapshot_pid_text
+        and managed_pid_matches_expected(paths, current_pid_text)
+        and process_is_alive(current_pid_text)
+    ):
+        try:
+            os.kill(int(current_pid_text.strip()), signal.SIGTERM)
+        except OSError:
+            pass
+    restore_path_state(
+        paths.state_file, snapshots.get("state_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.managed_config_file,
+        snapshots.get("managed_config_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        paths.config_toml, snapshots.get("config_toml", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.runtime_effective_mode_file,
+        snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        managed_pid_path(paths),
+        snapshots.get("managed_pid_file", {"state": "missing"}),
+    )
+
+
 def rollback_target_switch_apply(
     paths: RuntimePaths,
     *,
@@ -2067,6 +2216,15 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
         "status_delegates_to_owner": True,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
+        "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "status": "available" if paths.sync_script.exists() else "unavailable",
+            "command_surface": "sync --json",
+            "owner_path_private": True,
+            "allowed_when_launcher_lane_ineligible": True,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "writes_managed_config_proxy_url": True,
+            "reproof_required": True,
+        },
         "state_file": str(paths.state_file),
         "state_fields": [
             LAST_KNOWN_GOOD_PROXY_URL_FIELD,
@@ -2204,6 +2362,15 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "status_delegates_to_owner": True,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
+        "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "status": "available" if paths.sync_script.exists() else "unavailable",
+            "command_surface": "sync --json",
+            "owner_path_private": True,
+            "allowed_when_launcher_lane_ineligible": True,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "writes_managed_config_proxy_url": True,
+            "reproof_required": True,
+        },
         "state_file": str(paths.state_file),
         "activation_surface_status": "owner_path_private_launcher_activation_available",
         "activation_surface_kind": "repo_owned_handoff_env_var",
@@ -2345,6 +2512,18 @@ def refresh_last_known_good_proxy_from_healthcheck(
         ]
         write_json_atomic(paths.state_file, live_state)
     return refreshed_state
+
+
+def get_reported_current_proxy_url(
+    paths: RuntimePaths, state: dict[str, Any], reported_effective_mode: str
+) -> str:
+    current_proxy_url = str(state.get("current_proxy_url", ""))
+    if reported_effective_mode != "stable":
+        return current_proxy_url
+    stable_proxy_url = str(read_stable_proxy_url(paths) or "")
+    if parse_local_proxy_candidate(stable_proxy_url) is None:
+        return current_proxy_url
+    return stable_proxy_url
 
 
 def get_stable_runtime_consumer_selection_context(
@@ -4192,6 +4371,8 @@ def reconcile_stable_fallback(
     stable_state["last_error"] = error_message
     stable_state["effective_mode"] = "stable"
     stable_state["selected_backend_ids"] = []
+    stable_state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
+    stable_state.pop("selected_backend_ids_observed_at", None)
     stable_state["healthy_count"] = 1 if stable_listener_ok else 0
     stable_state["degraded_count"] = 0
     stable_state["down_count"] = 1
@@ -4217,6 +4398,8 @@ def reconcile_stable_recovery_success(
     stable_state["last_error"] = ""
     stable_state["effective_mode"] = "stable"
     stable_state["selected_backend_ids"] = []
+    stable_state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
+    stable_state.pop("selected_backend_ids_observed_at", None)
     stable_state["healthy_count"] = 1
     stable_state["degraded_count"] = 0
     stable_state["down_count"] = 0
@@ -4691,6 +4874,7 @@ def run_healthcheck(
     responses_ok = False
     model_name = model or get_model(paths)
     error_detail = ""
+    current_proxy_url = str(state.get("current_proxy_url", ""))
     proxy_reprobe: dict[str, Any] | None = None
     proxy_reprobe_adoption_result: dict[str, Any] | None = None
 
@@ -4878,6 +5062,35 @@ def run_healthcheck(
                     proxy_reprobe_adoption_result["adoption_outcome"] = (
                         "live_reproof_failed"
                     )
+            elif paths.sync_script.exists():
+                sync_recovery_result, sync_reproof_payload = (
+                    attempt_sync_current_proxy_recovery_under_lock(
+                        paths,
+                        working_candidate=working_candidate,
+                        prior_current_proxy_url=current_proxy_url,
+                    )
+                )
+                proxy_reprobe_adoption_result.update(sync_recovery_result)
+                if sync_reproof_payload is not None:
+                    state = read_json(paths.state_file, required=False)
+                    attestation = sync_reproof_payload["attestation"]
+                    listener_ok = bool(attestation["listener_ok"])
+                    models_ok = bool(attestation["models_ok"])
+                    responses_ok = bool(attestation["responses_ok"])
+                    effective_mode_match = bool(attestation["effective_mode_match"])
+                    base_url_match = bool(attestation["base_url_match"])
+                    error_detail = str(sync_reproof_payload.get("last_error", ""))
+                    effective_mode = str(sync_reproof_payload["effective_mode"])
+                    reported_effective_mode = effective_mode
+                    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+                    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                    liveness = str(sync_reproof_payload["liveness"])
+                    severity = str(sync_reproof_payload["severity"])
+                    operator_action = str(sync_reproof_payload["operator_action"])
+                    machine_error_code = str(sync_reproof_payload["machine_error_code"])
+                    human_message = str(sync_reproof_payload["human_message"])
+                    ok = True
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
@@ -4998,7 +5211,9 @@ def run_healthcheck(
             attestation_ok=ok,
             reported_effective_mode=reported_effective_mode,
         )
-    current_proxy_url = str(state.get("current_proxy_url", ""))
+    current_proxy_url = get_reported_current_proxy_url(
+        paths, state, reported_effective_mode
+    )
     if proxy_reprobe_adoption_result is not None:
         proxy_reprobe_adoption_result["last_known_good_refreshed"] = (
             str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or "")
@@ -5023,11 +5238,15 @@ def run_healthcheck(
         "endpoint": reported_endpoint,
         "current_proxy_url": current_proxy_url,
         "attestation": attestation,
-        "last_error": error_detail
-        or (
-            "Missing or invalid runtime-effective-mode.txt"
-            if not effective_mode_artifact
-            else state.get("last_error", "")
+        "last_error": (
+            ""
+            if ok
+            else error_detail
+            or (
+                "Missing or invalid runtime-effective-mode.txt"
+                if not effective_mode_artifact
+                else state.get("last_error", "")
+            )
         ),
     }
     if proxy_reprobe is not None:
@@ -6507,12 +6726,8 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     registry = read_json(paths.registry_file)
     state = read_json(paths.state_file, required=False)
     observed_at_utc = now_iso()
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-        allow_stable_fallback_write=False,
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(
+        paths, allow_stable_fallback_write=False
     )
     status_payload = summarize_status(paths, health_payload=health_payload)
     accounts_payload = list_accounts(paths)
@@ -6657,6 +6872,7 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         "runtime_version": runtime_version,
         "environment_note": "local_mac_control_layer_evidence_packet",
         "runtime_attestation_status": runtime_attestation_status,
+        "runtime_attestation_retry_summary": healthcheck_retry,
         "strict_json_command_api_status": strict_json_status,
         "state_serialization_status": state_serialization_status,
         "rotation_evidence_status": rotation_status,
@@ -6992,11 +7208,8 @@ def run_rollout_stage_prove(
             operator_action="user_action",
         )
 
-    pre_health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
+    pre_health_payload, pre_healthcheck_retry = run_rollout_attestation_healthcheck(
+        paths
     )
     pre_status_payload = summarize_status(paths, health_payload=pre_health_payload)
     pre_pool_summary = pre_status_payload.get("pool_summary", {})
@@ -7033,6 +7246,7 @@ def run_rollout_stage_prove(
                     "last_known_good_proxy", {}
                 ),
             },
+            "pre_smoke_healthcheck_retry_summary": pre_healthcheck_retry,
             "pre_smoke_status_summary": {
                 "status": pre_status_payload.get("status"),
                 "machine_error_code": pre_status_payload.get("machine_error_code"),
@@ -7116,11 +7330,8 @@ def run_rollout_stage_prove(
             exit_code=int(smoke_payload.get("exit_code", 1) or 1),
         )
 
-    post_health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
+    post_health_payload, post_healthcheck_retry = (
+        run_rollout_attestation_healthcheck(paths)
     )
     post_status_payload = summarize_status(paths, health_payload=post_health_payload)
     post_rollback_readiness = summarize_stable_10_rollback_readiness(
@@ -7149,6 +7360,9 @@ def run_rollout_stage_prove(
         ),
         "last_known_good_proxy": post_health_payload.get("last_known_good_proxy", {}),
     }
+    stage_proof_result["delegated_evidence"]["post_smoke_healthcheck_retry_summary"] = (
+        post_healthcheck_retry
+    )
     stage_proof_result["delegated_evidence"]["post_smoke_status_summary"] = {
         "status": post_status_payload.get("status"),
         "machine_error_code": post_status_payload.get("machine_error_code"),
@@ -7205,12 +7419,7 @@ def summarize_rollout_stage_advance_preflight(
     *,
     lock_acquired: bool = False,
 ) -> tuple[bool, str, str, dict[str, Any]]:
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-    )
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(paths)
     status_payload = summarize_status(paths, health_payload=health_payload)
     rotation_payload = run_rollout_rotation_inspect(
         paths, lock_acquired=lock_acquired
@@ -7236,6 +7445,7 @@ def summarize_rollout_stage_advance_preflight(
             "effective_mode": health_payload.get("effective_mode"),
             "liveness": health_payload.get("liveness"),
         },
+        "healthcheck_retry_summary": healthcheck_retry,
         "status_summary": summarize_owner_path_status_observation(status_payload),
         "rotation_summary": {
             "status": rotation_payload.get("status"),
@@ -7313,12 +7523,7 @@ def summarize_rollout_stage_advance_postflight(
     pool_counts = summarize_registry_pool_counts(registry)
     backend_matches = get_registry_backends_by_id(registry, backend_id)
     promoted_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-    )
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(paths)
     status_payload = summarize_status(paths, health_payload=health_payload)
     rotation_payload = run_rollout_rotation_inspect(
         paths, lock_acquired=lock_acquired
@@ -7389,6 +7594,7 @@ def summarize_rollout_stage_advance_postflight(
             "effective_mode": health_payload.get("effective_mode"),
             "liveness": health_payload.get("liveness"),
         },
+        "healthcheck_retry_summary": healthcheck_retry,
         "status_summary": summarize_owner_path_status_observation(status_payload),
         "rotation_summary": {
             "status": rotation_payload.get("status"),
@@ -8307,6 +8513,90 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         "effective_mode": sync_reported_effective_mode,
         "endpoint": sync_reported_endpoint,
     }
+
+
+def attempt_sync_current_proxy_recovery_under_lock(
+    paths: RuntimePaths,
+    *,
+    working_candidate: str,
+    prior_current_proxy_url: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    rollback_surface_snapshots = snapshot_sync_current_proxy_recovery_runtime_surfaces(
+        paths
+    )
+    result = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "working_candidate": working_candidate,
+        "activation_surface_kind": "sync_owner_path_restart",
+        "activation_command_surface": "sync --json",
+        "adoption_outcome": "sync_owner_path_failed",
+        "current_proxy_url_rewritten": False,
+        "live_runtime_observation_confirmed": False,
+        "sync_result_status": "not_run",
+        "sync_result_machine_error_code": "",
+        "sync_result_exit_code": None,
+        "selected_proxy_url": "",
+        "rollback_restored": False,
+    }
+    sync_payload = run_sync_for_owner_path_under_lock(paths)
+    result["sync_result_status"] = str(sync_payload["status"])
+    result["sync_result_machine_error_code"] = str(
+        sync_payload["machine_error_code"]
+    )
+    result["sync_result_exit_code"] = sync_payload["exit_code"]
+    if sync_payload["status"] != "ok":
+        restore_sync_current_proxy_recovery_runtime_surfaces(
+            paths, rollback_surface_snapshots
+        )
+        result["rollback_restored"] = True
+        return result, None
+    reproof_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    reproof_ok = (
+        reproof_payload["status"] == "ok"
+        and str(reproof_payload["effective_mode"]) == "managed"
+    )
+    state = read_json(paths.state_file, required=False)
+    reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
+    result["selected_proxy_url"] = reproof_current_proxy_url
+    same_current_reconfirmed = (
+        prior_current_proxy_url == working_candidate
+        and reproof_ok
+        and reproof_current_proxy_url == working_candidate
+    )
+    candidate_adopted = (
+        prior_current_proxy_url != working_candidate
+        and reproof_ok
+        and reproof_current_proxy_url == working_candidate
+    )
+    alternate_local_candidate_adopted = (
+        prior_current_proxy_url != reproof_current_proxy_url
+        and reproof_ok
+        and parse_local_proxy_candidate(reproof_current_proxy_url) is not None
+    )
+    if same_current_reconfirmed or candidate_adopted or alternate_local_candidate_adopted:
+        if same_current_reconfirmed:
+            result["adoption_outcome"] = "sync_owner_path_same_current_reconfirmed"
+        elif candidate_adopted:
+            result["adoption_outcome"] = "sync_owner_path_candidate_adopted"
+        else:
+            result["adoption_outcome"] = "sync_owner_path_alternate_candidate_adopted"
+        result["current_proxy_url_rewritten"] = (
+            reproof_current_proxy_url != prior_current_proxy_url
+        )
+        result["live_runtime_observation_confirmed"] = True
+        return result, reproof_payload
+    restore_sync_current_proxy_recovery_runtime_surfaces(
+        paths, rollback_surface_snapshots
+    )
+    result["rollback_restored"] = True
+    result["adoption_outcome"] = "sync_owner_path_live_reproof_failed"
+    return result, None
 
 
 def observe_status_proof_for_owner_path_under_lock(
