@@ -3,7 +3,17 @@
 
 # Wild Boar Proxy
 
-Wild Boar Proxy is an experimental companion control app for managed local account pools running on top of `CLIProxyAPI`.
+Wild Boar Proxy is an experimental companion control app for Codex.
+
+It helps a user manage their own local Codex setup from one place: account
+lifecycle, launch configuration, runtime modes, diagnostics, and recovery.
+
+It does not modify Codex, replace the Codex client, or provide shared account
+access for other users.
+It is intended for a user's own accounts and local runtime environment, not for
+account sharing, rule circumvention, or unauthorized access.
+
+The current runtime implementation is built on top of `CLIProxyAPI`.
 
 The project does not replace the proxy engine. It owns the control layer:
 
@@ -16,6 +26,35 @@ The project does not replace the proxy engine. It owns the control layer:
 ## Current status
 
 This repository is the bootstrap for the public experimental project.
+
+Current next contour is execution-core repair for reserve-first stage-20
+re-entry.
+The runtime can be live and useful while the formal stage-20 owner path remains
+blocked by proof-posture drift.
+Basic companion UI work stays gated behind
+`EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`.
+
+## Managed pool capacity
+
+The current local real-load contour has exercised a managed pool of 25 accounts.
+
+The default operating contour uses a 10-account active window.
+The wider managed pool remains available for ranking, replacement, and staged expansion.
+
+This means the system does not need to route through all 25 accounts at the same time.
+Instead, it selects a healthy working subset and can pull in additional managed accounts when active accounts degrade, hit quota limits, fail authentication, or are placed on hold.
+
+Account-level failures such as `401`, `429`, or quota exhaustion do not, by themselves, mean that the runtime architecture has failed.
+They mean the system has identified a problem with a specific account and should continue operating through the remaining healthy pool.
+
+This currently indicates 25-account managed-pool readiness for the experimental control contour.
+Canonical release-facing claims remain bound to committed evidence and closeout.
+
+In short:
+
+- `25 accounts` is the tested managed-pool capacity
+- `10 accounts` is the default active window
+- the remaining managed accounts provide replacement depth, resilience, and controlled scale headroom
 
 ## Core rule
 

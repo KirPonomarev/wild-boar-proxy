@@ -1,0 +1,13 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "machine_error_code": "TARGET_SWITCH_DIR_NOT_EMPTY",
+  "human_message": "Target switch apply blocked because the approved target inventory already contains auth files.",
+  "changed_files": [],
+  "target_surface_status": "applied_control_target_reference",
+  "approved_repair_target_reference_status": "materialized_aligned",
+  "approved_repair_target_inventory_dir": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+  "target_switch_transaction_status": "materialized_aligned",
+  "mode_set_is_target_switch": false,
+  "verdict": "TARGET_ALREADY_MATERIALIZED_CONTINUE_WITH_STABLE_REPAIR"
+}

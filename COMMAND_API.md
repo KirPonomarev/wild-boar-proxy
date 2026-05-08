@@ -38,6 +38,12 @@ All operator commands must support `--json`.
 - `accounts retire <id> --json`
 - `accounts onboard --json`
 - `diagnostics export --json`
+- `installer init --json`
+- `legacy import --source-dir <path> --json`
+- `companion reset --json`
+- `companion uninstall --json`
+- `package experimental build --output-dir <path> --json`
+- `package experimental verify --manifest <path> --json`
 
 ## Required response fields
 
@@ -66,16 +72,36 @@ Every command response must include all required fields on both success and fail
 - commands that carry runtime attestation must expose an `attestation` object
   containing the required attestation fields from `RUNTIME_CONTRACT.md`
 
-## Error classes
+## Severity classes
 
 - `recoverable`
-- `needs_user_action`
 - `fatal`
+
+## Additional experimental package owner surface
+
+`package experimental build --output-dir <path> --json` is the owner surface for
+local experimental package materialization.
+
+It must emit:
+
+- a package artifact (`tar.gz` or `zip`) built from allowlisted repo
+  source/docs material only
+- a checksum manifest for the artifact
+- metadata with plan version/date when available
+
+The package surface must not include runtime/private data such as auth files,
+runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+`package experimental verify --manifest <path> --json` is the owner surface for
+artifact existence + checksum verification from the manifest.
 
 ## Additional onboarding owner surface
 
 `accounts onboard --json` is the owner surface for reserve-first onboarding
 truth.
+The onboarding owner lane supports external launcher invocation modes `--once`
+and `--loop`; the selected mode must remain visible in the emitted owner
+packet command surface.
 
 Onboarding success must not be inferred from external onboarding process exit
 code alone.
@@ -99,6 +125,10 @@ Preferred fields include:
 - `selected_backend_id`
 - `selection_status`
 - `reserve_first_enforced`
+- `auth_snapshot_before_login_status`
+- `auth_snapshot_before_login_count`
+- `auth_snapshot_before_login_digest`
+- `auth_snapshot_before_login_source`
 - `pool_after_onboarding`
 - `validate_attempted`
 - `validate_outcome`
@@ -1141,6 +1171,13 @@ Field meaning rules:
   only as delegated reporting
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
+- current bounded candidate discovery remains
+  `shallow_socket_listener_only` and is limited to local listener reachability
+  rather than a separate deep-probing truth surface
+- top-level current-proxy adoption success still requires same-owner live
+  runtime reproof through `healthcheck.attestation`
+- no separate control-layer deep-probing surface is active by default; deeper
+  runtime validation remains delegated to the live reproof surface above
 - `status --json` may expose the same `last_known_good_proxy` readout only as
   delegated reporting
 - delegated `status --json` must propagate those owner-path writes honestly in

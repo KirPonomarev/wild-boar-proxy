@@ -1,0 +1,101 @@
+{
+  "step": "STEP-20A_LIVE_SCALE20_EVIDENCE_LANE",
+  "captured_at_utc": "2026-05-07T05:40:57.689666Z",
+  "runtime_scope": "machine_evidence_test_and_repo_scan_only",
+  "claim_scope": "machine-evidence-only",
+  "source_artifacts": [
+    {
+      "path": "audit_results/step19a_decision_packet.json",
+      "size_bytes": 2190,
+      "sha256": "9c1f0df34a7824c68d2e1c914d31570fa85d1d0b77d7f7c3f629d06556fb53f0",
+      "last_modified_utc": "2026-05-07T05:24:45.163137Z"
+    },
+    {
+      "path": "audit_results/step17_release_gate_alignment_report.md",
+      "size_bytes": 7429,
+      "sha256": "5596d391fc38fd70da9a2ef505d22900d3ea8aca74aebe276904765b0b92de4b",
+      "last_modified_utc": "2026-05-07T01:48:05.442504Z"
+    },
+    {
+      "path": "audit_results/step16_owner_surface_capture.json",
+      "size_bytes": 359164,
+      "sha256": "02c7ebb0384a3a5d85463e8ae766065916632e7a533ad46567af4f7bfc691ef7",
+      "last_modified_utc": "2026-05-07T01:23:39.123498Z"
+    },
+    {
+      "path": "audit_results/step20a_test_runs.json",
+      "size_bytes": 2362,
+      "sha256": "881f169e7dc5004bb22698befc1d4e34f7e41e49b3dd51088313de692f2c26ad",
+      "last_modified_utc": "2026-05-07T05:35:21.413923Z"
+    },
+    {
+      "path": "MASTER_PLAN.md",
+      "size_bytes": 60808,
+      "sha256": "7b677dee9d85eca66cd8e3f9bab691f61819abcef113bd35f8d8b117a742150b",
+      "last_modified_utc": "2026-05-07T05:28:50.180295Z"
+    }
+  ],
+  "required_commands": [
+    "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization"
+  ],
+  "required_commands_present": true,
+  "blocker_surface_mapping": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+        "rg -n --no-heading \"\\\"active_count_observed\\\"\\s*:\\s*20\" audit_results/*.json",
+        "rg -n --no-heading \"active_count_observed=16|active_target=20|Stage-20 lane evidence ends\" audit_results/step17_release_gate_alignment_report.md MASTER_PLAN.md"
+      ],
+      "fact": "All required stage_advance_20 unittest commands passed with exit_code=0, but repository evidence scan still lacks a machine artifact proving controlled rollout completion to 20 active backends.",
+      "blocked_reasons": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    }
+  ],
+  "scale20_field_evidence_scan": {
+    "scale_exact_active20_scan": {
+      "command": "rg -n --no-heading \"\\\"active_count_observed\\\"\\s*:\\s*20\" audit_results/*.json",
+      "exit_code": 1,
+      "stdout_line_count": 0,
+      "sample": []
+    },
+    "inherited_field_fact_scan": {
+      "command": "rg -n --no-heading \"active_count_observed=16|active_target=20|Stage-20 lane evidence ends\" audit_results/step17_release_gate_alignment_report.md MASTER_PLAN.md",
+      "exit_code": 0,
+      "stdout_line_count": 2,
+      "sample": [
+        "audit_results/step17_release_gate_alignment_report.md:15:| scale_gate | blocked | `MASTER_PLAN.md:928`; `audit_results/step16_owner_surface_capture.json:.lanes[].commands[].stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step` | 2026-05-07T01:23:39Z | Stage-20 lane evidence ends at `active_count_observed=16` with `active_target=20`. |",
+        "MASTER_PLAN.md:840:  (`active_count_observed=16`, `active_target=20`)"
+      ]
+    },
+    "scale_target20_scan": {
+      "command": "rg -n --no-heading \"\\\"active_target\\\"\\s*:\\s*20\" audit_results/*.json",
+      "exit_code": 0,
+      "stdout_line_count": 5,
+      "sample": [
+        "audit_results/step17_fact_dump.json:288:            \"active_target\": 20,",
+        "audit_results/step16_owner_surface_capture.json:3735:                    \"active_target\": 20,",
+        "audit_results/step16_owner_surface_capture.json:3755:                  \"active_target\": 20,",
+        "audit_results/step16_owner_surface_capture.json:3806:                  \"active_target\": 20,",
+        "audit_results/step16_owner_surface_capture.json:3925:                  \"active_target\": 20,"
+      ]
+    },
+    "conclusion": "no_new_machine_field_evidence_of_controlled_rollout_to_20_detected"
+  },
+  "forbidden_claim_scan": {
+    "status": "recorded_in_step20_negative_checks"
+  },
+  "residual_release_gate_context": {
+    "scale20_status_from_step19a": "still_blocked",
+    "scale20_reason": "Controlled rollout-to-20 field proof is not established by unit-test contour evidence alone.",
+    "source_ref": "audit_results/step19a_decision_packet.json"
+  }
+}

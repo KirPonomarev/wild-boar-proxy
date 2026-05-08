@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "artifact": "readonly_snapshot",
+  "step": "step38",
+  "generated_at_utc": "2026-05-08T20:30:52Z",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+  "worktree": {
+    "status": "dirty",
+    "live_runtime_mutation_performed": false
+  },
+  "commands": {
+    "status": {
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "liveness": "healthy",
+      "claim_gate": {
+        "status": "blocked",
+        "machine_error_code": "CLAIM_GATE_BLOCKED",
+        "blocked_claims": [
+          "active-only-traffic",
+          "pool-participation-correct",
+          "stable-15-proved"
+        ],
+        "sources": [
+          "policy_drift"
+        ]
+      },
+      "policy_drift": {
+        "status": "detected",
+        "machine_error_code": "STABLE_POLICY_DRIFT",
+        "configured_active_count": 24,
+        "allowed_stable_auth_count": 2,
+        "stable_auth_inventory_count": 24
+      },
+      "pool_summary": {
+        "active": 24,
+        "reserve": 0,
+        "retired": 0,
+        "healthy": 1,
+        "degraded": 0,
+        "down": 1,
+        "backend_count": 24,
+        "selected_backend_ids": []
+      },
+      "auth_pool_hygiene": {
+        "status": "launch_capable_available",
+        "launch_capable_backend_count": 2,
+        "launch_capable_backend_ids": [
+          "new-new55555",
+          "open17-plus"
+        ],
+        "auth_invalid_backend_ids": [
+          "gpt2026bis-team",
+          "kip85905-team",
+          "new-gpt-bis",
+          "new-new22222"
+        ]
+      },
+      "runtime_guardrails": {
+        "status": "clear"
+      }
+    },
+    "healthcheck": {
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "liveness": "healthy",
+      "launch_readiness": {
+        "status": "ready",
+        "machine_error_code": "OK",
+        "launch_capable_backend_count": 2
+      },
+      "runtime_guardrails": {
+        "status": "clear"
+      },
+      "auth_pool_hygiene": {
+        "status": "launch_capable_available",
+        "launch_capable_backend_count": 2,
+        "launch_capable_backend_ids": [
+          "new-new55555",
+          "open17-plus"
+        ]
+      },
+      "attestation": {
+        "listener_ok": true,
+        "models_ok": true,
+        "responses_ok": true,
+        "effective_mode_match": true,
+        "base_url_match": true,
+        "proxy_url_match": true,
+        "observed_at_utc": "2026-05-08T20:30:27.658287+00:00",
+        "runtime_version": "2",
+        "attestation_source": "healthcheck --json"
+      }
+    },
+    "accounts_list": {
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "active_count": 24,
+      "reserve_count": 0,
+      "pool_policy": {
+        "active_target": 15,
+        "active_min": 15,
+        "reserve_target": 0
+      },
+      "healthy_active_backend_ids": [
+        "open17-plus",
+        "new-new55555"
+      ],
+      "stable_default_backend_id": "gpt2026bis-team"
+    },
+    "rollout_rotation_inspect": {
+      "exit_code": 1,
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_STALE",
+      "next_action": "retry",
+      "rotation_evidence_result": {
+        "evidence_status": "participation_evidence_stale",
+        "evidence_freshness": "stale",
+        "selected_backend_snapshot_validation_status": "valid",
+        "selected_backend_snapshot_present": true,
+        "selected_backend_ids": [
+          "new-new55555",
+          "open17-plus"
+        ],
+        "active_pool_count_observed": 24,
+        "participation_status": "stale",
+        "policy_drift_status": "clear",
+        "policy_drift_observed_status": "detected",
+        "claim_scope": "bounded_local_participation_evidence_only",
+        "final_outcome": "participation_evidence_stale"
+      }
+    }
+  },
+  "targeted_tests": {
+    "command": "python3 -m unittest tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step tests.test_cli.CliTests.test_rollout_stage_advance_20_rejects_invalid_or_ineligible_backend tests.test_cli.CliTests.test_rollout_stage_advance_20_rejects_overfull_stage_as_already_satisfied",
+    "result": "passed",
+    "ran": 3
+  }
+}

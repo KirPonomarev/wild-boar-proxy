@@ -1,0 +1,55 @@
+{
+  "step": "STEP-21_CANONICAL_DECISION_PACKET",
+  "generated_at_utc": "2026-05-07T05:50:04Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "lanes": [
+    {
+      "lane": "STEP-21A_LIVE_SCALE20_EVIDENCE_LANE",
+      "status": "blocked",
+      "decision_ref": "audit_results/step21a_decision_packet.json",
+      "primary_blocker": "SCALE_GATE_20_NOT_COMPLETED",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    },
+    {
+      "lane": "STEP-21B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+      "status": "blocked",
+      "decision_ref": "audit_results/step21b_decision_packet.json",
+      "primary_blocker": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ]
+    }
+  ],
+  "unresolved_blockers": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ],
+      "fact": "No repo-scope machine artifact proves active_count_observed=20 with operator-approved live field proof."
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ],
+      "fact": "No complete 14-day machine metrics window artifact/command trail is present in repository scope."
+    }
+  ],
+  "refs": {
+    "step21a_owner_surface_capture": "audit_results/step21a_owner_surface_capture.json",
+    "step21a_negative_checks": "audit_results/step21a_negative_checks.json",
+    "step21a_test_runs": "audit_results/step21a_test_runs.json",
+    "step21a_scale_report": "audit_results/step21a_scale_report.md",
+    "step21a_decision_packet": "audit_results/step21a_decision_packet.json",
+    "step21b_pilot_blocker_capture": "audit_results/step21b_pilot_blocker_capture.json",
+    "step21b_negative_checks": "audit_results/step21b_negative_checks.json",
+    "step21b_metrics_window_report": "audit_results/step21b_metrics_window_report.md",
+    "step21b_decision_packet": "audit_results/step21b_decision_packet.json"
+  }
+}

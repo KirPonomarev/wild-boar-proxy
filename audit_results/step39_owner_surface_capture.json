@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "artifact": "owner_surface_capture",
+  "step": "step39",
+  "generated_at_utc": "2026-05-08T20:40:47Z",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+  "phase": "phase1_read_only_truth_reproof",
+  "git_status": {
+    "branch": "codex/wave-1c-prereq-closeout",
+    "dirty": true
+  },
+  "status": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "blocked_claims": [
+      "active-only-traffic",
+      "pool-participation-correct",
+      "stable-15-proved"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "pool_summary": {
+      "active": 24,
+      "reserve": 0,
+      "retired": 0,
+      "healthy": 1,
+      "degraded": 0,
+      "down": 1,
+      "selected_backend_ids": [],
+      "backend_count": 24
+    },
+    "auth_pool_hygiene": {
+      "status": "launch_capable_available",
+      "launch_capable_backend_ids": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "launch_capable_backend_count": 2,
+      "selected_backend_ids_observed": [],
+      "selected_launch_capable_backend_count": 0,
+      "selected_unusable_backend_count": 0
+    },
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "attestation_summary": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "observed_at_utc": "2026-05-08T20:39:36.973774+00:00"
+    }
+  },
+  "healthcheck": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "launch_readiness": {
+      "status": "ready",
+      "machine_error_code": "OK",
+      "launch_capable_backend_count": 2
+    },
+    "runtime_guardrails": {
+      "status": "clear"
+    },
+    "attestation": {
+      "listener_ok": true,
+      "models_ok": true,
+      "responses_ok": true,
+      "effective_mode_match": true,
+      "base_url_match": true,
+      "selected_backends_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "observed_at_utc": "2026-05-08T20:39:36.925499+00:00",
+      "attestation_source": "healthcheck --json"
+    }
+  },
+  "accounts_list": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "pool_policy": {
+      "active_target": 15,
+      "active_min": 15,
+      "reserve_target": 0
+    },
+    "counts": {
+      "backend_count": 24,
+      "active_count": 24,
+      "reserve_count": 0,
+      "retired_count": 0,
+      "healthy_count": 2,
+      "down_count": 22
+    },
+    "healthy_active_backend_ids": [
+      "open17-plus",
+      "new-new55555"
+    ]
+  },
+  "rotation_inspect": {
+    "command_status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "next_action": "retry",
+    "rotation_evidence_result": {
+      "observed_at_utc": "2026-05-08T19:16:05.639101+00:00",
+      "evidence_status": "participation_evidence_stale",
+      "evidence_reason": "selected_backend_snapshot_stale",
+      "evidence_source": "runtime_state.selected_backend_snapshot",
+      "evidence_source_name": "sync --json",
+      "evidence_freshness": "stale",
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_ids": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "selected_backends_digest": "b48cbf9508b092ef1db5c2df1399e1e0ad323a42bb5cdccd8cff1326a47dcbd6",
+      "active_pool_count_observed": 24,
+      "runtime_active_pool_count_observed": 24,
+      "registry_active_pool_count_observed": 24,
+      "active_routing_candidate_ids_observed": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected",
+      "participation_status": "stale",
+      "final_outcome": "participation_evidence_stale"
+    }
+  }
+}

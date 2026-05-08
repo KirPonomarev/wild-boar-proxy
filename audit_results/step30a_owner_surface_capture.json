@@ -1,0 +1,117 @@
+{
+  "step": "STEP-30A_DIRECT_SAME_DAY_20_ACCOUNT_VALIDATION_REENTRY",
+  "generated_at_utc": "2026-05-08T18:29:46Z",
+  "claim_scope": "machine-evidence-only",
+  "contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "preflight_surfaces": [
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "managed",
+      "endpoint": "http://127.0.0.1:8320/v1",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "claim_gate_blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "claim_gate_sources": [
+        "policy_drift"
+      ],
+      "attestation_source": "healthcheck --json",
+      "attestation_observed_at_utc": "2026-05-08T18:27:51.138041+00:00",
+      "fact": "Runtime truth is healthy, but claim gate remains blocked by policy drift."
+    },
+    {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "managed",
+      "endpoint": "http://127.0.0.1:8320/v1",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear",
+      "launch_capable_backend_count": 2,
+      "selected_backend_ids_observed": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "attestation_observed_at_utc": "2026-05-08T18:29:36.994121+00:00",
+      "fact": "Managed listener, model surface, responses proof, and proxy-path attestation all passed."
+    },
+    {
+      "command": "python3 -m wild_boar_proxy accounts list --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "registry_active_count": 24,
+      "registry_reserve_count": 0,
+      "registry_retired_count": 0,
+      "pool_policy_active_target": 15,
+      "pool_policy_active_min": 15,
+      "pool_policy_reserve_target": 0,
+      "healthy_backend_ids": [
+        "open17-plus",
+        "new-new55555"
+      ],
+      "healthy_backend_count": 2,
+      "registry_identity_status": "clear",
+      "fact": "Registry topology remains 24 active / 0 reserve / 0 retired with only 2 currently healthy launch-capable backends."
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "exit_code": 1,
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_UNKNOWN",
+      "evidence_status": "participation_evidence_unknown",
+      "blocker_type": "observability",
+      "evidence_reason": "selected_backend_snapshot_observation_time_missing_or_invalid",
+      "evidence_freshness": "unknown",
+      "selected_backend_ids_observed": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "active_pool_count_observed": 24,
+      "runtime_active_pool_count_observed": 24,
+      "registry_active_pool_count_observed": 24,
+      "fact": "Rotation participation proof is not acceptable because same-event observation timestamp is missing."
+    },
+    {
+      "command": "python3 -m wild_boar_proxy launch smoke --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "managed",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear",
+      "launcher_exit_code": 0,
+      "stabilization_seconds": 1.0,
+      "fact": "Fallback readiness owner proof remained green after the bounded stabilization-gate fix."
+    },
+    {
+      "command": "python3 -m wild_boar_proxy diagnostics export --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-diagnostics-8d9u9ikz",
+      "fact": "Redacted diagnostics bundle was exported for the contour packet."
+    }
+  ],
+  "preflight_gate": {
+    "status": "failed",
+    "live_run_executed": false,
+    "primary_blocker": "ROTATION_EVIDENCE_UNKNOWN",
+    "additional_observations": [
+      "CLAIM_GATE_BLOCKED"
+    ],
+    "fact": "Same-day live validation did not start because mandatory preflight contained a failed rotation participation evidence surface."
+  }
+}

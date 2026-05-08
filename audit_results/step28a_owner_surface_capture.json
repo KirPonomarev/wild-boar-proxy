@@ -1,0 +1,23 @@
+{
+  "step": "STEP-28A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T08:21:05Z",
+  "claim_scope": "machine-evidence-only",
+  "repo_scope_checks": [
+    {
+      "command": "rg -n --no-heading '\"active_count_observed\"\\s*:\\s*20' audit_results/*.json",
+      "exit_code": 1,
+      "matched_lines": [],
+      "fact": "No repo-scope JSON line proving active_count_observed=20 was found."
+    },
+    {
+      "command": "rg -n --no-heading '\"operator_approved\"\\s*:\\s*true|\"approved_by_operator\"\\s*:\\s*true|\"operator_approval\"\\s*:\\s*\"approved\"' audit_results/*.json",
+      "exit_code": 1,
+      "matched_lines": [],
+      "fact": "No repo-scope operator-approval true/approved marker was found."
+    }
+  ],
+  "conclusion": {
+    "scale_gate_field_proof_present": false,
+    "reason_code": "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "step": "STEP-19A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T05:20:15.000006Z",
+  "required_command_count": 4,
+  "missing_required_commands": [],
+  "runs": [
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T05:20:01.858026Z",
+      "ended_at_utc": "2026-05-07T05:20:11.066260Z",
+      "tests_ran": 14,
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-inline-auth\nvalidate-ok\npromote-ran\nsync-advance-stage20-contradicted\nvalidate-ok\npromote-ran\nsync-advance-stage20-stable-auth-failure\n----------------------------------------------------------------------\nRan 14 tests in 9.072s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T05:20:11.066559Z",
+      "ended_at_utc": "2026-05-07T05:20:12.514945Z",
+      "tests_ran": 1,
+      "stdout": "",
+      "stderr": "----------------------------------------------------------------------\nRan 1 test in 1.335s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T05:20:12.515064Z",
+      "ended_at_utc": "2026-05-07T05:20:14.010513Z",
+      "tests_ran": 1,
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-contradicted\n----------------------------------------------------------------------\nRan 1 test in 1.367s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+      "kind": "required",
+      "exit_code": 0,
+      "started_at_utc": "2026-05-07T05:20:14.010607Z",
+      "ended_at_utc": "2026-05-07T05:20:15.461468Z",
+      "tests_ran": 1,
+      "stdout": "",
+      "stderr": "validate-ok\npromote-ran\nsync-advance-stage20-stable-auth-failure\n----------------------------------------------------------------------\nRan 1 test in 1.328s\n\nOK\n"
+    }
+  ],
+  "all_required_passed": true
+}

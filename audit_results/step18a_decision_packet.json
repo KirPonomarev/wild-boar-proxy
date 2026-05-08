@@ -1,0 +1,84 @@
+{
+  "step": "STEP-18A_OWNER_EVIDENCE_CLOSURE",
+  "generated_at_utc": "2026-05-07T05:00:16Z",
+  "decision_status": "partially_blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "PILOT_ENTRY_ONBOARDING_EVIDENCE_MISSING",
+      "status": "closed_by_machine_evidence",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k onboard"
+      ],
+      "fact": "onboard-focused unittest selection completed with exit_code=0"
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_UI_COMPLETION_EVIDENCE_MISSING",
+      "status": "closed_by_machine_evidence",
+      "evidence_commands": [
+        "python3 -m unittest -q tests/test_ui_shell.py"
+      ],
+      "fact": "ui shell test suite completed with exit_code=0"
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_SECURITY_EVIDENCE_MISSING",
+      "status": "closed_by_machine_evidence",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli.CliTests.test_diagnostics_export_redacts_runtime_state_and_registry_secrets",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_redacts_bundle_secrets"
+      ],
+      "fact": "two redaction-focused security tests completed with exit_code=0"
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_LEGACY_IMPORT_EVIDENCE_MISSING",
+      "status": "closed_by_machine_evidence",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k legacy_import"
+      ],
+      "fact": "legacy_import-focused unittest selection completed with exit_code=0"
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k installer"
+      ],
+      "fact": "installer-focused unittest selection completed with exit_code=0; two-week metrics evidence not provided in step18A scope",
+      "blocked_reasons": [
+        "TWO_WEEK_METRICS_EVIDENCE_MISSING"
+      ],
+      "partial_closure": {
+        "installer_evidence": "closed_by_machine_evidence",
+        "two_week_metrics_evidence": "still_blocked"
+      }
+    },
+    {
+      "blocker_id": "EXTERNAL_PACKAGE_GATE_EVIDENCE_MISSING",
+      "status": "closed_by_machine_evidence",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k package_experimental"
+      ],
+      "fact": "package_experimental-focused unittest selection completed with exit_code=0"
+    }
+  ],
+  "closed_blocker_count": 5,
+  "still_blocked_count": 1,
+  "still_blocked_reasons": [
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "reason": "Installer evidence is present, but two-week metrics evidence is still missing in step18A scope."
+    },
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "reason": "No new step18A machine evidence proves controlled rollout completion to active target 20."
+    }
+  ],
+  "required_test_runs_ref": "audit_results/step18a_test_runs.json",
+  "negative_checks_ref": "audit_results/step18a_negative_checks.json",
+  "prior_context_ref": "audit_results/step17_release_gate_decision_packet.json",
+  "forbidden_claim_token_policy": {
+    "enforced": true,
+    "enforcement_surface": "positive_claim_fields_only",
+    "violations_found": []
+  }
+}

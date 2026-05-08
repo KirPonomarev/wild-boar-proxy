@@ -1,0 +1,30 @@
+{
+  "contour": "Selected Backend Snapshot / Rotation Evidence Reclear For Final Validation",
+  "verdict": "rotation_snapshot_reclear_blocked",
+  "rotation_snapshot_reclear": {
+    "owner_path_used": "sync --json",
+    "rotation_inspect_machine_error_code": "OK",
+    "selected_backend_snapshot_present": true,
+    "selected_backend_snapshot_validation_status": "valid",
+    "participation_status": "available",
+    "rotation_unknown_cleared": true
+  },
+  "residual_blocker": {
+    "type": "post_sync_stable_truth_regression",
+    "status_machine_error_code": "OK",
+    "effective_mode": "managed",
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "effective_stable_runtime_consumer_source_kind": "observed_stable_inventory_source",
+    "effective_stable_runtime_consumer_matches_desired": false,
+    "consumer_activation_readiness_machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+  },
+  "independent_audit": {
+    "verdict": "supported_for_rotation_reclear_only; final_gate_still_blocked",
+    "agent": "Mendel"
+  },
+  "next_action": "do_not_run_final_validation_yet",
+  "truth_summary": "sync materializes valid selected-backend snapshot owner-way, but the same owner path leaves runtime in managed mode and reopens stable policy drift and claim gate."
+}

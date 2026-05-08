@@ -1,0 +1,53 @@
+{
+  "step": "STEP-29A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T08:29:27Z",
+  "claim_scope": "machine-evidence-only",
+  "commands": [
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+      "exit_code": 0,
+      "stdout_lines": [
+        "validate-ok",
+        "promote-ran",
+        "sync-advance-stage20-inline-auth",
+        "validate-ok",
+        "promote-ran",
+        "sync-advance-stage20-contradicted",
+        "validate-ok",
+        "promote-ran",
+        "sync-advance-stage20-stable-auth-failure",
+        "Ran 14 tests in 8.645s",
+        "OK"
+      ],
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+      "exit_code": 0,
+      "stdout_lines": [
+        "validate-ok",
+        "promote-ran",
+        "sync-advance-stage20-contradicted",
+        "Ran 1 test in 1.394s",
+        "OK"
+      ],
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+      "exit_code": 0,
+      "stdout_lines": [
+        "validate-ok",
+        "promote-ran",
+        "sync-advance-stage20-stable-auth-failure",
+        "Ran 1 test in 1.389s",
+        "OK"
+      ],
+      "result": "passed"
+    }
+  ],
+  "summary": {
+    "all_required_stage20_tests_passed": true,
+    "failing_required_tests": 0
+  }
+}

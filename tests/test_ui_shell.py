@@ -61,11 +61,11 @@ def status_payload(**overrides: object) -> dict[str, object]:
         endpoint="127.0.0.1:9999",
         current_proxy_url="http://127.0.0.1:10808",
         pool_summary={
-            "active": 2,
+            "active": 1,
             "reserve": 1,
             "retired": 0,
             "healthy": 2,
-            "degraded": 1,
+            "degraded": 0,
             "down": 0,
         },
         attestation_summary={
@@ -244,7 +244,7 @@ class RuntimeSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.desired_mode, "managed")
         self.assertEqual(snapshot.current_proxy_url, "http://127.0.0.1:10808")
         self.assertEqual(snapshot.attestation_source, "healthcheck --json")
-        self.assertEqual(snapshot.degraded_count, 1)
+        self.assertEqual(snapshot.degraded_count, 0)
 
     def test_build_runtime_snapshot_rejects_missing_required_pool_field(self) -> None:
         broken_status = status_payload(
@@ -426,6 +426,30 @@ class ModeControlTests(unittest.TestCase):
                 ("mode", "get", "--json"),
             ],
         )
+
+    def test_run_sync_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("sync", "--json"): command_payload(human_message="Managed sync completed."),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_sync_and_refresh(runner)
 
 
 class LaunchClientTests(unittest.TestCase):
@@ -679,7 +703,16 @@ class AccountMutationTests(unittest.TestCase):
                         }
                     ]
                 ),
-                ("status", "--json"): status_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 1,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
             }
         )
 
@@ -740,6 +773,33 @@ class AccountMutationTests(unittest.TestCase):
                 runner, ("accounts", "release", "backend-a", "--json")
             )
 
+    def test_run_account_mutation_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "hold", "backend-a", "--json"): command_payload(
+                    human_message="Account held."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 2,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_account_mutation_and_refresh(
+                runner, ("accounts", "hold", "backend-a", "--json")
+            )
+
     def test_run_account_retire_and_refresh_uses_accounts_list_then_status(self) -> None:
         runner = FakeRunner(
             {
@@ -763,7 +823,16 @@ class AccountMutationTests(unittest.TestCase):
                         }
                     ]
                 ),
-                ("status", "--json"): status_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 0,
+                        "retired": 1,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
             }
         )
 
@@ -831,6 +900,52 @@ class OnboardingActionTests(unittest.TestCase):
                 ("status", "--json"),
             ],
         )
+
+    def test_run_account_onboard_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"): command_payload(
+                    human_message="Onboarding completed.",
+                    onboarding_result={
+                        "input_mode": "explicit_auth_ref",
+                        "explicit_auth_ref": "/tmp/new-auth.json",
+                        "new_backend_ids": ["backend-new"],
+                        "selected_backend_id": "backend-new",
+                        "selection_status": "selected_unique_backend",
+                        "reserve_first_enforced": True,
+                        "pool_after_onboarding": "reserve",
+                        "validate_attempted": True,
+                        "validate_outcome": "ok",
+                        "sync_attempted": False,
+                        "sync_outcome": "skipped_by_flag",
+                        "status_observed": {"command_status": "ok"},
+                        "external_command_exit_code": 7,
+                        "external_command_status": "nonzero",
+                        "active_routing_changed": False,
+                        "final_outcome": "explicit_auth_imported_to_reserve",
+                    },
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 1,
+                        "retired": 0,
+                        "healthy": 3,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_account_onboard_and_refresh(
+                runner,
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"),
+            )
 
     def test_build_onboarding_field_values_maps_known_fields_and_missing_as_blank(self) -> None:
         values = build_onboarding_field_values(
@@ -1246,6 +1361,80 @@ class UiDispatchTests(unittest.TestCase):
         shell._apply_smoke_results.assert_called_once()
         action_payload = shell._apply_smoke_results.call_args.args[0]
         self.assertEqual(action_payload["status"], "ok")
+
+    def test_refresh_worker_turns_capacity_count_mismatch_into_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = FakeRunner(
+            {
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+                ("mode", "get", "--json"): mode_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_refresh_results = mock.Mock()
+
+        shell._refresh_worker()
+
+        shell._apply_refresh_results.assert_called_once()
+        runtime_snapshot, account_snapshot = shell._apply_refresh_results.call_args.args
+        self.assertEqual(runtime_snapshot.overall_state, "integration_failure")
+        self.assertEqual(account_snapshot.machine_error_code, "UI_INTEGRATION_FAILURE")
+        self.assertIn("status pool_summary and accounts list disagree", runtime_snapshot.integration_error)
+        self.assertIn("status pool_summary and accounts list disagree", account_snapshot.integration_error)
+
+    def test_action_worker_turns_capacity_count_mismatch_into_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = FakeRunner(
+            {
+                ("mode", "set", "stable", "--json"): command_payload(
+                    human_message="Desired mode set to stable.",
+                    desired_mode="stable",
+                    effective_mode="managed",
+                ),
+                ("status", "--json"): status_payload(
+                    desired_mode="stable",
+                    effective_mode="managed",
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 2,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    },
+                ),
+                ("mode", "get", "--json"): mode_payload(
+                    desired_mode="stable",
+                    effective_mode="managed",
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_refresh_results = mock.Mock()
+
+        shell._action_worker(("mode", "set", "stable", "--json"))
+
+        shell._apply_refresh_results.assert_called_once()
+        runtime_snapshot, account_snapshot = shell._apply_refresh_results.call_args.args
+        self.assertEqual(runtime_snapshot.overall_state, "integration_failure")
+        self.assertEqual(account_snapshot.machine_error_code, "UI_INTEGRATION_FAILURE")
+        self.assertEqual(
+            shell._apply_refresh_results.call_args.kwargs["banner"],
+            "Operator action failed.",
+        )
 
     def test_apply_launch_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)

@@ -1,0 +1,45 @@
+{
+  "step": "STEP-20A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T05:40:57.689666Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+        "rg -n --no-heading \"\\\"active_count_observed\\\"\\s*:\\s*20\" audit_results/*.json",
+        "rg -n --no-heading \"active_count_observed=16|active_target=20|Stage-20 lane evidence ends\" audit_results/step17_release_gate_alignment_report.md MASTER_PLAN.md"
+      ],
+      "fact": "All required stage_advance_20 unittest commands passed with exit_code=0, but repository evidence scan still lacks a machine artifact proving controlled rollout completion to 20 active backends.",
+      "blocked_reasons": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    }
+  ],
+  "closed_blocker_count": 0,
+  "still_blocked_count": 1,
+  "still_blocked_reasons": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "reason": "Required stage_advance_20 tests passed, but canonical scale-gate closure requires controlled rollout-to-20 machine field evidence.",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    }
+  ],
+  "required_test_runs_ref": "audit_results/step20a_test_runs.json",
+  "negative_checks_ref": "audit_results/step20a_negative_checks.json",
+  "owner_surface_capture_ref": "audit_results/step20a_owner_surface_capture.json",
+  "prior_context_refs": [
+    "audit_results/step19a_decision_packet.json",
+    "audit_results/step17_release_gate_alignment_report.md"
+  ],
+  "forbidden_claim_scan": {
+    "status": "recorded_in_step20_negative_checks"
+  }
+}

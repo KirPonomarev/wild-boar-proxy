@@ -1,0 +1,38 @@
+[
+  {
+    "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_complete_packet",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.592s\n\nOK\n"
+  },
+  {
+    "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_attestation_incomplete",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.096s\n\nOK\n"
+  },
+  {
+    "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_rotation_contradicted",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.587s\n\nOK\n"
+  },
+  {
+    "command": "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_redaction_failure_unsafe",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 1 test in 0.526s\n\nOK\n"
+  },
+  {
+    "command": "python3 -m unittest -q tests.test_cli -k evidence_capture",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 10 tests in 4.410s\n\nOK\n"
+  },
+  {
+    "command": "python3 -m unittest -q tests/test_ui_shell.py",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "----------------------------------------------------------------------\nRan 82 tests in 0.033s\n\nOK\n"
+  }
+]

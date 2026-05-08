@@ -8,6 +8,8 @@ import os
 import shlex
 import socket
 import subprocess
+import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -28,6 +30,7 @@ class ProbeHandler(BaseHTTPRequestHandler):
     response_payload: object | None = None
     dynamic_state_file: str | None = None
     dynamic_launcher_path: str | None = None
+    dynamic_managed_config_path: str | None = None
     dynamic_success_proxy_url: str | None = None
 
     def do_GET(self) -> None:  # noqa: N802
@@ -47,18 +50,29 @@ class ProbeHandler(BaseHTTPRequestHandler):
             _ = self.rfile.read(length)
             if (
                 self.dynamic_state_file is not None
-                and self.dynamic_launcher_path is not None
                 and self.dynamic_success_proxy_url is not None
             ):
                 state = json.loads(
                     Path(self.dynamic_state_file).read_text(encoding="utf-8")
                 )
                 current_proxy_url = str(state.get("current_proxy_url", ""))
-                launcher_recognized = runtime_mod.repo_managed_default_launcher_recognized(
-                    Path(self.dynamic_launcher_path)
-                )
+                launcher_recognized = False
+                if self.dynamic_launcher_path is not None:
+                    launcher_recognized = (
+                        runtime_mod.repo_managed_default_launcher_recognized(
+                            Path(self.dynamic_launcher_path)
+                        )
+                    )
+                managed_config_proxy_url = ""
+                if self.dynamic_managed_config_path is not None:
+                    managed_config_proxy_url = runtime_mod.read_yaml_value(
+                        Path(self.dynamic_managed_config_path), "proxy-url"
+                    )
                 if (
-                    launcher_recognized
+                    (
+                        launcher_recognized
+                        or managed_config_proxy_url == self.dynamic_success_proxy_url
+                    )
                     and current_proxy_url == self.dynamic_success_proxy_url
                 ):
                     payload: object = {"output_text": self.response_text}
@@ -113,6 +127,7 @@ class CliTests(unittest.TestCase):
         ProbeHandler.response_payload = None
         ProbeHandler.dynamic_state_file = None
         ProbeHandler.dynamic_launcher_path = None
+        ProbeHandler.dynamic_managed_config_path = None
         ProbeHandler.dynamic_success_proxy_url = None
         self.temp_dir = tempfile.TemporaryDirectory()
         root = Path(self.temp_dir.name)
@@ -255,7 +270,7 @@ class CliTests(unittest.TestCase):
         self, *args: str, include_launcher_override: bool = True
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["python3", "-m", "wild_boar_proxy", *args],
+            [sys.executable, "-m", "wild_boar_proxy", *args],
             cwd=ROOT,
             env=self.env(include_launcher_override=include_launcher_override),
             text=True,
@@ -272,7 +287,7 @@ class CliTests(unittest.TestCase):
         env = self.env(include_launcher_override=include_launcher_override)
         env.update(env_overrides)
         return subprocess.run(
-            ["python3", "-m", "wild_boar_proxy", *args],
+            [sys.executable, "-m", "wild_boar_proxy", *args],
             cwd=ROOT,
             env=env,
             text=True,
@@ -315,6 +330,262 @@ class CliTests(unittest.TestCase):
             command_path="rollout rotation inspect",
         )
 
+    def test_installer_init_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "installer",
+            "init",
+            command_path="installer init",
+        )
+
+    def test_legacy_import_requires_json_flag(self) -> None:
+        result = self.run_cli("legacy", "import", "--source-dir", "/tmp/example")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("usage: wild-boar-proxy legacy import", result.stderr)
+        self.assertIn(
+            "error: the following arguments are required: --json",
+            result.stderr,
+        )
+
+    def test_companion_reset_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "companion",
+            "reset",
+            command_path="companion reset",
+        )
+
+    def test_companion_uninstall_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "companion",
+            "uninstall",
+            command_path="companion uninstall",
+        )
+
+    def test_package_experimental_build_requires_json_flag(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-output-missing-json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            command_path="package experimental build",
+        )
+
+    def test_package_experimental_verify_requires_json_flag(self) -> None:
+        manifest_path = Path(self.temp_dir.name) / "missing.manifest.json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            command_path="package experimental verify",
+        )
+
+    def test_package_experimental_build_success_reports_changed_files(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-build-output"
+        result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        for required_field in (
+            "status",
+            "exit_code",
+            "human_message",
+            "machine_error_code",
+            "changed_files",
+            "next_action",
+        ):
+            self.assertIn(required_field, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["severity"], "recoverable")
+        package_result = payload["package_result"]
+        self.assertEqual(package_result["status"], "built")
+        artifact_path = output_dir.resolve() / "experimental-package.tar.gz"
+        manifest_path = output_dir.resolve() / "experimental-package.manifest.json"
+        metadata_path = output_dir.resolve() / "experimental-package.metadata.json"
+        self.assertTrue(artifact_path.is_file())
+        self.assertTrue(manifest_path.is_file())
+        self.assertTrue(metadata_path.is_file())
+        self.assertCountEqual(
+            payload["changed_files"],
+            [str(artifact_path), str(manifest_path), str(metadata_path)],
+        )
+
+    def test_package_experimental_build_excludes_private_runtime_patterns_via_allowlist(
+        self,
+    ) -> None:
+        package_root = Path(self.temp_dir.name) / "package-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "module.py").write_text(
+            "value = 1\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        (package_root / ".env").write_text("SECRET=1\n", encoding="utf-8")
+        (package_root / "auth.json").write_text('{"OPENAI_API_KEY":"x"}\n', encoding="utf-8")
+        (package_root / "logs").mkdir(parents=True)
+        (package_root / "logs" / "runtime.log").write_text("secret log\n", encoding="utf-8")
+        (package_root / ".codex-custom-cli").mkdir(parents=True)
+        (package_root / ".codex-custom-cli" / "token.txt").write_text(
+            "token\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / ".env").write_text(
+            "INNER_SECRET=1\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "auth.json").write_text(
+            '{"OPENAI_API_KEY":"inner"}\n', encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "logs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "logs" / "internal.log").write_text(
+            "internal log\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / ".secret").write_text(
+            "secret file\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.dump").write_text(
+            "runtime dump\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.tmp").write_text(
+            "tmp\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "api_token.txt").write_text(
+            "token\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "private-key.md").write_text(
+            "# private\n", encoding="utf-8"
+        )
+        (package_root / "docs" / ".hidden-notes.md").write_text(
+            "# hidden\n", encoding="utf-8"
+        )
+        output_dir = Path(self.temp_dir.name) / "package-build-allowlist-output"
+        result = self.run_cli_with_env(
+            {"WBP_PACKAGE_SOURCE_ROOT": str(package_root)},
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        artifact_path = Path(payload["package_result"]["artifact_path"])
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            archive_entries = sorted(archive.getnames())
+        self.assertIn("wild_boar_proxy/module.py", archive_entries)
+        self.assertIn("docs/guide.md", archive_entries)
+        self.assertNotIn(".env", archive_entries)
+        self.assertNotIn("auth.json", archive_entries)
+        self.assertNotIn("logs/runtime.log", archive_entries)
+        self.assertNotIn(".codex-custom-cli/token.txt", archive_entries)
+        self.assertNotIn("wild_boar_proxy/.env", archive_entries)
+        self.assertNotIn("wild_boar_proxy/auth.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/logs/internal.log", archive_entries)
+        self.assertNotIn("wild_boar_proxy/.secret", archive_entries)
+        self.assertNotIn("wild_boar_proxy/session.dump", archive_entries)
+        self.assertNotIn("wild_boar_proxy/session.tmp", archive_entries)
+        self.assertNotIn("wild_boar_proxy/api_token.txt", archive_entries)
+        self.assertNotIn("docs/private-key.md", archive_entries)
+        self.assertNotIn("docs/.hidden-notes.md", archive_entries)
+
+    def test_package_experimental_build_uses_repo_root_when_cwd_is_foreign(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-build-foreign-cwd-output"
+        foreign_cwd = Path(self.temp_dir.name) / "foreign-cwd"
+        foreign_cwd.mkdir(parents=True, exist_ok=True)
+        env = self.env()
+        env.pop("WBP_PACKAGE_SOURCE_ROOT", None)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "wild_boar_proxy",
+                "package",
+                "experimental",
+                "build",
+                "--output-dir",
+                str(output_dir),
+                "--json",
+            ],
+            cwd=foreign_cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["severity"], "recoverable")
+        self.assertEqual(payload["package_result"]["source_root"], str(ROOT.resolve()))
+        self.assertNotEqual(payload["package_result"]["source_root"], str(foreign_cwd))
+
+    def test_package_experimental_verify_success(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-verify-success"
+        build_result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "ok")
+        self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertEqual(verify_payload["severity"], "recoverable")
+        self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertEqual(verify_payload["changed_files"], [])
+
+    def test_package_experimental_verify_checksum_mismatch_failure(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "package-verify-mismatch"
+        build_result = self.run_cli(
+            "package",
+            "experimental",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        artifact_path = Path(build_payload["package_result"]["artifact_path"])
+        artifact_path.write_bytes(artifact_path.read_bytes() + b"tampered")
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
+        self.assertFalse(verify_payload["package_result"]["checksum_match"])
+
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
             os.environ,
@@ -340,6 +611,7 @@ class CliTests(unittest.TestCase):
             "WBP_CURRENT_PROXY_URL",
         ):
             self.assertNotIn(key, env)
+        self.assertEqual(env["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
         self.assertEqual(env["NO_PROXY"], "127.0.0.1,localhost,::1")
         self.assertEqual(env["no_proxy"], env["NO_PROXY"])
 
@@ -395,6 +667,9 @@ class CliTests(unittest.TestCase):
     def configure_dynamic_proxy_gate(self, *, expected_proxy_url: str) -> None:
         ProbeHandler.dynamic_state_file = str(self.managed_dir / "supervisor-state.json")
         ProbeHandler.dynamic_launcher_path = str(self.default_launcher_script)
+        ProbeHandler.dynamic_managed_config_path = str(
+            self.managed_dir / "managed-config.yaml"
+        )
         ProbeHandler.dynamic_success_proxy_url = expected_proxy_url
 
     def start_probe_server(
@@ -930,6 +1205,7 @@ class CliTests(unittest.TestCase):
             "    'ALL_PROXY_present': 'ALL_PROXY' in os.environ,\n"
             "    'WBP_CURRENT_PROXY_URL_present': 'WBP_CURRENT_PROXY_URL' in os.environ,\n"
             "    'NO_PROXY': os.environ.get('NO_PROXY', ''),\n"
+            "    'PATH': os.environ.get('PATH', ''),\n"
             "}\n"
             "trace_path.write_text(json.dumps(payload) + '\\n')\n"
             "PY\n"
@@ -990,7 +1266,53 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["effective_mode"], "stable")
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(payload["last_error"], "")
         self.assertEqual(payload["pool_summary"]["selected_backend_ids"], [])
+
+    def test_status_reports_registry_lifecycle_counts_when_state_is_stale(self) -> None:
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-status",
+                auth_ref="/tmp/codex-reserve-status.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-status",
+                auth_ref="/tmp/codex-retired-status.json",
+                pool="retired",
+                status="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 1
+        state["reserve_count"] = 0
+        state["retired_count"] = 0
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        server, thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["pool_summary"]["active"], 1)
+        self.assertEqual(payload["pool_summary"]["reserve"], 1)
+        self.assertEqual(payload["pool_summary"]["retired"], 1)
+        self.assertEqual(payload["pool_summary"]["healthy"], 1)
+        self.assertEqual(payload["pool_summary"]["degraded"], 0)
+        self.assertEqual(payload["pool_summary"]["down"], 0)
+        self.assertEqual(payload["pool_summary"]["backend_count"], 3)
 
     def test_status_reports_listener_down_when_stable_port_is_absent(self) -> None:
         stable_port = free_port()
@@ -1048,6 +1370,12 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["attestation"]["responses_ok"])
         self.assertTrue(payload["attestation"]["base_url_match"])
         self.assertTrue(payload["attestation"]["effective_mode_match"])
+        self.assertEqual(payload["last_error"], "")
+        self.assertEqual(payload["launch_readiness"]["status"], "ready")
+        self.assertFalse(payload["launch_readiness"]["delegated_from_status"])
+        self.assertTrue(payload["launch_readiness"]["responses_proof_passed"])
+        self.assertTrue(payload["launch_readiness"]["gate_passed"])
+        self.assertEqual(payload["launch_readiness"]["blocking_reason"], "")
         recovery_contract = payload["deterministic_stable_recovery_contract"]
         self.assertEqual(recovery_contract["owner_command_surface"], "healthcheck --json")
         self.assertEqual(
@@ -1113,161 +1441,106 @@ class CliTests(unittest.TestCase):
             "owner_path_success_only_write_available",
         )
         self.assertEqual(
-            current_proxy_adoption_contract["activation_surface_status"],
-            "owner_path_private_launcher_activation_available",
+            current_proxy_adoption_contract["candidate_probe_depth"],
+            "shallow_socket_listener_only",
         )
         self.assertEqual(
-            current_proxy_adoption_contract["activation_surface_kind"],
-            "repo_owned_handoff_env_var",
+            current_proxy_adoption_contract["candidate_probe_scope"],
+            "bounded_local_listener_reachability_only",
         )
-        self.assertEqual(
-            current_proxy_adoption_contract["handoff_env_var"],
-            "WBP_CURRENT_PROXY_URL",
+
+    def test_run_rollout_attestation_healthcheck_retries_transient_timeout_once(
+        self,
+    ) -> None:
+        timeout_payload = runtime_mod.build_command_payload(
+            ok=False,
+            human_message="Runtime attestation failed one or more checks.",
+            machine_error_code="ATTESTATION_FAILED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "desired_mode": "managed",
+                "effective_mode": "managed",
+                "endpoint": "http://127.0.0.1:8320/v1",
+                "last_error": "timed out",
+            },
         )
-        handoff_carrier = current_proxy_adoption_contract["handoff_carrier_contract"]
-        self.assertEqual(handoff_carrier["status"], "contract_ready")
-        self.assertEqual(handoff_carrier["env_var"], "WBP_CURRENT_PROXY_URL")
-        self.assertEqual(
-            handoff_carrier["surface_kind"],
-            "launcher_scoped_process_local_carrier",
+        ok_payload = runtime_mod.build_command_payload(
+            ok=True,
+            human_message="Runtime attestation passed.",
+            machine_error_code="OK",
+            liveness="healthy",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=[],
+            extra={
+                "desired_mode": "managed",
+                "effective_mode": "managed",
+                "endpoint": "http://127.0.0.1:8320/v1",
+                "last_error": "",
+            },
         )
-        self.assertEqual(
-            handoff_carrier["current_proxy_truth_surface_field"],
-            "current_proxy_url",
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_healthcheck",
+                side_effect=[timeout_payload, ok_payload],
+            ) as mocked_healthcheck, mock.patch(
+                "wild_boar_proxy.runtime.time.sleep"
+            ) as mocked_sleep:
+                payload, retry_summary = runtime_mod.run_rollout_attestation_healthcheck(
+                    paths
+                )
+
+        self.assertEqual(mocked_healthcheck.call_count, 2)
+        mocked_sleep.assert_called_once()
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(retry_summary["eligible"])
+        self.assertTrue(retry_summary["attempted"])
+        self.assertEqual(retry_summary["outcome"], "healthy_on_retry")
+        self.assertEqual(retry_summary["initial_machine_error_code"], "ATTESTATION_FAILED")
+        self.assertEqual(retry_summary["final_machine_error_code"], "OK")
+        self.assertEqual(retry_summary["confirmation_basis"], "retry_observation_only")
+        self.assertEqual(retry_summary["guardrail_status"], "observation_only")
+
+    def test_run_rollout_attestation_healthcheck_does_not_retry_non_timeout_failure(
+        self,
+    ) -> None:
+        failed_payload = runtime_mod.build_command_payload(
+            ok=False,
+            human_message="Runtime attestation failed one or more checks.",
+            machine_error_code="ATTESTATION_FAILED",
+            liveness="degraded",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=[],
+            extra={
+                "desired_mode": "managed",
+                "effective_mode": "managed",
+                "endpoint": "http://127.0.0.1:8320/v1",
+                "last_error": "HTTP 500",
+            },
         )
-        self.assertTrue(handoff_carrier["ambient_authoritative_forbidden"])
-        self.assertTrue(handoff_carrier["top_level_runtime_truth_by_presence_forbidden"])
-        self.assertEqual(
-            current_proxy_adoption_contract["activation_value_source_field"],
-            "proxy_reprobe.working_candidate",
-        )
-        self.assertEqual(
-            current_proxy_adoption_contract["owner_activation_lane"],
-            "serialized_healthcheck_owner_path",
-        )
-        self.assertEqual(
-            current_proxy_adoption_contract["effectful_runtime_wiring_status"],
-            "bounded_private_launcher_lane_available",
-        )
-        launcher_consumer = current_proxy_adoption_contract["launcher_consumer_contract"]
-        self.assertFalse(launcher_consumer["repo_owned_default_consumer_provisioned"])
-        self.assertEqual(
-            launcher_consumer["status"],
-            "repo_owned_default_consumer_provisioning_available",
-        )
-        self.assertEqual(
-            launcher_consumer["launcher_protocol_scope"],
-            "bounded_launcher_smoke_seam",
-        )
-        self.assertEqual(
-            launcher_consumer["external_launcher_readiness_status"],
-            "external_script_path_present_consumer_capability_unverified",
-        )
-        self.assertFalse(launcher_consumer["repo_owned_default_consumer_provisioned"])
-        self.assertTrue(launcher_consumer["path_presence_not_capability_proof"])
-        self.assertTrue(launcher_consumer["repo_managed_marker_required_for_refresh"])
-        self.assertFalse(launcher_consumer["repo_managed_marker_present"])
-        self.assertFalse(launcher_consumer["repo_managed_marker_valid"])
-        self.assertFalse(launcher_consumer["repo_managed_marker_recognized"])
-        self.assertTrue(launcher_consumer["default_path_non_clobber_required"])
-        external_launcher = current_proxy_adoption_contract["external_launcher_path_surface"]
-        self.assertEqual(external_launcher["status"], "path_present")
-        self.assertEqual(external_launcher["env_var"], "WBP_LAUNCHER_SCRIPT")
-        self.assertTrue(external_launcher["exists"])
-        self.assertEqual(
-            external_launcher["role"],
-            "launcher_executable_path_surface",
-        )
-        self.assertEqual(
-            external_launcher["path_kind"],
-            "explicit_external_override",
-        )
-        self.assertFalse(external_launcher["repo_managed_marker_present"])
-        self.assertFalse(external_launcher["repo_managed_marker_valid"])
-        self.assertFalse(external_launcher["repo_managed_marker_recognized"])
-        self.assertTrue(
-            external_launcher["consumer_capability_by_path_presence_forbidden"]
-        )
-        engine_local_routing = current_proxy_adoption_contract[
-            "engine_local_proxy_routing_contract"
-        ]
-        self.assertEqual(engine_local_routing["status"], "contract_ready")
-        self.assertTrue(engine_local_routing["allowed"])
-        self.assertEqual(
-            engine_local_routing["routing_scope"],
-            "managed_runtime_child_process_only",
-        )
-        self.assertTrue(engine_local_routing["derived_from_handoff_carrier_only"])
-        self.assertFalse(engine_local_routing["current_engine_consumption_claimed"])
-        self.assertEqual(
-            current_proxy_adoption_contract["launcher_consumer_status"],
-            "repo_owned_default_consumer_provisioning_available",
-        )
-        self.assertEqual(
-            current_proxy_adoption_contract["external_launcher_readiness_status"],
-            "external_script_path_present_consumer_capability_unverified",
-        )
-        self.assertTrue(
-            current_proxy_adoption_contract["engine_local_proxy_routing_allowed"]
-        )
-        self.assertTrue(
-            current_proxy_adoption_contract[
-                "ambient_proxy_env_authoritative_forbidden"
-            ]
-        )
-        self.assertTrue(current_proxy_adoption_contract["control_plane_proxyless"])
-        self.assertTrue(
-            current_proxy_adoption_contract[
-                "base_url_proxy_selection_surface_forbidden"
-            ]
-        )
-        self.assertTrue(
-            current_proxy_adoption_contract["candidate_existence_alone_not_ok"]
-        )
-        self.assertTrue(
-            current_proxy_adoption_contract["top_level_ok_requires_live_runtime_reproof"]
-        )
-        self.assertTrue(
-            current_proxy_adoption_contract[
-                "absent_default_path_prerequisite_materialization_separate_from_eligibility"
-            ]
-        )
-        self.assertEqual(
-            current_proxy_adoption_contract["nested_adoption_result_surface"]["field"],
-            "proxy_reprobe_adoption_result",
-        )
-        last_known_good_contract = payload["last_known_good_proxy_contract"]
-        self.assertEqual(last_known_good_contract["status"], "contract_ready")
-        self.assertEqual(last_known_good_contract["owner_command_surface"], "healthcheck --json")
-        self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
-        self.assertEqual(
-            last_known_good_contract["candidate_input_priority"],
-            [
-                "WBP_PROXY_REPROBE_CANDIDATES",
-                "last_known_good_proxy_url",
-                "current_proxy_url",
-            ],
-        )
-        self.assertTrue(last_known_good_contract["current_proxy_url_reuse_forbidden"])
-        self.assertFalse(last_known_good_contract["historical_truth_promotes_live_truth"])
-        self.assertEqual(
-            last_known_good_contract["state_fields"],
-            ["last_known_good_proxy_url", "last_known_good_proxy_observed_at"],
-        )
-        last_known_good = payload["last_known_good_proxy"]
-        self.assertEqual(last_known_good["status"], "materialized")
-        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10808")
-        self.assertTrue(last_known_good["observed_at_utc"])
-        self.assertTrue(last_known_good["matches_current_proxy_url"])
-        self.assertTrue(last_known_good["eligible_for_bounded_reprobe"])
-        self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
-        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10808")
-        self.assertTrue(state["last_known_good_proxy_observed_at"])
-        recovery_result = payload["deterministic_stable_recovery_result"]
-        self.assertEqual(recovery_result["status"], "not_invoked")
-        self.assertEqual(recovery_result["entry_lane"], "not_invoked")
-        self.assertEqual(recovery_result["re_enable_method"], "")
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_healthcheck",
+                return_value=failed_payload,
+            ) as mocked_healthcheck, mock.patch(
+                "wild_boar_proxy.runtime.time.sleep"
+            ) as mocked_sleep:
+                payload, retry_summary = runtime_mod.run_rollout_attestation_healthcheck(
+                    paths
+                )
+
+        self.assertEqual(mocked_healthcheck.call_count, 1)
+        mocked_sleep.assert_not_called()
+        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertFalse(retry_summary["eligible"])
+        self.assertFalse(retry_summary["attempted"])
+        self.assertEqual(retry_summary["outcome"], "not_needed")
 
     def test_healthcheck_rejects_not_ok_probe(self) -> None:
         port = free_port()
@@ -1301,6 +1574,342 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
         self.assertFalse(payload["attestation"]["responses_ok"])
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertFalse(payload["launch_readiness"]["delegated_from_status"])
+        self.assertFalse(payload["launch_readiness"]["responses_proof_passed"])
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "responses_probe_failed"
+        )
+
+    def test_healthcheck_classifies_auth_unavailable(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 503
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "auth_unavailable: no auth available (providers=codex, model=gpt-5.3-codex)"
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "responses_probe_failed"
+        )
+
+    def test_routing_eligible_active_backend_ids_only_include_live_capable_backends(
+        self,
+    ) -> None:
+        registry = {
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-live",
+                    auth_ref="/tmp/codex-live.json",
+                    pool="active",
+                    status="healthy",
+                ),
+                {
+                    **self.build_backend(
+                        backend_id="backend-auth",
+                        auth_ref="/tmp/codex-auth.json",
+                        pool="active",
+                        status="down",
+                    ),
+                    "last_error_class": "auth",
+                    "last_error": "HTTP 401: auth_unavailable",
+                },
+                {
+                    **self.build_backend(
+                        backend_id="backend-quota",
+                        auth_ref="/tmp/codex-quota.json",
+                        pool="active",
+                        status="down",
+                    ),
+                    "last_error_class": "quota",
+                    "last_error": "HTTP 429: usage_limit_reached",
+                },
+                {
+                    **self.build_backend(
+                        backend_id="backend-cooldown",
+                        auth_ref="/tmp/codex-cooldown.json",
+                        pool="active",
+                        status="degraded",
+                    ),
+                    "cooldown_until": "2026-05-08T12:00:00+00:00",
+                    "last_error": "HTTP 429: model_cooldown",
+                },
+                self.build_backend(
+                    backend_id="backend-unknown",
+                    auth_ref="/tmp/codex-unknown.json",
+                    pool="active",
+                    status="degraded",
+                ),
+            ]
+        }
+        self.assertEqual(
+            runtime_mod.get_active_routing_candidate_backend_ids(registry),
+            ["backend-live"],
+        )
+        self.assertEqual(
+            runtime_mod.routing_eligible_active_backend_ids(registry),
+            ["backend-live"],
+        )
+
+    def test_healthcheck_surfaces_empty_usable_auth_pool(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 503
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "auth_unavailable: no auth available (providers=codex, model=gpt-5.3-codex)"
+            }
+        }
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"] = [
+            {
+                **self.build_backend(
+                    backend_id="backend-auth-invalid",
+                    auth_ref="/tmp/codex-auth-invalid.json",
+                    pool="active",
+                    status="down",
+                ),
+                "last_error_class": "auth",
+                "last_error": "HTTP 401: auth_unavailable",
+            }
+        ]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        self.configure_managed_runtime_probe(port)
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(
+            payload["auth_pool_hygiene"]["machine_error_code"], "USABLE_AUTH_POOL_EMPTY"
+        )
+        self.assertEqual(
+            payload["auth_pool_hygiene"]["status"], "launch_capable_empty"
+        )
+        self.assertEqual(
+            payload["auth_pool_hygiene"]["auth_invalid_backend_ids"],
+            ["backend-auth-invalid"],
+        )
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "usable_auth_pool_empty"
+        )
+        self.assertIn(
+            "usable_auth_pool_empty", payload["launch_readiness"]["failed_checks"]
+        )
+
+    def test_healthcheck_classifies_quota_exhausted(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 429
+        ProbeHandler.response_payload = {
+            "error": {"message": "usage_limit_reached", "code": "usage_limit_reached"}
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "QUOTA_EXHAUSTED")
+        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "QUOTA_EXHAUSTED")
+
+    def test_healthcheck_classifies_model_cooldown(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 429
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "All credentials for model gpt-5.3-codex are cooling down",
+                "code": "model_cooldown",
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "MODEL_COOLDOWN")
+        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "MODEL_COOLDOWN")
+
+    def test_healthcheck_classifies_model_unavailable(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 404
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "The model gpt-5.3-codex does not exist",
+                "code": "model_not_found",
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "MODEL_UNAVAILABLE")
+        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "MODEL_UNAVAILABLE")
+
+    def test_healthcheck_reports_model_truth_drift_without_greenwash(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                payload = runtime_mod.run_healthcheck(paths, model="gpt-5.4")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertFalse(payload["attestation"]["model_match"])
+        self.assertEqual(payload["attestation"]["configured_model"], "gpt-5.3-codex")
+        self.assertEqual(payload["attestation"]["requested_model"], "gpt-5.4")
+        self.assertIn("model drift", payload["last_error"])
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "model_truth_drift"
+        )
+
+    def test_healthcheck_reports_proxy_truth_drift_without_greenwash(self) -> None:
+        port = free_port()
+        ProbeHandler.response_text = "OK"
+        expected_proxy_url = "http://127.0.0.1:12334"
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f'host: 127.0.0.1\nport: {port}\nproxy-url: "{expected_proxy_url}"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with mock.patch.dict(os.environ, self.env(), clear=False):
+                paths = runtime_mod.RuntimePaths.from_env()
+                payload = runtime_mod.run_healthcheck(paths)
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["machine_error_code"], "ATTESTATION_FAILED")
+        self.assertFalse(payload["attestation"]["proxy_url_match"])
+        self.assertEqual(payload["attestation"]["configured_proxy_url"], expected_proxy_url)
+        self.assertEqual(payload["attestation"]["current_proxy_url"], "http://127.0.0.1:10808")
+        self.assertIn("proxy drift", payload["last_error"])
 
     def test_healthcheck_reports_reprobe_failure_for_proxy_path_failure(self) -> None:
         port = free_port()
@@ -1344,7 +1953,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROXY_REPROBE_FAILED")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(
+            payload["proxy_reprobe"]["candidate_source_order"],
+            [
+                "env.WBP_PROXY_REPROBE_CANDIDATES",
+                "runtime_state.last_known_good_proxy_url",
+                "runtime_state.current_proxy_url",
+            ],
+        )
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 1)
         self.assertIn(
             f"http://127.0.0.1:{candidate_port}", payload["proxy_reprobe"]["candidates"]
         )
@@ -1359,6 +1981,7 @@ class CliTests(unittest.TestCase):
     ) -> None:
         port = free_port()
         candidate_port = free_port()
+        last_known_good_url = "http://127.0.0.1:1"
         ProbeHandler.response_status = 500
         ProbeHandler.response_payload = {
             "error": {
@@ -1378,7 +2001,7 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         state["managed_port"] = port
         state["current_proxy_url"] = f"http://127.0.0.1:{candidate_port}"
-        state["last_known_good_proxy_url"] = "http://127.0.0.1:10809"
+        state["last_known_good_proxy_url"] = last_known_good_url
         state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
@@ -1400,10 +2023,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         last_known_good = payload["last_known_good_proxy"]
         self.assertEqual(last_known_good["status"], "materialized")
-        self.assertEqual(last_known_good["proxy_url"], "http://127.0.0.1:10809")
+        self.assertEqual(last_known_good["proxy_url"], last_known_good_url)
         self.assertFalse(last_known_good["matches_current_proxy_url"])
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
-        self.assertEqual(state["last_known_good_proxy_url"], "http://127.0.0.1:10809")
+        self.assertEqual(state["last_known_good_proxy_url"], last_known_good_url)
         self.assertEqual(
             state["last_known_good_proxy_observed_at"], "2026-05-05T00:00:00+00:00"
         )
@@ -1468,25 +2091,51 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(payload["liveness"], "degraded")
         self.assertTrue(payload["proxy_reprobe"]["found_candidate"])
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 1)
         self.assertEqual(
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{candidate_port}",
         )
         adoption_result = payload["proxy_reprobe_adoption_result"]
         self.assertEqual(adoption_result["status"], "owner_path_emitted")
-        self.assertFalse(adoption_result["attempted"])
+        self.assertTrue(adoption_result["attempted"])
         self.assertEqual(
             adoption_result["launcher_lane_eligibility"],
             "external_script_path_present_consumer_capability_unverified",
         )
         self.assertEqual(
-            adoption_result["adoption_outcome"], "launcher_lane_ineligible"
+            adoption_result["activation_surface_kind"], "sync_owner_path_restart"
         )
+        self.assertEqual(
+            adoption_result["adoption_outcome"],
+            "sync_owner_path_live_reproof_failed",
+        )
+        self.assertEqual(adoption_result["sync_result_status"], "ok")
+        self.assertEqual(adoption_result["sync_result_machine_error_code"], "OK")
         self.assertFalse(adoption_result["current_proxy_url_rewritten"])
         self.assertFalse(adoption_result["live_runtime_observation_confirmed"])
+        self.assertTrue(adoption_result["rollback_restored"])
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
-        self.assertEqual(payload["changed_files"], [])
+        self.assertIn(
+            str(self.managed_dir / "managed-config.yaml"), payload["changed_files"]
+        )
+        self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
+        self.assertIn(
+            str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
+        )
+        self.assertIn(
+            str(self.profile_dir / "runtime-effective-mode.txt"),
+            payload["changed_files"],
+        )
         self.assertFalse(payload["attestation"]["responses_ok"])
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "responses_probe_failed"
+        )
 
     def test_healthcheck_adopts_working_candidate_after_live_reproof_on_repo_owned_default_lane(
         self,
@@ -1553,6 +2202,195 @@ class CliTests(unittest.TestCase):
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["current_proxy_url"], expected_proxy_url)
+
+    def test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        self.configure_dynamic_proxy_gate(expected_proxy_url=expected_proxy_url)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f'host: 127.0.0.1\nport: {port}\nproxy-url: "http://127.0.0.1:10808"\n',
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        self.sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - \"$WBP_STATE_FILE\" \"$WBP_MANAGED_CONFIG_FILE\" "
+            "\"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\" \"$WBP_CONFIG_TOML\" <<'PY'\n"
+            "import json\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "state_path = Path(sys.argv[1])\n"
+            "managed_config_path = Path(sys.argv[2])\n"
+            "effective_mode_path = Path(sys.argv[3])\n"
+            "config_toml_path = Path(sys.argv[4])\n"
+            f"expected_proxy_url = {expected_proxy_url!r}\n"
+            f"managed_port = {port!r}\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state['effective_mode'] = 'managed'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state['current_proxy_url'] = expected_proxy_url\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "lines = managed_config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "replaced = False\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('proxy-url:'):\n"
+            "        out.append(f'proxy-url: \"{expected_proxy_url}\"')\n"
+            "        replaced = True\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "if not replaced:\n"
+            "    out.append(f'proxy-url: \"{expected_proxy_url}\"')\n"
+            "managed_config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "effective_mode_path.write_text('managed\\n')\n"
+            "config_toml_path.write_text(\n"
+            "    f'model = \"gpt-5.4\"\\nbase_url = \"http://127.0.0.1:{managed_port}/v1\"\\n'\n"
+            ")\n"
+            "PY\n",
+            encoding="utf-8",
+        )
+        self.sync_script.chmod(0o755)
+        server, thread = self.start_probe_server(port)
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    ),
+                },
+                "healthcheck",
+                "--json",
+            )
+        finally:
+            candidate_socket.close()
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["current_proxy_url"], expected_proxy_url)
+        adoption_result = payload["proxy_reprobe_adoption_result"]
+        self.assertTrue(adoption_result["attempted"])
+        self.assertEqual(
+            adoption_result["activation_surface_kind"], "sync_owner_path_restart"
+        )
+        self.assertEqual(
+            adoption_result["adoption_outcome"],
+            "sync_owner_path_candidate_adopted",
+        )
+        self.assertTrue(adoption_result["current_proxy_url_rewritten"])
+        self.assertTrue(adoption_result["live_runtime_observation_confirmed"])
+        self.assertFalse(adoption_result["rollback_restored"])
+        self.assertEqual(adoption_result["selected_proxy_url"], expected_proxy_url)
+        self.assertEqual(adoption_result["sync_result_status"], "ok")
+        self.assertEqual(adoption_result["sync_result_machine_error_code"], "OK")
+
+    def test_healthcheck_blocks_cross_thread_mode_mutation_during_proxy_reproof_window(
+        self,
+    ) -> None:
+        port = free_port()
+        candidate_port = free_port()
+        expected_proxy_url = f"http://127.0.0.1:{candidate_port}"
+        self.configure_dynamic_proxy_gate(expected_proxy_url=expected_proxy_url)
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        concurrent_result: dict[str, object] = {}
+        post_call_count = 0
+        server, thread = self.start_probe_server(port)
+        candidate_socket = socket.socket()
+        candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        candidate_socket.bind(("127.0.0.1", candidate_port))
+        candidate_socket.listen(1)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                self.env(include_launcher_override=False)
+                | {
+                    "WBP_PROXY_REPROBE_CANDIDATES": (
+                        f"{expected_proxy_url},http://127.0.0.1:10808"
+                    )
+                },
+                clear=False,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                original_http_post_json = runtime_mod.http_post_json
+
+                def post_side_effect(
+                    url: str, api_key: str, payload: dict[str, object]
+                ) -> dict[str, object]:
+                    nonlocal post_call_count
+                    post_call_count += 1
+                    if post_call_count == 2:
+                        def concurrent_mode_mutation() -> None:
+                            try:
+                                runtime_mod.mode_set(paths, "stable")
+                            except runtime_mod.RuntimeErrorInfo as exc:
+                                concurrent_result["machine_error_code"] = (
+                                    exc.machine_error_code
+                                )
+                                concurrent_result["operator_action"] = (
+                                    exc.operator_action
+                                )
+                            else:
+                                concurrent_result["status"] = "unexpected_success"
+
+                        mutation_thread = threading.Thread(
+                            target=concurrent_mode_mutation, daemon=True
+                        )
+                        mutation_thread.start()
+                        mutation_thread.join(timeout=5)
+                        if mutation_thread.is_alive():
+                            concurrent_result["status"] = "timed_out"
+                    return original_http_post_json(url, api_key, payload)
+
+                with mock.patch(
+                    "wild_boar_proxy.runtime.http_post_json",
+                    side_effect=post_side_effect,
+                ):
+                    payload = runtime_mod.run_healthcheck(paths)
+        finally:
+            candidate_socket.close()
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(post_call_count, 2)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["current_proxy_url"], expected_proxy_url)
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(concurrent_result["operator_action"], "retry")
 
     def test_healthcheck_reconfirms_same_current_proxy_without_rewrite_after_prerequisite_materialization(
         self,
@@ -1730,6 +2568,48 @@ class CliTests(unittest.TestCase):
         self.assertEqual(adoption_result["adoption_outcome"], "launcher_lane_ineligible")
         self.assertEqual(payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertEqual(payload["changed_files"], [])
+
+    def test_healthcheck_refreshes_stable_current_proxy_url_from_live_stable_config(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        stable_proxy_port = free_port()
+        stable_proxy_url = f"http://127.0.0.1:{stable_proxy_port}"
+        (self.profile_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{stable_port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n"
+            f'proxy-url: "{stable_proxy_url}"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["effective_mode"] = "stable"
+        state["current_proxy_url"] = "http://127.0.0.1:10808"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        server, thread = self.start_probe_server(stable_port)
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["current_proxy_url"], stable_proxy_url)
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(state["current_proxy_url"], "http://127.0.0.1:10808")
 
     def test_healthcheck_restores_prior_current_proxy_when_live_reproof_fails(self) -> None:
         port = free_port()
@@ -1994,6 +2874,14 @@ class CliTests(unittest.TestCase):
         self.assertTrue(recovery["generated_config_regenerated"])
         self.assertTrue(recovery["snapshot_refreshed"])
         self.assertTrue(recovery["live_runtime_observation_confirmed"])
+        self.assertEqual(
+            recovery["confirmation_basis"],
+            "approved_target_activation_plus_live_runtime_observation",
+        )
+        self.assertTrue(recovery["effectful_claim_allowed"])
+        self.assertEqual(recovery["guardrail_status"], "confirmed")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
+        self.assertEqual(payload["runtime_guardrails"]["recovery_guardrail_status"], "confirmed")
         self.assertIn(
             str(self.managed_dir / "stable-runtime-config.generated.yaml"),
             payload["changed_files"],
@@ -2056,7 +2944,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(recovery["attempted"])
         self.assertEqual(recovery["entry_lane"], "managed_preflight_failure")
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
-        self.assertEqual(recovery["outcome"], "observed_source_fallback_recovered")
+        self.assertEqual(recovery["outcome"], "observed_source_live_recovered")
         self.assertEqual(
             recovery["selected_source_kind"], "observed_stable_inventory_source"
         )
@@ -2064,6 +2952,17 @@ class CliTests(unittest.TestCase):
         self.assertTrue(recovery["generated_config_regenerated"])
         self.assertTrue(recovery["snapshot_refreshed"])
         self.assertTrue(recovery["live_runtime_observation_confirmed"])
+        self.assertEqual(
+            recovery["confirmation_basis"],
+            "observed_source_live_runtime_observation_after_activation_attempt",
+        )
+        self.assertFalse(recovery["effectful_claim_allowed"])
+        self.assertEqual(recovery["guardrail_status"], "observation_only")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "caution")
+        self.assertEqual(
+            payload["runtime_guardrails"]["recovery_guardrail_status"],
+            "observation_only",
+        )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(state["healthy_count"], 1)
         self.assertEqual(state["down_count"], 0)
@@ -2490,6 +3389,11 @@ class CliTests(unittest.TestCase):
                 f"http://127.0.0.1:{current_candidate_port}",
             ],
         )
+        self.assertEqual(payload["proxy_reprobe"]["candidate_budget"], 8)
+        self.assertEqual(payload["proxy_reprobe"]["probe_concurrency_limit"], 1)
+        self.assertEqual(payload["proxy_reprobe"]["probe_depth"], "shallow_socket_listener_only")
+        self.assertEqual(payload["proxy_reprobe"]["probe_strategy"], "sequential_first_success")
+        self.assertEqual(payload["proxy_reprobe"]["probed_candidate_count"], 2)
         self.assertEqual(
             payload["proxy_reprobe"]["working_candidate"],
             f"http://127.0.0.1:{lkg_candidate_port}",
@@ -2497,6 +3401,62 @@ class CliTests(unittest.TestCase):
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
             state["last_known_good_proxy_url"], f"http://127.0.0.1:{lkg_candidate_port}"
+        )
+
+    def test_healthcheck_proxy_reprobe_caps_candidate_budget_at_eight(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 500
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": (
+                    'Post "https://chatgpt.com/backend-api/codex/responses": '
+                    "proxyconnect tcp: dial tcp 127.0.0.1:10808: connect: connection refused"
+                )
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["current_proxy_url"] = "http://127.0.0.1:19999"
+        state["last_known_good_proxy_url"] = "http://127.0.0.1:19998"
+        state["last_known_good_proxy_observed_at"] = "2026-05-05T00:00:00+00:00"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        env_candidates = ",".join(
+            f"http://127.0.0.1:{18000 + index}" for index in range(10)
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_CANDIDATES": env_candidates},
+                "healthcheck",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        reprobe = payload["proxy_reprobe"]
+        self.assertEqual(reprobe["candidate_budget"], 8)
+        self.assertEqual(reprobe["candidate_count"], 8)
+        self.assertEqual(len(reprobe["candidates"]), 8)
+        self.assertEqual(reprobe["probed_candidate_count"], 8)
+        self.assertEqual(
+            reprobe["candidates"],
+            [f"http://127.0.0.1:{18000 + index}" for index in range(8)],
         )
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
@@ -3862,6 +4822,11 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(derived_surface["truth_surface"])
         self.assertFalse(derived_surface["exists"])
+        self.assertFalse(derived_surface["activation_snapshot_present"])
+        self.assertEqual(derived_surface["activation_snapshot_freshness"], "unknown")
+        self.assertFalse(
+            derived_surface["activation_snapshot_references_generated_config"]
+        )
         launcher_handoff = consumer["launcher_handoff_contract"]
         self.assertEqual(launcher_handoff["status"], "contract_ready")
         self.assertEqual(launcher_handoff["handoff_method"], "process_local_env_override")
@@ -3883,6 +4848,8 @@ class CliTests(unittest.TestCase):
         )
         self.assertFalse(activation_evidence["snapshot_present"])
         self.assertFalse(activation_evidence["snapshot_shape_valid"])
+        self.assertEqual(activation_evidence["snapshot_freshness"], "unknown")
+        self.assertFalse(activation_evidence["snapshot_references_generated_config"])
         effective_truth = consumer["effective_truth_contract"]
         self.assertEqual(effective_truth["status"], "contract_ready")
         self.assertTrue(effective_truth["live_runtime_observation_required"])
@@ -3904,15 +4871,23 @@ class CliTests(unittest.TestCase):
         self.assertFalse(recovery_contract["new_generic_cli_default"])
         self.assertEqual(
             recovery_contract["shared_activation_mechanics"]["status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
+        )
+        self.assertEqual(
+            recovery_contract["shared_activation_mechanics"]["owner_paths"],
+            ["healthcheck --json", "launch smoke --json"],
         )
         self.assertEqual(
             recovery_contract["generated_config_regeneration_status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertEqual(
             recovery_contract["generated_config_regeneration_policy"],
             "regenerate_each_recovery_attempt",
+        )
+        self.assertEqual(
+            recovery_contract["generated_config_regeneration_owner_paths"],
+            ["healthcheck --json", "launch smoke --json"],
         )
         self.assertFalse(recovery_contract["stale_generated_config_authoritative"])
         self.assertEqual(
@@ -3929,9 +4904,13 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             recovery_contract["snapshot_refresh_status"],
-            "contract_fixed_not_implemented",
+            "owner_path_emitted",
         )
         self.assertTrue(recovery_contract["snapshot_refresh_after_stable_live_outcome"])
+        self.assertEqual(
+            recovery_contract["snapshot_refresh_owner_paths"],
+            ["healthcheck --json", "launch smoke --json"],
+        )
         self.assertFalse(recovery_contract["snapshot_schema_widening_required"])
         self.assertFalse(
             recovery_contract["new_persisted_recovery_metadata_required"]
@@ -4117,8 +5096,25 @@ class CliTests(unittest.TestCase):
             "owner_path_success_only_write_available",
         )
         self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_depth"],
+            "shallow_socket_listener_only",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["candidate_probe_scope"],
+            "bounded_local_listener_reachability_only",
+        )
+        self.assertEqual(
             current_proxy_adoption_contract["effectful_runtime_wiring_status"],
             "bounded_private_launcher_lane_available",
+        )
+        self.assertEqual(
+            current_proxy_adoption_contract["post_adoption_runtime_validation_surface"],
+            "healthcheck.attestation",
+        )
+        self.assertFalse(
+            current_proxy_adoption_contract[
+                "separate_control_layer_deep_probe_surface_default"
+            ]
         )
         self.assertTrue(
             current_proxy_adoption_contract[
@@ -4151,8 +5147,13 @@ class CliTests(unittest.TestCase):
     def test_status_reports_desired_approved_target_before_effective_activation(
         self,
     ) -> None:
+        closed_stable_port = 1
         source_auth = self.stable_dir / "codex-active.json"
         source_auth.write_text('{"token":"active"}', encoding="utf-8")
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {closed_stable_port}\n",
+            encoding="utf-8",
+        )
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
         registry["backends"][0]["auth_ref"] = str(source_auth)
         (self.managed_dir / "backend-registry.json").write_text(
@@ -4191,6 +5192,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             consumer["consumer_activation_readiness"]["machine_error_code"],
             "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+        )
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "listener_unreachable"
         )
         self.assertTrue(consumer["fallback_contract"]["fallback_allowed"])
         self.assertTrue(consumer["fallback_contract"]["silent_fallback_forbidden"])
@@ -4275,9 +5281,11 @@ class CliTests(unittest.TestCase):
             consumer["desired_stable_runtime_consumer_source"]["source_kind"],
             "approved_repair_target",
         )
-        self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertEqual(evidence["status"], "snapshot_stale")
         self.assertTrue(evidence["snapshot_present"])
         self.assertTrue(evidence["snapshot_shape_valid"])
+        self.assertEqual(evidence["snapshot_freshness"], "stale")
+        self.assertTrue(evidence["snapshot_references_generated_config"])
         self.assertEqual(
             evidence["current_snapshot"]["selected_source_kind"], "approved_repair_target"
         )
@@ -4340,6 +5348,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(recovery["re_enable_method"], "bounded_healthcheck_owner_retry")
         self.assertEqual(recovery["outcome"], "approved_target_recovered")
         self.assertEqual(recovery["selected_source_kind"], "approved_repair_target")
+        self.assertEqual(
+            recovery["confirmation_basis"],
+            "approved_target_activation_plus_live_runtime_observation",
+        )
+        self.assertTrue(recovery["effectful_claim_allowed"])
+        self.assertEqual(recovery["guardrail_status"], "confirmed")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
+        self.assertTrue(payload["runtime_guardrails"]["delegated_from_status"])
         self.assertIn(
             str(self.managed_dir / "stable-runtime-config.generated.yaml"),
             payload["changed_files"],
@@ -4393,6 +5409,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             consumer["launcher_handoff_contract"]["env_var"], "WBP_STABLE_CONFIG"
         )
+        self.assertEqual(payload["launch_readiness"]["status"], "ready")
+        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
+        self.assertTrue(payload["launch_readiness"]["responses_proof_passed"])
         self.assertEqual(
             consumer["activation_evidence_surface"]["status"], "snapshot_present"
         )
@@ -4808,7 +5827,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             consumer["consumer_activation_readiness"]["machine_error_code"], "OK"
         )
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
+        self.assertTrue(payload["runtime_guardrails"]["delegated_from_status"])
+        self.assertEqual(
+            payload["runtime_guardrails"]["owner_command_surface"], "status --json"
+        )
         self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertEqual(evidence["snapshot_freshness"], "fresh")
+        self.assertTrue(evidence["snapshot_references_generated_config"])
         self.assertEqual(
             evidence["current_snapshot"]["activation_outcome"],
             "approved_target_activated",
@@ -4836,6 +5862,16 @@ class CliTests(unittest.TestCase):
         self.assertIn(
             f'auth-dir: "{self.managed_dir / "stable-repair-target"}"',
             generated_text,
+        )
+        derived_surface = consumer["derived_stable_runtime_config_surface"]
+        self.assertEqual(
+            derived_surface["status"], "materialized_with_fresh_activation_evidence"
+        )
+        self.assertTrue(derived_surface["exists"])
+        self.assertTrue(derived_surface["activation_snapshot_present"])
+        self.assertEqual(derived_surface["activation_snapshot_freshness"], "fresh")
+        self.assertTrue(
+            derived_surface["activation_snapshot_references_generated_config"]
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
@@ -4967,6 +6003,8 @@ class CliTests(unittest.TestCase):
         consumer = payload["stable_runtime_consumer"]
         evidence = consumer["activation_evidence_surface"]
         self.assertEqual(payload["machine_error_code"], "LAUNCHER_EXIT_NONZERO")
+        self.assertEqual(payload["launch_readiness"]["status"], "ready")
+        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
         self.assertEqual(
             consumer["desired_stable_runtime_consumer_source"]["source_kind"],
             "approved_repair_target",
@@ -4983,6 +6021,8 @@ class CliTests(unittest.TestCase):
             "STABLE_RUNTIME_CONSUMER_FALLBACK_ACTIVE",
         )
         self.assertEqual(evidence["status"], "snapshot_present")
+        self.assertEqual(evidence["snapshot_freshness"], "fresh")
+        self.assertTrue(evidence["snapshot_references_generated_config"])
         self.assertEqual(
             evidence["current_snapshot"]["activation_outcome"],
             "observed_source_fallback",
@@ -4997,6 +6037,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             evidence["current_snapshot"]["selected_source_kind"],
             "observed_stable_inventory_source",
+        )
+        derived_surface = consumer["derived_stable_runtime_config_surface"]
+        self.assertEqual(
+            derived_surface["status"], "materialized_with_fresh_activation_evidence"
+        )
+        self.assertTrue(
+            derived_surface["activation_snapshot_references_generated_config"]
         )
         state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
         self.assertEqual(
@@ -5351,6 +6398,98 @@ class CliTests(unittest.TestCase):
         self.assertIn("claim_gate", payload)
         self.assertNotEqual(payload["machine_error_code"], payload["claim_gate"]["machine_error_code"])
 
+    def test_status_delegates_auth_unavailable_failure_class(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 503
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "auth_unavailable: no auth available (providers=codex, model=gpt-5.3-codex)"
+            }
+        }
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(payload["launch_readiness"]["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertTrue(payload["launch_readiness"]["delegated_from_status"])
+        self.assertTrue(payload["auth_pool_hygiene"]["delegated_from_status"])
+
+    def test_status_delegates_empty_usable_auth_pool(self) -> None:
+        port = free_port()
+        ProbeHandler.response_status = 503
+        ProbeHandler.response_payload = {
+            "error": {
+                "message": "auth_unavailable: no auth available (providers=codex, model=gpt-5.3-codex)"
+            }
+        }
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"] = [
+            {
+                **self.build_backend(
+                    backend_id="backend-auth-invalid",
+                    auth_ref="/tmp/codex-auth-invalid.json",
+                    pool="active",
+                    status="down",
+                ),
+                "last_error_class": "auth",
+                "last_error": "HTTP 401: auth_unavailable",
+            }
+        ]
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        self.configure_managed_runtime_probe(port)
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+            ProbeHandler.response_status = 200
+            ProbeHandler.response_payload = None
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "AUTH_UNAVAILABLE")
+        self.assertEqual(
+            payload["auth_pool_hygiene"]["machine_error_code"], "USABLE_AUTH_POOL_EMPTY"
+        )
+        self.assertTrue(payload["auth_pool_hygiene"]["delegated_from_status"])
+        self.assertEqual(
+            payload["launch_readiness"]["blocking_reason"], "usable_auth_pool_empty"
+        )
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
+        self.assertEqual(
+            payload["runtime_guardrails"]["blocking_reason"],
+            "usable_auth_pool_empty",
+        )
+        self.assertTrue(payload["runtime_guardrails"]["delegated_from_status"])
+
     def test_accounts_list_returns_registry_snapshot(self) -> None:
         result = self.run_cli("accounts", "list", "--json")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -5361,6 +6500,40 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["registry_identity"]["machine_error_code"], "OK")
         self.assertEqual(payload["registry_identity"]["next_action"], "none")
         self.assertNotIn("claim_gate", payload)
+
+    def test_summarize_scale_evidence_accounts_reports_lifecycle_counts(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-accounts",
+                auth_ref="/tmp/codex-reserve-accounts.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-retired-accounts",
+                auth_ref="/tmp/codex-retired-accounts.json",
+                pool="retired",
+                status="retired",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        result = self.run_cli("accounts", "list", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        summary = runtime_mod.summarize_scale_evidence_accounts(payload)
+        self.assertEqual(summary["account_count"], 3)
+        self.assertEqual(
+            summary["lifecycle_counts"],
+            {"active": 1, "reserve": 1, "retired": 1},
+        )
+        self.assertEqual(summary["status_counts"]["healthy"], 2)
+        self.assertEqual(summary["status_counts"]["retired"], 1)
+        self.assertEqual(summary["registry_identity_status"], "clear")
 
     def test_accounts_list_reports_duplicate_backend_id_identity_ambiguity(self) -> None:
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
@@ -5435,6 +6608,37 @@ class CliTests(unittest.TestCase):
         self.assertEqual(identity["status"], "ambiguous")
         self.assertEqual(identity["invalid_auth_basenames"], ["backend-a"])
 
+    def test_accounts_list_reports_unsupported_registry_schema_identity_ambiguity(
+        self,
+    ) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["schema_version"] = 3
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertEqual(identity["registry_schema_version"], 3)
+        self.assertEqual(identity["unsupported_schema_versions"], ["3"])
+
+    def test_accounts_list_reports_invalid_backend_pool_identity_ambiguity(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["pool"] = "hold"
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+        result = self.run_cli("accounts", "list", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        identity = payload["registry_identity"]
+        self.assertEqual(identity["status"], "ambiguous")
+        self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
+        self.assertEqual(identity["invalid_backend_pools"], ["backend-a:hold"])
+
     def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
         self,
     ) -> None:
@@ -5466,6 +6670,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["selected_backend_id"], "backend-new")
         self.assertEqual(onboarding["selection_status"], "selected_unique_backend")
         self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertEqual(onboarding["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(onboarding["auth_snapshot_before_login_count"], 0)
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_digest"],
+            runtime_mod.get_auth_inventory_entries_digest([]),
+        )
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_source"]["source"],
+            "stable_config_parent",
+        )
         self.assertFalse(onboarding["active_routing_changed"])
         self.assertTrue(onboarding["validate_attempted"])
         self.assertEqual(onboarding["validate_outcome"], "ok")
@@ -5712,6 +6926,71 @@ class CliTests(unittest.TestCase):
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
 
+    def test_accounts_onboard_loop_mode_forwards_flag_and_keeps_reserve_first_proof(
+        self,
+    ) -> None:
+        auth_ref = str(self.profile_dir / "codex-loop-login.json")
+        Path(auth_ref).write_text("{}", encoding="utf-8")
+        argv_file = self.managed_dir / "onboard-argv-loop.json"
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [self.build_backend(backend_id="backend-loop-login", auth_ref=auth_ref)]
+                    ),
+                    "WBP_TEST_ONBOARD_ARGV_FILE": str(argv_file),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--loop",
+                "--no-sync",
+                "--skip-login",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["command"],
+            ["--loop", "--auth-ref", auth_ref, "--skip-login", "--no-sync"],
+        )
+        self.assertEqual(
+            json.loads(argv_file.read_text(encoding="utf-8")),
+            ["--loop", "--auth-ref", auth_ref, "--skip-login", "--no-sync"],
+        )
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertEqual(onboarding["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(onboarding["auth_snapshot_before_login_count"], 0)
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_digest"],
+            runtime_mod.get_auth_inventory_entries_digest([]),
+        )
+        self.assertEqual(
+            onboarding["auth_snapshot_before_login_source"]["source"],
+            "stable_config_parent",
+        )
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["sync_outcome"], "skipped_by_flag")
+        self.assertEqual(
+            onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
+        )
+
     def test_accounts_onboard_blocks_held_lock_without_mutation(self) -> None:
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
         lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
@@ -5777,6 +7056,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["operator_action"], "user_action")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["selection_status"], "ambiguous_new_backend_selection")
+        self.assertIn("auth_snapshot_before_login_status", onboarding)
+        self.assertIn("auth_snapshot_before_login_count", onboarding)
+        self.assertIn("auth_snapshot_before_login_digest", onboarding)
+        self.assertIn("auth_snapshot_before_login_source", onboarding)
         self.assertEqual(onboarding["final_outcome"], "ambiguous_new_auth_detection")
         self.assertFalse(onboarding["validate_attempted"])
         self.assertFalse(onboarding["sync_attempted"])
@@ -5823,6 +7106,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["operator_action"], "user_action")
         onboarding = payload["onboarding_result"]
         self.assertEqual(onboarding["selection_status"], "no_new_backend_detected")
+        self.assertIn("auth_snapshot_before_login_status", onboarding)
+        self.assertIn("auth_snapshot_before_login_count", onboarding)
+        self.assertIn("auth_snapshot_before_login_digest", onboarding)
+        self.assertIn("auth_snapshot_before_login_source", onboarding)
         self.assertEqual(onboarding["final_outcome"], "no_new_auth_detected")
         self.assertFalse(onboarding["validate_attempted"])
         self.assertFalse(onboarding["sync_attempted"])
@@ -6554,6 +7841,43 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["changed_files"], [str(registry_path)])
 
+    def test_policy_stage_set_updates_pool_policy_to_canonical_stage_20(self) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        before_registry = json.loads(registry_path.read_text())
+        result = self.run_cli("policy", "stage", "set", "20", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["requested_stage"], "20")
+        update = payload["pool_policy_update_result"]
+        self.assertEqual(update["status"], "owner_path_emitted")
+        self.assertTrue(update["attempted"])
+        self.assertEqual(update["requested_stage"], "20")
+        self.assertEqual(update["previous_pool_policy"], before_registry["pool_policy"])
+        self.assertEqual(
+            update["mapped_pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(
+            update["next_pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(update["policy_validation_status"], "ok")
+        self.assertEqual(update["stage_mapping_status"], "ok")
+        self.assertTrue(update["rollback_point_captured"])
+        self.assertTrue(update["write_attempted"])
+        self.assertTrue(update["write_observed"])
+        self.assertFalse(update["rollback_attempted"])
+        self.assertEqual(update["rollback_outcome"], "not_needed")
+        self.assertEqual(update["final_outcome"], "stage_policy_updated")
+        registry = json.loads(registry_path.read_text())
+        self.assertEqual(
+            registry["pool_policy"],
+            {"active_min": 20, "active_target": 20, "reserve_target": 0},
+        )
+        self.assertEqual(payload["changed_files"], [str(registry_path)])
+
     def test_policy_stage_set_blocks_held_lock_without_mutation(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         lock_file = self.managed_dir / "wild-boar-proxy.lock"
@@ -7017,6 +8341,33 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(evidence["blocker_type"], "schema_gap")
 
+    def test_rollout_rotation_inspect_rejects_snapshot_claim_scope(self) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            claim_scope=runtime_mod.SCALE_EVIDENCE_CLAIM_SCOPE,
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_claim_scope_invalid",
+        )
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_claim_scope_invalid",
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
+        self.assertEqual(evidence["blocker_type"], "schema_gap")
+
     def test_rollout_rotation_inspect_reports_stale_nested_snapshot(self) -> None:
         snapshot = self.build_selected_backend_snapshot(
             ["backend-a", "backend-b"],
@@ -7040,6 +8391,77 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["evidence_freshness"], "stale")
         self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "valid")
         self.assertEqual(evidence["evidence_reason"], "selected_backend_snapshot_stale")
+
+    def test_rollout_rotation_inspect_accepts_nested_snapshot_at_exact_freshness_boundary(
+        self,
+    ) -> None:
+        observed_at = "2026-05-06T00:00:00+00:00"
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc=observed_at,
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.now_iso",
+                return_value="2026-05-06T00:15:00+00:00",
+            ):
+                payload = runtime_mod.run_rollout_rotation_inspect(paths)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["observed_at_utc"], observed_at)
+        self.assertEqual(evidence["evidence_freshness"], "fresh")
+        self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "valid")
+        self.assertEqual(evidence["participation_status"], "available")
+        self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
+
+    def test_rollout_rotation_inspect_reports_unknown_for_future_dated_nested_snapshot(
+        self,
+    ) -> None:
+        snapshot = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-06T00:00:01+00:00",
+        )
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"],
+            selected_backend_snapshot=snapshot,
+        )
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            with mock.patch(
+                "wild_boar_proxy.runtime.now_iso",
+                return_value="2026-05-06T00:00:00+00:00",
+            ):
+                payload = runtime_mod.run_rollout_rotation_inspect(paths)
+
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_UNKNOWN")
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(
+            evidence["evidence_source"], "runtime_state.selected_backend_snapshot"
+        )
+        self.assertEqual(evidence["evidence_freshness"], "unknown")
+        self.assertEqual(evidence["selected_backend_snapshot_validation_status"], "invalid")
+        self.assertEqual(
+            evidence["selected_backend_snapshot_validation_error"],
+            "selected_backend_snapshot_observed_at_invalid",
+        )
+        self.assertEqual(
+            evidence["evidence_reason"],
+            "selected_backend_snapshot_observed_at_invalid",
+        )
+        self.assertEqual(evidence["participation_status"], "unknown")
 
     def test_rollout_rotation_inspect_rejects_nested_snapshot_outside_candidates(
         self,
@@ -7392,6 +8814,50 @@ class CliTests(unittest.TestCase):
         self.assertEqual(evidence["participation_status"], "contradicted")
         self.assertEqual(evidence["blocker_type"], "contradicted_state")
 
+    def test_rollout_rotation_inspect_reports_contradicted_for_invalid_backend_pool(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"][0]["pool"] = "hold"
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["registry_identity_status"], "ambiguous")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+
+    def test_rollout_rotation_inspect_reports_contradicted_for_unsupported_registry_schema(
+        self,
+    ) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["schema_version"] = 3
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli("rollout", "rotation", "inspect", "--json")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "ROTATION_EVIDENCE_CONTRADICTED"
+        )
+        evidence = payload["rotation_evidence_result"]
+        self.assertEqual(evidence["registry_identity_status"], "ambiguous")
+        self.assertEqual(evidence["evidence_status"], "participation_evidence_contradicted")
+        self.assertEqual(evidence["evidence_reason"], "registry_identity_ambiguous")
+        self.assertEqual(evidence["participation_status"], "contradicted")
+
     def test_rollout_rotation_inspect_reports_contradicted_for_policy_drift(
         self,
     ) -> None:
@@ -7492,6 +8958,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proof["rollback_readiness_status"], "ready")
         self.assertEqual(proof["proof_gate_status"], "stable_10_gate_closed")
         self.assertEqual(proof["final_outcome"], "stable_10_proved")
+        self.assertEqual(
+            proof["delegated_evidence"]["pre_smoke_healthcheck_retry_summary"][
+                "outcome"
+            ],
+            "not_needed",
+        )
+        self.assertEqual(
+            proof["delegated_evidence"]["post_smoke_healthcheck_retry_summary"][
+                "outcome"
+            ],
+            "not_needed",
+        )
         self.assertEqual(
             proof["delegated_evidence"]["runtime_smoke_summary"]["effective_mode"],
             "managed",
@@ -7716,6 +9194,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(packet["packet_status"], "complete")
         self.assertEqual(packet["final_outcome"], "field_evidence_packet_complete")
         self.assertEqual(packet["runtime_attestation_status"], "passed")
+        self.assertEqual(
+            packet["runtime_attestation_retry_summary"]["outcome"], "not_needed"
+        )
         self.assertEqual(packet["strict_json_command_api_status"], "passed")
         self.assertEqual(packet["state_serialization_status"], "passed")
         self.assertEqual(packet["rotation_evidence_status"], "available")
@@ -8051,6 +9532,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proof["rollback_readiness_status"], "ready")
         self.assertEqual(proof["proof_gate_status"], "stable_15_gate_closed")
         self.assertEqual(proof["final_outcome"], "stable_15_proved")
+        self.assertEqual(
+            proof["delegated_evidence"]["pre_smoke_healthcheck_retry_summary"][
+                "outcome"
+            ],
+            "not_needed",
+        )
+        self.assertEqual(
+            proof["delegated_evidence"]["post_smoke_healthcheck_retry_summary"][
+                "outcome"
+            ],
+            "not_needed",
+        )
         self.assertIn(
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
@@ -8291,6 +9784,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["preflight_policy_status"], "matched")
         self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
         self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(
+            advance["delegated_evidence"]["stable_10_proof_summary"][
+                "reserve_candidate_override_status"
+            ],
+            "accepted_single_explicit_reserve_candidate",
+        )
         self.assertEqual(advance["postflight_attestation_status"], "passed")
         self.assertEqual(advance["postflight_rotation_status"], "available")
         self.assertEqual(advance["rollback_readiness_status"], "ready")
@@ -8577,6 +10076,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["preflight_policy_status"], "matched")
         self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
         self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(
+            advance["delegated_evidence"]["stable_15_proof_summary"][
+                "reserve_candidate_override_status"
+            ],
+            "accepted_single_explicit_reserve_candidate",
+        )
         self.assertEqual(advance["postflight_attestation_status"], "passed")
         self.assertEqual(advance["postflight_rotation_status"], "available")
         self.assertEqual(advance["rollback_readiness_status"], "ready")
@@ -8594,6 +10099,57 @@ class CliTests(unittest.TestCase):
         self.assertIn(
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
+
+    def test_rollout_stage_advance_20_blocks_multiple_reserve_candidates_at_source_stage(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-stage20-primary"
+        extra_reserve_backend_id = "backend-reserve-advance-stage20-extra"
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref="/tmp/codex-reserve-advance-stage20-primary.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=extra_reserve_backend_id,
+                auth_ref="/tmp/codex-reserve-advance-stage20-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            result = self.run_cli(
+                "rollout",
+                "stage",
+                "advance",
+                "20",
+                reserve_backend_id,
+                "--json",
+            )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+        )
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage15_proof_status"], "failed")
+        self.assertEqual(advance["policy_transition_status"], "not_invoked")
+        self.assertEqual(advance["promotion_status"], "not_invoked")
+        self.assertEqual(advance["final_outcome"], "stable_15_proof_failed")
+        self.assertEqual(payload["changed_files"], [])
 
     def test_rollout_stage_advance_20_blocks_when_stable_15_proof_fails(self) -> None:
         self.configure_stable_fifteen_proof_fixture()
@@ -8904,6 +10460,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "retry")
         self.assertNotIn("stage_advancement_result", payload)
         self.assertEqual(before, after)
+
+    def test_observe_current_stage_from_pool_policy_keeps_near_stage_20_custom(self) -> None:
+        registry = {
+            "pool_policy": {
+                "active_min": 20,
+                "active_target": 20,
+                "reserve_target": 1,
+            }
+        }
+
+        stage_summary = runtime_mod.observe_current_stage_from_pool_policy(registry)
+
+        self.assertEqual(stage_summary["status"], "custom")
+        self.assertEqual(
+            stage_summary["machine_error_code"], "POOL_POLICY_STAGE_CUSTOM"
+        )
+        self.assertEqual(stage_summary["observed_stage"], "")
+        self.assertEqual(stage_summary["pool_policy_summary"]["status"], "ok")
+        self.assertEqual(
+            stage_summary["pool_policy_summary"]["active_target"], 20
+        )
+        self.assertEqual(
+            stage_summary["pool_policy_summary"]["reserve_target"], 1
+        )
 
     def test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion(
         self,
@@ -9620,6 +11200,277 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(before, self.state_snapshot())
 
+    def test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-stage15-outer-lock"
+        reserve_auth_path = self.profile_dir / "codex-reserve-stage15-outer-lock.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            lock_observations: list[str] = []
+
+            def proof_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("proof")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "stage_proof_result": {
+                        "proof_gate_status": "passed",
+                        "final_outcome": "stable_10_proved",
+                    },
+                }
+
+            def policy_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("policy")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "pool_policy_update_result": {
+                        "final_outcome": "stage_policy_updated",
+                    },
+                }
+
+            def promote_side_effect(*_args: object, **kwargs: object) -> dict[str, object]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("promote")
+                return {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "operator_action": "none",
+                    "exit_code": 0,
+                    "promotion_result": {
+                        "precondition_status": "eligible_reserve_backend",
+                        "final_outcome": "promoted_active",
+                    },
+                }
+
+            def materialize_side_effect(
+                *_args: object, **_kwargs: object
+            ) -> dict[str, object]:
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("materialize")
+                return {
+                    "auth_basename": reserve_auth_path.name,
+                    "source_auth_ref": str(reserve_auth_path),
+                    "target_path": str(reserve_auth_path),
+                    "target_dir": str(reserve_auth_path.parent),
+                    "inventory_source": "stable_config_auth_dir",
+                }
+
+            def postflight_side_effect(
+                *_args: object, **kwargs: object
+            ) -> tuple[bool, str, str, dict[str, object]]:
+                self.assertTrue(kwargs.get("lock_acquired"))
+                self.assertTrue(paths.lock_file.exists())
+                lock_observations.append("postflight")
+                return (
+                    True,
+                    "OK",
+                    "none",
+                    {
+                        "attestation_status": "passed",
+                        "rotation_status": "available",
+                        "readiness_status": "ready",
+                    },
+                )
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                side_effect=proof_side_effect,
+            ):
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_policy_stage_set",
+                    side_effect=policy_side_effect,
+                ):
+                    with mock.patch(
+                        "wild_boar_proxy.runtime.run_promote",
+                        side_effect=promote_side_effect,
+                    ):
+                        with mock.patch(
+                            "wild_boar_proxy.runtime.materialize_rollout_stage_advance_stable_auth",
+                            side_effect=materialize_side_effect,
+                        ):
+                            with mock.patch(
+                                "wild_boar_proxy.runtime.summarize_rollout_stage_advance_postflight",
+                                side_effect=postflight_side_effect,
+                            ):
+                                payload = runtime_mod.run_rollout_stage_advance(
+                                    paths, "15", reserve_backend_id
+                                )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        advance = payload["stage_advancement_result"]
+        self.assertEqual(advance["preflight_stage10_proof_status"], "passed")
+        self.assertEqual(advance["policy_transition_status"], "stage_policy_updated")
+        self.assertEqual(advance["promotion_status"], "promoted")
+        self.assertEqual(advance["final_outcome"], "advanced_one_step")
+        self.assertEqual(
+            lock_observations,
+            ["proof", "policy", "promote", "materialize", "postflight"],
+        )
+        self.assertFalse(paths.lock_file.exists())
+
+    def test_summarize_rollout_stage_advance_preflight_includes_healthcheck_retry_summary(
+        self,
+    ) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            health_payload = runtime_mod.build_command_payload(
+                ok=True,
+                human_message="Runtime attestation passed.",
+                machine_error_code="OK",
+                liveness="healthy",
+                severity="recoverable",
+                operator_action="none",
+                changed_files=[],
+                extra={
+                    "desired_mode": "managed",
+                    "effective_mode": "managed",
+                    "endpoint": "http://127.0.0.1:8320/v1",
+                    "last_error": "",
+                    "attestation": {},
+                },
+            )
+            retry_summary = {
+                "status": "not_invoked",
+                "attempted": False,
+                "eligible": False,
+                "retry_delay_seconds": 0.0,
+                "initial_status": "ok",
+                "initial_machine_error_code": "OK",
+                "initial_last_error": "",
+                "final_status": "ok",
+                "final_machine_error_code": "OK",
+                "final_last_error": "",
+                "outcome": "not_needed",
+            }
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_attestation_healthcheck",
+                return_value=(health_payload, retry_summary),
+            ), mock.patch(
+                "wild_boar_proxy.runtime.summarize_status",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "attestation_summary": {},
+                    "stable_runtime_consumer": {},
+                },
+            ), mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_rotation_inspect",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "rotation_evidence_result": {
+                        "participation_status": "available"
+                    },
+                },
+            ), mock.patch(
+                "wild_boar_proxy.runtime.summarize_stable_10_rollback_readiness",
+                return_value={"status": "ready", "machine_error_code": "OK"},
+            ):
+                ok, machine_error_code, operator_action, summary = (
+                    runtime_mod.summarize_rollout_stage_advance_preflight(paths)
+                )
+        self.assertTrue(ok)
+        self.assertEqual(machine_error_code, "OK")
+        self.assertEqual(operator_action, "none")
+        self.assertEqual(summary["healthcheck_retry_summary"], retry_summary)
+
+    def test_summarize_rollout_stage_advance_postflight_includes_healthcheck_retry_summary(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+            health_payload = runtime_mod.build_command_payload(
+                ok=True,
+                human_message="Runtime attestation passed.",
+                machine_error_code="OK",
+                liveness="healthy",
+                severity="recoverable",
+                operator_action="none",
+                changed_files=[],
+                extra={
+                    "desired_mode": "managed",
+                    "effective_mode": "managed",
+                    "endpoint": "http://127.0.0.1:8320/v1",
+                    "last_error": "",
+                    "attestation": {},
+                },
+            )
+            retry_summary = {
+                "status": "not_invoked",
+                "attempted": False,
+                "eligible": False,
+                "retry_delay_seconds": 0.0,
+                "initial_status": "ok",
+                "initial_machine_error_code": "OK",
+                "initial_last_error": "",
+                "final_status": "ok",
+                "final_machine_error_code": "OK",
+                "final_last_error": "",
+                "outcome": "not_needed",
+            }
+            with mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_attestation_healthcheck",
+                return_value=(health_payload, retry_summary),
+            ), mock.patch(
+                "wild_boar_proxy.runtime.summarize_status",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "attestation_summary": {},
+                    "stable_runtime_consumer": {},
+                },
+            ), mock.patch(
+                "wild_boar_proxy.runtime.run_rollout_rotation_inspect",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "rotation_evidence_result": {
+                        "participation_status": "available"
+                    },
+                },
+            ), mock.patch(
+                "wild_boar_proxy.runtime.summarize_stable_10_rollback_readiness",
+                return_value={"status": "ready", "machine_error_code": "OK"},
+            ):
+                ok, machine_error_code, operator_action, summary = (
+                    runtime_mod.summarize_rollout_stage_advance_postflight(
+                        paths,
+                        expected_stage="10",
+                        backend_id="backend-00",
+                        active_pool_count_before=9,
+                    )
+                )
+        self.assertTrue(ok)
+        self.assertEqual(machine_error_code, "OK")
+        self.assertEqual(operator_action, "none")
+        self.assertEqual(summary["healthcheck_retry_summary"], retry_summary)
+
     def test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion(
         self,
     ) -> None:
@@ -9797,6 +11648,105 @@ class CliTests(unittest.TestCase):
             str(self.managed_dir / "supervisor-state.json"), payload["changed_files"]
         )
         self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+
+    def test_rollout_stage_advance_15_blocks_cross_thread_mode_mutation_during_policy_step(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture()
+        reserve_backend_id = "backend-reserve-advance-interleaving"
+        reserve_auth_path = self.profile_dir / "codex-reserve-advance-interleaving.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-advance-interleaving.sh",
+            state_patch={
+                "selected_backend_ids": [
+                    *[f"backend-{index:02d}" for index in range(10)],
+                    reserve_backend_id,
+                ],
+                "active_count": 11,
+                "reserve_count": 0,
+                "healthy_count": 11,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": managed_port,
+                "last_error": "",
+            },
+            stderr_text="sync-advance-interleaving",
+            exit_code=0,
+        )
+        concurrent_result: dict[str, object] = {}
+        managed_server, managed_thread = self.start_probe_server(managed_port)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                self.env() | {"WBP_SYNC_SCRIPT": str(sync_script)},
+                clear=False,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                original_run_policy_stage_set = runtime_mod.run_policy_stage_set
+
+                def policy_side_effect(*args: object, **kwargs: object) -> dict[str, object]:
+                    def concurrent_mode_mutation() -> None:
+                        try:
+                            runtime_mod.mode_set(paths, "stable")
+                        except runtime_mod.RuntimeErrorInfo as exc:
+                            concurrent_result["machine_error_code"] = exc.machine_error_code
+                            concurrent_result["operator_action"] = exc.operator_action
+                        else:
+                            concurrent_result["status"] = "unexpected_success"
+
+                    thread = threading.Thread(target=concurrent_mode_mutation, daemon=True)
+                    thread.start()
+                    thread.join(timeout=5)
+                    self.assertFalse(thread.is_alive())
+                    return original_run_policy_stage_set(*args, **kwargs)
+
+                with mock.patch(
+                    "wild_boar_proxy.runtime.run_rollout_stage_prove",
+                    return_value={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "operator_action": "none",
+                        "exit_code": 0,
+                        "stage_proof_result": {
+                            "proof_gate_status": "passed",
+                            "final_outcome": "stable_10_proved",
+                        },
+                    },
+                ):
+                    with mock.patch(
+                        "wild_boar_proxy.runtime.run_policy_stage_set",
+                        side_effect=policy_side_effect,
+                    ):
+                        payload = runtime_mod.run_rollout_stage_advance(
+                            paths, "15", reserve_backend_id
+                        )
+        finally:
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(concurrent_result["operator_action"], "retry")
+        self.assertEqual(
+            (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "managed",
+        )
 
     def test_rollout_stage_advance_15_fails_when_postflight_reserve_posture_remains_nonzero(
         self,
@@ -10107,6 +12057,101 @@ class CliTests(unittest.TestCase):
         promotion = payload["promotion_result"]
         self.assertTrue(promotion["routing_change_attempted"])
         self.assertFalse(promotion["routing_change_observed"])
+        self.assertEqual(
+            promotion["final_outcome"], "rollback_completed_after_failed_verification"
+        )
+        self.assertEqual(registry_path.read_text(encoding="utf-8"), before_registry)
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_accounts_promote_policy_verification_failure_rolls_back(self) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 1,
+            "active_target": 2,
+            "reserve_target": 1,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-policy-target",
+                auth_ref="/tmp/codex-policy-target.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-policy-extra",
+                auth_ref="/tmp/codex-policy-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before_registry = registry_path.read_text(encoding="utf-8")
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-policy-drift.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-policy-target"],
+                "active_count": 2,
+                "reserve_count": 1,
+                "retired_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-policy-drift",
+            exit_code=0,
+        )
+        promote_updates = json.dumps(
+            [
+                {"id": "backend-policy-target", "pool": "active"},
+                {"id": "backend-policy-extra", "pool": "active"},
+            ]
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_PROMOTE_BACKEND_UPDATES_JSON": promote_updates,
+                },
+                "accounts",
+                "promote",
+                "backend-policy-target",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "PROMOTION_STATUS_FAILED")
+        promotion = payload["promotion_result"]
+        self.assertTrue(promotion["routing_change_attempted"])
+        self.assertFalse(promotion["routing_change_observed"])
+        self.assertEqual(promotion["policy_verification_status"], "failed")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_pool_count_after"], 3)
+        self.assertEqual(promotion["reserve_count_before"], 2)
+        self.assertEqual(promotion["reserve_count_after"], 0)
         self.assertEqual(
             promotion["final_outcome"], "rollback_completed_after_failed_verification"
         )
@@ -11139,6 +13184,46 @@ class CliTests(unittest.TestCase):
         )
         self.assertNotIn(str(generated_config_path), payload["changed_files"])
 
+    def test_accounts_retire_reserve_backend_keeps_status_lifecycle_counts_consistent(
+        self,
+    ) -> None:
+        managed_port = free_port()
+        self.configure_managed_runtime_probe(managed_port)
+        registry_path = self.managed_dir / "backend-registry.json"
+        generated_config_path = self.managed_dir / "stable-runtime-config.generated.yaml"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-retire-status",
+                auth_ref="/tmp/codex-reserve-retire-status.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        generated_config_path.write_text(
+            f"host: 127.0.0.1\nport: {managed_port}\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(managed_port)
+        try:
+            retire_result = self.run_cli(
+                "accounts", "retire", "backend-reserve-retire-status", "--json"
+            )
+            status_result = self.run_cli("status", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(retire_result.returncode, 0, retire_result.stderr)
+        self.assertEqual(status_result.returncode, 0, status_result.stderr)
+        status_payload = json.loads(status_result.stdout)
+        self.assertEqual(status_payload["machine_error_code"], "OK")
+        self.assertEqual(status_payload["pool_summary"]["active"], 1)
+        self.assertEqual(status_payload["pool_summary"]["reserve"], 0)
+        self.assertEqual(status_payload["pool_summary"]["retired"], 1)
+        self.assertEqual(status_payload["pool_summary"]["backend_count"], 2)
+
     def test_accounts_retire_already_retired_backend_returns_terminal_noop(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -11477,6 +13562,186 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("swordfish", bundle_text)
         self.assertNotIn("sessionid", bundle_text)
 
+    def test_installer_init_creates_baseline_companion_layout(self) -> None:
+        fresh_profile = Path(self.temp_dir.name) / "fresh-profile"
+        fresh_managed = fresh_profile / "managed"
+        fresh_stable = Path(self.temp_dir.name) / "fresh-stable"
+        fresh_stable.mkdir(parents=True, exist_ok=True)
+        (fresh_stable / "config.yaml").write_text(
+            "host: 127.0.0.1\nport: 8318\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli_with_env(
+            {
+                "WBP_PROFILE_DIR": str(fresh_profile),
+                "WBP_MANAGED_DIR": str(fresh_managed),
+                "WBP_STABLE_CONFIG": str(fresh_stable / "config.yaml"),
+                "WBP_CONFIG_TOML": str(fresh_profile / "config.toml"),
+                "WBP_REGISTRY_FILE": str(fresh_managed / "backend-registry.json"),
+                "WBP_STATE_FILE": str(fresh_managed / "supervisor-state.json"),
+                "WBP_MANAGED_CONFIG_FILE": str(fresh_managed / "managed-config.yaml"),
+                "WBP_RUNTIME_EFFECTIVE_MODE_FILE": str(
+                    fresh_profile / "runtime-effective-mode.txt"
+                ),
+                "WBP_LAUNCHER_SCRIPT": str(fresh_profile / "launcher.sh"),
+            },
+            "installer",
+            "init",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertTrue((fresh_managed / "backend-registry.json").is_file())
+        self.assertTrue((fresh_managed / "supervisor-state.json").is_file())
+        self.assertTrue((fresh_profile / "config.toml").is_file())
+        self.assertEqual(
+            (fresh_profile / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "stable",
+        )
+        registry = json.loads((fresh_managed / "backend-registry.json").read_text())
+        self.assertEqual(registry["schema_version"], 2)
+        self.assertEqual(registry["backends"], [])
+        state = json.loads((fresh_managed / "supervisor-state.json").read_text())
+        self.assertEqual(state["schema_version"], 2)
+        self.assertEqual(state["effective_mode"], "stable")
+
+    def test_legacy_import_updates_registry_and_state(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        source_registry = {
+            "schema_version": 2,
+            "version": 2,
+            "updated_at": "2026-05-07T00:00:00+00:00",
+            "stable_default_backend_id": "legacy-backend",
+            "pool_policy": {"active_min": 1, "active_target": 1, "reserve_target": 0},
+            "backends": [
+                self.build_backend(
+                    backend_id="legacy-backend",
+                    auth_ref="/tmp/legacy.json",
+                    pool="active",
+                )
+            ],
+        }
+        source_state = {
+            "schema_version": 2,
+            "version": 2,
+            "status": "healthy",
+            "effective_mode": "managed",
+            "last_sync_at": "2026-05-07T00:00:00+00:00",
+            "last_error": "",
+            "selected_backend_ids": ["legacy-backend"],
+            "managed_port": 9999,
+            "current_proxy_url": "http://127.0.0.1:10808",
+            "stable_default_backend_id": "legacy-backend",
+            "active_count": 1,
+            "reserve_count": 0,
+            "retired_count": 0,
+            "healthy_count": 1,
+            "degraded_count": 0,
+            "down_count": 0,
+        }
+        (source_dir / "backend-registry.json").write_text(
+            json.dumps(source_registry) + "\n", encoding="utf-8"
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            json.dumps(source_state) + "\n", encoding="utf-8"
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["legacy_import_result"]["final_outcome"], "import_completed"
+        )
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        self.assertEqual(registry["stable_default_backend_id"], "legacy-backend")
+        self.assertEqual(state["selected_backend_ids"], ["legacy-backend"])
+        self.assertEqual(
+            (self.profile_dir / "runtime-mode.txt").read_text(encoding="utf-8").strip(),
+            "managed",
+        )
+
+    def test_legacy_import_rolls_back_on_invalid_source_state(self) -> None:
+        before_registry = (self.managed_dir / "backend-registry.json").read_text(
+            encoding="utf-8"
+        )
+        before_state = (self.managed_dir / "supervisor-state.json").read_text(
+            encoding="utf-8"
+        )
+        source_dir = Path(self.temp_dir.name) / "legacy-broken"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            "{broken-json}\n",
+            encoding="utf-8",
+        )
+
+        result = self.run_cli(
+            "legacy",
+            "import",
+            "--source-dir",
+            str(source_dir),
+            "--json",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertIn(
+            payload["machine_error_code"],
+            {"INVALID_JSON_FILE", "LEGACY_IMPORT_VERIFY_FAILED"},
+        )
+        legacy_result = payload["legacy_import_result"]
+        self.assertTrue(legacy_result["rollback_attempted"])
+        self.assertEqual(legacy_result["rollback_outcome"], "completed")
+        self.assertEqual(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            before_registry,
+        )
+        self.assertEqual(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            before_state,
+        )
+
+    def test_companion_reset_removes_companion_data_and_preserves_auth_file(self) -> None:
+        (self.profile_dir / "auth.json").write_text("{\"token\": \"keep\"}\n", encoding="utf-8")
+        (self.profile_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (self.profile_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\n',
+            encoding="utf-8",
+        )
+        result = self.run_cli("companion", "reset", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse(self.managed_dir.exists())
+        self.assertFalse((self.profile_dir / "runtime-mode.txt").exists())
+        self.assertFalse((self.profile_dir / "runtime-effective-mode.txt").exists())
+        self.assertFalse((self.profile_dir / "config.toml").exists())
+        self.assertTrue((self.profile_dir / "auth.json").exists())
+        self.assertTrue(payload["reset_result"]["auth_file_preserved"])
+
     def test_sync_returns_single_json_object(self) -> None:
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, "managed listener should remain absent")
@@ -11592,6 +13857,72 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         after = json.loads(state_path.read_text())
         self.assertEqual(after.get("selected_backend_snapshot"), expected_snapshot)
+
+    def test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces(
+        self,
+    ) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = ["backend-a", "backend-b"]
+        state["selected_backend_ids_observed_at"] = "2026-05-03T00:00:00+00:00"
+        state["selected_backend_snapshot"] = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-03T00:00:00+00:00",
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, self.env()):
+            paths = runtime_mod.RuntimePaths.from_env()
+            runtime_mod.reconcile_stable_fallback(
+                paths,
+                state,
+                stable_endpoint="http://127.0.0.1:8318/v1",
+                error_message="forced stable fallback",
+                stable_listener_ok=True,
+            )
+
+        after = json.loads(state_path.read_text())
+        self.assertEqual(after.get("selected_backend_ids"), [])
+        self.assertEqual(
+            after.get("selected_backend_ids_observed_at"),
+            "2026-05-03T00:00:00+00:00",
+        )
+        self.assertEqual(
+            after.get("selected_backend_snapshot", {}).get("selected_backend_ids"),
+            ["backend-a", "backend-b"],
+        )
+
+    def test_reconcile_stable_recovery_success_preserves_selected_backend_snapshot_surfaces(
+        self,
+    ) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = ["backend-a", "backend-b"]
+        state["selected_backend_ids_observed_at"] = "2026-05-03T00:00:00+00:00"
+        state["selected_backend_snapshot"] = self.build_selected_backend_snapshot(
+            ["backend-a", "backend-b"],
+            observed_at_utc="2026-05-03T00:00:00+00:00",
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        with mock.patch.dict(os.environ, self.env()):
+            paths = runtime_mod.RuntimePaths.from_env()
+            runtime_mod.reconcile_stable_recovery_success(
+                paths,
+                state,
+                stable_endpoint="http://127.0.0.1:8318/v1",
+            )
+
+        after = json.loads(state_path.read_text())
+        self.assertEqual(after.get("selected_backend_ids"), [])
+        self.assertEqual(
+            after.get("selected_backend_ids_observed_at"),
+            "2026-05-03T00:00:00+00:00",
+        )
+        self.assertEqual(
+            after.get("selected_backend_snapshot", {}).get("selected_backend_ids"),
+            ["backend-a", "backend-b"],
+        )
 
     def test_sync_does_not_expose_deterministic_stable_recovery_result(self) -> None:
         result = self.run_cli("sync", "--json")
@@ -12247,6 +14578,36 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("current_proxy_adoption_contract", payload)
         self.assertNotIn("proxy_reprobe_adoption_result", payload)
 
+    def test_launch_smoke_uses_bounded_default_stabilization_window(self) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            env = self.env()
+            env.pop("WBP_LAUNCH_STABILIZATION_SECONDS", None)
+            result = subprocess.run(
+                ["python3", "-m", "wild_boar_proxy", "launch", "smoke", "--json"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["stabilization_seconds"], 1.0)
+
     def test_launch_client_dispatches_bounded_executable_with_sanitized_env(self) -> None:
         port = free_port()
         trace_file = self.managed_dir / "launch-client-trace.json"
@@ -12285,6 +14646,7 @@ class CliTests(unittest.TestCase):
                     "HTTPS_PROXY": "http://example.invalid:2",
                     "ALL_PROXY": "http://example.invalid:3",
                     "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                    "PATH": "/definitely/missing",
                 },
                 "launch",
                 "client",
@@ -12302,9 +14664,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["machine_error_code"], "OK")
         self.assertEqual(payload["changed_files"], [])
         self.assertEqual(payload["effective_mode"], "managed")
+        self.assertEqual(payload["launch_readiness"]["status"], "ready")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
+        self.assertTrue(payload["launch_readiness"]["responses_proof_passed"])
         launch_result = payload["client_launch_result"]
         self.assertEqual(launch_result["client_path_kind"], "executable")
-        self.assertEqual(launch_result["runtime_precondition_status"], "ok")
+        self.assertEqual(launch_result["runtime_precondition_status"], "ready")
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
         self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
@@ -12320,6 +14685,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_payload["ALL_PROXY_present"])
         self.assertFalse(trace_payload["WBP_CURRENT_PROXY_URL_present"])
         self.assertEqual(trace_payload["NO_PROXY"], "127.0.0.1,localhost,::1")
+        self.assertEqual(trace_payload["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
 
     def test_launch_client_reports_missing_client_path_as_owner_packet(self) -> None:
         missing_path = self.profile_dir / "missing-host-client.sh"
@@ -12375,8 +14741,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             payload["machine_error_code"], "CLIENT_LAUNCH_RUNTIME_PRECONDITION_FAILED"
         )
+        self.assertEqual(payload["launch_readiness"]["status"], "blocked")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "blocked")
         launch_result = payload["client_launch_result"]
-        self.assertEqual(launch_result["runtime_precondition_status"], "failed")
+        self.assertEqual(launch_result["runtime_precondition_status"], "blocked")
         self.assertFalse(launch_result["dispatch_attempted"])
         self.assertEqual(payload["changed_files"], [])
         self.assertFalse(trace_file.exists())
@@ -12436,6 +14804,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
         launch_result = payload["client_launch_result"]
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
@@ -12489,6 +14858,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
         self.assertEqual(payload["machine_error_code"], "CLIENT_LAUNCH_DISPATCH_FAILED")
+        self.assertEqual(payload["runtime_guardrails"]["status"], "clear")
         self.assertEqual(
             payload["client_launch_result"]["final_outcome"], "dispatch_failed"
         )
@@ -12570,7 +14940,7 @@ class CliTests(unittest.TestCase):
         try:
             with mock.patch.dict(os.environ, self.env(), clear=True):
                 paths = runtime_mod.RuntimePaths.from_env()
-                with mock.patch.object(runtime_mod.shutil, "which", return_value=None):
+                with mock.patch.object(runtime_mod, "SYSTEM_OPEN_BIN", Path("/definitely/missing/open")):
                     payload = runtime_mod.run_launch_client(paths, str(app_bundle))
         finally:
             server.shutdown()
@@ -12585,6 +14955,111 @@ class CliTests(unittest.TestCase):
         self.assertFalse(launch_result["dispatch_attempted"])
         self.assertEqual(launch_result["dispatch_method"], "")
         self.assertEqual(launch_result["final_outcome"], "unsupported_launch_shape")
+
+    def test_launch_client_uses_absolute_system_open_under_hostile_path(self) -> None:
+        port = free_port()
+        app_bundle = self.profile_dir / "FakeHostClientAbsolute.app"
+        app_bundle.mkdir()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(
+                {
+                    **json.loads(
+                        (self.managed_dir / "supervisor-state.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    "effective_mode": "managed",
+                    "status": "healthy",
+                    "managed_port": port,
+                    "last_error": "",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            with mock.patch.dict(
+                os.environ,
+                {**self.env(), "PATH": "/definitely/missing"},
+                clear=True,
+            ):
+                paths = runtime_mod.RuntimePaths.from_env()
+                with mock.patch.object(runtime_mod, "SYSTEM_OPEN_BIN", Path("/usr/bin/open")):
+                    with mock.patch.object(runtime_mod.subprocess, "run") as run_mock:
+                        run_mock.return_value = subprocess.CompletedProcess(
+                            ["/usr/bin/open", "-a", str(app_bundle)],
+                            0,
+                            "",
+                            "",
+                        )
+                        payload = runtime_mod.run_launch_client(paths, str(app_bundle))
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        args, kwargs = run_mock.call_args
+        self.assertEqual(args[0][0], "/usr/bin/open")
+        self.assertEqual(kwargs["env"]["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
+
+    def test_launch_smoke_repo_owned_default_launcher_is_deterministic_under_hostile_path(
+        self,
+    ) -> None:
+        stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {stable_port}\n",
+            encoding="utf-8",
+        )
+        self.assertFalse(self.default_launcher_script.exists())
+        server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            for _ in range(5):
+                launch_result = self.run_cli_with_env(
+                    {"PATH": "/definitely/missing"},
+                    "launch",
+                    "smoke",
+                    "--json",
+                    include_launcher_override=False,
+                )
+                self.assertEqual(launch_result.returncode, 0, launch_result.stderr)
+                launch_payload = json.loads(launch_result.stdout)
+                self.assertEqual(launch_payload["status"], "ok")
+                self.assertEqual(launch_payload["machine_error_code"], "OK")
+                self.assertEqual(launch_payload["desired_mode"], "managed")
+                self.assertEqual(launch_payload["effective_mode"], "stable")
+                self.assertEqual(
+                    launch_payload["attestation_summary"]["status"], "ok"
+                )
+
+                status_result = self.run_cli_with_env(
+                    {"PATH": "/definitely/missing"},
+                    "status",
+                    "--json",
+                    include_launcher_override=False,
+                )
+                self.assertEqual(status_result.returncode, 0, status_result.stderr)
+                status_payload = json.loads(status_result.stdout)
+                self.assertEqual(status_payload["status"], "ok")
+                self.assertEqual(status_payload["machine_error_code"], "OK")
+                self.assertEqual(status_payload["desired_mode"], "managed")
+                self.assertEqual(status_payload["effective_mode"], "stable")
+                self.assertEqual(status_payload["attestation_summary"]["status"], "ok")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+{
+  "step": "STEP-28B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T08:21:05Z",
+  "claim_scope": "machine-evidence-only",
+  "checks": [
+    {
+      "name": "metrics_window_incomplete_reason_code_present",
+      "passed": true,
+      "source_ref": "audit_results/step28b_metrics_window_capture.json",
+      "fact": "machine_window_artifact_detected remains false and reason_code is TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE."
+    },
+    {
+      "name": "policy_reason_code_enforced_for_missing_14_day_window",
+      "passed": true,
+      "fact": "Missing complete 14-day machine metrics window is mapped to TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE."
+    },
+    {
+      "name": "forbidden_claims_not_asserted",
+      "passed": true,
+      "fact": "No forbidden release-readiness assertions are present in step28b owned outputs."
+    }
+  ],
+  "overall_passed": true
+}

@@ -71,10 +71,7 @@ Optional backend fields currently supported by the local contour:
 - `drain_until`
 - `enabled`
 - `half_open_since`
-- `last_deep_probe_at`
 - `last_error_class`
-- `last_probe_at`
-- `last_probe_level`
 - `last_transition_at`
 - `priority`
 - `proxy_mode`
@@ -125,13 +122,15 @@ Optional fields currently supported by the local contour:
 - `degraded_count`
 - `down_count`
 - `selected_backend_ids_observed_at`
-- `probe_port`
-- `last_proxy_discovery_at`
-- `last_full_deep_probe_at`
 - `last_known_good_proxy_url`
 - `last_known_good_proxy_observed_at`
 - `stable_runtime_consumer_snapshot`
 - `selected_backend_snapshot`
+
+The current local contour does not materialize a separate persisted
+deep-probe history field.
+Proxy-path truth remains carried by bounded owner-path packets and live runtime
+attestation instead.
 
 `selected_backend_ids` is a supervisor/runtime snapshot field.
 It is not registry lifecycle truth and must not be inferred from active registry

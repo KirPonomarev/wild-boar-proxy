@@ -1,0 +1,110 @@
+{
+  "contour": "Selected Backend Snapshot / Rotation Evidence Reclear For Final Validation",
+  "collected_at_utc": "2026-05-08T19:09:26.456043+00:00",
+  "owner_path_contract": {
+    "selected_backend_snapshot_owner_path": "sync --json",
+    "rotation_inspect_mutates_snapshot": false
+  },
+  "commands": [
+    {
+      "command": "python3 -m wild_boar_proxy sync --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "endpoint": "http://127.0.0.1:8320/v1",
+      "selected_backends_from_sync_log": [
+        "open17-plus",
+        "new-new55555"
+      ],
+      "changed_files": [
+        "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+        "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+        "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+        "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+      ]
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "observed_at_utc": "2026-05-08T19:09:17.745295+00:00",
+      "evidence_status": "participation_evidence_present",
+      "evidence_strength": "partial",
+      "evidence_reason": "multi_backend_snapshot",
+      "evidence_source": "runtime_state.selected_backend_snapshot",
+      "evidence_source_name": "sync --json",
+      "evidence_freshness": "fresh",
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_snapshot_compatibility": "nested_snapshot",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_ids": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "participation_status": "available",
+      "final_outcome": "participation_evidence_available"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "pool_summary": {
+        "active": 24,
+        "healthy": 2,
+        "down": 22,
+        "selected_backend_ids": [
+          "open17-plus",
+          "new-new55555"
+        ]
+      },
+      "policy_drift": {
+        "status": "detected",
+        "machine_error_code": "STABLE_POLICY_DRIFT",
+        "configured_active_count": 24,
+        "allowed_stable_auth_count": 2,
+        "stable_auth_inventory_count": 24,
+        "claim_blockers": [
+          "stable-15-proved",
+          "active-only-traffic",
+          "pool-participation-correct"
+        ]
+      },
+      "stable_runtime_consumer": {
+        "effective_source_status": "observed_source_active",
+        "effective_source_kind": "observed_stable_inventory_source",
+        "effective_source_path": "/Users/kirillponomarev/.cli-proxy-api",
+        "matches_desired": false,
+        "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+      },
+      "claim_gate": {
+        "status": "blocked",
+        "machine_error_code": "CLAIM_GATE_BLOCKED",
+        "sources": [
+          "policy_drift"
+        ],
+        "blocked_claims": [
+          "active-only-traffic",
+          "pool-participation-correct",
+          "stable-15-proved"
+        ]
+      },
+      "runtime_guardrails": {
+        "status": "clear",
+        "blocking_reason": ""
+      },
+      "launch_readiness": {
+        "status": "ready",
+        "blocking_reason": ""
+      }
+    }
+  ]
+}
