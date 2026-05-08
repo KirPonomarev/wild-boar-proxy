@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-08T19:03:15Z",
+  "contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "result": "NO_GO",
+  "result_basis": {
+    "live_run_executed": false,
+    "blocking_preflight_surface": "rollout rotation inspect --json",
+    "machine_error_code": "ROTATION_EVIDENCE_UNKNOWN",
+    "evidence_reason": "selected_backend_snapshot_missing",
+    "participation_status": "unknown",
+    "selected_backend_snapshot_present": false,
+    "selected_backend_ids": [],
+    "status_machine_error_code": "OK",
+    "healthcheck_machine_error_code": "OK",
+    "launch_smoke_machine_error_code": "OK",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear"
+  },
+  "diagnostics_bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-diagnostics-9bxz93db",
+  "next_contour": "Selected Backend Snapshot / Rotation Evidence Reclear For Final Validation",
+  "independent_audit": {
+    "agent": "Hooke",
+    "verdict": "blocked",
+    "blocker": "ROTATION_EVIDENCE_UNKNOWN",
+    "live_run_executed": false,
+    "next_step": "collect_selected_backend_snapshot_and rerun rollout rotation inspect"
+  }
+}

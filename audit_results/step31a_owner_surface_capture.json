@@ -1,0 +1,102 @@
+{
+  "step": "STEP-31A_ROTATION_PARTICIPATION_EVIDENCE_RECLEAR",
+  "generated_at_utc": "2026-05-08T18:34:17Z",
+  "claim_scope": "machine-evidence-only",
+  "contour": "Rotation Participation Evidence Reclear For Scale Gate",
+  "owner_path_action": {
+    "command": "python3 -m wild_boar_proxy sync --json",
+    "exit_code": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "fact": "Canonical owner path completed and refreshed selected-backend snapshot surfaces."
+  },
+  "post_sync_rotation_surface": {
+    "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+    "exit_code": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "evidence_status": "participation_evidence_present",
+    "evidence_source": "runtime_state.selected_backend_snapshot",
+    "evidence_source_name": "sync --json",
+    "evidence_freshness": "fresh",
+    "selected_backend_snapshot_validation_status": "valid",
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "final_outcome": "participation_evidence_available",
+    "selected_backend_ids": [
+      "new-new55555",
+      "open17-plus"
+    ],
+    "fact": "Rotation participation evidence was restored canonically from a fresh nested snapshot materialized by sync."
+  },
+  "post_sync_status_surface": {
+    "command": "python3 -m wild_boar_proxy status --json",
+    "exit_code": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "claim_gate": {
+      "status": "blocked",
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "sources": [
+        "policy_drift"
+      ]
+    },
+    "policy_drift": {
+      "status": "detected",
+      "machine_error_code": "STABLE_POLICY_DRIFT",
+      "configured_active_count": 24,
+      "allowed_stable_auth_count": 2,
+      "stable_auth_inventory_count": 24,
+      "claim_blockers": [
+        "stable-15-proved",
+        "active-only-traffic",
+        "pool-participation-correct"
+      ],
+      "stable_auth_inventory_source": {
+        "source": "auth-dir",
+        "path": "~/.cli-proxy-api",
+        "path_resolution": "expanduser",
+        "exists": true
+      }
+    },
+    "pool_summary": {
+      "active": 24,
+      "reserve": 0,
+      "retired": 0,
+      "healthy": 2,
+      "degraded": 0,
+      "down": 22,
+      "selected_backend_ids": [
+        "open17-plus",
+        "new-new55555"
+      ],
+      "backend_count": 24
+    },
+    "fact": "Rotation blocker is closed, but claim gate remains blocked by policy drift on the observed stable-auth inventory surface."
+  },
+  "post_sync_health_surface": {
+    "command": "python3 -m wild_boar_proxy healthcheck --json",
+    "exit_code": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "current_proxy_url": "http://127.0.0.1:10808",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "selected_backend_ids_observed": [
+      "new-new55555",
+      "open17-plus"
+    ],
+    "launch_capable_backend_count": 2,
+    "fact": "Runtime attestation stayed green after sync; the remaining blocker is not launch readiness."
+  }
+}

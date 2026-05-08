@@ -1,0 +1,101 @@
+{
+  "captured_at_utc": "2026-05-08T18:50:18Z",
+  "contour": "Repo-Owned Stable Launcher Provisioning For Claim-Gate Reclear",
+  "launcher_provisioning": {
+    "default_launcher_path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+    "backup_path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh.pre-step32-20260508T184658Z.bak",
+    "repo_managed_marker_present": true,
+    "repo_managed_marker_recognized": true
+  },
+  "commands": [
+    {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "repo_owned_default_consumer_provisioned": true,
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy launch smoke --json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "PROXY_PATH_BROKEN",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "current_proxy_url": "http://127.0.0.1:12334",
+      "launcher_exit_code": 0,
+      "consumer_activation_readiness": {
+        "status": "activation_pending",
+        "machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+        "reason": "desired_consumer_source_differs_from_effective_observation"
+      },
+      "effective_stable_runtime_consumer_source": {
+        "status": "observed_source_active",
+        "source_kind": "observed_stable_inventory_source",
+        "matches_desired": false
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "claim_gate": {
+        "status": "blocked",
+        "machine_error_code": "CLAIM_GATE_BLOCKED",
+        "blocked_claims": [
+          "active-only-traffic",
+          "pool-participation-correct",
+          "stable-15-proved"
+        ],
+        "sources": [
+          "policy_drift"
+        ]
+      },
+      "policy_drift": {
+        "status": "detected",
+        "configured_active_count": 24,
+        "allowed_stable_auth_count": 2,
+        "stable_auth_inventory_count": 24
+      },
+      "consumer_activation_readiness": {
+        "status": "activation_pending",
+        "machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+        "reason": "desired_consumer_source_differs_from_effective_observation"
+      },
+      "effective_stable_runtime_consumer_source": {
+        "status": "observed_source_active",
+        "source_kind": "observed_stable_inventory_source",
+        "resolved_path": "/Users/kirillponomarev/.cli-proxy-api",
+        "matches_desired": false
+      },
+      "launch_readiness": {
+        "status": "blocked",
+        "blocking_reason": "proxy_truth_drift",
+        "failed_checks": [
+          "proxy_truth_drift"
+        ],
+        "proxy_url_match": false
+      },
+      "attestation_summary": {
+        "status": "ok",
+        "machine_error_code": "OK"
+      }
+    }
+  ],
+  "independent_audit": {
+    "agent": "Carver",
+    "contour_status": "blocked",
+    "root_blocker": "proxy_truth_drift",
+    "launcher_provisioning_closed": true,
+    "next_step": "repair_proxy_truth_mismatch_then_rerun_launch_smoke"
+  }
+}
