@@ -20,6 +20,21 @@ Architecture is designed for 20 accounts from day one.
 The current contour has operational evidence of correct 16-account work.
 Formal scale proof remains staged and must be backed by runtime attestation, rotation evidence, and rollback readiness before any 20-account claim.
 
+## Managed Companion Positioning
+
+Wild Boar Proxy is currently positioned as a managed companion control app for the host client.
+It manages a user's own local operating contour: launch configuration, runtime modes, account lifecycle, diagnostics, and recovery.
+
+This positioning does not change the architecture boundary.
+The host client remains external.
+Wild Boar Proxy does not patch, fork, impersonate, or replace the host client.
+
+The app is intended for local management of a user's own accounts and runtime setup.
+It must not be positioned as an account-sharing tool, a bypass mechanism, a resale layer, or a way to obtain unauthorized access.
+
+Active planning docs should keep the neutral term `host client` where the architecture boundary matters.
+User-facing product copy may use companion-oriented wording only when it preserves the same boundary.
+
 ## Field Evidence Status
 
 The project has field evidence that the current local contour works correctly with 16 accounts.

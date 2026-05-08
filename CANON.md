@@ -52,15 +52,18 @@ Current standing approval phrase:
 
 `разрешаю тебе любые законные действия в рамках разработки проекта`
 
+Standing approval must be explicit, project-scoped, and present in the active
+thread.
+
 If that standing approval exists in the current thread and has not been
 revoked, it satisfies owner authorization for later project-scoped live
 commands that are otherwise allowed by canon and runbooks.
 
 Exact one-off owner markers remain valid and may still be used.
 
-Generic phrases such as `start`, `go`, or `начинай работу` do not themselves
-authorize live commands unless the thread already contains the standing owner
-approval or a more specific owner marker.
+Generic phrases such as `start`, `go`, `begin work`, or `начинай работу` do
+not themselves authorize live commands unless the thread already contains the
+standing owner approval or a more specific owner marker.
 
 Standing approval does not widen command scope beyond what canon and runbooks
 already allow.
