@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "machine_error_code": "OK",
+  "human_message": "Launcher smoke completed.",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+  ],
+  "desired_mode": "stable",
+  "effective_mode": "stable",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "desired_consumer_source_status": "approved_target_selected",
+  "effective_consumer_source_status": "approved_target_active_by_activation_evidence",
+  "effective_consumer_source_kind": "approved_repair_target",
+  "activation_snapshot_freshness": "fresh",
+  "launch_readiness_status": "ready",
+  "runtime_guardrails_status": "clear"
+}

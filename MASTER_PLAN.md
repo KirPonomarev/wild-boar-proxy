@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.44
-PLAN_DATE: 2026-05-07
+PLAN_VERSION: 1.45
+PLAN_DATE: 2026-05-08
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; prior blocked evidence-lane artifacts remain preserved as history; same-day 20-account live validation is scheduled for May 7, 2026; fixed long-window metrics gating is removed from the active plan; next primary contour is day-of scale validation, then remaining development closeout, basic companion UI, and pre-release testing
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; prior blocked evidence-lane artifacts remain preserved as history; direct same-day 20-account re-entry closed `NO_GO` on 2026-05-08 because the canonical stage-20 owner path lacked an explicit eligible reserve backend; fixed long-window metrics gating remains removed from the active plan; next primary contour is execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -59,6 +59,9 @@ The accepted interpretation is:
 - The contour must still produce machine-carried evidence.
 - Stress duration is operator-defined and should be long enough to exercise routing, rotation, recovery, and truthful status.
 - Architecture claims do not replace live evidence; they only justify the contour design.
+- same-day validation may begin only after the reserve-first stage-20 owner path is canonical and available
+- a working managed pool alone does not waive the explicit eligible reserve backend requirement for `rollout stage advance 20 <id> --json`
+- `managed pool` and `active window` remain distinct truths; a wider managed inventory is not itself proof of staged active-routing progression
 
 Required evidence for same-day 20-account validation:
 
@@ -75,6 +78,17 @@ Required evidence for same-day 20-account validation:
 
 This contour may support a `scale-to-20 validated` claim.
 It must not silently imply `pilot_ready` or `production_ready`.
+
+Current implication:
+
+- the same-day scale lane remains accepted
+- the direct re-entry attempt is not currently open
+- repair of proof posture and lifecycle truth comes first
+- if a later scale re-entry closes with a non-repo-owned `NO_GO` while
+  execution-core truth remains green and unambiguous, that scale blocker does
+  not by itself force more execution-core repair before `basic companion UI`
+  begins; the unresolved scale blocker must instead remain explicit as a
+  separate later contour
 
 ## Managed Pool Operating Contour
 
