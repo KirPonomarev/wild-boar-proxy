@@ -650,6 +650,8 @@ def run_rollout_attestation_healthcheck(
         "final_machine_error_code": str(payload.get("machine_error_code", "")),
         "final_last_error": last_error,
         "outcome": "not_needed",
+        "confirmation_basis": "",
+        "guardrail_status": "not_invoked",
     }
     if not retry_summary["eligible"]:
         return payload, retry_summary
@@ -659,6 +661,7 @@ def run_rollout_attestation_healthcheck(
     retry_summary["attempted"] = True
     retry_summary["retry_delay_seconds"] = retry_delay_seconds
     retry_summary["outcome"] = "retry_failed"
+    retry_summary["guardrail_status"] = "blocked"
     if retry_delay_seconds > 0:
         time.sleep(retry_delay_seconds)
 
@@ -676,16 +679,181 @@ def run_rollout_attestation_healthcheck(
     )
     retry_summary["final_last_error"] = retried_last_error
     retry_summary["outcome"] = (
-        "recovered_on_retry"
+        "healthy_on_retry"
         if retried_payload.get("status") == "ok"
         and str(retried_payload.get("effective_mode")) == "managed"
         else "retry_failed"
     )
+    if retry_summary["outcome"] == "healthy_on_retry":
+        retry_summary["confirmation_basis"] = "retry_observation_only"
+        retry_summary["guardrail_status"] = "observation_only"
     return retried_payload, retry_summary
 
 
-def get_model(paths: RuntimePaths, fallback: str = "gpt-5.4") -> str:
+def get_model(paths: RuntimePaths, fallback: str = "gpt-5.3-codex") -> str:
     return read_toml_string(paths.config_toml, "model") or fallback
+
+
+def get_configured_proxy_url(paths: RuntimePaths, effective_mode: str) -> str:
+    if effective_mode == "managed":
+        return read_yaml_value(paths.managed_config_file, "proxy-url")
+    return read_stable_proxy_url(paths)
+
+
+def truth_drift_detail(
+    *,
+    configured_model: str,
+    requested_model: str,
+    model_match: bool,
+    configured_proxy_url: str,
+    current_proxy_url: str,
+    proxy_url_match: bool,
+) -> str:
+    drift_parts: list[str] = []
+    if not model_match:
+        drift_parts.append(
+            f"model drift: configured={configured_model or '<empty>'}, requested={requested_model or '<empty>'}"
+        )
+    if not proxy_url_match:
+        drift_parts.append(
+            f"proxy drift: configured={configured_proxy_url or '<empty>'}, current={current_proxy_url or '<empty>'}"
+        )
+    return "; ".join(drift_parts)
+
+
+def build_launch_readiness_surface(
+    *,
+    owner_command_surface: str,
+    delegated_from_status: bool,
+    listener_ok: bool,
+    models_ok: bool,
+    responses_ok: bool,
+    base_url_match: bool,
+    effective_mode_match: bool,
+    model_match: bool,
+    proxy_url_match: bool,
+    machine_error_code: str,
+    error_detail: str,
+    auth_pool_hygiene: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if not listener_ok:
+        failed_checks.append("listener_unreachable")
+    if listener_ok and not models_ok:
+        failed_checks.append("models_surface_unavailable_or_invalid")
+    if listener_ok and models_ok and not responses_ok:
+        failed_checks.append("responses_probe_failed")
+    if not base_url_match:
+        failed_checks.append("base_url_mismatch")
+    if not effective_mode_match:
+        failed_checks.append("effective_mode_truth_drift")
+    if not model_match:
+        failed_checks.append("model_truth_drift")
+    if not proxy_url_match:
+        failed_checks.append("proxy_truth_drift")
+    auth_pool_hygiene_status = ""
+    launch_capable_backend_count = None
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene_status = str(auth_pool_hygiene.get("status", ""))
+        launch_capable_backend_count = auth_pool_hygiene.get(
+            "launch_capable_backend_count"
+        )
+        if (
+            listener_ok
+            and models_ok
+            and not responses_ok
+            and auth_pool_hygiene_status == "launch_capable_empty"
+        ):
+            failed_checks.insert(0, "usable_auth_pool_empty")
+    gate_passed = not failed_checks
+    return {
+        "status": "ready" if gate_passed else "blocked",
+        "owner_command_surface": owner_command_surface,
+        "delegated_from_status": delegated_from_status,
+        "real_inference_required": True,
+        "listener_reachable": listener_ok,
+        "models_surface_reachable": models_ok,
+        "responses_proof_passed": responses_ok,
+        "truth_alignment_passed": (
+            base_url_match and effective_mode_match and model_match and proxy_url_match
+        ),
+        "base_url_match": base_url_match,
+        "effective_mode_match": effective_mode_match,
+        "model_match": model_match,
+        "proxy_url_match": proxy_url_match,
+        "gate_passed": gate_passed,
+        "blocking_reason": "" if gate_passed else failed_checks[0],
+        "failed_checks": failed_checks,
+        "machine_error_code": machine_error_code,
+        "last_error": error_detail,
+        "auth_pool_hygiene_status": auth_pool_hygiene_status,
+        "launch_capable_backend_count": launch_capable_backend_count,
+    }
+
+
+def build_runtime_guardrail_surface(
+    paths: RuntimePaths,
+    *,
+    launch_readiness: dict[str, Any] | None,
+    auth_pool_hygiene: dict[str, Any] | None,
+    recovery_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    lock_preflight = get_lock_preflight(paths)
+    failed_checks: list[str] = []
+    lock_status = str(lock_preflight.get("status", "unknown"))
+    if lock_status == "held":
+        failed_checks.append("mutation_lock_held")
+    elif lock_status == "stale":
+        failed_checks.append("mutation_lock_stale")
+
+    launch_status = ""
+    launch_blocking_reason = ""
+    if isinstance(launch_readiness, dict):
+        launch_status = str(launch_readiness.get("status", ""))
+        launch_blocking_reason = str(launch_readiness.get("blocking_reason", ""))
+        if launch_status == "blocked" and launch_blocking_reason:
+            failed_checks.append(launch_blocking_reason)
+
+    auth_pool_status = ""
+    auth_pool_blocking_reason = ""
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_status = str(auth_pool_hygiene.get("status", ""))
+        auth_pool_blocking_reason = str(auth_pool_hygiene.get("blocking_reason", ""))
+        if auth_pool_status == "launch_capable_empty" and auth_pool_blocking_reason:
+            if auth_pool_blocking_reason not in failed_checks:
+                failed_checks.append(auth_pool_blocking_reason)
+
+    recovery_guardrail_status = ""
+    recovery_confirmation_basis = ""
+    recovery_effectful_claim_allowed = None
+    if isinstance(recovery_result, dict):
+        recovery_guardrail_status = str(recovery_result.get("guardrail_status", ""))
+        recovery_confirmation_basis = str(recovery_result.get("confirmation_basis", ""))
+        recovery_effectful_claim_allowed = recovery_result.get("effectful_claim_allowed")
+        if recovery_guardrail_status == "blocked":
+            failed_checks.append("recovery_claim_blocked")
+
+    if failed_checks:
+        status = "blocked"
+    elif recovery_guardrail_status == "observation_only":
+        status = "caution"
+    else:
+        status = "clear"
+
+    return {
+        "status": status,
+        "owner_command_surface": "healthcheck --json",
+        "lock_status": lock_status,
+        "launch_readiness_status": launch_status,
+        "launch_blocking_reason": launch_blocking_reason,
+        "auth_pool_hygiene_status": auth_pool_status,
+        "auth_pool_blocking_reason": auth_pool_blocking_reason,
+        "recovery_guardrail_status": recovery_guardrail_status,
+        "recovery_confirmation_basis": recovery_confirmation_basis,
+        "recovery_effectful_claim_allowed": recovery_effectful_claim_allowed,
+        "failed_checks": failed_checks,
+        "blocking_reason": "" if not failed_checks else failed_checks[0],
+    }
 
 
 def default_launcher_script_path(profile_dir: Path) -> Path:
@@ -1349,7 +1517,9 @@ def stable_repair_registry_identity_requires_block(
     )
 
 
-def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
+def backend_in_launch_candidate_universe(
+    backend: dict[str, Any],
+) -> tuple[bool, list[str]]:
     reasons = []
     if backend.get("enabled", True) is False:
         reasons.append("disabled")
@@ -1357,11 +1527,143 @@ def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
         reasons.append("pool_not_active")
     if bool(backend.get("manual_hold")):
         reasons.append("manual_hold")
-    if str(backend.get("status", "")).lower() in {"down", "fatal", "retired"}:
-        reasons.append("status_not_allowed")
     if not backend.get("auth_ref"):
         reasons.append("missing_auth_ref")
+    if str(backend.get("status", "")).lower() in {"retired", "fatal"}:
+        reasons.append("terminal_status")
     return not reasons, reasons
+
+
+def classify_backend_runtime_eligibility(
+    backend: dict[str, Any],
+) -> tuple[str, list[str]]:
+    eligible, reasons = backend_in_launch_candidate_universe(backend)
+    if not eligible:
+        return "excluded", reasons
+
+    status = str(backend.get("status", "")).lower()
+    last_error_class = str(backend.get("last_error_class", "")).lower()
+    last_error = str(backend.get("last_error", "")).lower()
+    cooldown_until = str(backend.get("cooldown_until") or "").strip()
+
+    if (
+        last_error_class == "auth"
+        or "auth_unavailable" in last_error
+        or "authentication token has been invalidated" in last_error
+    ):
+        return "auth_invalid", ["auth_invalid"]
+    if (
+        last_error_class == "quota"
+        or "usage_limit_reached" in last_error
+        or ("quota" in last_error and "model_cooldown" not in last_error)
+    ):
+        return "quota_exhausted", ["quota_exhausted"]
+    if "model_cooldown" in last_error or (
+        cooldown_until and status != "healthy" and not last_error_class
+    ):
+        return "cooldown_only", ["cooldown_only"]
+    if status == "healthy" and not cooldown_until and not last_error_class and not last_error:
+        return "live_capable", []
+    return "unknown_unverified", ["unknown_unverified"]
+
+
+def get_launch_capable_backend_ids(registry: dict[str, Any]) -> list[str]:
+    return sorted(
+        str(item.get("id")).strip()
+        for item in registry.get("backends", [])
+        if str(item.get("id") or "").strip()
+        and classify_backend_runtime_eligibility(item)[0] == "live_capable"
+    )
+
+
+def summarize_auth_pool_hygiene(
+    registry: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
+    candidate_universe_backend_ids: list[str] = []
+    class_backend_ids = {
+        "live_capable": [],
+        "quota_exhausted": [],
+        "auth_invalid": [],
+        "cooldown_only": [],
+        "unknown_unverified": [],
+    }
+    for backend in registry.get("backends", []):
+        backend_id = backend.get("id")
+        if backend_id is None:
+            continue
+        eligibility_class, _ = classify_backend_runtime_eligibility(backend)
+        if eligibility_class == "excluded":
+            continue
+        normalized_id = str(backend_id)
+        candidate_universe_backend_ids.append(normalized_id)
+        class_backend_ids.setdefault(eligibility_class, []).append(normalized_id)
+
+    selected_backend_ids = sorted(
+        str(item) for item in state.get("selected_backend_ids", []) or []
+    )
+    launch_capable_backend_ids = sorted(class_backend_ids["live_capable"])
+    launch_capable_backend_id_set = set(launch_capable_backend_ids)
+    selected_launch_capable_backend_ids = [
+        backend_id
+        for backend_id in selected_backend_ids
+        if backend_id in launch_capable_backend_id_set
+    ]
+    selected_unusable_backend_ids = [
+        backend_id
+        for backend_id in selected_backend_ids
+        if backend_id not in launch_capable_backend_id_set
+    ]
+
+    if launch_capable_backend_ids:
+        status = "launch_capable_available"
+        machine_error_code = "OK"
+        blocking_reason = ""
+    else:
+        status = "launch_capable_empty"
+        machine_error_code = "USABLE_AUTH_POOL_EMPTY"
+        blocking_reason = "no_live_capable_active_backends"
+
+    if selected_backend_ids and selected_unusable_backend_ids:
+        selection_alignment_status = "selected_backend_outside_live_capable_lane"
+    else:
+        selection_alignment_status = "aligned"
+
+    return {
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "blocking_reason": blocking_reason,
+        "claim_scope": "bounded_runtime_auth_usability_only",
+        "candidate_universe_backend_ids": sorted(candidate_universe_backend_ids),
+        "launch_capable_backend_ids": launch_capable_backend_ids,
+        "quota_exhausted_backend_ids": sorted(class_backend_ids["quota_exhausted"]),
+        "auth_invalid_backend_ids": sorted(class_backend_ids["auth_invalid"]),
+        "cooldown_only_backend_ids": sorted(class_backend_ids["cooldown_only"]),
+        "unknown_unverified_backend_ids": sorted(
+            class_backend_ids["unknown_unverified"]
+        ),
+        "launch_capable_backend_count": len(launch_capable_backend_ids),
+        "candidate_universe_backend_count": len(candidate_universe_backend_ids),
+        "selected_backend_ids_observed": selected_backend_ids,
+        "selected_launch_capable_backend_ids": selected_launch_capable_backend_ids,
+        "selected_unusable_backend_ids": selected_unusable_backend_ids,
+        "selected_launch_capable_backend_count": len(selected_launch_capable_backend_ids),
+        "selected_unusable_backend_count": len(selected_unusable_backend_ids),
+        "selection_alignment_status": selection_alignment_status,
+    }
+
+
+def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
+    eligibility_class, reasons = classify_backend_runtime_eligibility(backend)
+    if eligibility_class == "live_capable":
+        return True, []
+    status = str(backend.get("status", "")).lower()
+    if status in {"down", "degraded", "failed", "error"}:
+        if "status_not_allowed" not in reasons:
+            reasons = [*reasons, "status_not_allowed"]
+        return False, reasons
+    if eligibility_class == "excluded":
+        return False, reasons
+    return False, reasons or [eligibility_class]
 
 
 def get_stable_policy_drift_for_inventory_source(
@@ -1537,15 +1839,7 @@ def should_use_approved_target_policy_drift(
 
 
 def get_active_routing_candidate_backend_ids(registry: dict[str, Any]) -> list[str]:
-    candidate_ids: list[str] = []
-    for backend in registry.get("backends") or []:
-        backend_id = backend.get("id")
-        if not backend_id:
-            continue
-        allowed, _ = is_stable_auth_allowed(backend)
-        if allowed:
-            candidate_ids.append(str(backend_id))
-    return sorted(candidate_ids)
+    return get_launch_capable_backend_ids(registry)
 
 
 def summarize_registry_identity(registry_identity: dict[str, Any]) -> dict[str, Any]:
@@ -2033,10 +2327,40 @@ def build_target_switch_surface_context(paths: RuntimePaths) -> dict[str, Any]:
 
 def build_stable_runtime_generated_config_surface(
     paths: RuntimePaths,
+    state: dict[str, Any],
 ) -> dict[str, Any]:
     generated_path = paths.stable_runtime_generated_config_file
+    snapshot = get_valid_stable_runtime_consumer_snapshot(state)
+    activation_snapshot_present = snapshot is not None
+    activation_snapshot_observed_at_utc = ""
+    activation_snapshot_freshness = "unknown"
+    activation_snapshot_references_generated_config = False
+    if snapshot is not None:
+        activation_snapshot_observed_at_utc = str(
+            snapshot.get("observed_at_utc") or ""
+        ).strip()
+        activation_snapshot_freshness = selected_backend_snapshot_freshness(
+            activation_snapshot_observed_at_utc
+        )
+        activation_snapshot_references_generated_config = (
+            str(snapshot.get("selected_config_file")) == str(generated_path)
+        )
+    if not generated_path.exists():
+        status = "declared_not_materialized"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "fresh"
+    ):
+        status = "materialized_with_fresh_activation_evidence"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "stale"
+    ):
+        status = "materialized_with_stale_activation_evidence"
+    else:
+        status = "materialized_unactivated"
     return {
-        "status": "materialized_unactivated" if generated_path.exists() else "declared_not_materialized",
+        "status": status,
         "config_file": str(generated_path),
         "ownership": "control_layer",
         "location_scope": "companion_managed_data",
@@ -2044,6 +2368,13 @@ def build_stable_runtime_generated_config_surface(
         "truth_surface": False,
         "activation_method": STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
         "exists": generated_path.exists(),
+        "activation_snapshot_present": activation_snapshot_present,
+        "activation_snapshot_observed_at_utc": activation_snapshot_observed_at_utc,
+        "activation_snapshot_freshness": activation_snapshot_freshness,
+        "activation_snapshot_references_generated_config": (
+            activation_snapshot_references_generated_config
+        ),
+        "activation_snapshot_alone_sufficient": False,
     }
 
 
@@ -2070,7 +2401,19 @@ def build_stable_runtime_activation_evidence_surface(
     snapshot_shape_valid = snapshot_present and all(
         field in snapshot for field in STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS
     )
+    snapshot_observed_at_utc = ""
+    snapshot_freshness = "unknown"
+    snapshot_references_generated_config = False
     if snapshot_shape_valid:
+        snapshot_observed_at_utc = str(snapshot.get("observed_at_utc") or "").strip()
+        snapshot_freshness = selected_backend_snapshot_freshness(snapshot_observed_at_utc)
+        snapshot_references_generated_config = (
+            str(snapshot.get("selected_config_file"))
+            == str(paths.stable_runtime_generated_config_file)
+        )
+    if snapshot_shape_valid and snapshot_freshness == "stale":
+        status = "snapshot_stale"
+    elif snapshot_shape_valid:
         status = "snapshot_present"
     elif snapshot_present:
         status = "snapshot_shape_invalid"
@@ -2087,6 +2430,11 @@ def build_stable_runtime_activation_evidence_surface(
         "required_fields": STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
         "snapshot_present": snapshot_present,
         "snapshot_shape_valid": snapshot_shape_valid,
+        "snapshot_observed_at_utc": snapshot_observed_at_utc,
+        "snapshot_freshness": snapshot_freshness,
+        "snapshot_references_generated_config": snapshot_references_generated_config,
+        "generated_config_file": str(paths.stable_runtime_generated_config_file),
+        "snapshot_alone_sufficient": False,
     }
     if snapshot_present:
         payload["current_snapshot"] = snapshot
@@ -2134,21 +2482,27 @@ def build_deterministic_stable_recovery_contract(
         },
         "failure_taxonomy_redesign_forbidden": True,
         "shared_activation_mechanics": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "reuse_existing_launch_smoke_activation_helper": True,
             "generated_config_file": str(paths.stable_runtime_generated_config_file),
             "handoff_env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
             "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            "owner_paths": ["healthcheck --json", "launch smoke --json"],
         },
-        "generated_config_regeneration_status": "contract_fixed_not_implemented",
+        "generated_config_regeneration_status": "owner_path_emitted",
         "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
         "generated_config_derivation_source": (
             "current_baseline_stable_config_plus_current_approved_target_reference"
         ),
+        "generated_config_regeneration_owner_paths": [
+            "healthcheck --json",
+            "launch smoke --json",
+        ],
         "stale_generated_config_authoritative": False,
         "generated_config_existence_alone_sufficient": False,
-        "snapshot_refresh_status": "contract_fixed_not_implemented",
+        "snapshot_refresh_status": "owner_path_emitted",
         "snapshot_refresh_after_stable_live_outcome": True,
+        "snapshot_refresh_owner_paths": ["healthcheck --json", "launch smoke --json"],
         "snapshot_schema_widening_required": False,
         "new_persisted_recovery_metadata_required": False,
         "stable_service_disabled_classification": {
@@ -2621,7 +2975,12 @@ def build_stable_runtime_consumer_contract(
         and str(health_payload.get("effective_mode")) == "stable"
     )
     snapshot = get_valid_stable_runtime_consumer_snapshot(state)
-    if live_stable_runtime_ok and snapshot:
+    snapshot_freshness = (
+        selected_backend_snapshot_freshness(snapshot.get("observed_at_utc"))
+        if snapshot
+        else "unknown"
+    )
+    if live_stable_runtime_ok and snapshot and snapshot_freshness == "fresh":
         snapshot_selected_kind = str(snapshot.get("selected_source_kind"))
         snapshot_selected_path = Path(str(snapshot.get("selected_source_path")))
         snapshot_outcome = str(snapshot.get("activation_outcome"))
@@ -2697,7 +3056,7 @@ def build_stable_runtime_consumer_contract(
             "matches_desired": desired_matches_effective,
         },
         "derived_stable_runtime_config_surface": (
-            build_stable_runtime_generated_config_surface(paths)
+            build_stable_runtime_generated_config_surface(paths, state)
         ),
         "launcher_handoff_contract": build_stable_runtime_launcher_handoff_contract(
             paths
@@ -2872,13 +3231,21 @@ def build_deterministic_stable_recovery_result(
     snapshot_refreshed: bool,
     fallback_reason: str,
     live_runtime_observation_confirmed: bool,
+    confirmation_basis: str,
+    effectful_claim_allowed: bool,
 ) -> dict[str, Any]:
     if not attempted:
         status = "not_invoked"
+        guardrail_status = "not_invoked"
     elif outcome == "recovery_failed_before_stable_healthy":
         status = "failed"
+        guardrail_status = "blocked"
+    elif effectful_claim_allowed:
+        status = "completed"
+        guardrail_status = "confirmed"
     else:
         status = "completed"
+        guardrail_status = "observation_only"
     return {
         "status": status,
         "owner_command_surface": "healthcheck --json",
@@ -2893,6 +3260,9 @@ def build_deterministic_stable_recovery_result(
         "snapshot_refreshed": snapshot_refreshed,
         "fallback_reason": fallback_reason,
         "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
+        "confirmation_basis": confirmation_basis,
+        "effectful_claim_allowed": effectful_claim_allowed,
+        "guardrail_status": guardrail_status,
     }
 
 
@@ -4257,6 +4627,24 @@ def is_proxy_path_error(error_detail: str) -> bool:
     )
 
 
+def classify_http_failure_machine_error(error_detail: str) -> str | None:
+    lowered = error_detail.lower()
+    if "auth_unavailable" in lowered:
+        return "AUTH_UNAVAILABLE"
+    if "model_cooldown" in lowered:
+        return "MODEL_COOLDOWN"
+    if "usage_limit_reached" in lowered or "quota" in lowered:
+        return "QUOTA_EXHAUSTED"
+    if (
+        "model_unavailable" in lowered
+        or "model_not_found" in lowered
+        or "model not found" in lowered
+        or "does not exist" in lowered
+    ):
+        return "MODEL_UNAVAILABLE"
+    return None
+
+
 def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
     try:
         parsed = urllib.parse.urlparse(candidate)
@@ -4371,8 +4759,6 @@ def reconcile_stable_fallback(
     stable_state["last_error"] = error_message
     stable_state["effective_mode"] = "stable"
     stable_state["selected_backend_ids"] = []
-    stable_state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
-    stable_state.pop("selected_backend_ids_observed_at", None)
     stable_state["healthy_count"] = 1 if stable_listener_ok else 0
     stable_state["degraded_count"] = 0
     stable_state["down_count"] = 1
@@ -4398,8 +4784,6 @@ def reconcile_stable_recovery_success(
     stable_state["last_error"] = ""
     stable_state["effective_mode"] = "stable"
     stable_state["selected_backend_ids"] = []
-    stable_state.pop(SELECTED_BACKEND_SNAPSHOT_FIELD, None)
-    stable_state.pop("selected_backend_ids_observed_at", None)
     stable_state["healthy_count"] = 1
     stable_state["degraded_count"] = 0
     stable_state["down_count"] = 0
@@ -4588,6 +4972,37 @@ def summarize_status(
         "selected_backend_ids": state.get("selected_backend_ids") or [],
         "backend_count": len(registry.get("backends") or []),
     }
+    auth_pool_hygiene = health_payload.get("auth_pool_hygiene")
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene = {
+            **auth_pool_hygiene,
+            "delegated_from_status": True,
+        }
+    else:
+        auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
+        auth_pool_hygiene["delegated_from_status"] = False
+    launch_readiness = health_payload.get("launch_readiness")
+    if isinstance(launch_readiness, dict):
+        launch_readiness = {
+            **launch_readiness,
+            "delegated_from_status": True,
+        }
+    runtime_guardrails = health_payload.get("runtime_guardrails")
+    if isinstance(runtime_guardrails, dict):
+        runtime_guardrails = {
+            **runtime_guardrails,
+            "delegated_from_status": True,
+            "owner_command_surface": "status --json",
+        }
+    else:
+        runtime_guardrails = build_runtime_guardrail_surface(
+            paths,
+            launch_readiness=launch_readiness if isinstance(launch_readiness, dict) else None,
+            auth_pool_hygiene=auth_pool_hygiene if isinstance(auth_pool_hygiene, dict) else None,
+            recovery_result=recovery_result if isinstance(recovery_result, dict) else None,
+        )
+        runtime_guardrails["delegated_from_status"] = False
+        runtime_guardrails["owner_command_surface"] = "status --json"
 
     return build_command_payload(
         ok=health_payload["status"] == "ok",
@@ -4606,6 +5021,9 @@ def summarize_status(
             "desired_mode": desired_mode,
             "effective_mode": health_payload["effective_mode"],
             "endpoint": health_payload["endpoint"],
+            "configured_model": health_payload.get("configured_model"),
+            "requested_model": health_payload.get("requested_model"),
+            "configured_proxy_url": health_payload.get("configured_proxy_url"),
             "current_proxy_url": current_proxy_url,
             "current_proxy_adoption_contract": current_proxy_adoption_contract,
             "last_known_good_proxy_contract": last_known_good_proxy_contract,
@@ -4618,12 +5036,31 @@ def summarize_status(
                 else {}
             ),
             "pool_summary": pool_summary,
+            "auth_pool_hygiene": auth_pool_hygiene,
             "policy_drift": policy_drift,
             "policy_drift_observed": policy_drift_observed,
             "stable_runtime_consumer": stable_runtime_consumer,
+            **(
+                {
+                    "launch_readiness": launch_readiness,
+                }
+                if isinstance(launch_readiness, dict)
+                else {}
+            ),
+            **(
+                {
+                    "runtime_guardrails": runtime_guardrails,
+                }
+                if isinstance(runtime_guardrails, dict)
+                else {}
+            ),
             "registry_identity_summary": summarize_registry_identity(registry_identity),
             "claim_gate": get_claim_gate(policy_drift, registry_identity),
-            "last_error": health_payload.get("last_error", state.get("last_error", "")),
+            "last_error": (
+                ""
+                if health_payload["status"] == "ok"
+                else health_payload.get("last_error", state.get("last_error", ""))
+            ),
             "attestation_summary": {
                 "status": health_payload["status"],
                 "machine_error_code": health_payload["machine_error_code"],
@@ -4638,16 +5075,19 @@ def observe_runtime_precondition_for_launch_client(
     paths: RuntimePaths, model: str | None = None
 ) -> dict[str, Any]:
     state = read_json(paths.state_file, required=False)
+    registry = read_json(paths.registry_file)
+    auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
     host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
     configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    configured_model = get_model(paths)
     listener_ok = socket_is_listening(host, port)
     reported_effective_mode = reconcile_effective_mode_for_reporting(
         effective_mode, listener_ok=listener_ok
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
-    model_name = model or get_model(paths)
+    model_name = model or configured_model
     models_ok = False
     responses_ok = False
     error_detail = ""
@@ -4677,16 +5117,39 @@ def observe_runtime_precondition_for_launch_client(
     effective_mode_artifact = read_effective_mode_artifact(paths)
     expected_base_url = reported_endpoint
     base_url_match = configured_base_url == expected_base_url
+    current_proxy_url = str(state.get("current_proxy_url", ""))
+    configured_proxy_url = get_configured_proxy_url(paths, reported_effective_mode)
+    model_match = model_name == configured_model
+    proxy_url_match = (
+        not configured_proxy_url
+        or not current_proxy_url
+        or configured_proxy_url == current_proxy_url
+    )
     effective_mode_match = (
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    if not error_detail:
+        error_detail = truth_drift_detail(
+            configured_model=configured_model,
+            requested_model=model_name,
+            model_match=model_match,
+            configured_proxy_url=configured_proxy_url,
+            current_proxy_url=current_proxy_url,
+            proxy_url_match=proxy_url_match,
+        )
     attestation = {
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "model_match": model_match,
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
+        "configured_proxy_url": configured_proxy_url,
+        "current_proxy_url": current_proxy_url,
+        "proxy_url_match": proxy_url_match,
         "selected_backends_digest": get_selected_backends_digest(state),
         "observed_at_utc": now_iso(),
         "runtime_version": str(
@@ -4696,10 +5159,40 @@ def observe_runtime_precondition_for_launch_client(
     }
 
     if not listener_ok:
+        machine_error_code = "LISTENER_DOWN"
+    elif (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
+        machine_error_code = "OK"
+    else:
+        machine_error_code = (
+            classify_http_failure_machine_error(error_detail) or "ATTESTATION_FAILED"
+        )
+    launch_readiness = build_launch_readiness_surface(
+        owner_command_surface="launch client precondition",
+        delegated_from_status=False,
+        listener_ok=listener_ok,
+        models_ok=models_ok,
+        responses_ok=responses_ok,
+        base_url_match=base_url_match,
+        effective_mode_match=effective_mode_match,
+        model_match=model_match,
+        proxy_url_match=proxy_url_match,
+        machine_error_code=machine_error_code,
+        error_detail=error_detail,
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+
+    if not listener_ok:
         return build_command_payload(
             ok=False,
             human_message=f"Listener is not reachable at {attestation_endpoint}.",
-            machine_error_code="LISTENER_DOWN",
+            machine_error_code=machine_error_code,
             liveness="down",
             severity="recoverable",
             operator_action="retry",
@@ -4709,16 +5202,25 @@ def observe_runtime_precondition_for_launch_client(
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
                 "attestation": attestation,
+                "auth_pool_hygiene": auth_pool_hygiene,
+                "launch_readiness": launch_readiness,
                 "last_error": error_detail
                 or f"Listener is not reachable at {attestation_endpoint}.",
             },
         )
 
-    if models_ok and responses_ok and base_url_match and effective_mode_match:
+    if (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
         return build_command_payload(
             ok=True,
             human_message="Runtime precondition passed for host-client launch.",
-            machine_error_code="OK",
+            machine_error_code=machine_error_code,
             liveness="healthy",
             severity="recoverable",
             operator_action="none",
@@ -4728,6 +5230,8 @@ def observe_runtime_precondition_for_launch_client(
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
                 "attestation": attestation,
+                "auth_pool_hygiene": auth_pool_hygiene,
+                "launch_readiness": launch_readiness,
                 "last_error": "",
             },
         )
@@ -4745,6 +5249,8 @@ def observe_runtime_precondition_for_launch_client(
             "effective_mode": reported_effective_mode,
             "endpoint": reported_endpoint,
             "attestation": attestation,
+            "auth_pool_hygiene": auth_pool_hygiene,
+            "launch_readiness": launch_readiness,
             "last_error": error_detail or "Runtime precondition failed one or more checks.",
         },
     )
@@ -4771,6 +5277,7 @@ def run_healthcheck(
         effective_mode, listener_ok=listener_ok
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    successful_reconcile_detail = ""
     managed_preflight_failure_candidate = effective_mode == "managed" and not listener_ok
 
     stale_managed_residue = (
@@ -4799,6 +5306,7 @@ def run_healthcheck(
             error_message=error_message,
             stable_listener_ok=stable_listener_ok,
         )
+        successful_reconcile_detail = str(state.get("last_error", ""))
         effective_mode = get_effective_mode(paths, state)
         host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
         configured_base_url = read_toml_string(paths.config_toml, "base_url")
@@ -4818,6 +5326,8 @@ def run_healthcheck(
             snapshot_refreshed=False,
             fallback_reason="",
             live_runtime_observation_confirmed=False,
+            confirmation_basis="",
+            effectful_claim_allowed=False,
         )
     recovery_attempt: StableRuntimeLaunchAttempt | None = None
     if allow_recovery:
@@ -4872,8 +5382,11 @@ def run_healthcheck(
 
     models_ok = False
     responses_ok = False
-    model_name = model or get_model(paths)
+    configured_model = get_model(paths)
+    model_name = model or configured_model
     error_detail = ""
+    registry = read_json(paths.registry_file)
+    auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
     current_proxy_url = str(state.get("current_proxy_url", ""))
     proxy_reprobe: dict[str, Any] | None = None
     proxy_reprobe_adoption_result: dict[str, Any] | None = None
@@ -4907,10 +5420,29 @@ def run_healthcheck(
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
     expected_base_url = reported_endpoint
     base_url_match = configured_base_url == expected_base_url
+    configured_proxy_url = get_configured_proxy_url(paths, reported_effective_mode)
+    current_proxy_truth_url = get_reported_current_proxy_url(
+        paths, state, reported_effective_mode
+    )
+    model_match = model_name == configured_model
+    proxy_url_match = (
+        not configured_proxy_url
+        or not current_proxy_truth_url
+        or configured_proxy_url == current_proxy_truth_url
+    )
     effective_mode_match = (
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    if not error_detail:
+        error_detail = truth_drift_detail(
+            configured_model=configured_model,
+            requested_model=model_name,
+            model_match=model_match,
+            configured_proxy_url=configured_proxy_url,
+            current_proxy_url=current_proxy_truth_url,
+            proxy_url_match=proxy_url_match,
+        )
 
     if not listener_ok:
         liveness = "down"
@@ -4925,7 +5457,14 @@ def run_healthcheck(
         else:
             human_message = f"Listener is not reachable at {attestation_endpoint}."
         ok = False
-    elif models_ok and responses_ok and base_url_match and effective_mode_match:
+    elif (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
         liveness = "healthy"
         severity = "recoverable"
         operator_action = "none"
@@ -4961,7 +5500,10 @@ def run_healthcheck(
                     "no bounded local proxy candidate is reachable."
                 )
         else:
-            machine_error_code = "ATTESTATION_FAILED"
+            machine_error_code = (
+                classify_http_failure_machine_error(error_detail)
+                or "ATTESTATION_FAILED"
+            )
             human_message = "Runtime attestation failed one or more checks."
         ok = False
 
@@ -5017,6 +5559,7 @@ def run_healthcheck(
                 same_current_reconfirmed = (
                     activation_attempt.prior_current_proxy_url == working_candidate
                     and reproof_ok
+                    and reproof_current_proxy_url == working_candidate
                 )
                 candidate_adopted = (
                     activation_attempt.prior_current_proxy_url != working_candidate
@@ -5062,7 +5605,14 @@ def run_healthcheck(
                     proxy_reprobe_adoption_result["adoption_outcome"] = (
                         "live_reproof_failed"
                     )
-            elif paths.sync_script.exists():
+            elif (
+                paths.sync_script.exists()
+                and activation_attempt.launcher_lane_eligibility
+                not in {
+                    "default_path_present_repo_marker_invalid",
+                    "default_path_present_repo_marker_unrecognized",
+                }
+            ):
                 sync_recovery_result, sync_reproof_payload = (
                     attempt_sync_current_proxy_recovery_under_lock(
                         paths,
@@ -5114,6 +5664,8 @@ def run_healthcheck(
         fallback_reason = ""
         snapshot_refreshed = False
         live_runtime_observation_confirmed = ok and reported_effective_mode == "stable"
+        confirmation_basis = ""
+        effectful_claim_allowed = False
         if live_runtime_observation_confirmed:
             state = reconcile_stable_recovery_success(
                 paths, state, stable_endpoint=reported_endpoint
@@ -5123,6 +5675,10 @@ def run_healthcheck(
                 and recovery_attempt.launcher_exit_code == 0
             ):
                 recovery_outcome = "approved_target_recovered"
+                confirmation_basis = (
+                    "approved_target_activation_plus_live_runtime_observation"
+                )
+                effectful_claim_allowed = True
                 snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
                     activation_method="process_local_env_override",
                     selected_config_file=str(paths.stable_runtime_generated_config_file),
@@ -5134,7 +5690,13 @@ def run_healthcheck(
                 recovery_selected_kind = "approved_repair_target"
                 recovery_selected_path = str(paths.repair_target_inventory_dir)
             else:
-                recovery_outcome = "observed_source_fallback_recovered"
+                recovery_outcome = "observed_source_live_recovered"
+                if recovery_attempt.activation_attempted:
+                    confirmation_basis = (
+                        "observed_source_live_runtime_observation_after_activation_attempt"
+                    )
+                else:
+                    confirmation_basis = "observed_source_live_runtime_observation"
                 if recovery_attempt.activation_attempted:
                     fallback_reason = (
                         "launcher_exit_nonzero"
@@ -5171,6 +5733,7 @@ def run_healthcheck(
                 if recovery_attempt.launcher_exit_code != 0
                 else "stable_listener_unreachable_after_recovery"
             )
+            confirmation_basis = "live_runtime_observation_not_confirmed"
         recovery_result = build_deterministic_stable_recovery_result(
             delegated_from_status=False,
             attempted=True,
@@ -5183,6 +5746,8 @@ def run_healthcheck(
             snapshot_refreshed=snapshot_refreshed,
             fallback_reason=fallback_reason,
             live_runtime_observation_confirmed=live_runtime_observation_confirmed,
+            confirmation_basis=confirmation_basis,
+            effectful_claim_allowed=effectful_claim_allowed,
         )
         if (
             not live_runtime_observation_confirmed
@@ -5222,23 +5787,34 @@ def run_healthcheck(
             != previous_last_known_good_proxy_observed_at
         )
     attestation = {
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "model_match": model_match,
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
+        "configured_proxy_url": configured_proxy_url,
+        "current_proxy_url": current_proxy_url,
+        "proxy_url_match": proxy_url_match,
         "selected_backends_digest": get_selected_backends_digest(state),
         "observed_at_utc": now_iso(),
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": "healthcheck --json",
     }
-    extra = {
-        "desired_mode": desired_mode,
-        "effective_mode": reported_effective_mode,
-        "endpoint": reported_endpoint,
-        "current_proxy_url": current_proxy_url,
-        "attestation": attestation,
-        "last_error": (
+    launch_readiness = build_launch_readiness_surface(
+        owner_command_surface="healthcheck --json",
+        delegated_from_status=False,
+        listener_ok=listener_ok,
+        models_ok=models_ok,
+        responses_ok=responses_ok,
+        base_url_match=base_url_match,
+        effective_mode_match=effective_mode_match,
+        model_match=model_match,
+        proxy_url_match=proxy_url_match,
+        machine_error_code=machine_error_code,
+        error_detail=(
             ""
             if ok
             else error_detail
@@ -5248,6 +5824,41 @@ def run_healthcheck(
                 else state.get("last_error", "")
             )
         ),
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+    runtime_guardrails = build_runtime_guardrail_surface(
+        paths,
+        launch_readiness=launch_readiness,
+        auth_pool_hygiene=auth_pool_hygiene,
+        recovery_result=recovery_result,
+    )
+    reported_last_error = (
+        successful_reconcile_detail
+        if ok and successful_reconcile_detail
+        else (
+            ""
+            if ok
+            else error_detail
+            or (
+                "Missing or invalid runtime-effective-mode.txt"
+                if not effective_mode_artifact
+                else state.get("last_error", "")
+            )
+        )
+    )
+    extra = {
+        "desired_mode": desired_mode,
+        "effective_mode": reported_effective_mode,
+        "endpoint": reported_endpoint,
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "configured_proxy_url": configured_proxy_url,
+        "current_proxy_url": current_proxy_url,
+        "auth_pool_hygiene": auth_pool_hygiene,
+        "attestation": attestation,
+        "launch_readiness": launch_readiness,
+        "runtime_guardrails": runtime_guardrails,
+        "last_error": reported_last_error,
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
@@ -5379,12 +5990,12 @@ def detect_changed_files_by_state(
 
 
 def get_launch_stabilization_seconds() -> float:
-    raw = os.environ.get("WBP_LAUNCH_STABILIZATION_SECONDS", "30")
+    raw = os.environ.get("WBP_LAUNCH_STABILIZATION_SECONDS", "1")
     try:
         value = float(raw)
     except ValueError:
-        return 30.0
-    return value if value >= 0 else 30.0
+        return 1.0
+    return value if value >= 0 else 1.0
 
 
 def run_launch_smoke(
@@ -5511,6 +6122,9 @@ def run_launch_smoke(
             "stable_runtime_consumer": status_payload.get(
                 "stable_runtime_consumer", {}
             ),
+            "auth_pool_hygiene": status_payload.get("auth_pool_hygiene", {}),
+            "launch_readiness": status_payload.get("launch_readiness", {}),
+            "runtime_guardrails": status_payload.get("runtime_guardrails", {}),
             "attestation_summary": status_payload.get("attestation_summary", {}),
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",
@@ -5604,15 +6218,38 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             exit_code=exc.exit_code,
         )
     status_observed = summarize_owner_path_status_observation(status_payload)
+    launch_readiness = status_payload.get("launch_readiness")
+    auth_pool_hygiene = status_payload.get("auth_pool_hygiene")
+    runtime_guardrails = status_payload.get("runtime_guardrails")
+    if not isinstance(runtime_guardrails, dict):
+        recovery_result = None
+        stable_runtime_consumer = status_payload.get("stable_runtime_consumer")
+        if isinstance(stable_runtime_consumer, dict):
+            nested_recovery = stable_runtime_consumer.get(
+                "deterministic_stable_recovery_result"
+            )
+            if isinstance(nested_recovery, dict):
+                recovery_result = nested_recovery
+        runtime_guardrails = build_runtime_guardrail_surface(
+            paths,
+            launch_readiness=launch_readiness if isinstance(launch_readiness, dict) else None,
+            auth_pool_hygiene=auth_pool_hygiene if isinstance(auth_pool_hygiene, dict) else None,
+            recovery_result=recovery_result,
+        )
+        runtime_guardrails["delegated_from_status"] = False
+        runtime_guardrails["owner_command_surface"] = "launch client --json"
+    runtime_precondition_status = (
+        str(launch_readiness.get("status"))
+        if isinstance(launch_readiness, dict)
+        else ("ready" if status_payload["status"] == "ok" else "blocked")
+    )
     client_launch_result: dict[str, Any] = {
         "status": "runtime_precondition_checked",
         "attempted": True,
         "client_path": str(client_path),
         "client_path_kind": client_path_kind,
         "runtime_precondition_checked": True,
-        "runtime_precondition_status": (
-            "ok" if status_payload["status"] == "ok" else "failed"
-        ),
+        "runtime_precondition_status": runtime_precondition_status,
         "effective_mode_observed": str(status_payload.get("effective_mode", "")),
         "endpoint_observed": str(status_payload.get("endpoint", "")),
         "profile_context": profile_context,
@@ -5643,6 +6280,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "launch_readiness": launch_readiness,
+                    }
+                    if isinstance(launch_readiness, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=int(status_payload.get("exit_code", 1) or 1),
         )
@@ -5688,6 +6346,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "launch_readiness": launch_readiness,
+                    }
+                    if isinstance(launch_readiness, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=exc.exit_code,
         )
@@ -5728,6 +6407,20 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=(
                 int(dispatch_exit_code) if isinstance(dispatch_exit_code, int) else 1
@@ -5748,6 +6441,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             "endpoint": str(status_payload.get("endpoint", "")),
             "client_launch_result": client_launch_result,
             "status_observed": status_observed,
+            **(
+                {
+                    "auth_pool_hygiene": auth_pool_hygiene,
+                }
+                if isinstance(auth_pool_hygiene, dict)
+                else {}
+            ),
+            **(
+                {
+                    "launch_readiness": launch_readiness,
+                }
+                if isinstance(launch_readiness, dict)
+                else {}
+            ),
+            **(
+                {
+                    "runtime_guardrails": runtime_guardrails,
+                }
+                if isinstance(runtime_guardrails, dict)
+                else {}
+            ),
         },
     )
 
@@ -8574,18 +9288,11 @@ def attempt_sync_current_proxy_recovery_under_lock(
         and reproof_ok
         and reproof_current_proxy_url == working_candidate
     )
-    alternate_local_candidate_adopted = (
-        prior_current_proxy_url != reproof_current_proxy_url
-        and reproof_ok
-        and parse_local_proxy_candidate(reproof_current_proxy_url) is not None
-    )
-    if same_current_reconfirmed or candidate_adopted or alternate_local_candidate_adopted:
+    if same_current_reconfirmed or candidate_adopted:
         if same_current_reconfirmed:
             result["adoption_outcome"] = "sync_owner_path_same_current_reconfirmed"
-        elif candidate_adopted:
-            result["adoption_outcome"] = "sync_owner_path_candidate_adopted"
         else:
-            result["adoption_outcome"] = "sync_owner_path_alternate_candidate_adopted"
+            result["adoption_outcome"] = "sync_owner_path_candidate_adopted"
         result["current_proxy_url_rewritten"] = (
             reproof_current_proxy_url != prior_current_proxy_url
         )
@@ -10493,13 +11200,7 @@ def get_registry_backends_by_id(
 
 
 def routing_eligible_active_backend_ids(registry: dict[str, Any]) -> list[str]:
-    return sorted(
-        str(item.get("id"))
-        for item in registry.get("backends", [])
-        if item.get("id") is not None
-        and str(item.get("pool", "")) == "active"
-        and not bool(item.get("manual_hold", False))
-    )
+    return get_launch_capable_backend_ids(registry)
 
 
 def auth_ref_matches(expected_auth_ref: str, backend_auth_ref: Any) -> bool:
@@ -11016,7 +11717,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
         if not paths.state_file.exists():
             write_json_atomic(paths.state_file, build_installer_default_state_payload())
         if not paths.config_toml.exists():
-            write_text_atomic(paths.config_toml, 'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8318/v1"')
+            write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
     changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
     return build_command_payload(
         ok=True,
