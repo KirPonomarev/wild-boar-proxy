@@ -1,0 +1,108 @@
+{
+  "contour": "Stable Truth / Rotation Snapshot Coherence Reclear For Final Validation",
+  "collected_at_utc": "2026-05-08T19:16:36.840088+00:00",
+  "code_change_surface": {
+    "runtime_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "tests_file": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+    "behavior_change": "stable recovery/fallback preserve preexisting selected_backend_snapshot surfaces instead of clearing them"
+  },
+  "commands": [
+    {
+      "command": "python3 -m wild_boar_proxy sync --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "selected_backends_from_sync_log": [
+        "open17-plus",
+        "new-new55555"
+      ]
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_ids": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "participation_status": "available",
+      "evidence_source_name": "sync --json"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy mode set stable --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy launch smoke --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "launcher_exit_code": 0,
+      "stable_runtime_consumer": {
+        "effective_source_kind": "approved_repair_target",
+        "matches_desired": true,
+        "consumer_activation_readiness_machine_error_code": "OK"
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_ids": [
+        "new-new55555",
+        "open17-plus"
+      ],
+      "participation_status": "available",
+      "evidence_source_name": "sync --json"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "policy_drift_status": "clear",
+      "claim_gate_status": "clear",
+      "claim_gate_machine_error_code": "OK",
+      "effective_stable_runtime_consumer_matches_desired": true
+    },
+    {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "exit_code": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear",
+      "current_proxy_url": "http://127.0.0.1:10808"
+    }
+  ],
+  "verification": {
+    "unit_tests": [
+      "tests.test_cli.CliTests.test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces",
+      "tests.test_cli.CliTests.test_reconcile_stable_recovery_success_preserves_selected_backend_snapshot_surfaces",
+      "tests.test_cli.CliTests.test_sync_materializes_selected_backend_snapshot_on_success",
+      "tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target"
+    ],
+    "unit_test_result": "OK",
+    "py_compile": "OK",
+    "git_diff_check": "clean"
+  }
+}

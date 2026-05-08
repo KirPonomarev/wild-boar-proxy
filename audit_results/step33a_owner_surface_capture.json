@@ -1,0 +1,83 @@
+{
+  "captured_at_utc": "2026-05-08T18:59:42Z",
+  "contour": "Stable Approved-Target Activation / Proxy Truth Reclear For Final Validation",
+  "owner_correction": {
+    "stable_config_path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+    "backup_path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml.pre-step33-20260508T1850Z.bak",
+    "proxy_url_before": "http://127.0.0.1:12334",
+    "proxy_url_after": "http://127.0.0.1:10808"
+  },
+  "commands": [
+    {
+      "command": "python3 -m wild_boar_proxy mode set stable --json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy launch smoke --json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "effective_stable_runtime_consumer_source": {
+        "status": "approved_target_active_by_activation_evidence",
+        "source_kind": "approved_repair_target",
+        "resolved_path": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+        "matches_desired": true
+      },
+      "consumer_activation_readiness": {
+        "status": "aligned",
+        "machine_error_code": "OK"
+      },
+      "launch_readiness": {
+        "status": "ready",
+        "machine_error_code": "OK",
+        "blocking_reason": ""
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "configured_proxy_url": "http://127.0.0.1:10808",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "policy_drift": {
+        "status": "clear",
+        "machine_error_code": "OK",
+        "stable_auth_inventory_count": 2
+      },
+      "claim_gate": {
+        "status": "clear",
+        "machine_error_code": "OK",
+        "blocked_claims": [],
+        "sources": []
+      },
+      "effective_stable_runtime_consumer_source": {
+        "status": "approved_target_active_by_activation_evidence",
+        "source_kind": "approved_repair_target",
+        "resolved_path": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+        "matches_desired": true
+      },
+      "launch_readiness": {
+        "status": "ready",
+        "machine_error_code": "OK",
+        "blocking_reason": ""
+      }
+    }
+  ],
+  "independent_audit": {
+    "agent": "Cicero",
+    "contour_status": "approved_target_activation_verified",
+    "root_blocker_cleared": true,
+    "claim_gate_cleared": true,
+    "next_step": "none"
+  }
+}

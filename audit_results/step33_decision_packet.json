@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-08T18:59:42Z",
+  "contour": "Stable Approved-Target Activation / Proxy Truth Reclear For Final Validation",
+  "result": "stable_activation_truth_reclear_closed",
+  "result_basis": {
+    "owner_correction_type": "baseline_stable_proxy_url_reconciled_to_live_managed_proxy",
+    "proxy_url_after": "http://127.0.0.1:10808",
+    "launch_smoke_machine_error_code": "OK",
+    "launch_smoke_effective_mode": "stable",
+    "launch_smoke_current_proxy_url": "http://127.0.0.1:10808",
+    "effective_stable_runtime_consumer_source": "approved_target_active_by_activation_evidence",
+    "effective_source_matches_desired": true,
+    "consumer_activation_readiness_machine_error_code": "OK",
+    "status_machine_error_code": "OK",
+    "policy_drift_status": "clear",
+    "claim_gate_status": "clear",
+    "claim_gate_machine_error_code": "OK"
+  },
+  "next_contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "independent_audit": {
+    "agent": "Cicero",
+    "contour_status": "approved_target_activation_verified",
+    "root_blocker_cleared": true,
+    "claim_gate_cleared": true,
+    "next_step": "none"
+  }
+}

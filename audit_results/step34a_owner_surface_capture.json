@@ -1,0 +1,74 @@
+{
+  "captured_at_utc": "2026-05-08T19:03:15Z",
+  "contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "preflight": {
+    "status": {
+      "returncode": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "configured_proxy_url": "http://127.0.0.1:10808",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "claim_gate_status": "clear",
+      "claim_gate_machine_error_code": "OK",
+      "policy_drift_status": "clear"
+    },
+    "healthcheck": {
+      "returncode": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear"
+    },
+    "accounts_list": {
+      "returncode": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "active_count": 24,
+      "reserve_count": 0,
+      "retired_count": 0,
+      "healthy_active_count": 2,
+      "healthy_active_ids": [
+        "open17-plus",
+        "new-new55555"
+      ]
+    },
+    "rotation_inspect": {
+      "returncode": 1,
+      "status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_UNKNOWN",
+      "evidence_status": "participation_evidence_unknown",
+      "evidence_reason": "selected_backend_snapshot_missing",
+      "participation_status": "unknown",
+      "selected_backend_snapshot_present": false,
+      "selected_backend_ids": []
+    },
+    "launch_smoke": {
+      "returncode": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "effective_stable_runtime_consumer_status": "approved_target_active_by_activation_evidence",
+      "effective_matches_desired": true
+    },
+    "diagnostics_export": {
+      "returncode": 0,
+      "status": "ok",
+      "machine_error_code": "OK",
+      "bundle_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wild-boar-proxy-diagnostics-9bxz93db"
+    }
+  },
+  "independent_audit": {
+    "agent": "Hooke",
+    "verdict": "blocked",
+    "blocker": "ROTATION_EVIDENCE_UNKNOWN",
+    "live_run_executed": false,
+    "next_step": "collect_selected_backend_snapshot_and rerun rollout rotation inspect"
+  }
+}

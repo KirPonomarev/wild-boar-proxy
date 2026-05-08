@@ -1,0 +1,48 @@
+{
+  "step": "STEP-30_CANONICAL_DECISION_PACKET",
+  "generated_at_utc": "2026-05-08T18:29:46Z",
+  "contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "decision_status": "blocked",
+  "final_verdict": "NO_GO",
+  "claim_scope": "machine-evidence-only",
+  "live_high_load_run_executed": false,
+  "primary_blocker": {
+    "machine_error_code": "ROTATION_EVIDENCE_UNKNOWN",
+    "final_outcome": "participation_evidence_unknown",
+    "blocker_type": "observability",
+    "fact": "Mandatory rotation participation evidence under load is not presently claimable because same-event observation timestamp is missing."
+  },
+  "secondary_findings": [
+    {
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "fact": "Status surface still reports blocked claims sourced from policy drift."
+    }
+  ],
+  "contour_gate_result": {
+    "preflight_complete": true,
+    "preflight_passed": false,
+    "fallback_readiness_proven": true,
+    "strict_json_contract_intact": true,
+    "reason": "Mandatory preflight failed before the same-day high-load run could start."
+  },
+  "independent_audit": {
+    "verdict": "aligned_with_no_go",
+    "auditor": "Lorentz",
+    "agent_id": "019e08d6-6bf2-7d12-92dd-b13752ff13bf",
+    "narrowest_classification": "ROTATION_EVIDENCE_UNKNOWN",
+    "fact": "Independent audit agreed that canon requires NO_GO before any high-load run when rotation participation evidence remains unknown."
+  },
+  "refs": {
+    "owner_surface_capture": "audit_results/step30a_owner_surface_capture.json",
+    "closeout_report": "audit_results/step30_closeout_report.md",
+    "master_plan": "MASTER_PLAN.md",
+    "canon_plan": "NEXT_CONTOUR_CANON_PLAN.md",
+    "command_api": "COMMAND_API.md"
+  },
+  "environment": {
+    "branch": "codex/wave-1c-prereq-closeout",
+    "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+    "observation_date": "2026-05-08",
+    "environment_note": "Local managed companion runtime on the real environment"
+  }
+}
