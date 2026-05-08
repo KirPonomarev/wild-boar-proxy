@@ -1,0 +1,73 @@
+{
+  "status": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "policy_drift_machine_error_code": "OK",
+    "policy_drift_inventory_source": "approved_repair_target",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_observed_inventory_source": "auth-dir",
+    "pool_summary": {
+      "active": 24,
+      "reserve": 0,
+      "retired": 0,
+      "healthy": 1,
+      "degraded": 0,
+      "down": 1
+    }
+  },
+  "healthcheck": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "launch_capable_backend_ids": [
+      "open17-plus"
+    ]
+  },
+  "accounts_list": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "active_count": 24,
+    "reserve_count": 0,
+    "retired_count": 0,
+    "healthy_backend_ids": [
+      "open17-plus"
+    ],
+    "probing_backend_ids": [
+      "new-new55555"
+    ],
+    "down_count": 22,
+    "pool_policy": {
+      "active_target": 15,
+      "active_min": 15,
+      "reserve_target": 0
+    }
+  },
+  "rotation_inspect": {
+    "status": "error",
+    "exit_code": 1,
+    "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+    "evidence_freshness": "fresh",
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_claim_surface_source": "approved_repair_target",
+    "participation_status": "insufficient",
+    "evidence_reason": "active_routing_candidates_not_expanded",
+    "selected_backend_ids": [
+      "open17-plus"
+    ],
+    "active_routing_candidate_ids_observed": [
+      "open17-plus"
+    ],
+    "registry_active_pool_count_observed": 24,
+    "runtime_active_pool_count_observed": 24
+  }
+}

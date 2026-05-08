@@ -1,0 +1,49 @@
+{
+  "verdict": "GO_POSTURE_NORMALIZATION",
+  "contour_outcome": "POLICY_DRIFT_CONTRADICTION_CLEARED",
+  "primary_result": "TOP_LEVEL_POLICY_DRIFT_AND_CLAIM_GATE_CLEARED",
+  "remaining_blocker": "ROTATION_EVIDENCE_INSUFFICIENT",
+  "remaining_blocker_class": "POSTURE_PARTICIPATION",
+  "facts": {
+    "target_switch_apply": {
+      "machine_error_code": "TARGET_SWITCH_DIR_NOT_EMPTY",
+      "interpreted_as": "target_already_materialized"
+    },
+    "stable_repair_apply": {
+      "machine_error_code": "STABLE_REPAIR_APPLIED",
+      "target_inventory_entries_after": [
+        "codex-k.pro.open17@gmail.com-plus.json"
+      ]
+    },
+    "launch_smoke": {
+      "machine_error_code": "OK",
+      "effective_mode": "stable",
+      "effective_consumer_source_status": "approved_target_active_by_activation_evidence"
+    },
+    "status": {
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected"
+    },
+    "rotation": {
+      "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "policy_drift_status": "clear",
+      "participation_status": "insufficient",
+      "evidence_reason": "active_routing_candidates_not_expanded"
+    },
+    "pool": {
+      "active_count": 24,
+      "reserve_count": 0,
+      "active_target": 15,
+      "launch_capable_backend_count": 1
+    }
+  },
+  "contract_checks": {
+    "approved_target_activation_evidence_present": true,
+    "top_level_policy_drift_clear": true,
+    "claim_gate_clear": true,
+    "rotation_no_longer_contradicted": true,
+    "rotation_still_not_available": true
+  },
+  "next_action": "open_step42_posture_normalization_decision_packet"
+}

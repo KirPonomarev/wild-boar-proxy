@@ -4,11 +4,11 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.6
-PLAN_DATE: 2026-05-07
+PLAN_VERSION: 1.8
+PLAN_DATE: 2026-05-08
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Active; canonicalized; live lane blocked until owner authorization and preflight capture
-PLAN_SCOPE: Day-of 20-account validation prerequisites and go or no-go decision
+PLAN_STATUS: Active; direct same-day 20-account re-entry closed `NO_GO` in `step37`; `step38` scope-freeze classification closed `NO_GO` on current runtime-truth blockers; `step39` read-only truth reproof closed `NO_GO` because bounded `sync --json` refresh is required but not yet owner-authorized in the active thread; `step40` is the current authorized single-sync runtime-truth reclear contour and is presently parked at its precondition gate until explicit owner authorization appears in the active thread; this document governs a bounded repair program composed of multiple small contours; once `step40` reopens and closes, the next lanes are reserve-first posture normalization, stage-20 re-entry, post-advance same-day validation, and canonical stop before design
+PLAN_SCOPE: Repair proof posture and lifecycle truth through a bounded sequence of control-layer contours so the real working contour becomes canonically provable before basic companion UI work resumes
 
 ## Canon Priority
 
@@ -22,262 +22,508 @@ When sources conflict, decisions must follow this order:
 6. `DELIVERY_RULES.md`
 7. `README.md`
 
+This plan controls the next repair program and its small-contour sequence.
+It does not override the governing product/runtime canon above.
+
+## Trigger For This Plan
+
+The previous direct re-entry attempt is closed `NO_GO`.
+
+Observed facts from `step37`:
+
+- `status --json` remained green:
+  - `effective_mode=stable`
+  - `policy_drift.status=clear`
+  - `claim_gate.status=clear`
+- `healthcheck --json` remained green:
+  - `launch_readiness.status=ready`
+  - `runtime_guardrails.status=clear`
+- `rollout rotation inspect --json` remained green:
+  - `selected_backend_snapshot_present=true`
+  - `selected_backend_snapshot_validation_status=valid`
+  - `participation_status=available`
+- `accounts list --json` showed blocking posture:
+  - `active_count=24`
+  - `reserve_count=0`
+  - `pool_policy.active_target=15`
+- canonical owner surface
+  `rollout stage advance 20 <id> --json`
+  returned `STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE`
+  because the requested backend was not `reserve`
+
+Supporting sources:
+
+- `audit_results/step37_closeout_report.md`
+- `audit_results/step37_decision_packet.json`
+- `COMMAND_API.md`
+- `wild_boar_proxy/runtime.py`
+- `tests/test_cli.py`
+
 ## Purpose
 
-Close remaining execution-core prerequisites, run same-day live 20-account
-validation, and produce a machine-carried decision packet without mixing layers
-or expanding scope.
+Repair the gap between:
 
-This contour does not use a fixed 14-day metrics gate.
-Validation is executed in one approved same-day high-load contour on
-2026-05-07.
+- real working runtime truth
+- live registry lifecycle posture
+- stage-20 canonical proof path
+
+This contour exists to make the real contour canonically provable again.
+It is not a rich UI contour, not an installer contour, and not a generic
+runtime-expansion contour.
+
+## Core Finding
+
+The current blocker is not a broad runtime failure.
+The current blocker is a mismatch between:
+
+- the canonical reserve-first stage-20 owner path
+- the live registry posture currently showing `24 active / 0 reserve`
+
+The next contour must determine which of these is true:
+
+- `LIVE_POSTURE_DRIFT_ONLY`
+- `PROOF_MODEL_CONFLATES_MANAGED_POOL_WITH_ACTIVE_WINDOW`
+- `INSUFFICIENT_ELIGIBLE_POOL`
+
+No stage-20 proof or UI re-entry may proceed before that classification is
+closed.
+
+## Program Shape
+
+This document is not one single write contour.
+It is a bounded repair program that must be executed as a sequence of small
+contours with closeout between them.
+
+Default contour decomposition:
+
+1. closed: `step38` scope freeze plus read-only classification
+2. closed: `step39` read-only truth reproof plus authorization gate check
+3. `step40` authorized single-sync runtime-truth reclear
+   - current state: parked at precondition gate
+   - reopen under the same contour id after explicit owner authorization
+4. optional canon clarification contour
+5. optional repo repair contour
+6. live authorization plus normalization-decision contour
+7. live normalization contour
+8. post-normalization reclear contour
+9. stage-20 owner-path proof contour
+10. same-day scale validation contour
+11. independent audit plus design-gate closeout contour
+
+Contours may stop earlier on truthful `NO_GO`.
+Contours must not be silently merged into one long write lane unless the
+closeout explicitly justifies why the split could not be kept safely.
+
+## Scope
+
+In scope:
+
+1. Worktree/scope split between execution-core, live evidence, and UI.
+2. Read-only reality snapshot.
+3. Root-cause classification for the `step37` blocker.
+4. Optional docs/contract clarification for `managed pool` vs `active window`.
+5. Optional repo repair if proof model is proven to read the wrong truth.
+6. Repo verification, commit, and push boundary before any live mutation.
+7. Live operation declaration and rollback expectation.
+8. Live normalization decision packet.
+9. Reserve-first live normalization through owner surfaces only.
+10. Post-normalization reclear.
+11. Canonical `rollout stage advance 20 <id> --json` proof attempt.
+12. Same-day 20-account live validation only after successful stage-20
+    advancement.
+13. Evidence packet, independent audit, and design-gate stop token decision.
+
+Out of scope:
+
+1. Rich UI expansion.
+2. Design polish.
+3. Installer or packaging.
+4. Engine-layer refactor without proven blocker.
+5. Hidden best-reserve logic.
+6. Manual edits to `backend-registry.json`.
+7. Recasting the product as `active-only` without a separate architecture
+   decision contour.
 
 ## Layer Boundary
 
 Control-layer only in this contour:
 
-- mode orchestration
 - lifecycle policy
-- onboarding flow
-- truth layer
+- profile orchestration
+- runtime truth
 - fallback and recovery
-- diagnostics and evidence packet assembly
+- command API truth
+- stage progression proof posture
+- evidence capture and audit
 
-Engine-layer changes are out of scope unless a concrete blocker is proven and
-documented.
+Forbidden in this contour:
 
-Layer-mixing is forbidden in this contour:
+- patching `CLIProxyAPI` without a proven blocker
+- using logs as the primary API when canonical JSON surfaces exist
+- converting live validation into engine refactor
+- using UI work to mask unresolved execution-core blockers
 
-- do not patch `CLIProxyAPI` as part of day-of validation work
-- do not convert engine instability into unplanned engine refactor inside this
-  contour
-- if engine blocker is proven, stop and open a separate blocker contour with
-  blocker code and evidence
+## Branch Decision After Classification
 
-## In Scope
+After read-only classification, exactly one branch becomes active.
 
-1. Canonicalization closeout for governing docs before claims.
-2. Final runtime-hardening tail closure only for active gates.
-3. Live-runtime preflight on approved real contour.
-4. Same-day 20-account stress validation with machine-carried evidence.
-5. Independent audit and final go or no-go packet.
+### Branch A: `LIVE_POSTURE_DRIFT_ONLY`
 
-## Out of Scope
+Use this when:
 
-1. Rich UI expansion.
-2. Installer or packaging.
-3. Public release claims.
-4. Engine-layer refactor without blocker approval.
+- command contract is correct
+- tests support current semantics
+- runtime surfaces are green
+- live registry posture is the primary mismatch
 
-## Active Gates For This Contour
+Action:
 
-- `RUNTIME_ATTESTATION_GATE`
-- `STRICT_JSON_COMMAND_API_GATE`
-- `STATE_SERIALIZATION_GATE`
-- `FALLBACK_DRILL_GATE`
-- `SCALE_EVIDENCE_PACKET_GATE` (same-day 20-account validation packet lane)
+- skip repo repair
+- proceed to live authorization, normalization decision, and reserve-first
+  normalization
 
-Note:
+### Branch B: `PROOF_MODEL_CONFLATES_MANAGED_POOL_WITH_ACTIVE_WINDOW`
 
-- this contour does not introduce a new canonical command surface
-  `rollout evidence capture 20`
-- evidence is assembled as a redacted machine-carried packet from existing
-  canonical command outputs and runtime attestations
+Use this only when:
+
+- code, tests, and contract show that the proof path reads the wrong truth
+- the issue is repo-owned, not only live-state-owned
+
+Action:
+
+- open a bounded repo repair contour
+- add tests first or in the same bounded change set
+- verify, commit, and push before any live mutation starts
+
+### Branch C: `INSUFFICIENT_ELIGIBLE_POOL`
+
+Use this when:
+
+- there is no explicit eligible reserve candidate
+- or the live pool does not have enough healthy/valid accounts for safe
+  stage-20 progression
+
+Action:
+
+- stop
+- do not run `rollout stage advance 20 <id> --json`
+- do not hide the stop behind UI work
+- reopen only the blocking pool/readiness contour
+
+## Canon Clarification Rule
+
+If clarification is needed, it must preserve reserve-first canon rather than
+rewrite the system into `active-only`.
+
+The accepted clarification is:
+
+- `managed_pool_count`: total managed inventory known to the control layer
+- `active_window`: accounts currently allowed to participate in active routing
+  under the staged policy
+- `reserve_depth`: managed accounts available for explicit promotion and staged
+  expansion
+- `launch_capable`: accounts currently healthy enough to launch or route
+
+Important truth:
+
+- `25 managed accounts` does not mean `25 active-routing accounts`
+- `24 active / 0 reserve` is not an acceptable substitute for reserve-first
+  stage-20 proof
+
+If clarification contradicts `COMMAND_API.md` or the stage-advance tests,
+resolve the repo contract first and do not enter live normalization until the
+contract is verified.
+
+## Repo Repair Boundary
+
+Repo repair is conditional, not automatic.
+
+If Branch B is selected:
+
+1. limit repo changes to proof/truth/contract scope only
+2. add or update tests that prove the specific bug
+3. verify targeted tests and relevant broader tests
+4. review diff for scope discipline
+5. commit and push
+6. only then reopen the live lane
+
+Live normalization must never begin against an unverified local-only repair.
+
+## Target Posture Before Stage-20 Proof
+
+Before attempting `rollout stage advance 20 <id> --json`, the contour must
+reach this posture:
+
+1. current stage remains canonical `15` or explicit in-progress stage truth is
+   acceptable under `COMMAND_API.md`
+2. `status --json` remains green enough to avoid false-green or stale-green
+   claims
+3. `healthcheck --json` remains green enough to keep launch/fallback truth
+   honest
+4. `rollout rotation inspect --json` remains valid
+5. active window is intentionally bounded to the stage-15 target posture
+6. reserve depth is restored
+7. one explicit eligible reserve backend id is identified for stage-20
+   advancement
+8. protected active backends are preserved
+9. no undocumented live mutation remains in flight
+
+The target posture is not "make counts look pretty".
+The target posture is "make staged progression truthful and provable".
 
 ## Live Start Gate
 
 Live lane may start only when all conditions are true:
 
-1. `PLAN_NOT_CANONICALIZED` is closed by commit and push.
-2. Owner authorization for live-runtime actions is explicit in the current
-   thread according to `CANON.md`.
-3. Live operation declaration is recorded before command execution.
-4. Mandatory preflight packet is captured in strict JSON form.
+1. root-cause classification is closed
+2. if repo repair occurred, it is verified, committed, and pushed
+3. owner authorization for live-runtime action is explicit in the current
+   thread
+4. live operation declaration is recorded before execution
+5. mandatory read-only snapshot is captured in strict JSON form
 
-## Execution Steps
+## Live Operation Declaration
 
-1. Canonicalization pre-check
-   - confirm governing docs are clean in worktree
-   - if plan text changed, commit and push before live claims
-   - record branch and commit hash
+Before any real-path mutation, declare:
 
-2. Runtime-hardening tail revision
-   - this is a repo-write lane only
-   - close only blockers tied to active gates
-   - forbid unrelated refactors
-   - run targeted and full test suites
-   - close and re-verify repo-write lane before live lane execution
+1. exact commands to be executed
+2. exact real paths that may be read
+3. exact real paths that may be written
+4. rollback or backup expectation
 
-3. Live operation declaration
-   - declare exact commands
-   - declare exact real paths that may be read
-   - declare exact real paths that may be written
-   - declare rollback or backup expectation
+No live command may be treated as harmless merely because it emits JSON.
 
-4. Live preflight
-   - run `status --json`
-   - run `healthcheck --json`
-   - run `accounts list --json`
-   - run `rollout rotation inspect --json`
-   - run `diagnostics export --json`
-   - run fallback drill and verify deterministic stable recovery
-   - verify attestation mandatory fields
-   - reject any command output that violates strict JSON contract
+## Mandatory Read-Only Snapshot
 
-5. 20-account day-of validation run
-   - keep reserve-first lifecycle discipline
-   - validate then controlled promotion path
-   - run high-load traffic for same-day contour window
-   - collect rotation participation and pool health evidence
-   - do not patch engine-layer code during this step
-   - if an engine blocker is proven, stop this contour and open a separate
-     blocker contour
+Capture, without mutation:
 
-6. Evidence packet build
-   - include redacted outputs required by master plan
-   - include pool counts and selected backend participation proof
-   - include attestation, fallback readiness, commit hash, observation date,
-     environment note
-   - exclude secrets, auth artifacts, unredacted logs
+1. `status --json`
+2. `healthcheck --json`
+3. `accounts list --json`
+4. `rollout rotation inspect --json`
 
-7. Independent audit lane
-   - verify JSON contract integrity (`stdout` single JSON object)
-   - verify no log-parsing fallback was used instead of canonical JSON surfaces
-   - verify no stale-green or false-green claim
-   - verify no layer-mixing actions
-   - issue `GO_NEXT_CONTOUR` or `NO_GO` with explicit blocker codes
+The snapshot must record:
 
-8. Transition decision
-   - if `GO_NEXT_CONTOUR`: move to remaining development closeout, basic UI,
-     and pre-release testing
-   - if `NO_GO`: reopen only the blocking execution-core contour
+- desired and effective mode
+- `claim_gate`
+- `policy_drift`
+- pool counts
+- healthy/degraded/down summary
+- launch-capable backend ids or equivalent truthful summary
+- selected backend evidence
+- rotation participation evidence
 
-## Immediate One-Pass Run Order
+If runtime truth is not green enough at this step, repair runtime truth first.
+Do not proceed into rollout posture work on top of a broken truth layer.
 
-This ordered checklist is the default execution path for the next contour:
+`launch smoke --json` is intentionally excluded from this read-only snapshot.
+It remains a bounded live activation seam, not a pure observation surface.
+Use it only in an explicitly authorized live contour such as post-normalization
+reclear or a later live preflight where activation evidence is required by the
+approved lane.
 
-1. Confirm live gate readiness (`PLAN_NOT_CANONICALIZED` must stay closed).
-2. Obtain explicit owner authorization in the current thread.
-3. Record live operation declaration (commands, read paths, write paths,
-   rollback expectation).
-4. Execute mandatory preflight JSON packet and reject invalid JSON output.
-5. Execute day-of 20-account high-load validation in control-layer scope only.
-6. Build evidence packet, run independent audit, and publish `GO_NEXT_CONTOUR`
-   or `NO_GO` with blocker codes.
+## Normalization Decision Packet
 
-## Mandatory Artifacts
+Before live mutation, build a decision packet that names:
 
-1. Decision packet in `audit_results/` with explicit blocker codes or GO token.
-2. Redacted evidence packet in `audit_results/` for same-day 20-account run.
-3. Verification pack with executed commands, exit codes, and timestamps.
-4. Short closeout report with branch and commit hash.
+1. `protected_active`
+2. `reserve_candidate`
+3. `reserve_set`
+4. `hold_set`
+5. `retire_set`
+6. `do_not_touch`
+7. expected target posture after normalization
 
-Artifacts must not include auth files, secrets, raw unredacted logs, or private
-runtime dumps.
+Rules:
 
-Decision packet blocker-code mapping:
+- do not demote or retire healthy working backends mechanically just to satisfy
+  a pretty count
+- do not silently sacrifice fallback or recovery depth
+- do not proceed if no explicit reserve candidate can be named
 
-- `PLAN_NOT_CANONICALIZED`:
-  governing docs dirty or required plan revision not committed and pushed
-- `LIVE_RUNTIME_OWNER_AUTH_NOT_EXPLICIT`:
-  owner authorization for live-runtime operations is missing in current thread
-- `LIVE_PRECHECK_NOT_EXECUTED`:
-  mandatory preflight commands are not executed and captured
-- `ATTESTATION_FIELDS_MISSING`:
-  one or more mandatory runtime-attestation fields are absent
-- `STRICT_JSON_CONTRACT_BROKEN`:
-  command `stdout` is not exactly one JSON object
-- `LOG_PARSING_FALLBACK_USED`:
-  operator decision or audit relied on log parsing instead of canonical JSON
-  command surfaces
-- `STATE_SERIALIZATION_BREACH`:
-  evidence shows interleaving or split ownership in serialized mutation path
-- `FALLBACK_DRILL_FAILED`:
-  deterministic stable fallback or stable recovery readiness is not proven
-- `ENGINE_BLOCKER_ESCALATION_REQUIRED`:
-  proven engine-layer blocker exists and requires a separate contour outside the
-  current control-layer scope
+## Live Normalization Rule
 
-## Dispute Resolution Rule
+Live normalization must use owner surfaces only.
 
-For any disputed decision:
+Allowed mutation surfaces include:
 
-- choose truth over speed
-- choose serialization over convenience
-- choose control-layer boundary over engine duplication
-- choose fallback determinism over optimistic progress
+- `accounts ... --json`
+- `policy stage set ... --json`
+- `sync --json`
+
+Forbidden mutation methods:
+
+- direct edit of `backend-registry.json`
+- hidden one-off scripts that bypass owner surfaces
+- staged-pool mutation through UI-only paths
+
+The result must preserve the working active window while restoring truthful
+reserve-first posture.
+
+## Post-Normalization Reclear
+
+After normalization, rerun:
+
+1. `sync --json`
+2. `rollout rotation inspect --json`
+3. `status --json`
+4. `healthcheck --json`
+5. `launch smoke --json`
+6. `accounts list --json`
+
+Required outcomes:
+
+- `claim_gate.status=clear`
+- `policy_drift.status=clear`
+- rotation evidence remains valid
+- runtime guardrails remain clear
+- stable fallback remains available
+- target posture is actually observed, not assumed
+
+If this reclear fails, stop before stage-20 proof.
+
+## Stage-20 Owner-Path Proof
+
+Only after successful reclear may the contour run:
+
+```sh
+python3 -m wild_boar_proxy rollout stage advance 20 <reserve-id> --json
+```
+
+Success must prove, machine-readably:
+
+- explicit backend id input
+- explicit reserve eligibility
+- one-step controlled advancement
+- postflight attestation status
+- postflight rotation status
+- rollback readiness status
+
+If this command fails again:
+
+- record the new blocker honestly
+- do not proceed into same-day high-load validation
+- do not proceed into UI
+
+## Same-Day 20-Account Validation Re-entry
+
+Same-day 20-account live validation is allowed only if stage-20 owner-path
+proof succeeds first.
+
+This follow-up validation contour must:
+
+1. keep control-layer scope only
+2. exercise the real environment under operator-approved high load
+3. collect runtime attestation under load
+4. collect rotation participation evidence under load
+5. collect truthful pool counts under load
+6. verify fallback readiness and deterministic recovery readiness
+7. avoid any engine-layer refactor or hidden contract expansion during the run
+
+The scale claim remains evidence-driven.
+Successful stage advancement alone is not the full scale proof.
+
+## Explicit `NO_GO` Table
+
+Use these blocker codes or their direct equivalents when closing the contour:
+
+- `RUNTIME_TRUTH_NOT_GREEN`
+- `LIVE_POSTURE_DRIFT_UNCLASSIFIED`
+- `PROOF_MODEL_REPAIR_UNVERIFIED`
+- `REPO_REPAIR_NOT_PUSHED`
+- `LIVE_RUNTIME_OWNER_AUTH_NOT_EXPLICIT`
+- `LIVE_OPERATION_DECLARATION_MISSING`
+- `STRICT_JSON_CONTRACT_BROKEN`
+- `RESERVE_CANDIDATE_NOT_IDENTIFIED`
+- `INSUFFICIENT_ELIGIBLE_POOL`
+- `TARGET_POSTURE_NOT_REACHED`
+- `POST_NORMALIZATION_RECLEAR_FAILED`
+- `STAGE20_OWNER_PATH_UNAVAILABLE`
+- `SAME_DAY_SCALE_VALIDATION_FAILED`
+- `ENGINE_BLOCKER_ESCALATION_REQUIRED`
+
+No blocker may be reworded into generic optimism.
+
+## Artifacts Required
+
+This contour must produce:
+
+1. read-only snapshot packet
+2. root-cause classification note
+3. optional contract clarification note
+4. optional repo repair closeout with commit hash and push status
+5. live operation declaration
+6. normalization decision packet
+7. post-normalization verification packet
+8. stage-20 proof packet
+9. same-day validation evidence packet if stage-20 proof succeeded
+10. independent audit closeout
+
+Artifacts must remain redacted and must not include secrets, auth files,
+private runtime dumps, or unredacted logs.
+
+## Canonical Stop Before Design
+
+The contour may transition toward UI only after this stop token is truthfully
+earned:
+
+`EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`
+
+This token may be set only if all conditions are true:
+
+1. runtime truth is green:
+   - `status --json`
+   - `healthcheck --json`
+   - `launch smoke --json` when required by the contour
+   - `rollout rotation inspect --json`
+2. reserve-first lifecycle posture is canonical or explicitly clarified without
+   contradicting command truth
+3. stage-20 owner-path is either:
+   - passed and followed by successful same-day validation, or
+   - closed with a non-repo-owned `NO_GO` that does not leave execution-core
+     truth ambiguous
+4. no repo-owned execution-core blocker remains open
+5. no live-runtime mutation remains undocumented
+6. UI/design changes are not mixed into execution-core closeout
+7. branch state is committed and pushed
+8. final closeout names verification commands, commit hash, branch, and next
+   contour
+
+Until this token is earned:
+
+- no rich UI expansion
+- no design polish contour
+- no masking execution-core blockers behind UI progress
+
+If the stop token is earned through the second path above
+(`non-repo-owned NO_GO` with clear execution-core truth), only `basic companion
+UI` may reopen.
+That reopening:
+
+- must not claim scale closure
+- must not imply `scale-to-20 validated`
+- must not hide the unresolved scale blocker
+- must keep the scale contour open as a separate later contour
 
 ## Success Criteria
 
-1. Same-day 20-account contour has machine-carried packet with attestation and
-   rotation evidence.
-2. No invalid JSON command response in critical path.
-3. No stale-green or false-green runtime status.
-4. Stable fallback remains operational and deterministic.
-5. Final decision packet is explicit and auditable.
+This plan succeeds when:
 
-## Final Claim Discipline
+1. the `step37` blocker is honestly classified
+2. the necessary branch is executed without mixing repo and live lanes
+3. reserve-first stage-20 owner-path becomes available and truthful again
+4. same-day 20-account validation is either completed with evidence or closed
+   by an explicit truthful `NO_GO`
+5. the repo reaches a canonical stop before design
 
-This contour can support:
+## Final Discipline
 
-- `scale-to-20 validated` (same-day contour claim)
+This repair contour is intentionally narrower than a general product plan.
 
-This contour cannot by itself imply:
+Choose:
 
-- `pilot_ready`
-- `production_ready`
-
-Pilot and release claims require their own gates from `MASTER_PLAN.md` and are
-out of scope for this contour closeout.
-
-## Plan Validity Check
-
-- Practicality: the contour is executable in one day because it is limited to
-  live-gate closure, preflight, day-of load run, evidence packet, and audit.
-- Canon alignment: no deviation from source-of-truth order, live authorization
-  rule, strict JSON rule, or staged-claim discipline.
-- Layer discipline: no engine-layer fixes are allowed inside this contour; any
-  proven engine blocker triggers separate blocker contour opening.
-
-## No-Deviation Statement
-
-This contour does not deviate from `MASTER_PLAN.md` or `CANON.md`.
-Any conflict must be resolved in favor of `CANON.md`, then `MASTER_PLAN.md`.
-
-## Day-Of Layer Guardrail
-
-During same-day 20-account validation, the team must not:
-
-- patch engine-layer code
-- replace canonical JSON command surfaces with log parsing
-- convert runtime-validation lane into refactor lane
-
-If any of these conditions occurs, the run must stop with explicit blocker
-codes and reopen as a separate blocker contour.
-
-## Next Contour Operational Plan
-
-1. Obtain explicit owner authorization in the current thread.
-2. Record live-operation declaration before any live command:
-   exact commands, read paths, write paths, rollback or backup expectation.
-3. Execute mandatory preflight JSON packet:
-   `status --json`, `healthcheck --json`, `accounts list --json`,
-   `rollout rotation inspect --json`, `diagnostics export --json`.
-4. Apply preflight decision gate:
-   if preflight fails, issue `NO_GO` with blocker codes;
-   if preflight passes, proceed to same-day load run.
-5. Execute same-day 20-account validation in control-layer scope only:
-   reserve-first lifecycle, validate, controlled promotion, high-load run.
-6. Build redacted evidence packet:
-   attestation, rotation participation, truthful pool counts,
-   fallback readiness, commit hash, observation date, environment note.
-7. Run independent audit and publish final contour verdict:
-   `GO_NEXT_CONTOUR` or `NO_GO` with explicit blocker codes.
-
-## Layer-Mixing Stop Triggers
-
-The contour must stop immediately and reopen as a separate blocker contour if:
-
-- engine-layer patching is attempted
-- canonical JSON surfaces are replaced by log parsing
-- runtime-validation lane is converted into refactor work
+- truth over optimism
+- reserve-first lifecycle truth over active-only drift
+- explicit owner surfaces over hidden mutation
+- repo/live separation over convenience
+- design gate discipline over premature UI expansion

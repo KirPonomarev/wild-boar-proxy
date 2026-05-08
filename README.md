@@ -3,7 +3,17 @@
 
 # Wild Boar Proxy
 
-Wild Boar Proxy is an experimental companion control app for managed local account pools running on top of `CLIProxyAPI`.
+Wild Boar Proxy is an experimental companion control app for Codex.
+
+It helps a user manage their own local Codex setup from one place: account
+lifecycle, launch configuration, runtime modes, diagnostics, and recovery.
+
+It does not modify Codex, replace the Codex client, or provide shared account
+access for other users.
+It is intended for a user's own accounts and local runtime environment, not for
+account sharing, rule circumvention, or unauthorized access.
+
+The current runtime implementation is built on top of `CLIProxyAPI`.
 
 The project does not replace the proxy engine. It owns the control layer:
 
@@ -16,6 +26,13 @@ The project does not replace the proxy engine. It owns the control layer:
 ## Current status
 
 This repository is the bootstrap for the public experimental project.
+
+Current next contour is execution-core repair for reserve-first stage-20
+re-entry.
+The runtime can be live and useful while the formal stage-20 owner path remains
+blocked by proof-posture drift.
+Basic companion UI work stays gated behind
+`EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`.
 
 ## Managed pool capacity
 

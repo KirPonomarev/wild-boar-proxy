@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "artifact": "decision_packet",
+  "step": "step38",
+  "generated_at_utc": "2026-05-08T20:30:52Z",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+  "contour": "scope_freeze_readonly_classification",
+  "verdict": "NO_GO",
+  "primary_blocker_code": "RUNTIME_TRUTH_NOT_GREEN",
+  "secondary_blockers": [
+    "ROTATION_EVIDENCE_STALE",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT"
+  ],
+  "root_cause_classification": {
+    "stage20_blocker_branch": "LIVE_POSTURE_DRIFT_ONLY",
+    "repo_owned_managed_pool_conflation": false,
+    "live_normalization_allowed_now": false,
+    "reason": "current truth lane must be green enough before posture normalization begins"
+  },
+  "facts": [
+    "status --json returned OK but claim_gate.status=blocked with machine_error_code=CLAIM_GATE_BLOCKED",
+    "status --json returned policy_drift.status=detected with machine_error_code=STABLE_POLICY_DRIFT",
+    "healthcheck --json returned OK with launch_readiness.status=ready and runtime_guardrails.status=clear",
+    "accounts list --json showed active_count=24 reserve_count=0 while pool_policy.active_target=15",
+    "rollout rotation inspect --json returned ROTATION_EVIDENCE_STALE with participation_status=stale",
+    "two healthy active backends were observed: open17-plus and new-new55555",
+    "targeted stage-20 owner-path tests passed in repo fixtures"
+  ],
+  "independent_inspection": {
+    "canon_inspector_verdict": "LIVE_POSTURE_DRIFT_ONLY",
+    "canon_inspector_note": "managed pool vs active window semantics already exist in canon; explicit reserve backend remains required for stage-20",
+    "mini_audit_reliability": "partial",
+    "mini_audit_issue": "reported outdated top-level status facts; rerun commands overruled the inconsistent audit statement"
+  },
+  "repo_level_observation": {
+    "primary_repo_blocker_for_step38": false,
+    "notable_repo_contradiction": "stage prove enforces zero-reserve posture while stage advance accepts one explicit reserve candidate override",
+    "repo_contradiction_blocks_current_live_classification": false
+  },
+  "next_action": "open_runtime_truth_reclear_contour_before_any_live_normalization_or_stage20_reentry"
+}
