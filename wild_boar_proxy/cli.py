@@ -29,6 +29,7 @@ from .runtime import (
     run_companion_reset,
     run_release,
     run_rollout_evidence_capture,
+    run_rollout_posture_inspect,
     run_rollout_rotation_inspect,
     run_rollout_stage_advance,
     run_rollout_stage_prove,
@@ -170,6 +171,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
     rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+    rollout_posture = rollout_subparsers.add_parser("posture")
+    rollout_posture_subparsers = rollout_posture.add_subparsers(
+        dest="rollout_posture_command", required=True
+    )
+    rollout_posture_inspect = rollout_posture_subparsers.add_parser("inspect")
+    rollout_posture_inspect.add_argument("value", choices=["15", "20"])
+    rollout_posture_inspect.add_argument("--json", action="store_true", required=True)
     rollout_evidence = rollout_subparsers.add_parser("evidence")
     rollout_evidence_subparsers = rollout_evidence.add_subparsers(
         dest="rollout_evidence_command", required=True
@@ -296,6 +304,12 @@ def main(argv: list[str] | None = None) -> int:
             and args.rollout_rotation_command == "inspect"
         ):
             return emit_json(run_rollout_rotation_inspect(paths))
+        if (
+            args.command == "rollout"
+            and args.rollout_command == "posture"
+            and args.rollout_posture_command == "inspect"
+        ):
+            return emit_json(run_rollout_posture_inspect(paths, args.value))
         if (
             args.command == "rollout"
             and args.rollout_command == "evidence"

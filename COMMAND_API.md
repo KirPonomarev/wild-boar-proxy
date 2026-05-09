@@ -24,6 +24,7 @@ All operator commands must support `--json`.
 - `mode set managed --json`
 - `policy stage set <10|15|20> --json`
 - `rollout rotation inspect --json`
+- `rollout posture inspect <15|20> --json`
 - `rollout evidence capture 16 --json`
 - `rollout stage prove 10 --json`
 - `rollout stage prove 15 --json`
@@ -423,6 +424,67 @@ Rotation evidence `machine_error_code` values include:
 - lifecycle mutation under `accounts ... --json`
 - policy mutation under `policy stage set ... --json`
 - runtime-health ownership in `healthcheck --json`
+
+## Additional rollout posture classification surface
+
+`rollout posture inspect <15|20> --json` is the read-only owner surface for
+pre-stage-advance posture classification.
+
+It must not mutate registry, state, policy, mode files, selected-backend
+snapshots, stable inventory, auth files, or repair targets. It may aggregate
+cached local state, policy-stage truth, lifecycle candidate classification, and
+bounded rotation-evidence observation. It must not run hidden recovery, policy
+repair, registry normalization, promotion, demotion, or stage advancement.
+
+Top-level `machine_error_code` remains the authoritative command truth surface.
+Nested `classification` and `blocker_code` under `rollout_posture_result`
+provide explanatory posture detail only and must not contradict the top-level
+command outcome.
+
+The command may expose a nested `rollout_posture_result` surface. Required
+fields include:
+
+- `requested_stage`
+- `source_stage`
+- `classification`
+- `blocker_code`
+- `pool_count_summary`
+- `candidate_summary`
+- `runtime_truth_summary`
+- `policy_stage_summary`
+- `rotation_summary`
+- `normalization_decision_packet`
+- `final_outcome`
+
+Canonical posture classifications include:
+
+- `INSUFFICIENT_ELIGIBLE_POOL`
+- `RESERVE_CANDIDATE_NOT_IDENTIFIED`
+- `LIVE_POSTURE_DRIFT_ONLY`
+- `ROTATION_EVIDENCE_INSUFFICIENT`
+- `READY_FOR_STAGE_ADVANCE`
+- `READY_ALREADY_ON_TARGET`
+
+`rollout posture inspect <15|20> --json` may also surface canonical target-stage
+blockers such as `STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL` when the requested
+advance target is not on a canonical policy-stage path.
+
+A `READY_FOR_STAGE_ADVANCE` classification means only that the current read-only
+posture is compatible with a later explicit
+`rollout stage advance <stage> <reserve-id> --json` attempt. It is not a
+`STABLE_20_PROVED`, `SCALE_COMPLETE`, `PILOT_READY`, or live scale-proof claim.
+
+`runtime_truth_summary` is intentionally not a live runtime attestation.
+`status --json`, `healthcheck --json`, `rollout rotation inspect --json`, and
+any required smoke or fallback checks remain separate gates.
+
+`rollout posture inspect <15|20> --json` remains separate from:
+
+- lifecycle mutation under `accounts ... --json`
+- policy mutation under `policy stage set ... --json`
+- stage-proof ownership under `rollout stage prove ... --json`
+- stage-advance ownership under `rollout stage advance ... --json`
+- live runtime attestation under `healthcheck --json`
 
 ## Additional scale evidence packet surface
 
