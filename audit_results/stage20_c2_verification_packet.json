@@ -1,0 +1,57 @@
+{
+  "contour_id": "STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR",
+  "date": "2026-05-09",
+  "branch": "codex/stage20-c2-stage-advance-lock-repair",
+  "status": "verification_complete_pending_git_closeout",
+  "scope": {
+    "repo_only": true,
+    "live_mutation_authorized": false
+  },
+  "files_changed": [
+    "wild_boar_proxy/runtime.py",
+    "tests/test_cli.py",
+    "audit_results/stage20_c2_spec.md",
+    "audit_results/stage20_c2_verification_packet.json",
+    "audit_results/stage20_c2_closeout_report.md"
+  ],
+  "implementation_summary": {
+    "runtime_change": "stage-advance registry/stage/pool/backend preconditions moved under the existing serialized owner lock",
+    "test_change": "added stage-20 target-satisfied held-lock regression test",
+    "reserve_semantics_changed": false,
+    "posture_inspect_changed": false,
+    "candidate_filtering_changed": false
+  },
+  "verification": {
+    "py_compile": {
+      "command": "python3 -m py_compile wild_boar_proxy/runtime.py tests/test_cli.py",
+      "status": "passed"
+    },
+    "targeted_tests": {
+      "command": "python3 -m unittest tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation tests.test_cli.CliTests.test_rollout_stage_advance_20_reads_target_satisfied_preconditions_under_serialized_lock tests.test_cli.CliTests.test_rollout_stage_advance_20_blocks_held_lock_without_mutation tests.test_cli.CliTests.test_rollout_stage_advance_20_returns_noop_when_target_is_already_satisfied tests.test_cli.CliTests.test_rollout_stage_advance_20_rejects_overfull_stage_as_already_satisfied",
+      "status": "passed",
+      "observed_result": "Ran 5 tests in 1.328s OK"
+    },
+    "full_suite": {
+      "command": "python3 -m unittest -f tests.test_cli",
+      "status": "passed",
+      "observed_result": "Ran 333 tests in 152.375s OK"
+    }
+  },
+  "manual_review": {
+    "diff_scope": "runtime.py lock-boundary movement and one new test only",
+    "unrelated_runtime_docs_ui_work_mixed_in": false,
+    "runtime_data_committed": false
+  },
+  "independent_audits": [
+    {
+      "auditor": "Mendel",
+      "finding": "precondition reads currently happen before lock; minimal safe repair is to hoist the existing outer serialized lock before registry-backed preconditions"
+    },
+    {
+      "auditor": "Halley",
+      "verdict": "SAFE",
+      "finding": "no reserve semantics drift detected; new test sufficiently covers target-satisfied precondition window"
+    }
+  ],
+  "next_contour": "STAGE20_C3_ROLLOUT_POSTURE_INSPECT"
+}
