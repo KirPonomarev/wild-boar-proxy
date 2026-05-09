@@ -1,0 +1,65 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_IMPLANTATION_TRANSPORT_GATE",
+  "date": "2026-05-09",
+  "base_branch": "codex/ui-desktop-html-overview-bridge-contract",
+  "work_branch": "codex/ui-desktop-html-overview-implantation-transport-gate",
+  "status": "passed_red_path_verification",
+  "transport_gate": "RED",
+  "closed_as": "UI_DESKTOP_HTML_OVERVIEW_IMPLANTATION_SIMULATED",
+  "full_implantation_claimed": false,
+  "runtime_scope": {
+    "runtime_core_changed": false,
+    "cli_changed": false,
+    "web_ui_changed": false,
+    "ui_shell_changed": false,
+    "browser_shell_execution_added": false,
+    "renderer_transport_added": false,
+    "live_mutating_smoke_run": false
+  },
+  "browser_contract": {
+    "transport_gate_constant": "RED",
+    "allowed_request_shapes": [
+      "refresh_overview",
+      "run_overview_action:switch_stable",
+      "run_overview_action:run_sync",
+      "run_overview_action:launch_client",
+      "run_overview_action:run_smoke"
+    ],
+    "simulated_source": "ui_desktop_html_overview_implantation_simulated",
+    "full_backend_call": false
+  },
+  "verification": [
+    {
+      "command": "python3 -m unittest -q tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_command_adapter tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 52
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/overview_bridge.py wild_boar_proxy/desktop_ui/overview_actions.py wild_boar_proxy/desktop_ui/live_overview.py wild_boar_proxy/desktop_ui/command_adapter.py tests/test_desktop_ui_overview_implantation.py tests/test_desktop_ui_overview_bridge.py tests/test_desktop_ui_overview_actions.py tests/test_desktop_ui_overview_live_binding.py tests/test_desktop_ui_static.py",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"shell=True|os\\.system|Popen\\(|subprocess\\.run\\([^\\n]*shell=True|~/.codex|backend-registry|supervisor-state|stable target switch|rollout stage|policy stage|evidence capture|auth_ref\" wild_boar_proxy/desktop_ui -g '!README.md'",
+      "result": "pass_no_matches"
+    },
+    {
+      "command": "headless Chrome screenshot at index.html?fixture=overview_healthy",
+      "result": "pass",
+      "screenshot": "audit_results/ui_desktop_html_overview_implantation_fixture_screenshot.png",
+      "screenshot_dimensions": "1600x1000"
+    },
+    {
+      "command": "headless Chrome screenshot at index.html?mode=live",
+      "result": "pass",
+      "screenshot": "audit_results/ui_desktop_html_overview_implantation_live_screenshot.png",
+      "screenshot_dimensions": "1600x1000"
+    },
+    {
+      "command": "headless Chrome screenshot at index.html?mode=live&bridge=simulated",
+      "result": "pass",
+      "screenshot": "audit_results/ui_desktop_html_overview_implantation_simulated_screenshot.png",
+      "screenshot_dimensions": "1600x1000"
+    }
+  ],
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_SAFE_TRANSPORT"
+}

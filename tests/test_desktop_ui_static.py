@@ -23,6 +23,7 @@ class DesktopUiStaticTests(unittest.TestCase):
             DESKTOP_UI / "overview_bridge.py",
             DESKTOP_UI / "live_overview.py",
             DESKTOP_UI / "overview_actions.py",
+            ROOT / "tests" / "test_desktop_ui_overview_implantation.py",
             DESKTOP_UI / "assets" / "boar_mark.png",
         ]
         for path in expected:
@@ -115,6 +116,7 @@ class DesktopUiStaticTests(unittest.TestCase):
         self.assertNotIn("overview_actions", overview)
         self.assertNotIn("overview_bridge", index)
         self.assertNotIn("overview_bridge", overview)
+        self.assertNotIn("command_adapter", overview)
 
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(
