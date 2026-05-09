@@ -1,0 +1,72 @@
+{
+  "contour_id": "UI_C1_BASIC_COMPANION_UI_REENTRY",
+  "status": "completed",
+  "final_verdict": "GO_NEXT_BOUNDED_UI_OR_INSTALLER_CONTOUR",
+  "scope": {
+    "files_touched": [
+      "wild_boar_proxy/ui_shell.py",
+      "tests/test_ui_shell.py"
+    ],
+    "files_explicitly_untouched": [
+      "wild_boar_proxy/web_ui.py",
+      "wild_boar_proxy/runtime.py",
+      "wild_boar_proxy/cli.py",
+      "README.md"
+    ]
+  },
+  "implemented": {
+    "healthcheck_detail_surface": true,
+    "rotation_detail_surface": true,
+    "stable_repair_dry_run": true,
+    "stable_repair_apply_retained": true,
+    "new_command_surface_added": false,
+    "web_ui_touched": false,
+    "forbidden_rollout_ui_action_added": false
+  },
+  "verification": {
+    "py_compile": {
+      "command": "python3 -m py_compile wild_boar_proxy/ui_shell.py tests/test_ui_shell.py",
+      "status": "passed"
+    },
+    "ui_shell_tests": {
+      "command": "python3 -m unittest -q tests.test_ui_shell",
+      "status": "passed",
+      "observed_result": "Ran 96 tests in 0.050s OK"
+    },
+    "cli_healthcheck_selector": {
+      "command": "python3 -m unittest -q tests.test_cli -k healthcheck",
+      "status": "passed",
+      "observed_result": "Ran 40 tests in 27.785s OK"
+    },
+    "cli_rotation_selector": {
+      "command": "python3 -m unittest -q tests.test_cli -k rollout_rotation_inspect",
+      "status": "passed",
+      "observed_result": "Ran 30 tests in 3.624s OK"
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  },
+  "independent_audit": {
+    "scanner": "Huygens",
+    "scanner_findings": [
+      "baseline shell previously lacked healthcheck invocation path",
+      "baseline shell previously lacked rollout rotation inspect invocation path",
+      "baseline shell previously lacked stable repair dry-run path"
+    ],
+    "auditor": "Halley",
+    "verdict": "SAFE",
+    "decisive_findings": [
+      "no web_ui touch",
+      "no invented command surface",
+      "read-only healthcheck and rotation detail stay within UI_READINESS_SPEC",
+      "stable repair dry-run now exists",
+      "no forbidden stage-proof, stage-advance, policy-stage, or live-capture UI action exposed"
+    ]
+  },
+  "residual_notes": [
+    "support/open-file actions remain deferred to a later bounded UI contour",
+    "this contour is baseline ui_shell re-entry only, not visual polish or redesign"
+  ]
+}
