@@ -1,0 +1,187 @@
+{
+  "contour_id": "UI_C3_RENDER_HANDOFF_CONTRACT",
+  "status": "completed",
+  "final_verdict": "RENDER_HANDOFF_READY",
+  "render_base": {
+    "branch": "codex/ui-c1-delivery-settlement",
+    "status": "ready_clean_isolated_base"
+  },
+  "screen_map": {
+    "first_pass_required": [
+      "runtime-status",
+      "mode-controls",
+      "account-pool",
+      "diagnostics"
+    ],
+    "conditional_first_pass": [
+      "onboarding",
+      "settings"
+    ],
+    "mode_controls_support_panels": [
+      "launch-client",
+      "smoke-test",
+      "diagnostics-export",
+      "healthcheck-detail",
+      "rotation-detail",
+      "stable-repair"
+    ],
+    "forbidden_in_this_lane": [
+      "web-ui",
+      "stage-proof-ui",
+      "stage-advance-ui",
+      "evidence-capture-ui",
+      "policy-stage-mutation-ui",
+      "stable-target-switch-ui"
+    ]
+  },
+  "state_matrix": {
+    "rule": "Only states truthfully derivable from existing strict JSON command surfaces are allowed.",
+    "runtime_status": [
+      "healthy",
+      "degraded",
+      "down",
+      "stale",
+      "unknown",
+      "integration-failure"
+    ],
+    "mode_controls": [
+      "desired-stable__effective-stable",
+      "desired-managed__effective-managed",
+      "desired-stable__effective-managed",
+      "desired-managed__effective-stable",
+      "action-result__ok",
+      "action-result__recoverable-error",
+      "action-result__user-action-required",
+      "action-result__integration-failure"
+    ],
+    "launch_client_support": [
+      "bounded-dispatch-only",
+      "failure",
+      "integration-failure",
+      "unknown"
+    ],
+    "smoke_test_support": [
+      "bounded-runtime-smoke-only",
+      "failure",
+      "integration-failure",
+      "unknown"
+    ],
+    "account_pool": {
+      "lifecycle_pool": [
+        "active",
+        "reserve",
+        "retired"
+      ],
+      "hold_state": [
+        "hold",
+        "no-hold"
+      ],
+      "health_state": [
+        "healthy",
+        "degraded",
+        "down",
+        "probing"
+      ]
+    },
+    "onboarding": [
+      "user-action-required",
+      "reserve-only",
+      "validate-attempted",
+      "sync-skipped",
+      "integration-failure"
+    ],
+    "diagnostics": [
+      "export-ready",
+      "export-success",
+      "export-failure",
+      "integration-failure"
+    ],
+    "support_only_rollout_detail": [
+      "healthcheck-detail",
+      "rotation-detail",
+      "posture-detail"
+    ]
+  },
+  "command_binding_matrix": {
+    "primary_truth": [
+      "status --json",
+      "healthcheck --json",
+      "mode get --json",
+      "accounts list --json",
+      "rollout rotation inspect --json"
+    ],
+    "approved_first_pass_actions": [
+      "mode set stable --json",
+      "mode set managed --json",
+      "sync --json",
+      "launch client --json",
+      "launch smoke --json",
+      "stable repair --dry-run --json",
+      "stable repair --apply --json",
+      "accounts onboard --json",
+      "accounts validate <id> --json",
+      "accounts promote <id> --json",
+      "accounts demote <id> --json",
+      "accounts hold <id> --json",
+      "accounts release <id> --json",
+      "accounts retire <id> --json",
+      "diagnostics export --json"
+    ],
+    "deferred_actions": [
+      "policy stage set <10|15|20> --json",
+      "rollout stage prove ... --json",
+      "rollout stage advance ... --json",
+      "rollout evidence capture 16 --json",
+      "stable target switch ... --json"
+    ]
+  },
+  "truth_rules": {
+    "top_level_machine_error_code_authoritative": true,
+    "nested_surfaces_must_not_compete": true,
+    "invalid_json_is_integration_failure": true,
+    "state_files_logs_cached_ui_exit_code_not_truth": true,
+    "rollout_posture_inspect_ui_authority": "support_only_non_authoritative"
+  },
+  "render_intake": {
+    "required_fields": [
+      "target_screen",
+      "state_variant",
+      "viewport_scope",
+      "action_surface_kind"
+    ],
+    "variant_naming_rule": "<screen>__<state>__<viewport>",
+    "example_variants": [
+      "runtime-status__healthy__desktop",
+      "runtime-status__integration-failure__desktop",
+      "mode-controls__desired-stable__effective-managed__desktop",
+      "account-pool__degraded__desktop",
+      "diagnostics__export-success__desktop"
+    ],
+    "forbidden_visual_claims_without_command_truth": [
+      "healthy",
+      "ready",
+      "proved",
+      "pilot-ready",
+      "20-account validated"
+    ]
+  },
+  "independent_fact_scan": {
+    "auditor": "Boyle",
+    "facts": [
+      "UI_READINESS_SPEC grounds Runtime Status, Mode Controls, Account Pool, Onboarding, Diagnostics, and Settings.",
+      "ui_shell currently implements Runtime Status, Mode Controls, Launch Client, Smoke Test, Diagnostics Export, Healthcheck Detail, Rotation Detail, Stable Repair, Onboarding, and Account Pool.",
+      "rollout posture inspect is support-only for UI handoff and not part of first-pass primary truth."
+    ]
+  },
+  "independent_audit": {
+    "auditor": "Halley",
+    "verdict": "SAFE",
+    "findings": [
+      "No canon or scope drift found in the handoff artifacts.",
+      "Render states remain limited to existing JSON-grounded truth.",
+      "rollout posture inspect remains support-only and non-authoritative for UI handoff.",
+      "No web_ui or runtime expansion slipped into the contour."
+    ]
+  },
+  "next_contour": "UI_RENDER_INTEGRATION_WHEN_RENDERS_ARRIVE"
+}
