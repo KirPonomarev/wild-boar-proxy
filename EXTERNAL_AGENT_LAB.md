@@ -25,6 +25,7 @@ Allowed in the isolated layer:
 - local compile/import checks
 - stdlib `unittest` verification
 - future CLI contract repair inside the lab surface
+- shared preflight JSON packet repair for `Python >= 3.9`
 
 Forbidden for this contour:
 
@@ -41,6 +42,13 @@ Forbidden for this contour:
 Canonical verification for this isolated lane uses Python standard-library
 commands. `pytest` may be used as local convenience if installed, but it is not
 required for acceptance.
+
+Current CLI contract note:
+
+- unsupported Python must return one canonical JSON packet through the shared
+  lab CLI path
+- this repair applies to the isolated lab layer only
+- full acceptance and broader truth relock remain deferred to later contours
 
 C1 does not close final acceptance. Later contours must repair the CLI JSON
 contract, relock model/provider truth, and re-issue acceptance evidence after

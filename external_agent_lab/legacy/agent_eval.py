@@ -181,7 +181,7 @@ def normalize_requested_model(model_name):
     return model_name
 
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run route qualification or bounded eval against free/API model routes")
     parser.add_argument(
         "--mode",
@@ -264,7 +264,7 @@ def parse_args():
     parser.add_argument("--access-recheck-report")
     parser.add_argument("--verification-report")
     parser.add_argument("--registry-report")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def select_tasks(task_arg):
@@ -12745,8 +12745,8 @@ def run_contour_7c_repo_bound_authorization_wait_state_generator(args):
     print(f"JSON report: {chain_path}")
 
 
-def main():
-    args = parse_args()
+def main(argv=None):
+    args = parse_args(argv)
     if args.mode == "provider-access":
         run_provider_access(args)
         return

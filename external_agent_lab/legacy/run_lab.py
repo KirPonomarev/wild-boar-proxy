@@ -279,14 +279,14 @@ def shutdown_proxy(process):
         process.wait(timeout=5)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="One-command launcher for the external adapter lab")
     parser.add_argument("--key", "-k", help="Disabled for safety. Use the interactive prompt or .env.")
     parser.add_argument("--port", "-p", type=int, default=DEFAULT_PORT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument("--allow-paid-routes", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         port = pick_port(args.port)
