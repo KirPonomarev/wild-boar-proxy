@@ -1,0 +1,109 @@
+{
+  "document_type": "UI_DESKTOP_HTML_APP_LAUNCHER_PACKET",
+  "document_status": "implementation_verified",
+  "contour_id": "UI_DESKTOP_HTML_APP_LAUNCHER",
+  "created_at": "2026-05-09",
+  "branch": "codex/ui-desktop-html-app-launcher",
+  "base_branch": "codex/ui-desktop-html-overview-full-implantation",
+  "goal": "Provide one terminal launcher command for the first Overview screen without making browser/dev-preview the product default.",
+  "commands": [
+    "python3 -m wild_boar_proxy.desktop_ui.app",
+    "python3 -m wild_boar_proxy.desktop_ui.app --smoke",
+    "python3 -m wild_boar_proxy.desktop_ui.app --open-dev-preview"
+  ],
+  "current_renderer_dependency_probe": {
+    "webview": false,
+    "PySide6": false,
+    "PyQt6": false,
+    "tkinter": true,
+    "expected_renderer_status": "embedded_unavailable_dev_preview"
+  },
+  "write_surfaces": [
+    "wild_boar_proxy/desktop_ui/app.py",
+    "tests/test_desktop_ui_app_launcher.py",
+    "tests/test_desktop_ui_static.py",
+    "wild_boar_proxy/desktop_ui/README.md",
+    "audit_results/ui_desktop_html_app_launcher_packet.json",
+    "audit_results/ui_desktop_html_app_launcher_closeout.md"
+  ],
+  "launcher_boundaries": {
+    "default_auto_opens_browser": false,
+    "dev_preview_open_requires_flag": true,
+    "static_bind_host": "127.0.0.1",
+    "transport_bind_host": "127.0.0.1",
+    "static_root": "wild_boar_proxy/desktop_ui",
+    "static_methods": [
+      "GET",
+      "HEAD"
+    ],
+    "directory_listing": false,
+    "directory_traversal": false,
+    "runtime_truth_owner": "existing strict JSON command surfaces via live overview and overview bridge",
+    "other_screens_integrated": false,
+    "product_web_ui": false
+  },
+  "startup_packet_fields": [
+    "source",
+    "status",
+    "renderer_status",
+    "transport_url",
+    "renderer_url",
+    "static_host",
+    "static_port",
+    "transport_host",
+    "transport_port",
+    "embedded_renderer",
+    "dev_preview_url",
+    "opened_dev_preview",
+    "human_message",
+    "next_action"
+  ],
+  "verification": [
+    {
+      "command": "python3 -m json.tool audit_results/ui_desktop_html_app_launcher_packet.json",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/app.py tests/test_desktop_ui_app_launcher.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m unittest tests.test_desktop_ui_app_launcher tests.test_desktop_ui_command_adapter tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_overview_transport tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 74
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.app --help",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.app --smoke",
+      "result": "pass",
+      "observed_renderer_status": "embedded_unavailable_dev_preview",
+      "observed_opened_dev_preview": false
+    },
+    {
+      "command": "ps -axo pid,command | rg 'desktop_ui\\\\.app|http\\\\.server|overview_transport' | rg -v 'rg'",
+      "result": "pass",
+      "matches": 0
+    },
+    {
+      "command": "rg -n \"shell=True|Popen|os\\\\.system|rollout stage|policy stage|evidence capture|stable target switch|backend-registry|supervisor-state|runtime\\\\.py|cli\\\\.py\" wild_boar_proxy/desktop_ui tests/test_desktop_ui_app_launcher.py",
+      "result": "pass",
+      "matches": 0
+    }
+  ],
+  "independent_inspection": {
+    "result": "pass",
+    "runtime_cli_web_ui_ui_shell_touched": false,
+    "default_auto_opens_dev_preview": false,
+    "static_server_boundary": "localhost_only_desktop_ui_root_get_head_no_listing_or_traversal",
+    "verification_claims_consistent": true,
+    "residual_risks": [
+      "embedded renderer auto-opens if pywebview becomes available and smoke is false",
+      "overview URL shape must stay aligned with overview_transport.py and overview.js",
+      "static serving rules must be rechecked if allowed file scope expands"
+    ]
+  },
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_VISUAL_QA_PASS"
+}
