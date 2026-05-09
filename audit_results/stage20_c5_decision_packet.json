@@ -1,0 +1,77 @@
+{
+  "contour_id": "STAGE20_C5_RESERVE_SEMANTICS_ADR",
+  "date": "2026-05-09",
+  "branch": "codex/stage20-c5-reserve-semantics-adr",
+  "status": "completed",
+  "scope": {
+    "repo_only": true,
+    "live_mutation_authorized": false,
+    "runtime_behavior_changed": false
+  },
+  "decision": {
+    "current_canon": "mixed_reserve_semantics_retained",
+    "minimum_depth_status": "documented_as_future_alternative_only",
+    "accepted_runtime_change": false,
+    "tests_rewritten": false
+  },
+  "current_runtime_evidence": {
+    "stage_proof": {
+      "file": "wild_boar_proxy/runtime.py",
+      "rule": "reserve_pool_count_observed must equal reserve_target or proof blocks",
+      "machine_error_code": "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+    },
+    "stage_advance_postflight": {
+      "file": "wild_boar_proxy/runtime.py",
+      "rule": "reserve_pool_count_after must equal reserve_target for successful reserve-step postflight"
+    },
+    "accounts_promote": {
+      "file": "wild_boar_proxy/runtime.py",
+      "rule": "promotion blocks when reserve_count_before - 1 < reserve_target",
+      "machine_error_code": "PROMOTION_POLICY_LIMIT_REACHED"
+    }
+  },
+  "canon_doc_evidence": {
+    "state_schema": {
+      "file": "STATE_SCHEMA.md",
+      "rule": "reserve_target is the minimum reserve floor that promotion must preserve"
+    },
+    "command_api_promotion": {
+      "file": "COMMAND_API.md",
+      "rule": "promotion does not drop reserve below the staged reserve target"
+    }
+  },
+  "test_evidence": [
+    {
+      "file": "tests/test_cli.py",
+      "name": "test_accounts_promote_blocks_when_reserve_target_would_be_violated"
+    },
+    {
+      "file": "tests/test_cli.py",
+      "name": "test_rollout_stage_prove_15_reports_reserve_posture_mismatch"
+    },
+    {
+      "file": "tests/test_cli.py",
+      "name": "test_rollout_stage_advance_20_blocks_multiple_reserve_candidates_at_source_stage"
+    }
+  ],
+  "external_research_position": {
+    "proposal": "minimum-depth reserve semantics",
+    "form": "reserve_count >= reserve_target",
+    "status_in_this_contour": "not_accepted"
+  },
+  "verification": {
+    "git_diff_check": {
+      "command": "git diff --check",
+      "status": "passed"
+    },
+    "scope_review": {
+      "code_files_changed": false,
+      "test_files_changed": false,
+      "docs_only": true
+    }
+  },
+  "next_contour_decision": {
+    "if_mixed_canon_documented_without_contradiction": "STAGE20_C6_FINAL_VERIFICATION_AND_UI_GATE",
+    "if_real_contradiction_found": "STOP_AND_DIAGNOSE"
+  }
+}

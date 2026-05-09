@@ -39,6 +39,14 @@ Current execution-wave meaning:
 - `active_target` is the current staged active-pool ceiling for promotion truth
 - `reserve_target` is the minimum reserve floor that promotion must preserve
 
+Current rollout-proof nuance:
+
+- promotion treats `reserve_target` as a floor guard
+- stage proof and stage-advance postflight currently apply a stricter exact
+  reserve-posture alignment check when asserting canonical stage truth
+- surplus reserve can therefore remain promotion-legal while still blocking
+  stage proof or stage-advance postflight
+
 Canonical staged policy mapping for the current contour:
 
 - stage `10` sets `active_min = 10`, `active_target = 10`, `reserve_target = 0`

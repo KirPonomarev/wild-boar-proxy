@@ -655,6 +655,15 @@ Canonical stage-proof outcomes include:
 - `rollback_readiness_failed`
 - `proof_blocked`
 
+Current reserve-semantics note:
+
+- `accounts promote <id> --json` preserves `reserve_target` as a reserve floor
+- `rollout stage prove 10 --json` and `rollout stage prove 15 --json` currently
+  require exact reserve-posture alignment against the stage target when closing
+  proof
+- surplus reserve may therefore remain promotion-legal while still producing
+  `reserve_posture_mismatch` in stage proof
+
 `rollout stage prove 10 --json` and `rollout stage prove 15 --json` remain separate from:
 
 - policy mutation under `policy stage set ... --json`
@@ -698,6 +707,13 @@ Successful owner packets must prove, machine-readably:
 - delegated failures resolve conservatively and may trigger rollback of the
   bounded advancement step
 - no stronger claim than one-step control-layer progression; no stage-proof claim
+
+Current reserve-semantics note:
+
+- postflight promotion verification currently expects exact reserve-posture
+  alignment against the target-stage reserve target
+- this is stricter than the promotion-floor rule used by
+  `accounts promote <id> --json`
 
 `rollout stage advance 15 <id> --json` and `rollout stage advance 20 <id> --json`
 may expose a nested
