@@ -22,6 +22,12 @@
   width: 1544px;
 }
 
+.window[data-bridge-state="transport_unavailable"] .status-line::after {
+  color: var(--amber);
+  content: "transport simulated";
+  margin-left: 6px;
+}
+
 .window::after {
   background: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 18%);
   content: "";

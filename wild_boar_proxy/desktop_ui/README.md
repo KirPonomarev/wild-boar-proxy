@@ -53,6 +53,18 @@ Run a backend bridge contract operation with:
 The bridge accepts fixed operation IDs only. It does not let the browser choose
 commands, argv, paths, environment variables, or working directories.
 
+Transport gate status:
+
+`TRANSPORT_GATE=RED`
+
+No safe browser-to-backend renderer transport is proven in the current repo
+context. Preview the browser lifecycle simulation with:
+
+`http://127.0.0.1:<port>/index.html?mode=live&bridge=simulated`
+
+This mode builds fixed bridge request objects and renders lifecycle states, but
+it does not call backend commands from the browser.
+
 ## Command Adapter Boundary
 
 `command_adapter.py` is a backend-side utility. Browser JavaScript does not

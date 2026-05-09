@@ -4,6 +4,29 @@
 const FIXTURE_DIR = "./fixtures";
 const DEFAULT_FIXTURE = "overview_healthy";
 const DEFAULT_LIVE_SNAPSHOT = "./live/overview_live_snapshot.json";
+const TRANSPORT_GATE = "RED";
+const SIMULATED_BRIDGE_SOURCE = "ui_desktop_html_overview_implantation_simulated";
+
+const BRIDGE_ACTIONS = Object.freeze({
+  "launch-client": "launch_client",
+  smoke: "run_smoke",
+  stable: "switch_stable",
+  sync: "run_sync"
+});
+
+const FORBIDDEN_BRIDGE_FIELDS = Object.freeze([
+  "command",
+  "argv",
+  "shell",
+  "path",
+  "state_path",
+  "log_path",
+  "registry_path",
+  "snapshot_path",
+  "runtime_file",
+  "env",
+  "cwd"
+]);
 
 const statusView = {
   healthy: { label: "Работает", sidebar: "Все системы работают нормально", chip: "green" },
@@ -96,6 +119,10 @@ function renderToast(text) {
   toast.hidden = false;
 }
 
+function setBridgeState(state) {
+  document.querySelector(".window").dataset.bridgeState = state;
+}
+
 function renderIntegrationFailure(message) {
   renderChip("integration-failure");
   renderModes({ desired_mode: "-", effective_mode: "-" });
@@ -103,6 +130,7 @@ function renderIntegrationFailure(message) {
   setText("endpoint", "-");
   setText("last-error", message);
   setText("truth-source", "integration-failure");
+  setBridgeState("bridge_integration_failure");
   renderEvents([{ tone: "red", icon: "!", message: "Overview integration failure", time: "local preview" }]);
   renderToast(message);
 }
@@ -124,16 +152,21 @@ function renderOverview(payload) {
   setText("endpoint", statusPacket.endpoint || "-");
   setText("last-error", statusPacket.last_error || "нет");
   setText("truth-source", payload.live_mode ? "live snapshot" : "fixture-only");
+  setBridgeState(payload.live_mode ? "live_idle" : "fixture");
   renderEvents(payload.events);
   renderToast(payload.notice || "");
 }
 
-function setActionPolicy(mode) {
+function isAdmittedBridgeAction(action) {
+  return action === "refresh" || Object.prototype.hasOwnProperty.call(BRIDGE_ACTIONS, action);
+}
+
+function setActionPolicy(mode, bridgeMode = "none") {
   document.querySelectorAll("[data-fixture-action]").forEach((node) => {
     const action = node.dataset.fixtureAction;
-    const allowed = action === "refresh";
+    const allowed = action === "refresh" || (mode === "live" && bridgeMode === "simulated" && isAdmittedBridgeAction(action));
     node.disabled = mode === "live" && !allowed;
-    node.title = mode === "live" && !allowed ? "Deferred in live read contour" : "";
+    node.title = mode === "live" && !allowed ? "Deferred in overview implantation gate" : "";
   });
 }
 
@@ -147,6 +180,119 @@ async function setFixture(name) {
   }
 }
 
+function hasForbiddenBridgeFields(request) {
+  return FORBIDDEN_BRIDGE_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(request, field));
+}
+
+function buildBridgeRequest(action, confirmed = false) {
+  if (action === "refresh") {
+    return { operation_id: "refresh_overview" };
+  }
+  const actionId = BRIDGE_ACTIONS[action];
+  if (!actionId) {
+    return null;
+  }
+  return {
+    operation_id: "run_overview_action",
+    action_id: actionId,
+    confirmed: confirmed === true
+  };
+}
+
+function simulatedBridgeResponse(request) {
+  if (!request || typeof request !== "object") {
+    return {
+      source: SIMULATED_BRIDGE_SOURCE,
+      status: "error",
+      machine_error_code: "SIMULATED_BRIDGE_REQUEST_INVALID",
+      human_message: "Simulated bridge request is invalid.",
+      snapshot_written: false,
+      action_result: null
+    };
+  }
+  if (hasForbiddenBridgeFields(request)) {
+    return {
+      source: SIMULATED_BRIDGE_SOURCE,
+      operation_id: request.operation_id || "",
+      status: "error",
+      machine_error_code: "SIMULATED_BRIDGE_FORBIDDEN_FIELD",
+      human_message: "Simulated bridge request contains a forbidden field.",
+      snapshot_written: false,
+      action_result: null
+    };
+  }
+  if (request.operation_id === "refresh_overview") {
+    return {
+      source: SIMULATED_BRIDGE_SOURCE,
+      operation_id: "refresh_overview",
+      status: "ok",
+      machine_error_code: "SIMULATED_TRANSPORT_GATE_RED",
+      human_message: "Transport gate is RED; refresh is simulated in browser lifecycle only.",
+      snapshot_written: false,
+      action_result: null
+    };
+  }
+  if (request.operation_id === "run_overview_action" && !request.confirmed) {
+    return {
+      source: SIMULATED_BRIDGE_SOURCE,
+      operation_id: "run_overview_action",
+      status: "error",
+      machine_error_code: "CONFIRMATION_REQUIRED",
+      human_message: "Confirmation is required before this simulated action can proceed.",
+      snapshot_written: false,
+      action_result: null
+    };
+  }
+  if (request.operation_id === "run_overview_action" && Object.values(BRIDGE_ACTIONS).includes(request.action_id)) {
+    return {
+      source: SIMULATED_BRIDGE_SOURCE,
+      operation_id: "run_overview_action",
+      status: "ok",
+      machine_error_code: "SIMULATED_TRANSPORT_GATE_RED",
+      human_message: "Transport gate is RED; action lifecycle is simulated and no backend action ran.",
+      snapshot_written: false,
+      action_result: {
+        status: "ok",
+        action_id: request.action_id,
+        simulated: true
+      }
+    };
+  }
+  return {
+    source: SIMULATED_BRIDGE_SOURCE,
+    operation_id: request.operation_id || "",
+    status: "error",
+    machine_error_code: "SIMULATED_BRIDGE_OPERATION_FORBIDDEN",
+    human_message: "Simulated bridge operation is not admitted.",
+    snapshot_written: false,
+    action_result: null
+  };
+}
+
+async function runSimulatedBridgeAction(action) {
+  setBridgeState("bridge_pending");
+  const request = buildBridgeRequest(action, false);
+  if (!request) {
+    setBridgeState("deferred");
+    renderToast(`Deferred in this contour: ${action}`);
+    return;
+  }
+  if (request.operation_id === "run_overview_action") {
+    const confirmed = window.confirm(`Simulate ${BRIDGE_ACTIONS[action]}? No backend command will run.`);
+    request.confirmed = confirmed === true;
+  }
+  const response = simulatedBridgeResponse(request);
+  if (response.status !== "ok") {
+    setBridgeState(response.machine_error_code === "CONFIRMATION_REQUIRED" ? "confirmation_required" : "bridge_command_error");
+    renderToast(response.human_message);
+    return;
+  }
+  setBridgeState("bridge_success_refreshing");
+  await setLiveSnapshot(new URLSearchParams(window.location.search).get("live") || DEFAULT_LIVE_SNAPSHOT);
+  setBridgeState("transport_unavailable");
+  renderToast(response.human_message);
+}
+
 async function loadLiveSnapshot(source) {
   const response = await fetch(source, { cache: "no-store" });
   if (!response.ok) throw new Error(`live snapshot load failed: ${source}`);
@@ -154,13 +300,18 @@ async function loadLiveSnapshot(source) {
 }
 
 async function setLiveSnapshot(source) {
-  setActionPolicy("live");
+  const bridgeMode = new URLSearchParams(window.location.search).get("bridge");
+  setActionPolicy("live", bridgeMode);
   try {
     const payload = await loadLiveSnapshot(source);
     if (!payload || payload.source !== "ui_desktop_html_live_overview_snapshot" || payload.synthetic !== false) {
       throw new Error("live snapshot source is not admitted");
     }
     renderOverview(payload);
+    if (bridgeMode === "simulated") {
+      setText("truth-source", "live snapshot + simulated bridge");
+      setBridgeState("transport_unavailable");
+    }
   } catch (error) {
     renderIntegrationFailure(error.message);
   }
@@ -168,8 +319,12 @@ async function setLiveSnapshot(source) {
 
 document.querySelectorAll("[data-fixture-action]").forEach((node) => {
   node.addEventListener("click", () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "live" && params.get("bridge") === "simulated") {
+      runSimulatedBridgeAction(node.dataset.fixtureAction);
+      return;
+    }
     if (node.dataset.fixtureAction === "refresh") {
-      const params = new URLSearchParams(window.location.search);
       if (params.get("mode") === "live") {
         setLiveSnapshot(params.get("live") || DEFAULT_LIVE_SNAPSHOT);
       } else {
@@ -185,6 +340,13 @@ const params = new URLSearchParams(window.location.search);
 const queryFixture = params.get("fixture");
 window.setOverviewFixture = setFixture;
 window.setOverviewLiveSnapshot = setLiveSnapshot;
+window.__overviewImplantationGate = Object.freeze({
+  transportGate: TRANSPORT_GATE,
+  admittedActions: Object.freeze({ ...BRIDGE_ACTIONS }),
+  forbiddenFields: FORBIDDEN_BRIDGE_FIELDS,
+  buildBridgeRequest,
+  simulatedBridgeResponse
+});
 
 if (params.get("mode") === "live") {
   setLiveSnapshot(params.get("live") || DEFAULT_LIVE_SNAPSHOT);
