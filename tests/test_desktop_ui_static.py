@@ -47,7 +47,7 @@ class DesktopUiStaticTests(unittest.TestCase):
         self.assertEqual(mode_packet["desired_mode"], "managed")
         self.assertEqual(mode_packet["effective_mode"], "stable")
 
-    def test_no_live_command_or_runtime_file_access(self) -> None:
+    def test_static_shell_has_no_live_command_or_runtime_file_access(self) -> None:
         forbidden = [
             "subprocess",
             "Popen",
@@ -61,9 +61,36 @@ class DesktopUiStaticTests(unittest.TestCase):
         for path in sorted(DESKTOP_UI.rglob("*")):
             if path.is_dir() or path.suffix == ".png":
                 continue
+            if path.name == "command_adapter.py":
+                continue
             text = path.read_text(encoding="utf-8")
             for needle in forbidden:
                 self.assertNotIn(needle, text, f"{needle} found in {path}")
+
+    def test_command_adapter_boundary_has_no_direct_truth_fallbacks(self) -> None:
+        adapter = DESKTOP_UI / "command_adapter.py"
+        self.assertTrue(adapter.exists(), adapter)
+        text = adapter.read_text(encoding="utf-8")
+        for needle in (
+            "shell=True",
+            "Popen",
+            "os.system",
+            "~/.codex",
+            "backend-registry",
+            "supervisor-state",
+            "runtime.py",
+            "cli.py",
+            "policy stage",
+            "rollout stage",
+            "evidence capture",
+            "stable target switch",
+        ):
+            self.assertNotIn(needle, text, f"{needle} found in {adapter}")
+
+    def test_browser_shell_does_not_import_command_adapter(self) -> None:
+        for path in sorted((DESKTOP_UI / "screens").glob("*.js")):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("command_adapter", text, path)
 
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(

@@ -28,3 +28,18 @@ from live state, logs, registry files, or runtime files.
 Preview fixture variants with:
 
 `http://127.0.0.1:<port>/index.html?fixture=overview_degraded`
+
+## Command Adapter Boundary
+
+`command_adapter.py` is a backend-side utility. Browser JavaScript does not
+import it directly.
+
+Adapter rules:
+
+- allowlisted command IDs only
+- argv-list execution only
+- strict JSON packet parsing
+- invalid JSON is integration failure
+- stderr is support detail only
+- no persistent truth cache
+- no state-file or log fallback
