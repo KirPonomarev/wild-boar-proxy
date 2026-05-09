@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "artifact": "decision_packet",
+  "step": "step37",
+  "generated_at_utc": "2026-05-08T19:24:20Z",
+  "contour": "Direct Same-Day 20-Account Validation Re-entry",
+  "verdict": "NO_GO",
+  "live_run_executed": false,
+  "blocker_code": "STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
+  "blocker_cluster": "reserve_first_stage20_owner_path_unavailable",
+  "facts": [
+    "status --json returned OK with effective_mode=stable, policy_drift.status=clear, and claim_gate.status=clear",
+    "healthcheck --json returned OK with launch_readiness.status=ready and runtime_guardrails.status=clear",
+    "rollout rotation inspect --json returned OK with selected_backend_snapshot_present=true and selected_backend_snapshot_validation_status=valid",
+    "accounts list --json showed active_count=24 and reserve_count=0 while pool_policy.active_target=15",
+    "rollout stage advance 20 open17-plus --json returned STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE with backend_precondition_status=backend_not_reserve"
+  ],
+  "canonical_owner_surface_finding": {
+    "stage20_owner_surface": "python3 -m wild_boar_proxy rollout stage advance 20 <id> --json",
+    "requires_explicit_eligible_reserve_backend": true,
+    "supporting_sources": [
+      "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:607",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:8606",
+      "/Volumes/Work/wild-boar-proxy/tests/test_cli.py:10015"
+    ]
+  },
+  "next_action": "do_not_start_high_load_run_until_reserve_first_stage20_owner_path_is_canonical_and_available"
+}

@@ -18,17 +18,23 @@ from .runtime import (
     run_accounts_command,
     run_demote,
     run_healthcheck,
+    run_installer_init,
     run_hold,
     run_launch_client,
     run_launch_smoke,
+    run_legacy_import,
     run_onboard,
     run_policy_stage_set,
     run_promote,
+    run_companion_reset,
     run_release,
     run_rollout_evidence_capture,
+    run_rollout_posture_inspect,
     run_rollout_rotation_inspect,
     run_rollout_stage_advance,
     run_rollout_stage_prove,
+    run_package_experimental_build,
+    run_package_experimental_verify,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -103,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_onboard = accounts_subparsers.add_parser("onboard")
     accounts_onboard.add_argument("--json", action="store_true", required=True)
     accounts_onboard.add_argument("--auth-ref")
+    accounts_onboard.add_argument("--loop", action="store_true")
     accounts_onboard.add_argument("--skip-login", action="store_true")
     accounts_onboard.add_argument("--no-sync", action="store_true")
     accounts_onboard.add_argument("--non-interactive", action="store_true")
@@ -113,6 +120,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diagnostics_export = diagnostics_subparsers.add_parser("export")
     diagnostics_export.add_argument("--json", action="store_true", required=True)
+
+    installer = subparsers.add_parser("installer")
+    installer_subparsers = installer.add_subparsers(
+        dest="installer_command", required=True
+    )
+    installer_init = installer_subparsers.add_parser("init")
+    installer_init.add_argument("--json", action="store_true", required=True)
+
+    legacy = subparsers.add_parser("legacy")
+    legacy_subparsers = legacy.add_subparsers(dest="legacy_command", required=True)
+    legacy_import = legacy_subparsers.add_parser("import")
+    legacy_import.add_argument("--source-dir", required=True)
+    legacy_import.add_argument("--json", action="store_true", required=True)
+
+    companion = subparsers.add_parser("companion")
+    companion_subparsers = companion.add_subparsers(
+        dest="companion_command", required=True
+    )
+    companion_reset = companion_subparsers.add_parser("reset")
+    companion_reset.add_argument("--json", action="store_true", required=True)
+    companion_uninstall = companion_subparsers.add_parser("uninstall")
+    companion_uninstall.add_argument("--json", action="store_true", required=True)
 
     mode = subparsers.add_parser("mode")
     mode_subparsers = mode.add_subparsers(dest="mode_command", required=True)
@@ -142,6 +171,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
     rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
+    rollout_posture = rollout_subparsers.add_parser("posture")
+    rollout_posture_subparsers = rollout_posture.add_subparsers(
+        dest="rollout_posture_command", required=True
+    )
+    rollout_posture_inspect = rollout_posture_subparsers.add_parser("inspect")
+    rollout_posture_inspect.add_argument("value", choices=["15", "20"])
+    rollout_posture_inspect.add_argument("--json", action="store_true", required=True)
     rollout_evidence = rollout_subparsers.add_parser("evidence")
     rollout_evidence_subparsers = rollout_evidence.add_subparsers(
         dest="rollout_evidence_command", required=True
@@ -160,6 +196,19 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_advance.add_argument("value", choices=["15", "20"])
     rollout_stage_advance.add_argument("id")
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
+
+    package = subparsers.add_parser("package")
+    package_subparsers = package.add_subparsers(dest="package_command", required=True)
+    package_experimental = package_subparsers.add_parser("experimental")
+    package_experimental_subparsers = package_experimental.add_subparsers(
+        dest="package_experimental_command", required=True
+    )
+    package_experimental_build = package_experimental_subparsers.add_parser("build")
+    package_experimental_build.add_argument("--output-dir", required=True)
+    package_experimental_build.add_argument("--json", action="store_true", required=True)
+    package_experimental_verify = package_experimental_subparsers.add_parser("verify")
+    package_experimental_verify.add_argument("--manifest", required=True)
+    package_experimental_verify.add_argument("--json", action="store_true", required=True)
 
     return root_parser
 
@@ -223,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_onboard(
                     paths,
                     auth_ref=args.auth_ref,
+                    loop=args.loop,
                     skip_login=args.skip_login,
                     no_sync=args.no_sync,
                     non_interactive=args.non_interactive,
@@ -230,6 +280,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "diagnostics" and args.diagnostics_command == "export":
             return emit_json(export_diagnostics(paths))
+        if args.command == "installer" and args.installer_command == "init":
+            return emit_json(run_installer_init(paths))
+        if args.command == "legacy" and args.legacy_command == "import":
+            return emit_json(run_legacy_import(paths, args.source_dir))
+        if args.command == "companion" and args.companion_command == "reset":
+            return emit_json(run_companion_reset(paths, uninstall=False))
+        if args.command == "companion" and args.companion_command == "uninstall":
+            return emit_json(run_companion_reset(paths, uninstall=True))
         if args.command == "mode" and args.mode_command == "get":
             return emit_json(mode_get(paths))
         if args.command == "mode" and args.mode_command == "set":
@@ -248,6 +306,12 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_rollout_rotation_inspect(paths))
         if (
             args.command == "rollout"
+            and args.rollout_command == "posture"
+            and args.rollout_posture_command == "inspect"
+        ):
+            return emit_json(run_rollout_posture_inspect(paths, args.value))
+        if (
+            args.command == "rollout"
             and args.rollout_command == "evidence"
             and args.rollout_evidence_command == "capture"
         ):
@@ -264,6 +328,18 @@ def main(argv: list[str] | None = None) -> int:
             and args.rollout_stage_command == "advance"
         ):
             return emit_json(run_rollout_stage_advance(paths, args.value, args.id))
+        if (
+            args.command == "package"
+            and args.package_command == "experimental"
+            and args.package_experimental_command == "build"
+        ):
+            return emit_json(run_package_experimental_build(paths, args.output_dir))
+        if (
+            args.command == "package"
+            and args.package_command == "experimental"
+            and args.package_experimental_command == "verify"
+        ):
+            return emit_json(run_package_experimental_verify(paths, args.manifest))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

@@ -1,0 +1,52 @@
+{
+  "attestation_incomplete": {
+    "command": "rollout evidence capture 16 --json",
+    "exit_code": 1,
+    "machine_error_code": "SCALE_EVIDENCE_INCOMPLETE",
+    "packet_status": "incomplete",
+    "runtime_attestation_status": "failed",
+    "final_outcome": "field_evidence_packet_incomplete",
+    "blocked_reason_codes": [
+      "SCALE_EVIDENCE_ATTESTATION_INCOMPLETE"
+    ],
+    "blocked_gate_names": [
+      "RUNTIME_ATTESTATION_GATE",
+      "SCALE_EVIDENCE_PACKET_GATE"
+    ]
+  },
+  "rotation_contradicted": {
+    "command": "rollout evidence capture 16 --json",
+    "exit_code": 1,
+    "machine_error_code": "SCALE_EVIDENCE_CONTRADICTED",
+    "packet_status": "contradicted",
+    "rotation_evidence_status": "contradicted",
+    "final_outcome": "field_evidence_packet_contradicted",
+    "blocked_gate_names": [
+      "SCALE_EVIDENCE_PACKET_GATE"
+    ]
+  },
+  "rotation_stale": {
+    "command": "rollout evidence capture 16 --json",
+    "exit_code": 1,
+    "machine_error_code": "SCALE_EVIDENCE_INCOMPLETE",
+    "packet_status": "incomplete",
+    "rotation_evidence_status": "stale",
+    "blocked_reason_codes": [
+      "SCALE_EVIDENCE_ROTATION_INCOMPLETE"
+    ],
+    "blocked_gate_names": [
+      "SCALE_EVIDENCE_PACKET_GATE"
+    ]
+  },
+  "redaction_failure_unsafe": {
+    "command": "runtime.run_rollout_evidence_capture(paths, \"16\") [fixture + mock redacted_json_has_secret_leak=True]",
+    "exit_code": 1,
+    "machine_error_code": "SCALE_EVIDENCE_UNSAFE_TO_CLAIM",
+    "packet_status": "unsafe_to_claim",
+    "diagnostics_redaction_status": "failed",
+    "final_outcome": "field_evidence_packet_unsafe_to_claim",
+    "blocked_gate_names": [
+      "SCALE_EVIDENCE_PACKET_GATE"
+    ]
+  }
+}

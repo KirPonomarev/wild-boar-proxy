@@ -55,6 +55,10 @@ ONBOARDING_RESULT_FIELDS = (
     "selected_backend_id",
     "selection_status",
     "reserve_first_enforced",
+    "auth_snapshot_before_login_status",
+    "auth_snapshot_before_login_count",
+    "auth_snapshot_before_login_digest",
+    "auth_snapshot_before_login_source",
     "pool_after_onboarding",
     "validate_attempted",
     "validate_outcome",
@@ -96,7 +100,10 @@ SMOKE_RESULT_FIELDS = (
     "attestation_summary",
     "stable_runtime_consumer",
 )
-ACCOUNT_CAPACITY_TARGET = 20
+DIAGNOSTICS_RESULT_FIELDS = ("bundle_path",)
+STABLE_REPAIR_RESULT_FIELDS = ()
+ACCOUNT_CAPACITY_TARGET = 25
+DEFAULT_ACTIVE_WINDOW_TARGET = 10
 
 
 class UiShellError(Exception):
@@ -429,6 +436,26 @@ def build_account_pool_snapshot(accounts_payload: dict[str, Any]) -> AccountPool
     )
 
 
+def ensure_capacity_data_consistency(
+    runtime_snapshot: RuntimeSnapshot, account_snapshot: AccountPoolSnapshot
+) -> None:
+    runtime_counts = (
+        runtime_snapshot.active_count,
+        runtime_snapshot.reserve_count,
+        runtime_snapshot.retired_count,
+    )
+    account_counts = (
+        account_snapshot.active_count,
+        account_snapshot.reserve_count,
+        account_snapshot.retired_count,
+    )
+    if runtime_counts != account_counts:
+        raise UiShellError(
+            "status pool_summary and accounts list disagree about "
+            "active, reserve, or retired counts"
+        )
+
+
 def load_runtime_snapshot(runner: JsonCommandRunner) -> RuntimeSnapshot:
     return build_runtime_snapshot(
         status_payload=runner.run("status", "--json").payload,
@@ -466,6 +493,38 @@ def run_smoke_and_refresh(
     return action_result.payload, snapshot
 
 
+def run_diagnostics_export_and_refresh(
+    runner: JsonCommandRunner,
+) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
+    action_result = runner.run("diagnostics", "export", "--json")
+    status_payload = runner.run("status", "--json").payload
+    accounts_payload = runner.run("accounts", "list", "--json").payload
+    mode_payload = runner.run("mode", "get", "--json").payload
+    runtime_snapshot = build_runtime_snapshot(
+        status_payload=status_payload,
+        mode_payload=mode_payload,
+    )
+    account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+    return action_result.payload, runtime_snapshot, account_snapshot
+
+
+def run_stable_repair_and_refresh(
+    runner: JsonCommandRunner,
+) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
+    action_result = runner.run("stable", "repair", "--apply", "--json")
+    status_payload = runner.run("status", "--json").payload
+    accounts_payload = runner.run("accounts", "list", "--json").payload
+    mode_payload = runner.run("mode", "get", "--json").payload
+    runtime_snapshot = build_runtime_snapshot(
+        status_payload=status_payload,
+        mode_payload=mode_payload,
+    )
+    account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+    return action_result.payload, runtime_snapshot, account_snapshot
+
+
 def run_sync_and_refresh(
     runner: JsonCommandRunner,
 ) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
@@ -478,6 +537,7 @@ def run_sync_and_refresh(
         mode_payload=mode_payload,
     )
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -497,6 +557,7 @@ def run_account_mutation_and_refresh(
     status_payload = runner.run("status", "--json").payload
     runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -508,6 +569,7 @@ def run_account_onboard_and_refresh(
     status_payload = runner.run("status", "--json").payload
     runtime_snapshot = build_runtime_snapshot(status_payload=status_payload)
     account_snapshot = build_account_pool_snapshot(accounts_payload)
+    ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
     return action_result.payload, runtime_snapshot, account_snapshot
 
 
@@ -601,6 +663,14 @@ def build_smoke_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def build_diagnostics_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in DIAGNOSTICS_RESULT_FIELDS}
+    for field in DIAGNOSTICS_RESULT_FIELDS:
+        if field in action_payload:
+            result[field] = format_onboarding_value(action_payload[field])
+    return result
+
+
 def classify_smoke_rendered_state(
     action_payload: dict[str, Any], *, malformed: bool
 ) -> str:
@@ -634,6 +704,7 @@ class MinimalCompanionShell:
         self.effective_mode_var = StringVar(value="unknown")
         self.endpoint_var = StringVar(value="")
         self.current_proxy_var = StringVar(value="")
+        self.health_var = StringVar(value="unknown / ")
         self.liveness_var = StringVar(value="unknown")
         self.severity_var = StringVar(value="recoverable")
         self.operator_action_var = StringVar(value="none")
@@ -644,7 +715,12 @@ class MinimalCompanionShell:
         self.integration_var = StringVar(value="")
         self.account_registry_var = StringVar(value="unknown")
         self.account_counts_var = StringVar(value="A:0 R:0 T:0")
-        self.account_capacity_var = StringVar(value=str(ACCOUNT_CAPACITY_TARGET))
+        self.account_capacity_var = StringVar(
+            value=(
+                f"{ACCOUNT_CAPACITY_TARGET} managed / "
+                f"{DEFAULT_ACTIVE_WINDOW_TARGET} active default"
+            )
+        )
         self.account_integration_var = StringVar(value="")
         self.onboarding_auth_ref_var = StringVar(value="")
         self.onboarding_command_status_var = StringVar(value="")
@@ -677,6 +753,22 @@ class MinimalCompanionShell:
             field: StringVar(value="")
             for field in SMOKE_RESULT_FIELDS
         }
+        self.diagnostics_command_status_var = StringVar(value="")
+        self.diagnostics_command_exit_code_var = StringVar(value="")
+        self.diagnostics_command_human_message_var = StringVar(value="")
+        self.diagnostics_command_machine_error_var = StringVar(value="")
+        self.diagnostics_command_changed_files_var = StringVar(value="")
+        self.diagnostics_command_next_action_var = StringVar(value="")
+        self.diagnostics_field_vars = {
+            field: StringVar(value="")
+            for field in DIAGNOSTICS_RESULT_FIELDS
+        }
+        self.stable_repair_command_status_var = StringVar(value="")
+        self.stable_repair_command_exit_code_var = StringVar(value="")
+        self.stable_repair_command_human_message_var = StringVar(value="")
+        self.stable_repair_command_machine_error_var = StringVar(value="")
+        self.stable_repair_command_changed_files_var = StringVar(value="")
+        self.stable_repair_command_next_action_var = StringVar(value="")
 
         self._build_layout()
         self.root.after(0, self.refresh)
@@ -712,6 +804,7 @@ class MinimalCompanionShell:
         self._add_status_row(status_box, "Effective mode", self.effective_mode_var)
         self._add_status_row(status_box, "Endpoint", self.endpoint_var)
         self._add_status_row(status_box, "Current proxy", self.current_proxy_var)
+        self._add_status_row(status_box, "Health", self.health_var)
         self._add_status_row(status_box, "Liveness", self.liveness_var)
         self._add_status_row(status_box, "Severity", self.severity_var)
         self._add_status_row(status_box, "Operator action", self.operator_action_var)
@@ -748,6 +841,16 @@ class MinimalCompanionShell:
             controls_box,
             text="Smoke Test",
             command=self.run_smoke_action,
+        ).pack(fill="x", pady=4)
+        ttk.Button(
+            controls_box,
+            text="Run Stable Repair",
+            command=self.run_stable_repair_action,
+        ).pack(fill="x", pady=4)
+        ttk.Button(
+            controls_box,
+            text="Export Diagnostics",
+            command=self.run_diagnostics_action,
         ).pack(fill="x", pady=4)
         launch_box = ttk.LabelFrame(controls_box, text="Launch Client", padding=8)
         launch_box.pack(fill="x", pady=(8, 0))
@@ -870,6 +973,77 @@ class MinimalCompanionShell:
         ):
             self._add_status_row(smoke_box, label, self.smoke_field_vars[field])
 
+        diagnostics_box = ttk.LabelFrame(controls_box, text="Diagnostics Export", padding=8)
+        diagnostics_box.pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            diagnostics_box,
+            "Command status",
+            self.diagnostics_command_status_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Exit code",
+            self.diagnostics_command_exit_code_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Human message",
+            self.diagnostics_command_human_message_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Machine error",
+            self.diagnostics_command_machine_error_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Changed files",
+            self.diagnostics_command_changed_files_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Next action",
+            self.diagnostics_command_next_action_var,
+        )
+        self._add_status_row(
+            diagnostics_box,
+            "Bundle path",
+            self.diagnostics_field_vars["bundle_path"],
+        )
+
+        stable_repair_box = ttk.LabelFrame(controls_box, text="Stable Repair", padding=8)
+        stable_repair_box.pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            stable_repair_box,
+            "Command status",
+            self.stable_repair_command_status_var,
+        )
+        self._add_status_row(
+            stable_repair_box,
+            "Exit code",
+            self.stable_repair_command_exit_code_var,
+        )
+        self._add_status_row(
+            stable_repair_box,
+            "Human message",
+            self.stable_repair_command_human_message_var,
+        )
+        self._add_status_row(
+            stable_repair_box,
+            "Machine error",
+            self.stable_repair_command_machine_error_var,
+        )
+        self._add_status_row(
+            stable_repair_box,
+            "Changed files",
+            self.stable_repair_command_changed_files_var,
+        )
+        self._add_status_row(
+            stable_repair_box,
+            "Next action",
+            self.stable_repair_command_next_action_var,
+        )
+
         onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
         onboarding_box.pack(fill="x", pady=(16, 0))
 
@@ -904,6 +1078,10 @@ class MinimalCompanionShell:
             ("Selected backend", "selected_backend_id"),
             ("Selection status", "selection_status"),
             ("Reserve first", "reserve_first_enforced"),
+            ("Auth snapshot status", "auth_snapshot_before_login_status"),
+            ("Auth snapshot count", "auth_snapshot_before_login_count"),
+            ("Auth snapshot digest", "auth_snapshot_before_login_digest"),
+            ("Auth snapshot source", "auth_snapshot_before_login_source"),
             ("Pool after", "pool_after_onboarding"),
             ("Validate attempted", "validate_attempted"),
             ("Validate outcome", "validate_outcome"),
@@ -924,7 +1102,7 @@ class MinimalCompanionShell:
         account_summary.pack(fill="x")
         self._add_status_row(account_summary, "Registry identity", self.account_registry_var)
         self._add_status_row(account_summary, "Account counts", self.account_counts_var)
-        self._add_status_row(account_summary, "Capacity target", self.account_capacity_var)
+        self._add_status_row(account_summary, "Managed contour", self.account_capacity_var)
         self._add_status_row(account_summary, "Integration", self.account_integration_var)
 
         account_actions = ttk.Frame(accounts_box)
@@ -1012,6 +1190,12 @@ class MinimalCompanionShell:
             account_snapshot = load_account_pool_snapshot(self.runner)
         except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
             account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+        if not runtime_snapshot.integration_error and not account_snapshot.integration_error:
+            try:
+                ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+            except UiShellError as exc:
+                runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+                account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
         self.root.after(
             0,
             lambda: self._apply_refresh_results(runtime_snapshot, account_snapshot),
@@ -1025,6 +1209,9 @@ class MinimalCompanionShell:
         self.effective_mode_var.set(snapshot.effective_mode)
         self.endpoint_var.set(snapshot.endpoint)
         self.current_proxy_var.set(snapshot.current_proxy_url)
+        self.health_var.set(
+            f"{snapshot.liveness} / {snapshot.machine_error_code}"
+        )
         self.liveness_var.set(snapshot.liveness)
         self.severity_var.set(snapshot.severity)
         self.operator_action_var.set(snapshot.operator_action)
@@ -1064,7 +1251,10 @@ class MinimalCompanionShell:
                 retired=snapshot.retired_count,
             )
         )
-        self.account_capacity_var.set(str(snapshot.capacity_target))
+        self.account_capacity_var.set(
+            f"{snapshot.capacity_target} managed / "
+            f"{DEFAULT_ACTIVE_WINDOW_TARGET} active default"
+        )
         self.account_integration_var.set(snapshot.integration_error)
 
         for item in self.accounts_tree.get_children():
@@ -1167,6 +1357,32 @@ class MinimalCompanionShell:
         self.set_busy(True)
         self.banner_var.set("Running smoke test...")
         threading.Thread(target=self._smoke_worker, daemon=True).start()
+
+    def run_diagnostics_action(self) -> None:
+        if self._busy:
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Export redacted diagnostics bundle and refresh command truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running diagnostics export...")
+        threading.Thread(target=self._diagnostics_worker, daemon=True).start()
+
+    def run_stable_repair_action(self) -> None:
+        if self._busy:
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run stable repair and refresh command truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running stable repair...")
+        threading.Thread(target=self._stable_repair_worker, daemon=True).start()
 
     def run_onboard_action(self) -> None:
         if self._busy:
@@ -1282,6 +1498,7 @@ class MinimalCompanionShell:
         try:
             action_payload, runtime_snapshot = run_mode_control_and_refresh(self.runner, command)
             account_snapshot = load_account_pool_snapshot(self.runner)
+            ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
             banner = str(action_payload["human_message"])
         except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
             runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
@@ -1372,6 +1589,64 @@ class MinimalCompanionShell:
             lambda: self._apply_smoke_results(
                 action_payload,
                 runtime_snapshot,
+                banner=banner,
+            ),
+        )
+
+    def _diagnostics_worker(self) -> None:
+        try:
+            action_payload, runtime_snapshot, account_snapshot = (
+                run_diagnostics_export_and_refresh(self.runner)
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_diagnostics_results(
+                action_payload,
+                runtime_snapshot,
+                account_snapshot,
+                banner=banner,
+            ),
+        )
+
+    def _stable_repair_worker(self) -> None:
+        try:
+            action_payload, runtime_snapshot, account_snapshot = (
+                run_stable_repair_and_refresh(self.runner)
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_stable_repair_results(
+                action_payload,
+                runtime_snapshot,
+                account_snapshot,
                 banner=banner,
             ),
         )
@@ -1484,6 +1759,69 @@ class MinimalCompanionShell:
         self._apply_runtime_snapshot(runtime_snapshot)
         self.banner_var.set(banner)
         self.set_busy(False)
+
+    def _apply_diagnostics_payload(self, action_payload: dict[str, Any]) -> None:
+        self.diagnostics_command_status_var.set(str(action_payload.get("status", "")))
+        self.diagnostics_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.diagnostics_command_human_message_var.set(
+            str(action_payload.get("human_message", ""))
+        )
+        self.diagnostics_command_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.diagnostics_command_next_action_var.set(str(action_payload.get("next_action", "")))
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.diagnostics_command_changed_files_var.set("")
+        else:
+            self.diagnostics_command_changed_files_var.set(
+                format_onboarding_value(changed_files_value)
+            )
+        field_values = build_diagnostics_field_values(action_payload)
+        for field, value in field_values.items():
+            self.diagnostics_field_vars[field].set(value)
+
+    def _apply_diagnostics_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        account_snapshot: AccountPoolSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_diagnostics_payload(action_payload)
+        self._apply_refresh_results(runtime_snapshot, account_snapshot, banner=banner)
+
+    def _apply_stable_repair_payload(self, action_payload: dict[str, Any]) -> None:
+        self.stable_repair_command_status_var.set(str(action_payload.get("status", "")))
+        self.stable_repair_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.stable_repair_command_human_message_var.set(
+            str(action_payload.get("human_message", ""))
+        )
+        self.stable_repair_command_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.stable_repair_command_next_action_var.set(
+            str(action_payload.get("next_action", ""))
+        )
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.stable_repair_command_changed_files_var.set("")
+        else:
+            self.stable_repair_command_changed_files_var.set(
+                format_onboarding_value(changed_files_value)
+            )
+
+    def _apply_stable_repair_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        account_snapshot: AccountPoolSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_stable_repair_payload(action_payload)
+        self._apply_refresh_results(runtime_snapshot, account_snapshot, banner=banner)
 
     def _apply_onboarding_payload(self, action_payload: dict[str, Any]) -> None:
         self.onboarding_command_status_var.set(str(action_payload.get("status", "")))

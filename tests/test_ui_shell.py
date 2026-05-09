@@ -9,6 +9,7 @@ from unittest import mock
 
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
+    DIAGNOSTICS_RESULT_FIELDS,
     ONBOARDING_RESULT_FIELDS,
     SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
@@ -17,6 +18,7 @@ from wild_boar_proxy.ui_shell import (
     UiShellError,
     build_account_pool_snapshot,
     build_client_launch_field_values,
+    build_diagnostics_field_values,
     build_smoke_field_values,
     classify_client_launch_rendered_state,
     classify_smoke_rendered_state,
@@ -30,9 +32,11 @@ from wild_boar_proxy.ui_shell import (
     run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
+    run_stable_repair_and_refresh,
     run_launch_client_and_refresh,
     run_mode_control_and_refresh,
     run_smoke_and_refresh,
+    run_diagnostics_export_and_refresh,
     run_sync_and_refresh,
 )
 
@@ -61,11 +65,11 @@ def status_payload(**overrides: object) -> dict[str, object]:
         endpoint="127.0.0.1:9999",
         current_proxy_url="http://127.0.0.1:10808",
         pool_summary={
-            "active": 2,
+            "active": 1,
             "reserve": 1,
             "retired": 0,
             "healthy": 2,
-            "degraded": 1,
+            "degraded": 0,
             "down": 0,
         },
         attestation_summary={
@@ -244,7 +248,7 @@ class RuntimeSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.desired_mode, "managed")
         self.assertEqual(snapshot.current_proxy_url, "http://127.0.0.1:10808")
         self.assertEqual(snapshot.attestation_source, "healthcheck --json")
-        self.assertEqual(snapshot.degraded_count, 1)
+        self.assertEqual(snapshot.degraded_count, 0)
 
     def test_build_runtime_snapshot_rejects_missing_required_pool_field(self) -> None:
         broken_status = status_payload(
@@ -316,7 +320,7 @@ class AccountPoolSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.registry_identity_status, "clear")
         self.assertEqual(snapshot.active_count, 1)
         self.assertEqual(snapshot.reserve_count, 1)
-        self.assertEqual(snapshot.capacity_target, 20)
+        self.assertEqual(snapshot.capacity_target, 25)
         self.assertEqual(snapshot.accounts[0].backend_id, "backend-a")
 
     def test_build_account_pool_snapshot_rejects_missing_accounts_field(self) -> None:
@@ -426,6 +430,116 @@ class ModeControlTests(unittest.TestCase):
                 ("mode", "get", "--json"),
             ],
         )
+
+    def test_run_sync_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("sync", "--json"): command_payload(human_message="Managed sync completed."),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_sync_and_refresh(runner)
+
+    def test_run_diagnostics_export_and_refresh_includes_runtime_and_accounts_refresh(self) -> None:
+        runner = FakeRunner(
+            {
+                ("diagnostics", "export", "--json"): command_payload(
+                    human_message="Diagnostics bundle exported.",
+                    bundle_path="/tmp/wbp-diag",
+                ),
+                ("status", "--json"): status_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_diagnostics_export_and_refresh(
+            runner
+        )
+
+        self.assertEqual(action_payload["human_message"], "Diagnostics bundle exported.")
+        self.assertEqual(action_payload["bundle_path"], "/tmp/wbp-diag")
+        self.assertEqual(runtime_snapshot.effective_mode, "managed")
+        self.assertEqual(account_snapshot.active_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("diagnostics", "export", "--json"),
+                ("status", "--json"),
+                ("accounts", "list", "--json"),
+                ("mode", "get", "--json"),
+            ],
+        )
+
+    def test_run_stable_repair_and_refresh_includes_runtime_and_accounts_refresh(self) -> None:
+        runner = FakeRunner(
+            {
+                ("stable", "repair", "--apply", "--json"): command_payload(
+                    human_message="Stable repair applied."
+                ),
+                ("status", "--json"): status_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_stable_repair_and_refresh(
+            runner
+        )
+
+        self.assertEqual(action_payload["human_message"], "Stable repair applied.")
+        self.assertEqual(runtime_snapshot.effective_mode, "managed")
+        self.assertEqual(account_snapshot.active_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("stable", "repair", "--apply", "--json"),
+                ("status", "--json"),
+                ("accounts", "list", "--json"),
+                ("mode", "get", "--json"),
+            ],
+        )
+
+    def test_run_stable_repair_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("stable", "repair", "--apply", "--json"): command_payload(
+                    human_message="Stable repair applied."
+                ),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_stable_repair_and_refresh(runner)
 
 
 class LaunchClientTests(unittest.TestCase):
@@ -679,7 +793,16 @@ class AccountMutationTests(unittest.TestCase):
                         }
                     ]
                 ),
-                ("status", "--json"): status_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 1,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
             }
         )
 
@@ -740,6 +863,33 @@ class AccountMutationTests(unittest.TestCase):
                 runner, ("accounts", "release", "backend-a", "--json")
             )
 
+    def test_run_account_mutation_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "hold", "backend-a", "--json"): command_payload(
+                    human_message="Account held."
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 2,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_account_mutation_and_refresh(
+                runner, ("accounts", "hold", "backend-a", "--json")
+            )
+
     def test_run_account_retire_and_refresh_uses_accounts_list_then_status(self) -> None:
         runner = FakeRunner(
             {
@@ -763,7 +913,16 @@ class AccountMutationTests(unittest.TestCase):
                         }
                     ]
                 ),
-                ("status", "--json"): status_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 0,
+                        "retired": 1,
+                        "healthy": 1,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
             }
         )
 
@@ -832,6 +991,52 @@ class OnboardingActionTests(unittest.TestCase):
             ],
         )
 
+    def test_run_account_onboard_and_refresh_rejects_capacity_count_mismatch(self) -> None:
+        runner = FakeRunner(
+            {
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"): command_payload(
+                    human_message="Onboarding completed.",
+                    onboarding_result={
+                        "input_mode": "explicit_auth_ref",
+                        "explicit_auth_ref": "/tmp/new-auth.json",
+                        "new_backend_ids": ["backend-new"],
+                        "selected_backend_id": "backend-new",
+                        "selection_status": "selected_unique_backend",
+                        "reserve_first_enforced": True,
+                        "pool_after_onboarding": "reserve",
+                        "validate_attempted": True,
+                        "validate_outcome": "ok",
+                        "sync_attempted": False,
+                        "sync_outcome": "skipped_by_flag",
+                        "status_observed": {"command_status": "ok"},
+                        "external_command_exit_code": 7,
+                        "external_command_status": "nonzero",
+                        "active_routing_changed": False,
+                        "final_outcome": "explicit_auth_imported_to_reserve",
+                    },
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 1,
+                        "retired": 0,
+                        "healthy": 3,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(
+            UiShellError, "status pool_summary and accounts list disagree"
+        ):
+            run_account_onboard_and_refresh(
+                runner,
+                ("accounts", "onboard", "--json", "--auth-ref", "/tmp/new-auth.json", "--non-interactive"),
+            )
+
     def test_build_onboarding_field_values_maps_known_fields_and_missing_as_blank(self) -> None:
         values = build_onboarding_field_values(
             command_payload(
@@ -839,6 +1044,8 @@ class OnboardingActionTests(unittest.TestCase):
                     "input_mode": "explicit_auth_ref",
                     "sync_outcome": "skipped_by_flag",
                     "reserve_first_enforced": True,
+                    "auth_snapshot_before_login_status": "ok",
+                    "auth_snapshot_before_login_count": 2,
                 }
             )
         )
@@ -847,6 +1054,8 @@ class OnboardingActionTests(unittest.TestCase):
         self.assertEqual(values["input_mode"], "explicit_auth_ref")
         self.assertEqual(values["sync_outcome"], "skipped_by_flag")
         self.assertEqual(values["reserve_first_enforced"], "true")
+        self.assertEqual(values["auth_snapshot_before_login_status"], "ok")
+        self.assertEqual(values["auth_snapshot_before_login_count"], "2")
         self.assertEqual(values["selected_backend_id"], "")
 
     def test_build_onboarding_field_values_rejects_non_object_onboarding_result(self) -> None:
@@ -859,6 +1068,13 @@ class OnboardingActionTests(unittest.TestCase):
             format_onboarding_value({"command_status": "ok"}),
             '{"command_status": "ok"}',
         )
+
+    def test_build_diagnostics_field_values_maps_bundle_path(self) -> None:
+        values = build_diagnostics_field_values(
+            command_payload(bundle_path="/tmp/wbp-diag")
+        )
+        self.assertEqual(set(values.keys()), set(DIAGNOSTICS_RESULT_FIELDS))
+        self.assertEqual(values["bundle_path"], "/tmp/wbp-diag")
 
 
 class UiDispatchTests(unittest.TestCase):
@@ -944,6 +1160,49 @@ class UiDispatchTests(unittest.TestCase):
             "Promote selected reserve account into active routing?",
             "promote",
         )
+
+    def test_run_mode_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_mode_action(
+                    "Switch desired mode to stable?",
+                    ("mode", "set", "stable", "--json"),
+                )
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_mode_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_mode_action(
+                    "Switch desired mode to managed?",
+                    ("mode", "set", "managed", "--json"),
+                )
+
+        shell.set_busy.assert_called_once_with(True)
+        shell.banner_var.set.assert_called_once_with("Running operator action...")
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._action_worker)
+        self.assertEqual(kwargs["args"], (("mode", "set", "managed", "--json"),))
+        thread_instance.start.assert_called_once_with()
 
     def test_run_demote_action_maps_to_generic_mutation_handler(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
@@ -1180,6 +1439,78 @@ class UiDispatchTests(unittest.TestCase):
         self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
         thread_instance.start.assert_called_once_with()
 
+    def test_run_diagnostics_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_diagnostics_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_diagnostics_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_diagnostics_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._diagnostics_worker)
+        self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
+        thread_instance.start.assert_called_once_with()
+
+    def test_run_stable_repair_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_stable_repair_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_stable_repair_action_starts_worker_after_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_stable_repair_action()
+
+        shell.set_busy.assert_called_once_with(True)
+        shell.banner_var.set.assert_called_once_with("Running stable repair...")
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._stable_repair_worker)
+        self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
+        thread_instance.start.assert_called_once_with()
+
     def test_apply_smoke_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell.smoke_command_status_var = mock.Mock()
@@ -1222,6 +1553,114 @@ class UiDispatchTests(unittest.TestCase):
 
         shell.smoke_rendered_state_var.set.assert_called_once_with("failure")
 
+    def test_apply_diagnostics_payload_maps_command_and_bundle_path(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.diagnostics_command_status_var = mock.Mock()
+        shell.diagnostics_command_exit_code_var = mock.Mock()
+        shell.diagnostics_command_human_message_var = mock.Mock()
+        shell.diagnostics_command_machine_error_var = mock.Mock()
+        shell.diagnostics_command_changed_files_var = mock.Mock()
+        shell.diagnostics_command_next_action_var = mock.Mock()
+        shell.diagnostics_field_vars = {
+            field: mock.Mock() for field in DIAGNOSTICS_RESULT_FIELDS
+        }
+
+        shell._apply_diagnostics_payload(
+            command_payload(
+                human_message="Diagnostics bundle exported.",
+                changed_files=["/tmp/wbp-diag"],
+                bundle_path="/tmp/wbp-diag",
+            )
+        )
+
+        shell.diagnostics_command_status_var.set.assert_called_once_with("ok")
+        shell.diagnostics_command_exit_code_var.set.assert_called_once_with("0")
+        shell.diagnostics_command_human_message_var.set.assert_called_once_with(
+            "Diagnostics bundle exported."
+        )
+        shell.diagnostics_command_machine_error_var.set.assert_called_once_with("OK")
+        shell.diagnostics_command_changed_files_var.set.assert_called_once_with(
+            '["/tmp/wbp-diag"]'
+        )
+        shell.diagnostics_command_next_action_var.set.assert_called_once_with("none")
+        shell.diagnostics_field_vars["bundle_path"].set.assert_called_once_with(
+            "/tmp/wbp-diag"
+        )
+
+    def test_apply_stable_repair_payload_maps_command_fields(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.stable_repair_command_status_var = mock.Mock()
+        shell.stable_repair_command_exit_code_var = mock.Mock()
+        shell.stable_repair_command_human_message_var = mock.Mock()
+        shell.stable_repair_command_machine_error_var = mock.Mock()
+        shell.stable_repair_command_changed_files_var = mock.Mock()
+        shell.stable_repair_command_next_action_var = mock.Mock()
+
+        shell._apply_stable_repair_payload(
+            command_payload(
+                human_message="Stable repair applied.",
+                changed_files=["/tmp/config.yaml"],
+            )
+        )
+
+        shell.stable_repair_command_status_var.set.assert_called_once_with("ok")
+        shell.stable_repair_command_exit_code_var.set.assert_called_once_with("0")
+        shell.stable_repair_command_human_message_var.set.assert_called_once_with(
+            "Stable repair applied."
+        )
+        shell.stable_repair_command_machine_error_var.set.assert_called_once_with("OK")
+        shell.stable_repair_command_changed_files_var.set.assert_called_once_with(
+            "[\"/tmp/config.yaml\"]"
+        )
+        shell.stable_repair_command_next_action_var.set.assert_called_once_with("none")
+
+    def test_stable_repair_worker_keeps_action_payload_when_refresh_fails(self) -> None:
+        class BrokenRefreshRunner:
+            def run(self, *args: str):
+                if args == ("stable", "repair", "--apply", "--json"):
+                    return type(
+                        "Result",
+                        (),
+                        {
+                            "payload": command_payload(
+                                human_message="Stable repair applied."
+                            ),
+                            "stderr": "",
+                        },
+                    )()
+                if args == ("accounts", "list", "--json"):
+                    return type(
+                        "Result",
+                        (),
+                        {"payload": accounts_payload(), "stderr": ""},
+                    )()
+                if args == ("status", "--json"):
+                    return type(
+                        "Result",
+                        (),
+                        {"payload": command_payload(status="ok"), "stderr": ""},
+                    )()
+                if args == ("mode", "get", "--json"):
+                    return type(
+                        "Result",
+                        (),
+                        {"payload": mode_payload(), "stderr": ""},
+                    )()
+                raise AssertionError(f"unexpected command: {args}")
+
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = BrokenRefreshRunner()
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_stable_repair_results = mock.Mock()
+
+        shell._stable_repair_worker()
+
+        shell._apply_stable_repair_results.assert_called_once()
+        action_payload = shell._apply_stable_repair_results.call_args.args[0]
+        self.assertEqual(action_payload["status"], "integration_failure")
+        self.assertEqual(action_payload["machine_error_code"], "UI_INTEGRATION_FAILURE")
+
     def test_smoke_worker_keeps_action_payload_when_status_refresh_fails(self) -> None:
         class BrokenStatusRunner:
             def run(self, *args: str):
@@ -1246,6 +1685,80 @@ class UiDispatchTests(unittest.TestCase):
         shell._apply_smoke_results.assert_called_once()
         action_payload = shell._apply_smoke_results.call_args.args[0]
         self.assertEqual(action_payload["status"], "ok")
+
+    def test_refresh_worker_turns_capacity_count_mismatch_into_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = FakeRunner(
+            {
+                ("status", "--json"): status_payload(
+                    pool_summary={
+                        "active": 2,
+                        "reserve": 0,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    }
+                ),
+                ("mode", "get", "--json"): mode_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_refresh_results = mock.Mock()
+
+        shell._refresh_worker()
+
+        shell._apply_refresh_results.assert_called_once()
+        runtime_snapshot, account_snapshot = shell._apply_refresh_results.call_args.args
+        self.assertEqual(runtime_snapshot.overall_state, "integration_failure")
+        self.assertEqual(account_snapshot.machine_error_code, "UI_INTEGRATION_FAILURE")
+        self.assertIn("status pool_summary and accounts list disagree", runtime_snapshot.integration_error)
+        self.assertIn("status pool_summary and accounts list disagree", account_snapshot.integration_error)
+
+    def test_action_worker_turns_capacity_count_mismatch_into_integration_failure(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = FakeRunner(
+            {
+                ("mode", "set", "stable", "--json"): command_payload(
+                    human_message="Desired mode set to stable.",
+                    desired_mode="stable",
+                    effective_mode="managed",
+                ),
+                ("status", "--json"): status_payload(
+                    desired_mode="stable",
+                    effective_mode="managed",
+                    pool_summary={
+                        "active": 0,
+                        "reserve": 2,
+                        "retired": 0,
+                        "healthy": 2,
+                        "degraded": 0,
+                        "down": 0,
+                    },
+                ),
+                ("mode", "get", "--json"): mode_payload(
+                    desired_mode="stable",
+                    effective_mode="managed",
+                ),
+                ("accounts", "list", "--json"): accounts_payload(),
+            }
+        )
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_refresh_results = mock.Mock()
+
+        shell._action_worker(("mode", "set", "stable", "--json"))
+
+        shell._apply_refresh_results.assert_called_once()
+        runtime_snapshot, account_snapshot = shell._apply_refresh_results.call_args.args
+        self.assertEqual(runtime_snapshot.overall_state, "integration_failure")
+        self.assertEqual(account_snapshot.machine_error_code, "UI_INTEGRATION_FAILURE")
+        self.assertEqual(
+            shell._apply_refresh_results.call_args.kwargs["banner"],
+            "Operator action failed.",
+        )
 
     def test_apply_launch_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
@@ -1359,6 +1872,10 @@ class UiDispatchTests(unittest.TestCase):
             command_payload(
                 onboarding_result={
                     "reserve_first_enforced": True,
+                    "auth_snapshot_before_login_status": "ok",
+                    "auth_snapshot_before_login_count": 0,
+                    "auth_snapshot_before_login_digest": "digest",
+                    "auth_snapshot_before_login_source": {"source": "stable_config_parent"},
                     "sync_outcome": "skipped_by_flag",
                     "status_observed": {"command_status": "ok"},
                     "active_routing_changed": False,
@@ -1368,6 +1885,12 @@ class UiDispatchTests(unittest.TestCase):
         )
 
         shell.onboarding_field_vars["reserve_first_enforced"].set.assert_called_with("true")
+        shell.onboarding_field_vars["auth_snapshot_before_login_status"].set.assert_called_with("ok")
+        shell.onboarding_field_vars["auth_snapshot_before_login_count"].set.assert_called_with("0")
+        shell.onboarding_field_vars["auth_snapshot_before_login_digest"].set.assert_called_with("digest")
+        shell.onboarding_field_vars["auth_snapshot_before_login_source"].set.assert_called_with(
+            '{"source": "stable_config_parent"}'
+        )
         shell.onboarding_field_vars["sync_outcome"].set.assert_called_with("skipped_by_flag")
 
     def test_apply_onboarding_payload_displays_status_failure_fields(self) -> None:

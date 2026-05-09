@@ -1,0 +1,21 @@
+{
+  "step": "STEP-26B_PILOT_BLOCKER_AND_METRICS_WINDOW_LANE",
+  "generated_at_utc": "2026-05-07T08:06:07Z",
+  "claim_scope": "machine-evidence-only",
+  "scale_evidence_crosscheck": [
+    {
+      "command": "rg -n --no-heading '\"active_count_observed\"\\s*:\\s*20' audit_results/*.json",
+      "exit_code": 1,
+      "matched_lines": []
+    },
+    {
+      "command": "rg -n --no-heading '\"operator_approved\"\\s*:\\s*true|\"approved_by_operator\"\\s*:\\s*true|\"operator_approval\"\\s*:\\s*\"approved\"' audit_results/*.json",
+      "exit_code": 1,
+      "matched_lines": []
+    }
+  ],
+  "conclusion": {
+    "scale_field_proof_available": false,
+    "reason_code": "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+  }
+}

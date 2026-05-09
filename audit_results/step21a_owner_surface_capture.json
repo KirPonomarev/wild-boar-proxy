@@ -1,0 +1,101 @@
+{
+  "step": "STEP-21A_LIVE_SCALE20_EVIDENCE_LANE",
+  "captured_at_utc": "2026-05-07T05:50:04Z",
+  "runtime_scope": "machine_evidence_test_and_repo_scan_only",
+  "claim_scope": "machine-evidence-only",
+  "source_artifacts": [
+    {
+      "path": "audit_results/step20a_decision_packet.json",
+      "size_bytes": 2200,
+      "sha256": "190e9dd6cb67332f7d9778597f22984bd2e1aaa342e307970ba9e435131b1dd6",
+      "last_modified_utc": "2026-05-07T05:40:57.825122Z"
+    },
+    {
+      "path": "audit_results/step17_release_gate_alignment_report.md",
+      "size_bytes": 7429,
+      "sha256": "5596d391fc38fd70da9a2ef505d22900d3ea8aca74aebe276904765b0b92de4b",
+      "last_modified_utc": "2026-05-07T01:48:05.442504Z"
+    },
+    {
+      "path": "audit_results/step16_owner_surface_capture.json",
+      "size_bytes": 359164,
+      "sha256": "02c7ebb0384a3a5d85463e8ae766065916632e7a533ad46567af4f7bfc691ef7",
+      "last_modified_utc": "2026-05-07T01:23:39.123498Z"
+    },
+    {
+      "path": "audit_results/step21a_test_runs.json",
+      "size_bytes": 2362,
+      "sha256": "782946240cae3865f119c676717b099ab1ea1388804726046d3df8e726a30140",
+      "last_modified_utc": "2026-05-07T05:53:28.827857Z"
+    },
+    {
+      "path": "MASTER_PLAN.md",
+      "size_bytes": 64463,
+      "sha256": "2b0b091903e605181abe0dd7ab09f4598468b62334a5a84c8ea8d6fef85be283",
+      "last_modified_utc": "2026-05-07T05:43:40.585458Z"
+    }
+  ],
+  "required_commands": [
+    "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+    "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization"
+  ],
+  "required_commands_present": true,
+  "blocker_surface_mapping": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization",
+        "rg -n --no-heading \"\\\"active_count_observed\\\"\\s*:\\s*20\" audit_results/*.json",
+        "rg -n --no-heading \"operator-approved|operator approved|operator_approved|approved_by_operator\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md EXECUTION_WAVE_1C.md",
+        "jq '.lanes[] | select(.fixture.source_stage==\"15\" and .fixture.target_stage==\"20\") | {lane_stage:(.fixture.source_stage + \"->\" + .fixture.target_stage), active_count_observed:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_count_observed), active_target:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_target), postflight_rotation_status:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.postflight_rotation_status), rollback_readiness_status:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.rollback_readiness_status)}' audit_results/step16_owner_surface_capture.json"
+      ],
+      "fact": "Required tests passed, but no machine artifact proves active_count_observed=20 and no operator-approved live field proof artifact was found in repo scope.",
+      "blocked_reasons": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    }
+  ],
+  "scale20_field_evidence_scan": {
+    "scale_exact_active20_scan": {
+      "command": "rg -n --no-heading \"\\\"active_count_observed\\\"\\s*:\\s*20\" audit_results/*.json",
+      "exit_code": 1,
+      "stdout_line_count": 0,
+      "sample": []
+    },
+    "operator_approved_proof_scan": {
+      "command": "rg -n --no-heading \"operator-approved|operator approved|operator_approved|approved_by_operator\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md EXECUTION_WAVE_1C.md",
+      "exit_code": 0,
+      "stdout_line_count": 2,
+      "sample": [
+        "MASTER_PLAN.md:10:... next primary contour is step-21 operator-approved live field proof and 14-day metrics window acquisition lane",
+        "MASTER_PLAN.md:1056:  `Step-21 operator-approved live field proof and 14-day metrics window acquisition lane`"
+      ],
+      "fact": "Only planning references were found; no operator-approved proof artifact was found in audit_results scope."
+    },
+    "stage20_lane_snapshot": {
+      "command": "jq '.lanes[] | select(.fixture.source_stage==\"15\" and .fixture.target_stage==\"20\") | {lane_stage:(.fixture.source_stage + \"->\" + .fixture.target_stage), active_count_observed:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_count_observed), active_target:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step.active_target), postflight_rotation_status:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.postflight_rotation_status), rollback_readiness_status:(.commands[] | select(.command==\"rollout stage advance 20 backend-reserve-advance-stage20-step --json\") | .stdout_json.stage_advancement_result.rollback_readiness_status)}' audit_results/step16_owner_surface_capture.json",
+      "exit_code": 0,
+      "stdout_json": {
+        "lane_stage": "15->20",
+        "active_count_observed": 16,
+        "active_target": 20,
+        "postflight_rotation_status": "available",
+        "rollback_readiness_status": "ready"
+      }
+    },
+    "conclusion": "no_repo_scope_operator_approved_live_field_proof_of_active_count_observed_20_detected"
+  },
+  "forbidden_claim_scan": {
+    "status": "recorded_in_step21a_negative_checks"
+  },
+  "residual_release_gate_context": {
+    "scale20_status": "still_blocked",
+    "scale20_reason": "Canonical blocker reason code remains SCALE_GATE_FIELD_PROOF_INSUFFICIENT in current repository evidence scope."
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "step": "STEP-18B_SCALE_GATE_AND_TWO_WEEK_METRICS_LANE",
+  "generated_at_utc": "2026-05-07T05:10:11.550603Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_resolution": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_returns_noop_when_target_is_already_satisfied",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_existing_stage_20_policy_promotes_one_backend",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_rolls_back_failed_stable_auth_materialization"
+      ],
+      "fact": "Stage-advance-20 unittest contour completed with exit_code=0, but this does not prove controlled staged rollout completion to 20 accounts per canonical scale-gate criteria.",
+      "blocked_reasons": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "evidence_commands": [
+        "rg --files | rg -i 'two.?week|two_week|metrics|metric'",
+        "rg -n '\\\"command\\\"\\s*:\\s*\\\"[^\\\"]*(two[-_ ]week|metrics)[^\\\"]*\\\"' audit_results/*.json",
+        "rg -n \"two-week|two week|two_week|2w metrics|TWO_WEEK|TWO-WEEK|metrics\" audit_results MASTER_PLAN.md EVIDENCE_CAPTURE_RUNBOOK.md tests wild_boar_proxy"
+      ],
+      "fact": "Two-week metrics closure evidence is not present as a dedicated machine command/artifact in current repo scan scope.",
+      "blocked_reasons": [
+        "TWO_WEEK_METRICS_EVIDENCE_MISSING"
+      ],
+      "partial_closure": {
+        "installer_evidence": "closed_by_machine_evidence_in_step18a",
+        "two_week_metrics_evidence": "still_blocked"
+      }
+    }
+  ],
+  "closed_blocker_count": 0,
+  "still_blocked_count": 2,
+  "still_blocked_reasons": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "reason": "Required stage-advance-20 tests passed, but machine-evidence for canonical scale-gate closure (controlled rollout to 20 with scale criteria evidence) is still insufficient.",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "reason": "Installer evidence is already closed, but no dedicated two-week metrics machine-evidence artifact/command was found in repository scan scope.",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_MISSING"
+      ]
+    }
+  ],
+  "required_test_runs_ref": "audit_results/step18b_test_runs.json",
+  "negative_checks_ref": "audit_results/step18b_negative_checks.json",
+  "owner_surface_capture_ref": "audit_results/step18b_owner_surface_capture.json",
+  "prior_context_refs": [
+    "audit_results/step18a_decision_packet.json",
+    "audit_results/step17_release_gate_decision_packet.json"
+  ],
+  "forbidden_claim_token_policy": {
+    "enforced": true,
+    "enforcement_surface": "positive_claim_fields_only",
+    "violations_found": []
+  }
+}

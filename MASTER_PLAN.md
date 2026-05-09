@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.8
-PLAN_DATE: 2026-05-05
+PLAN_VERSION: 1.45
+PLAN_DATE: 2026-05-08
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed
+PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; prior blocked evidence-lane artifacts remain preserved as history; direct same-day 20-account re-entry closed `NO_GO` on 2026-05-08 because the canonical stage-20 owner path lacked an explicit eligible reserve backend; fixed long-window metrics gating remains removed from the active plan; next primary contour is execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -19,6 +19,21 @@ We build the managing layer: modes, policy, onboarding, diagnostics, recovery, a
 Architecture is designed for 20 accounts from day one.
 The current contour has operational evidence of correct 16-account work.
 Formal scale proof remains staged and must be backed by runtime attestation, rotation evidence, and rollback readiness before any 20-account claim.
+
+## Managed Companion Positioning
+
+Wild Boar Proxy is currently positioned as a managed companion control app for the host client.
+It manages a user's own local operating contour: launch configuration, runtime modes, account lifecycle, diagnostics, and recovery.
+
+This positioning does not change the architecture boundary.
+The host client remains external.
+Wild Boar Proxy does not patch, fork, impersonate, or replace the host client.
+
+The app is intended for local management of a user's own accounts and runtime setup.
+It must not be positioned as an account-sharing tool, a bypass mechanism, a resale layer, or a way to obtain unauthorized access.
+
+Active planning docs should keep the neutral term `host client` where the architecture boundary matters.
+User-facing product copy may use companion-oriented wording only when it preserves the same boundary.
 
 ## Field Evidence Status
 
@@ -32,6 +47,64 @@ The correct interpretation is:
 - The formal proof contour must still capture machine-carried evidence.
 - Stage-20 remains a controlled rollout target, not an inferred outcome.
 - Fallback, rollback, and strict runtime truth rules remain mandatory.
+
+## Same-Day Scale Validation Rule
+
+The active plan accepts a same-day high-load validation contour for 20 accounts.
+We do not require a fixed long-window metrics rule as an active gating requirement in this revision.
+
+The accepted interpretation is:
+
+- 20-account proof may be established through one approved live validation contour on the real environment.
+- The contour must still produce machine-carried evidence.
+- Stress duration is operator-defined and should be long enough to exercise routing, rotation, recovery, and truthful status.
+- Architecture claims do not replace live evidence; they only justify the contour design.
+- same-day validation may begin only after the reserve-first stage-20 owner path is canonical and available
+- a working managed pool alone does not waive the explicit eligible reserve backend requirement for `rollout stage advance 20 <id> --json`
+- `managed pool` and `active window` remain distinct truths; a wider managed inventory is not itself proof of staged active-routing progression
+
+Required evidence for same-day 20-account validation:
+
+- `healthcheck --json`
+- `status --json`
+- `accounts list --json`
+- `rollout rotation inspect --json`
+- truthful pool counts showing the observed 20-account contour
+- runtime attestation under load
+- rotation participation evidence under load
+- fallback readiness and deterministic stable recovery readiness
+- redacted diagnostics export
+- commit hash, observation date, and environment note
+
+This contour may support a `scale-to-20 validated` claim.
+It must not silently imply `pilot_ready` or `production_ready`.
+
+Current implication:
+
+- the same-day scale lane remains accepted
+- the direct re-entry attempt is not currently open
+- repair of proof posture and lifecycle truth comes first
+- if a later scale re-entry closes with a non-repo-owned `NO_GO` while
+  execution-core truth remains green and unambiguous, that scale blocker does
+  not by itself force more execution-core repair before `basic companion UI`
+  begins; the unresolved scale blocker must instead remain explicit as a
+  separate later contour
+
+## Managed Pool Operating Contour
+
+The current local contour has exercised a managed pool of 25 accounts under real-load testing.
+
+Default operating contour uses a 10-account active window.
+The wider managed pool remains available for ranking, replacement, and staged expansion.
+
+Accounts outside the current active window may remain managed, validated, and eligible for promotion into active routing when higher-ranked accounts degrade, hit quota limits, fail authentication, or are placed on hold.
+
+Observed `401`, `429`, quota exhaustion, or other account-level failures inside the wider managed pool do not, by themselves, invalidate the runtime architecture claim, provided that runtime truth remains correct, fallback remains available, and the system continues selecting a healthy working subset without stale-green behavior.
+
+Current evidence indicates 25-account managed-pool readiness for this experimental contour.
+Canonical closeout for this claim still requires committed-and-pushed evidence and governing-document closeout.
+It does not claim that all 25 accounts will remain simultaneously healthy under all upstream conditions.
+The canonical default operating contour remains the active window, while the wider managed pool provides resilience, replacement depth, and controlled scale headroom.
 
 ## Field Evidence Capture Requirements
 
@@ -50,6 +123,9 @@ Required evidence artifacts:
 - commit hash, observation date, and environment note
 
 Evidence packets must not include auth files, private tokens, raw unredacted logs, real account secrets, or private runtime dumps.
+
+Thread exports, planning logs, chat transcripts, and extracted user-turn histories are not accepted as implementation evidence, rollout proof, or scale evidence packets.
+They may help reconstruct chronology, but they do not replace a redacted machine-carried evidence packet.
 
 ## Canonicalization Rule
 
@@ -461,6 +537,7 @@ Enforce lock discipline.
 Implement reliable fallback to stable.
 Implement runtime attestation.
 Implement single-writer state mutation.
+Close rollout stage-advance serialization so proof, policy transition, promotion, stable inventory materialization, and postflight verification execute through one serialized owner path or one equivalent owner primitive.
 Implement proxy candidate reprobe.
 Persist last-known-good outbound proxy.
 Classify proxy-path failure separately from listener failure when evidence supports it.
@@ -471,8 +548,23 @@ Acceptance:
 - Five consecutive launches without false healthy and without effective-mode drift.
 - Runtime attestation is valid.
 - No stale-green behavior remains in the main launch path.
+- No lock handoff or interleaving window remains inside `rollout stage advance 15/20`.
 - Broken outbound proxy path does not silently masquerade as generic runtime death.
 - Stable recovery path remains deterministic under network-environment drift.
+
+Current closeout note for implementation-order step 7:
+
+- launch-chain stabilization, listener truth, deterministic PATH/dependency
+  checks, stale-pid cleanup, lock discipline, reliable stable fallback,
+  runtime attestation, single-writer mutation discipline, serialized
+  stage-advance owner path, proxy reprobe, last-known-good proxy persistence,
+  proxy-path classification, and deterministic stable-service recovery all
+  have machine-carried surfaces and acceptance coverage in the current contour
+- the `Five consecutive launches without false healthy and without
+  effective-mode drift` acceptance bullet is covered by a five-iteration
+  machine-checked launch and status proof slice in the current owner path
+- implementation-order step 7 is therefore closed for the current contour, and
+  the next primary contour is `Productize onboarding`
 
 ### Workstream 03: Onboarding
 
@@ -487,6 +579,24 @@ Print final backend report.
 
 Acceptance: A new account is added without manual JSON editing and without degrading the working pool.
 
+Current closeout note for implementation-order step 8:
+
+- onboarding owner lane now exposes `--once` and `--loop` command-path truth,
+  reserve-first enforcement proof, and strict machine-carried onboarding
+  outcomes without claim escalation beyond control-layer scope
+- pre-login auth snapshot evidence is emitted in onboarding owner packets as
+  `auth_snapshot_before_login_status`, `auth_snapshot_before_login_count`,
+  `auth_snapshot_before_login_digest`, and
+  `auth_snapshot_before_login_source`; these fields provide control-layer
+  evidence only and do not duplicate engine-layer OAuth semantics
+- acceptance and regression verification for this closeout was executed with
+  `python3 -m unittest -q -k accounts_onboard tests.test_cli.CliTests` and
+  `python3 -m unittest -q tests.test_cli.CliTests` on branch
+  `codex/wave-1c-prereq-closeout`
+- onboarding step-8 closeout commits are `6105fde` and `e52f704`, and
+  implementation-order step 8 is therefore closed for the current contour;
+  the next primary contour is `Build basic companion UI`
+
 ### Workstream 04: Pool Architecture 20
 
 Registry schema v2.
@@ -498,6 +608,17 @@ Staged promotion logic.
 UI capacity model for 20 accounts from day one.
 
 Acceptance: Architecture and data format do not need redesign when moving to 20 accounts.
+
+Current closeout note for implementation-order step 6:
+
+- registry schema v2, lifecycle truth, bounded probing/concurrency, reserve
+  policy, staged promotion logic, and the UI-facing capacity data model all
+  have machine-carried surfaces and acceptance coverage in the current contour
+- for the current control-layer scope, the `Shallow and deep probing` clause is
+  satisfied by bounded shallow reprobe plus same-owner live runtime reproof;
+  no separate control-layer deep-probing truth surface is required by default
+- implementation-order step 6 is therefore closed for the current contour, and
+  the next primary contour is `Finish runtime hardening`
 
 ### Workstream 05: Staged Pool Rollout
 
@@ -566,6 +687,43 @@ Settings:
 
 Acceptance: Operator can complete core workflows without terminal access.
 
+Current closeout note for implementation-order step 9:
+
+- the baseline companion UI now covers the bounded control-layer workflow for
+  mode control, managed sync, launch smoke, reserve-first onboarding truth,
+  account mutation actions, and diagnostics export owner-path invocation with
+  strict JSON command/result mapping
+- onboarding truth fields include machine-carried pre-login auth snapshot
+  evidence (`auth_snapshot_before_login_status`, count, digest, source) and
+  are rendered in the UI without engine-layer OAuth duplication
+- the diagnostics export owner lane is wired through
+  `diagnostics export --json` and renders command truth plus bundle-path
+  output without log parsing fallback
+- acceptance/regression verification for this step-9 closeout executed with:
+  `python3 -m unittest -q tests.test_ui_shell`,
+  `python3 -m unittest -q -k accounts_onboard tests.test_cli.CliTests`,
+  `python3 -m unittest -q tests.test_cli.CliTests`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- step-9 closeout commits are `9339ca4` and `bd61ebd`; implementation-order
+  step 9 is therefore closed for the current contour, and the next primary
+  contour is `Add diagnostics export`
+
+Current closeout note for implementation-order step 10:
+
+- diagnostics export owner path is now integrated and verified across CLI and
+  baseline companion UI through `diagnostics export --json` with strict JSON
+  command/result mapping and bundle-path truth
+- redaction safety surfaces remain control-layer only; diagnostics export and
+  supporting tests verify redacted bundle behavior without engine-layer
+  protocol duplication or claim escalation
+- acceptance/regression verification for step-10 closeout executed with:
+  `python3 -m unittest -q tests.test_ui_shell`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k diagnostics`,
+  `python3 -m unittest -q tests.test_cli.CliTests`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 10 is therefore closed for the current contour,
+  and the next primary contour is `Add installer and legacy import`
+
 ### Workstream 07: Installer And Data Layout
 
 Release format is zip or dmg.
@@ -576,6 +734,196 @@ Checksums exist.
 Codesign and notarization are deferred until the experiment goes wider.
 
 Acceptance: Clean install and legacy migration work without manual config edits.
+
+Current closeout note for implementation-order step 11:
+
+- baseline installer/data-layout owner surfaces now include
+  `installer init --json`, `legacy import --source-dir <path> --json`,
+  `companion reset --json`, and `companion uninstall --json` with strict JSON
+  command/result packets and control-layer-only scope
+- legacy import uses explicit transaction phases and rollback restoration over
+  companion-managed write targets, and baseline reset/uninstall paths preserve
+  auth file boundaries by default while removing companion-managed state
+- command list and coverage were expanded with parser-guard tests and baseline
+  installer/import/reset behavior tests in `tests.test_cli.CliTests`
+- acceptance/regression verification for step-11 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests -k diagnostics`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k legacy`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k installer`,
+  `python3 -m unittest -q tests.test_cli.CliTests -k companion`,
+  `python3 -m unittest -q tests.test_cli.CliTests`,
+  `python3 -m unittest -q tests.test_ui_shell`, and `git diff --check`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 11 is therefore closed for the current contour,
+  and the next primary contour is `Prepare experimental package`
+
+Current closeout note for implementation-order step 12:
+
+- experimental package owner surfaces now include
+  `package experimental build --output-dir <path> --json` and
+  `package experimental verify --manifest <path> --json` with strict JSON
+  command/result packets and control-layer-only packaging scope
+- package build emits artifact, checksum manifest, and metadata, while package
+  verify enforces checksum truth and artifact presence without log parsing
+- packaging boundary hardening excludes runtime/private material (auth/state,
+  dumps, logs, token/key-like files, hidden runtime traces) and uses a
+  deterministic repo-root source default instead of launch-directory drift
+- acceptance/regression verification for step-12 closeout executed with:
+  `python3 -m unittest -q tests/test_cli.py -k package`,
+  `python3 -m unittest -q tests/test_cli.py`,
+  `python3 -m unittest -q tests/test_ui_shell.py`, plus manual owner-path smoke
+  checks for private-artifact exclusion and foreign-cwd source-root stability
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 12 is therefore closed for the current contour,
+  and the next primary contour is `Run alpha`
+
+Current closeout note for implementation-order step 13:
+
+- alpha-run preparation contour was executed in isolated-runtime and test-fixture
+  lanes with machine-carried gate evidence for `RUNTIME_ATTESTATION_GATE`,
+  `STRICT_JSON_COMMAND_API_GATE`, `STATE_SERIALIZATION_GATE`, and
+  `FALLBACK_DRILL_GATE`
+- command replay and gate verdict evidence is captured in
+  `audit_results/step13_alpha_gate_report.md`; the replay explicitly marks
+  zero-test command selections as non-gating and excludes them from coverage
+- independent audit replay confirmed PASS across all four alpha gates and found
+  no P0/P1 issues; one P3 reporting-clarity finding (`Ran 0 tests` wording) was
+  remediated in the report without changing gate outcomes
+- acceptance/regression verification for step-13 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_healthcheck_returns_attestation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_status_uses_live_attestation_for_green_state`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_sync_returns_single_json_object`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_cross_thread_mode_mutation_during_policy_step`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_healthcheck_owner_path_reports_observed_source_fallback_recovery`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_complete_packet`,
+  `python3 -m unittest -q tests.test_cli -k healthcheck`,
+  `python3 -m unittest -q tests.test_cli -k status`,
+  `python3 -m unittest -q tests.test_cli -k advance`,
+  `python3 -m unittest -q tests.test_cli -k fallback`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 13 is therefore closed for the current contour,
+  and the next primary contour is `Prove stable 10`
+
+Current closeout note for implementation-order step 14:
+
+- stable-10 proof contour was executed in isolated-runtime fixture lanes through
+  owner-surface `rollout stage prove 10 --json` with supporting
+  `healthcheck --json`, `status --json`, and `rollout rotation inspect --json`
+  replay evidence
+- command replay and gate verdict evidence is captured in
+  `audit_results/step14_stable10_proof_report.md`, including explicit non-gating
+  labeling for grouped `-k` expressions that selected zero tests
+- independent audit replay confirmed PASS for stable-10 contour coverage and
+  found no P0/P1/P2/P3 findings; claim scope remains bounded to
+  `stable_10_proved`
+- acceptance/regression verification for step-14 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_runtime_attestation_failure`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_prove_10_reports_rotation_insufficiency`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion`,
+  `python3 -m unittest -q tests.test_cli -k stage_prove`,
+  `python3 -m unittest -q tests.test_cli -k rollback_readiness`,
+  `python3 -m unittest -q tests.test_cli -k prove_10`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 14 is therefore closed for the current contour,
+  and the next primary contour is `Consolidate observed 16-account evidence`
+
+Current closeout note for implementation-order step 15:
+
+- observed 16-account evidence consolidation contour was executed in isolated
+  fixture lanes through owner surfaces `healthcheck --json`, `status --json`,
+  `accounts list --json`, `rollout rotation inspect --json`, and
+  `rollout evidence capture 16 --json`
+- command replay, acceptance checklist, and negative-lane evidence are captured
+  in:
+  `audit_results/step15_consolidate_16_evidence_report.md`,
+  `audit_results/step15_owner_surface_capture.json`,
+  `audit_results/step15_negative_fixture_checks.json`, and
+  `audit_results/step15_test_runs.json`
+- acceptance fields were confirmed machine-readably with
+  `packet_status=complete`,
+  `final_outcome=field_evidence_packet_complete`,
+  `blocked_reasons=[]`,
+  `scale_gate_summary.blocked_gate_names=[]`, and
+  `claim_scope=field_evidence_observed_only`
+- independent audit replay confirmed PASS with no P0/P1/P2/P3 findings and no
+  claim-escalation beyond observed-only scope
+- acceptance/regression verification for step-15 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_complete_packet`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_attestation_incomplete`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_rotation_contradicted`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_evidence_capture_16_reports_redaction_failure_unsafe`,
+  `python3 -m unittest -q tests.test_cli -k evidence_capture`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 15 is therefore closed for the current contour,
+  and the next primary contour is `Expand by controlled updates toward 20`
+
+Current closeout note for implementation-order step 16:
+
+- controlled-update contours toward 20 were executed in isolated fixture lanes
+  through control-layer owner surfaces only, with deterministic replay for:
+  `status --json`, `rollout rotation inspect --json`,
+  `rollout stage prove 10 --json`, `rollout stage prove 15 --json`,
+  `rollout stage advance 15 <id> --json`, and
+  `rollout stage advance 20 <id> --json`
+- machine-carried replay, negative lanes, and test-run evidence are captured in:
+  `audit_results/step16_controlled_updates_toward20_report.md`,
+  `audit_results/step16_owner_surface_capture.json`,
+  `audit_results/step16_negative_checks.json`, and
+  `audit_results/step16_test_runs.json`
+- positive owner-surface lanes show bounded successful step transitions
+  (`advance_* final_outcome=advanced_one_step`) from staged preconditions, while
+  safety lanes confirm held-lock blocking, invalid-backend rejection, and
+  rollback paths for contradiction/proof/policy/promotion/materialization
+  failures
+- independent audit replay confirmed PASS with no P0/P1/P2/P3 findings and no
+  claim-escalation tokens; this contour does not claim `stable_20_proved`,
+  `scale_complete`, `pilot_ready`, or `production_ready`
+- acceptance/regression verification for step-16 closeout executed with:
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_from_stage_10_updates_policy_one_step`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_from_stage_15_updates_policy_one_step`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_blocks_held_lock_without_mutation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_blocks_held_lock_without_mutation`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps`,
+  `python3 -m unittest -q tests.test_cli.CliTests.test_rollout_stage_advance_15_reports_truthful_changed_files_after_promotion`,
+  `python3 -m unittest -q tests.test_cli -k stage_advance_15`,
+  `python3 -m unittest -q tests.test_cli -k stage_advance_20`, and
+  `python3 -m unittest -q tests/test_ui_shell.py`
+  on branch `codex/wave-1c-prereq-closeout`
+- implementation-order step 16 is therefore closed for the current contour,
+  and the next primary contour is `Release-gate alignment for scale decision and pilot-entry prep`
+
+## Historical Planning Reset Note
+
+Artifacts from implementation-order steps 17 through 29 remain preserved in
+`audit_results/` as truthful historical records of the prior gate policy.
+
+Those contours repeatedly captured two real facts:
+
+- repository-scope machine proof for the live 20-account contour was still
+  missing
+- the then-active policy expected a fixed multi-day metrics window
+
+This plan revision supersedes that forward policy.
+The historical artifacts remain useful chronology and regression evidence, but
+they do not define the current active execution contour.
+
+The active forward plan is now:
+
+- run one approved same-day live validation for the real 20-account contour
+- capture machine-carried evidence from existing owner surfaces
+- use that contour to resolve scale validation honestly
+- then close remaining development questions
+- then build the basic companion UI
+- then continue pre-release testing before any release claim
+
+No fixed long-window metrics requirement is part of the active governing plan.
 
 ### Workstream 08: Experiment Package
 
@@ -595,11 +943,11 @@ Acceptance: There is a short and clear notice about the external or bundled engi
 
 ### Workstream 10: QA And SRE
 
-Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, 16-account evidence capture, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, and stable service disabled then recovered.
+Tests cover install, first run, legacy import, onboarding success, onboarding fallback, mode switch, managed restart, stable fallback, stale pid, stale lock, listener truth, diagnostics redaction, staged pool rollout, 16-account evidence capture, invalid JSON command response, wrong effective mode, wrong base_url, duplicate account_id, partial migration rollback, VPN or network-change proxy drift, broken current proxy candidate, auto-reprobe to a new working proxy candidate, stable service disabled then recovered, and concurrent mutation or interleaving attempts during `rollout stage advance 15/20`.
 Observability includes status report, machine error codes, diagnostics bundle, and runtime attestation.
 Pilot SLO includes launch success rate, onboarding success rate, managed health stability, and mean recovery time.
 
-Acceptance: Pilot metrics remain stable for two weeks.
+Acceptance: Pre-release testing covers same-day high-load validation, fallback drills, recovery drills, and release-candidate regression without false-green behavior.
 
 ### Workstream 11: Security
 
@@ -676,8 +1024,8 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 1. Alpha gate includes runtime attestation, strict JSON command API, stable fallback, single-writer state mutation, and 20-account registry capacity.
 2. Closed beta gate includes onboarding, diagnostics, stable 10-account pool, and staged rollout plan to 20.
 3. Scale-prep gate includes documented 16-account field evidence with machine-carried attestation, rotation evidence, fallback readiness, and no stale-green behavior.
-4. Pilot gate includes installer, legacy import, minimum security, minimum license note, and two-week metrics.
-5. Scale gate includes controlled staged rollout to 20.
+4. Scale gate includes same-day controlled validation to 20 with machine-carried evidence, runtime attestation, rotation participation evidence, and fallback readiness.
+5. Pilot gate includes installer, legacy import, minimum security, minimum license note, basic companion UI, and pre-release regression readiness.
 6. Experimental external package gate requires no private runtime data, working checksums, and a basic README.
 
 ## Pilot Entry Criteria
@@ -703,12 +1051,14 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 ## Scale To 20 Criteria
 
 1. The observed 16-account contour is documented with a redacted evidence packet.
-2. 20 accounts are registered across active and reserve lifecycle.
-3. Bounded probing works without request storm.
-4. Staged promotion to 20 passes through rollback points.
-5. Rotation logs show participation of the expanded active pool.
-6. Failing accounts are isolated to reserve or hold.
-7. Stable fallback remains operational.
+2. A same-day live 20-account contour is executed on the real environment under high load.
+3. 20 accounts are registered across active and reserve lifecycle.
+4. Bounded probing works without request storm.
+5. Staged promotion to 20 passes through rollback points.
+6. Rotation logs show participation of the expanded active pool.
+7. Runtime attestation remains truthful during the validation contour.
+8. Failing accounts are isolated to reserve or hold.
+9. Stable fallback remains operational.
 
 ## Rollback Matrix
 
@@ -769,33 +1119,35 @@ This surface may produce only `field_evidence_observed_only`.
 It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
 `pilot_ready`, or `production_ready`.
 
+`STATE_SERIALIZATION_GATE` is satisfied only when composite stage-advance execution does not reopen lock boundaries between proof, policy mutation, promotion, stable inventory materialization, and postflight verification.
+
 ## Implementation Order
 
 1. Freeze execution core.
 2. Freeze state schema and state transitions.
 3. Freeze command API.
-4. Close the current stage-20 command API work.
+4. Close the current stage-20 command API work, including serialized stage-advance owner-path closure and interleaving tests.
 5. Capture the 16-account evidence packet.
 6. Upgrade registry and probing architecture for 20-account capacity.
 7. Finish runtime hardening.
-8. Productize onboarding.
-9. Build basic companion UI.
-10. Add diagnostics export.
-11. Add installer and legacy import.
-12. Prepare experimental package.
-13. Run alpha.
-14. Prove stable 10.
-15. Consolidate observed 16-account evidence.
-16. Expand by controlled updates toward 20.
+8. Run same-day live validation for 20 accounts.
+9. Capture and redact the 20-account machine evidence packet.
+10. Close remaining control-layer development questions.
+11. Productize onboarding where needed for release flow.
+12. Build basic companion UI.
+13. Add diagnostics export.
+14. Add installer and legacy import.
+15. Prepare experimental package.
+16. Run pre-release testing and release-candidate regression.
 
 ## Estimate
 
-Pilot readiness is 5 to 7 weeks with tight scope control.
-Proof of 20-account operation is a separate staged milestone after pilot-base stabilization.
-The observed 16-account contour lowers scale uncertainty but does not remove the need for formal stage-20 proof.
+Pilot readiness depends on tight scope control and clean closure of the remaining development contours.
+The active scale milestone is a same-day 20-account live validation with machine-carried evidence.
+The observed 16-account contour lowers scale uncertainty but does not remove the need for formal live 20-account proof.
 
 ## Final Verdict
 
 This plan is executable and practical if used as a governing document rather than a single giant TODO list.
 Execution begins with one narrow wave: execution core, runtime truth, state, and command API first.
-The strongest version of the plan is the one that protects the boundary with CLIProxy, keeps staged scaling honest, converts the observed 16-account contour into machine-carried evidence, forbids stale-green behavior, serializes state mutation, hardens proxy-path resilience against network-environment drift, and blocks UI polish from outrunning runtime truth.
+The strongest version of the plan is the one that protects the boundary with CLIProxy, keeps staged scaling honest, turns today's 20-account live contour into machine-carried evidence, forbids stale-green behavior, serializes state mutation, hardens proxy-path resilience against network-environment drift, and then lets UI and release work follow only after runtime truth is already proven.

@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "artifact": "owner_surface_capture",
+  "step": "step40",
+  "generated_at_utc": "2026-05-08T20:58:08Z",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+  "sync_packet_summary": {
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+    ],
+    "declared_write_set_match": true
+  },
+  "status": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+    ],
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "blocked_claims": [
+      "active-only-traffic",
+      "pool-participation-correct",
+      "stable-15-proved"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "pool_summary": {
+      "active": 24,
+      "reserve": 0,
+      "retired": 0,
+      "healthy": 1,
+      "degraded": 0,
+      "down": 22,
+      "selected_backend_ids": [
+        "open17-plus"
+      ],
+      "backend_count": 24
+    },
+    "auth_pool_hygiene": {
+      "status": "launch_capable_available",
+      "launch_capable_backend_ids": [
+        "open17-plus"
+      ],
+      "launch_capable_backend_count": 1,
+      "selected_backend_ids_observed": [
+        "open17-plus"
+      ],
+      "selected_launch_capable_backend_count": 1,
+      "selected_unusable_backend_count": 0
+    },
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "attestation_summary": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "observed_at_utc": "2026-05-08T20:57:23.084621+00:00"
+    }
+  },
+  "healthcheck": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "endpoint": "http://127.0.0.1:8320/v1",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+    ],
+    "launch_readiness": {
+      "status": "ready",
+      "machine_error_code": "OK",
+      "launch_capable_backend_count": 1
+    },
+    "runtime_guardrails": {
+      "status": "clear"
+    },
+    "attestation": {
+      "listener_ok": true,
+      "models_ok": true,
+      "responses_ok": true,
+      "effective_mode_match": true,
+      "base_url_match": true,
+      "selected_backends_digest": "3f01942ac21b50892295813b1e7bfe280574e434cc5ce38adf01640265080115",
+      "observed_at_utc": "2026-05-08T20:57:23.461767+00:00",
+      "attestation_source": "healthcheck --json"
+    }
+  },
+  "accounts_list": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "pool_policy": {
+      "active_target": 15,
+      "active_min": 15,
+      "reserve_target": 0
+    },
+    "counts": {
+      "backend_count": 24,
+      "active_count": 24,
+      "reserve_count": 0,
+      "retired_count": 0,
+      "healthy_count": 1,
+      "probing_count": 1,
+      "down_count": 22
+    },
+    "healthy_or_launch_capable_active_backend_ids": [
+      "open17-plus"
+    ],
+    "probing_active_backend_ids": [
+      "new-new55555"
+    ]
+  },
+  "rotation_inspect": {
+    "command_status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "next_action": "user_action",
+    "rotation_evidence_result": {
+      "observed_at_utc": "2026-05-08T20:57:10.182163+00:00",
+      "evidence_status": "participation_evidence_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "evidence_source": "runtime_state.selected_backend_snapshot",
+      "evidence_source_name": "sync --json",
+      "evidence_freshness": "fresh",
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_ids": [
+        "open17-plus"
+      ],
+      "selected_backends_digest": "3f01942ac21b50892295813b1e7bfe280574e434cc5ce38adf01640265080115",
+      "active_pool_count_observed": 24,
+      "runtime_active_pool_count_observed": 24,
+      "registry_active_pool_count_observed": 24,
+      "active_routing_candidate_ids_observed": [
+        "open17-plus"
+      ],
+      "policy_drift_status": "detected",
+      "policy_drift_observed_status": "detected",
+      "participation_status": "contradicted",
+      "final_outcome": "participation_evidence_contradicted"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "step": "STEP-31_CANONICAL_DECISION_PACKET",
+  "generated_at_utc": "2026-05-08T18:34:17Z",
+  "contour": "Rotation Participation Evidence Reclear For Scale Gate",
+  "decision_status": "partially_closed",
+  "final_verdict": "rotation_evidence_closed_claim_gate_still_blocked",
+  "claim_scope": "machine-evidence-only",
+  "blocker_set_re_evaluation": {
+    "rotation_evidence_blocker": {
+      "status": "closed",
+      "machine_error_code": "OK",
+      "final_outcome": "participation_evidence_available"
+    },
+    "claim_gate_blocker": {
+      "status": "still_blocked",
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "source": "policy_drift",
+      "claim_blockers": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ]
+    }
+  },
+  "independent_audit": {
+    "auditor": "Kierkegaard",
+    "agent_id": "019e08dd-76af-7af3-9133-fc6553e7472a",
+    "verdict": "aligned_with_partial_closeout",
+    "fact": "Independent audit confirmed that rotation evidence and claim-gate paths are separate, and that the next contour must reopen only the policy-drift / claim-gate lane."
+  },
+  "refs": {
+    "owner_surface_capture": "audit_results/step31a_owner_surface_capture.json",
+    "closeout_report": "audit_results/step31_closeout_report.md",
+    "previous_no_go_packet": "audit_results/step30_decision_packet.json",
+    "command_api": "COMMAND_API.md",
+    "canon_plan": "NEXT_CONTOUR_CANON_PLAN.md"
+  },
+  "environment": {
+    "branch": "codex/wave-1c-prereq-closeout",
+    "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+    "observation_date": "2026-05-08",
+    "environment_note": "Local managed companion runtime on the real environment"
+  }
+}

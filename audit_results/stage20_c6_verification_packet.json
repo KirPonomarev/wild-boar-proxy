@@ -1,0 +1,130 @@
+{
+  "contour_id": "STAGE20_C6_FINAL_VERIFICATION_AND_UI_GATE",
+  "status": "completed",
+  "final_verdict": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+  "ui_gate_path": "non-repo-owned NO_GO path",
+  "repo_owned_ambiguity_status": "closed",
+  "repo_verification": {
+    "py_compile": {
+      "command": "python3 -m py_compile wild_boar_proxy/runtime.py wild_boar_proxy/cli.py tests/test_cli.py",
+      "status": "passed"
+    },
+    "full_test_cli": {
+      "command": "python3 -m unittest -f tests.test_cli",
+      "status": "passed",
+      "observed_result": "Ran 342 tests in 170.150s OK"
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  },
+  "contour_closure_check": {
+    "STAGE20_C1_RESEARCH_CLEANUP_CANON": {
+      "opened": true,
+      "closed": true,
+      "branch": "codex/stage20-c1-research-cleanup-canon",
+      "primary_commit": "d8eb0ef",
+      "pushed": true,
+      "closeout": "audit_results/stage20_c1_closeout_report.md"
+    },
+    "STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR": {
+      "opened": true,
+      "closed": true,
+      "branch": "codex/stage20-c2-stage-advance-lock-repair",
+      "primary_commit": "aef164c",
+      "pushed": true,
+      "closeout": "audit_results/stage20_c2_closeout_report.md"
+    },
+    "STAGE20_C3_ROLLOUT_POSTURE_INSPECT": {
+      "opened": true,
+      "closed": true,
+      "branch": "codex/stage20-c3-rollout-posture-inspect",
+      "primary_commit": "f97b8cd",
+      "pushed": true,
+      "closeout": "audit_results/stage20_c3_closeout_report.md"
+    },
+    "STAGE20_C4_CANDIDATE_FILTERING": {
+      "opened": false,
+      "closed": false,
+      "note": "Not opened separately; handled inside STAGE20_C3 read-only candidate summary path."
+    },
+    "STAGE20_C5_RESERVE_SEMANTICS_ADR": {
+      "opened": true,
+      "closed": true,
+      "branch": "codex/stage20-c5-reserve-semantics-adr",
+      "primary_commit": "a52a7da",
+      "pushed": true,
+      "closeout": "audit_results/stage20_c5_closeout_report.md"
+    }
+  },
+  "live_truth_closure": {
+    "captured": true,
+    "capture_mode": "read-only",
+    "raw_capture_directory": "/tmp/stage20_c6",
+    "raw_capture_committed": false,
+    "status": {
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "policy_drift_status": "detected",
+      "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    },
+    "healthcheck": {
+      "machine_error_code": "OK",
+      "launch_readiness_status": "ready",
+      "runtime_guardrails_status": "clear"
+    },
+    "rotation": {
+      "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "evidence_status": "participation_evidence_insufficient",
+      "final_outcome": "participation_evidence_insufficient",
+      "selected_backend_count": 1,
+      "active_routing_candidate_count": 1,
+      "policy_drift_observed_status": "detected"
+    },
+    "accounts": {
+      "machine_error_code": "OK",
+      "accounts_total": 24,
+      "active_pool_count": 24,
+      "reserve_pool_count": 0,
+      "healthy_count": 1,
+      "down_count": 22,
+      "probing_count": 1
+    },
+    "posture20": {
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+      "classification": "INSUFFICIENT_ELIGIBLE_POOL",
+      "blocker_code": "INSUFFICIENT_ELIGIBLE_POOL",
+      "requested_stage": "20",
+      "source_stage": "15",
+      "active_live_capable_count": 1,
+      "reserve_live_capable_count": 0,
+      "reserve_candidate_present": false,
+      "rotation_machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "policy_stage_status": "matched",
+      "policy_stage_machine_error_code": "OK",
+      "final_outcome": "insufficient_source_stage_live_capable_pool"
+    }
+  },
+  "independent_audit": {
+    "closure_auditor": "Boyle",
+    "closure_verdict": "C1/C2/C3/C5 canonically closed; C4 not opened separately",
+    "packet_auditor": "Halley",
+    "packet_verdict": "Path B: non-repo-owned NO_GO",
+    "packet_reason": "No code-vs-runtime ambiguity remains; live lane is blocked by machine-readable operational and pool truth."
+  },
+  "blocking_truths": [
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "INSUFFICIENT_ELIGIBLE_POOL"
+  ],
+  "next_contour": {
+    "allowed": "Build Basic Companion UI",
+    "later_live_blocker_remains_explicit": true,
+    "later_live_blocker_shape": "reserve-first stage-20 re-entry remains closed NO_GO until operational pool truth changes"
+  }
+}

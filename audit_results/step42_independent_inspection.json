@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "artifact": "independent_inspection",
+  "contour_id": "step42_posture_normalization_decision_packet",
+  "inspector": {
+    "agent_nickname": "Franklin",
+    "agent_role": "explorer"
+  },
+  "accepted_findings": {
+    "status_packet": {
+      "policy_drift_status": "detected",
+      "claim_gate_status": "blocked"
+    },
+    "status_recheck_packet": {
+      "policy_drift_status": "detected",
+      "claim_gate_status": "blocked"
+    },
+    "rotation_packet": {
+      "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "participation_status": "insufficient",
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected"
+    },
+    "rotation_recheck_packet": {
+      "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "participation_status": "insufficient",
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected"
+    },
+    "persistent_owner_surface_mismatch": true,
+    "supported_decision_verdict": "NO_GO_OWNER_SURFACE_CONTRADICTION"
+  },
+  "not_adopted_as_primary_blocker": {
+    "runtime_guardrails_owner_surface_mismatch": {
+      "status_packet_owner_command_surface": "status --json",
+      "healthcheck_packet_owner_command_surface": "healthcheck --json",
+      "adoption_status": "not_promoted_to_primary_blocker",
+      "reason": "delegation semantics may permit different packet-level owner surfaces; not separately proven as canon violation in this contour"
+    }
+  }
+}

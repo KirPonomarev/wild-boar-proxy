@@ -1,0 +1,37 @@
+{
+  "step": "STEP-19A_LIVE_SCALE20_EVIDENCE_LANE",
+  "generated_at_utc": "2026-05-07T05:24:45.087308Z",
+  "checks": [
+    {
+      "name": "required_commands_present",
+      "passed": true,
+      "observed_missing_commands": []
+    },
+    {
+      "name": "required_runs_exit_zero",
+      "passed": true,
+      "non_zero_commands": []
+    },
+    {
+      "name": "required_runs_report_tests_ran",
+      "passed": true,
+      "missing_tests_ran_commands": []
+    },
+    {
+      "name": "scale_gate_not_closed_by_unit_tests_only",
+      "passed": true,
+      "fact": "Stage_advance_20 test contour pass is preserved as non-closure evidence; scale gate remains still_blocked."
+    },
+    {
+      "name": "scale_gate_block_reason_code_enforced",
+      "passed": true,
+      "fact": "Scale blocker reason code is recorded as SCALE_GATE_FIELD_PROOF_INSUFFICIENT."
+    },
+    {
+      "name": "forbidden_claim_scan_on_step19_surface_clean",
+      "passed": true,
+      "violations": []
+    }
+  ],
+  "overall_passed": true
+}

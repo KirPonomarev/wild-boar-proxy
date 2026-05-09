@@ -1,0 +1,145 @@
+{
+  "step": "STEP-17_RELEASE_GATE_ALIGNMENT_AND_PILOT_ENTRY_PREP_CANON",
+  "generated_at_utc": "2026-05-07T01:38:16Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine_evidence_only_alignment_from_step13_to_step16_no_pilot_ready_or_scale_complete_claim",
+  "gates": [
+    {
+      "name": "alpha_gate",
+      "status": "ready",
+      "evidence_ref": "audit_results/step13_alpha_gate_report.md:26; audit_results/step15_owner_surface_capture.json:.packet.scale_gate_summary.gates",
+      "last_verified_at": "2026-05-07T01:12:50Z"
+    },
+    {
+      "name": "closed_beta_gate",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:925; audit_results/step14_stable10_proof_report.md:30; audit_results/step16_controlled_updates_toward20_report.md:46",
+      "last_verified_at": "2026-05-07T01:26:47Z",
+      "blocking_reason": "Closed-beta composite requires onboarding plus diagnostics plus stable-10 plus staged rollout plan; step13-16 machine evidence proves stable-10 and controlled updates but does not provide machine proof of onboarding completion."
+    },
+    {
+      "name": "scale_prep_gate",
+      "status": "ready",
+      "evidence_ref": "MASTER_PLAN.md:926; audit_results/step15_owner_surface_capture.json:.packet; audit_results/step13_alpha_gate_report.md:31",
+      "last_verified_at": "2026-05-07T01:12:50Z"
+    },
+    {
+      "name": "pilot_gate",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:927",
+      "last_verified_at": "2026-05-07T01:32:25Z",
+      "blocking_reason": "No machine evidence in step13-16 artifacts for installer completion, legacy import path testing, minimum security completion, or two-week metrics."
+    },
+    {
+      "name": "scale_gate",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:928; audit_results/step16_owner_surface_capture.json:.lanes[].commands[].stdout_json.stage_advancement_result.delegated_evidence.pool_count_summary_after_step",
+      "last_verified_at": "2026-05-07T01:23:39Z",
+      "blocking_reason": "Controlled staged rollout to 20 is not yet evidenced as complete: captured stage-20 advance lane shows active_count_observed=16 with active_target=20."
+    },
+    {
+      "name": "experimental_external_package_gate",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:929",
+      "last_verified_at": "2026-05-07T01:32:25Z",
+      "blocking_reason": "No machine evidence in step13-16 artifacts for package checksum workflow and package-level private-data exclusion verification."
+    }
+  ],
+  "pilot_entry_mapping": [
+    {
+      "criterion": "Runtime hardening completed",
+      "status": "ready",
+      "evidence_ref": "MASTER_PLAN.md:934; audit_results/step13_alpha_gate_report.md:28-31; audit_results/step16_negative_checks.json:.overall_passed"
+    },
+    {
+      "criterion": "Command API with strict JSON completed",
+      "status": "ready",
+      "evidence_ref": "MASTER_PLAN.md:935; audit_results/step13_alpha_gate_report.md:29; audit_results/step15_owner_surface_capture.json:.packet.scale_gate_summary.gates.STRICT_JSON_COMMAND_API_GATE"
+    },
+    {
+      "criterion": "Registry architecture supports 20 accounts",
+      "status": "ready",
+      "evidence_ref": "MASTER_PLAN.md:936; audit_results/step13_alpha_gate_report.md:22",
+      "blocking_reason": null
+    },
+    {
+      "criterion": "Onboarding completed",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:937",
+      "blocking_reason": "No onboarding-completion machine artifact present in step13-16 source set."
+    },
+    {
+      "criterion": "Basic companion UI completed",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:938; audit_results/step16_test_runs.json:runs[].command=python3 -m unittest -q tests/test_ui_shell.py",
+      "blocking_reason": "UI test execution exists, but no machine artifact proves criterion-level UI completion."
+    },
+    {
+      "criterion": "Minimum security completed",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:939",
+      "blocking_reason": "No security-completion machine artifact present in step13-16 source set."
+    },
+    {
+      "criterion": "Legacy import path tested",
+      "status": "blocked",
+      "evidence_ref": "MASTER_PLAN.md:940",
+      "blocking_reason": "No legacy-import machine test artifact present in step13-16 source set."
+    }
+  ],
+  "unresolved_blockers": [
+    {
+      "blocker_id": "PILOT_ENTRY_ONBOARDING_EVIDENCE_MISSING",
+      "scope": "pilot_entry",
+      "detail": "Criterion 'Onboarding completed' remains unproven by machine evidence in step13-16 artifacts."
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_UI_COMPLETION_EVIDENCE_MISSING",
+      "scope": "pilot_entry",
+      "detail": "UI tests pass, but no machine artifact in step13-16 marks companion UI criterion as completed."
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_SECURITY_EVIDENCE_MISSING",
+      "scope": "pilot_entry",
+      "detail": "Minimum security completion has no machine evidence in step13-16 artifacts."
+    },
+    {
+      "blocker_id": "PILOT_ENTRY_LEGACY_IMPORT_EVIDENCE_MISSING",
+      "scope": "pilot_entry",
+      "detail": "Legacy import path testing evidence is absent from step13-16 artifacts."
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "scope": "release_gate",
+      "detail": "Pilot gate requires installer and two-week metrics; neither is machine-proven in step13-16 artifacts."
+    },
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "scope": "release_gate",
+      "detail": "Stage-20 advance lane evidence shows active_count_observed=16 versus active_target=20, so controlled rollout to 20 is incomplete."
+    },
+    {
+      "blocker_id": "EXTERNAL_PACKAGE_GATE_EVIDENCE_MISSING",
+      "scope": "release_gate",
+      "detail": "No package checksum/private-data exclusion evidence found in step13-16 artifacts."
+    }
+  ],
+  "claim_escalation_forbidden_tokens_scan": {
+    "tokens": [
+      "stable_20_proved",
+      "scale_complete",
+      "pilot_ready",
+      "production_ready"
+    ],
+    "scan_scope": [
+      "audit_results/step13_*",
+      "audit_results/step14_*",
+      "audit_results/step15_*",
+      "audit_results/step16_*"
+    ],
+    "scan_command": "rg -n --no-heading -i \"pilot_ready|scale_complete|stable_20_proved|production_ready\" audit_results/step13_* audit_results/step14_* audit_results/step15_* audit_results/step16_*",
+    "rg_exit_code": 1,
+    "matches": [],
+    "result": "pass_no_claim_escalation_tokens_found_in_step13_to_step16_artifacts"
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "registry_seed_version": "2",
+  "source_plan": "External Agent Lab R&D Plan v1.4",
+  "entries": [
+    {
+      "model_id": "direct-cerebras-llama3.1-8b",
+      "provider": "cerebras",
+      "provider_type": "direct_provider",
+      "availability_state": "provider_visible_but_unverified",
+      "lane_role": "primary_practical",
+      "cost_class": "entitled_direct_limited",
+      "capability_tags": [
+        "cheap_helper",
+        "baseline_executor_candidate",
+        "current_practical_pool"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "limits_ui",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "cerebras_personal_limits_ui"
+      ]
+    },
+    {
+      "model_id": "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
+      "provider": "cerebras",
+      "provider_type": "direct_provider",
+      "availability_state": "provider_visible_but_unverified",
+      "lane_role": "secondary_reasoning",
+      "cost_class": "entitled_direct_limited",
+      "capability_tags": [
+        "reasoning_lane",
+        "selective_use",
+        "secondary_reasoning_lane"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "limits_ui",
+      "last_verified_at": "2026-05-07T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "cerebras_personal_limits_ui"
+      ]
+    },
+    {
+      "model_id": "direct-gemini-2.5-flash",
+      "provider": "gemini",
+      "provider_type": "direct_provider",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "comparison",
+      "cost_class": "paid_direct",
+      "capability_tags": [
+        "comparison_lane",
+        "fast_generalist"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_provider_report"
+      ]
+    },
+    {
+      "model_id": "direct-groq-openai-gpt-oss-20b",
+      "provider": "groq",
+      "provider_type": "direct_provider",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "comparison",
+      "cost_class": "paid_direct",
+      "capability_tags": [
+        "comparison_lane",
+        "openai_compatible"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_provider_report"
+      ]
+    },
+    {
+      "model_id": "direct-mistral-small-latest",
+      "provider": "mistral",
+      "provider_type": "direct_provider",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "comparison",
+      "cost_class": "paid_direct",
+      "capability_tags": [
+        "comparison_lane",
+        "generalist"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_provider_report"
+      ]
+    },
+    {
+      "model_id": "direct-cerebras-gpt-oss-120b",
+      "provider": "cerebras",
+      "provider_type": "direct_provider",
+      "availability_state": "externally_blocked",
+      "lane_role": "blocked_target",
+      "cost_class": "paid_direct",
+      "capability_tags": [
+        "blocked_target",
+        "strategic_target"
+      ],
+      "fallback_eligible": false,
+      "max_context_hint": null,
+      "evidence_level": "runtime_failure",
+      "last_verified_at": "2026-05-05T06:01:03.667627+00:00",
+      "blocked_reason_optional": "Cerebras authority watch: model listed but chat execution denied for current entitlement.",
+      "evidence_sources": [
+        "authority_watch_rule"
+      ]
+    },
+    {
+      "model_id": "glm-4.7-flash",
+      "provider": "zai",
+      "provider_type": "provider_router",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "comparison",
+      "cost_class": "free_limited",
+      "capability_tags": [
+        "comparison_lane",
+        "free_route_candidate"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_qualification"
+      ]
+    },
+    {
+      "model_id": "or-gpt-oss-20b",
+      "provider": "openrouter",
+      "provider_type": "provider_router",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "fallback",
+      "cost_class": "free_limited",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_qualification"
+      ]
+    },
+    {
+      "model_id": "or-gpt-oss-120b",
+      "provider": "openrouter",
+      "provider_type": "provider_router",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "fallback",
+      "cost_class": "free_limited",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_qualification"
+      ]
+    },
+    {
+      "model_id": "or-qwen3-coder",
+      "provider": "openrouter",
+      "provider_type": "provider_router",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "fallback",
+      "cost_class": "free_limited",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free",
+        "coding_candidate"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_qualification"
+      ]
+    },
+    {
+      "model_id": "or-qwen3-next",
+      "provider": "openrouter",
+      "provider_type": "provider_router",
+      "availability_state": "auth_unconfirmed",
+      "lane_role": "fallback",
+      "cost_class": "free_limited",
+      "capability_tags": [
+        "free_route_fallback_lane",
+        "openrouter_free",
+        "reasoning_candidate"
+      ],
+      "fallback_eligible": true,
+      "max_context_hint": null,
+      "evidence_level": "manual_assumption_forbidden",
+      "last_verified_at": "2026-05-05T00:00:00+00:00",
+      "blocked_reason_optional": null,
+      "evidence_sources": [
+        "seed_placeholder_requires_qualification"
+      ]
+    }
+  ]
+}

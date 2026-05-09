@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "machine_error_code": "STABLE_REPAIR_APPLIED",
+  "human_message": "Stable repair apply completed on the approved target inventory.",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/codex-new.new55555@outlook.com-free.json"
+  ],
+  "eligible_registry_auth_refs": [
+    {
+      "backend_id": "open17-plus",
+      "auth_basename": "codex-k.pro.open17@gmail.com-plus.json",
+      "pool": "active",
+      "status": "healthy"
+    }
+  ],
+  "target_inventory_entries_after": [
+    "codex-k.pro.open17@gmail.com-plus.json"
+  ],
+  "observed_policy_drift_status": "detected",
+  "observed_policy_drift_inventory_source": "auth-dir",
+  "target_reconciliation_result": "EXACT_APPROVED_SET_ALIGNED"
+}

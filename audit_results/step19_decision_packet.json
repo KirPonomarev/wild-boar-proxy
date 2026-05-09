@@ -1,0 +1,59 @@
+{
+  "step": "STEP-19_CANONICAL_DECISION_PACKET",
+  "generated_at_utc": "2026-05-07T05:24:45.087308Z",
+  "decision_status": "blocked",
+  "claim_scope": "machine-evidence-only",
+  "lanes": [
+    {
+      "lane": "STEP-19A_LIVE_SCALE20_EVIDENCE_LANE",
+      "status": "blocked",
+      "decision_ref": "audit_results/step19a_decision_packet.json",
+      "primary_blocker": "SCALE_GATE_20_NOT_COMPLETED",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ]
+    },
+    {
+      "lane": "STEP-19B_TWO_WEEK_METRICS_WINDOW_LANE",
+      "status": "blocked",
+      "decision_ref": "audit_results/step19b_decision_packet.json",
+      "primary_blocker": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ]
+    }
+  ],
+  "unresolved_blockers": [
+    {
+      "blocker_id": "SCALE_GATE_20_NOT_COMPLETED",
+      "status": "still_blocked",
+      "reason_codes": [
+        "SCALE_GATE_FIELD_PROOF_INSUFFICIENT"
+      ],
+      "fact": "No controlled rollout-to-20 machine field proof was produced in step19 scope."
+    },
+    {
+      "blocker_id": "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+      "status": "still_blocked",
+      "reason_codes": [
+        "TWO_WEEK_METRICS_EVIDENCE_WINDOW_INCOMPLETE"
+      ],
+      "fact": "No complete 14-day machine metrics window evidence was produced in step19 scope."
+    }
+  ],
+  "forbidden_claim_scan": {
+    "passed": true,
+    "violations": []
+  },
+  "refs": {
+    "step19a_owner_surface_capture": "audit_results/step19a_owner_surface_capture.json",
+    "step19a_negative_checks": "audit_results/step19a_negative_checks.json",
+    "step19a_test_runs": "audit_results/step19a_test_runs.json",
+    "step19a_scale_report": "audit_results/step19a_scale_report.md",
+    "step19a_decision_packet": "audit_results/step19a_decision_packet.json",
+    "step19b_metrics_capture": "audit_results/step19b_metrics_capture.json",
+    "step19b_negative_checks": "audit_results/step19b_negative_checks.json",
+    "step19b_metrics_window_report": "audit_results/step19b_metrics_window_report.md",
+    "step19b_decision_packet": "audit_results/step19b_decision_packet.json"
+  }
+}

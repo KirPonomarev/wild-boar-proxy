@@ -1,0 +1,49 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "human_message": "Step42 closes NO_GO because owner-surface truth is contradictory after bounded recheck; live normalization must not open.",
+  "machine_error_code": "NO_GO_OWNER_SURFACE_CONTRADICTION",
+  "changed_files": [
+    "audit_results/step42_contour_plan.md",
+    "audit_results/step42_operation_declaration.md",
+    "audit_results/step42_status_packet.json",
+    "audit_results/step42_healthcheck_packet.json",
+    "audit_results/step42_accounts_list_packet.json",
+    "audit_results/step42_rotation_inspect_packet.json",
+    "audit_results/step42_status_recheck_packet.json",
+    "audit_results/step42_rotation_recheck_packet.json",
+    "audit_results/step42_owner_surface_capture.json",
+    "audit_results/step42_normalization_decision_packet.json",
+    "audit_results/step42_decision_packet.json",
+    "audit_results/step42_closeout_report.md",
+    "audit_results/step42_independent_inspection.json"
+  ],
+  "next_action": "inspect_status_vs_rotation_policy_drift_owner_mismatch",
+  "contour_id": "step42_posture_normalization_decision_packet",
+  "authorization_gate_status": "open",
+  "repo_side_admissibility_status": "revalidated_true",
+  "owner_surface_truth_status": "contradiction_persistent_after_bounded_recheck",
+  "current_blockers": [
+    "OWNER_SURFACE_CONTRADICTION",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "NO_EXPLICIT_RESERVE_POSTURE"
+  ],
+  "blocker_classification": {
+    "primary": "OWNER_SURFACE_CONTRADICTION",
+    "secondary": "POSTURE_PARTICIPATION",
+    "evidence": {
+      "status_policy_drift_status": "detected",
+      "status_claim_gate_status": "blocked",
+      "rotation_policy_drift_status": "clear",
+      "rotation_participation_status": "insufficient",
+      "accounts_active_count": 24,
+      "accounts_reserve_count": 0,
+      "launch_capable_backend_count": 1,
+      "bounded_recheck_confirms_contradiction": true
+    }
+  },
+  "decision_verdict": "NO_GO_OWNER_SURFACE_CONTRADICTION",
+  "normalization_contour_admissible": false
+}

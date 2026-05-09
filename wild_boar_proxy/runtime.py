@@ -8,15 +8,18 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +50,8 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
+DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+SYSTEM_OPEN_BIN = Path("/usr/bin/open")
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
@@ -79,6 +84,17 @@ SELECTED_BACKEND_SNAPSHOT_SCHEMA_VERSION = 1
 SELECTED_BACKEND_SNAPSHOT_FIELD = "selected_backend_snapshot"
 SELECTED_BACKEND_SNAPSHOT_KIND = "selected_backend_participation"
 ROTATION_EVIDENCE_CLAIM_SCOPE = "bounded_local_participation_evidence_only"
+BACKEND_REGISTRY_SCHEMA_VERSION = 2
+VALID_BACKEND_REGISTRY_POOLS = {"active", "reserve", "retired"}
+PROXY_REPROBE_MAX_CANDIDATES = 8
+PROXY_REPROBE_CONCURRENCY_LIMIT = 1
+PROXY_REPROBE_DEPTH = "shallow_socket_listener_only"
+PROXY_REPROBE_STRATEGY = "sequential_first_success"
+PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
+    "env.WBP_PROXY_REPROBE_CANDIDATES",
+    "runtime_state.last_known_good_proxy_url",
+    "runtime_state.current_proxy_url",
+]
 SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
     "engine_observed",
     "runtime_observed",
@@ -90,6 +106,66 @@ STAGED_POOL_POLICY_PACKETS: dict[str, dict[str, int]] = {
     "15": {"active_min": 15, "active_target": 15, "reserve_target": 0},
     "20": {"active_min": 20, "active_target": 20, "reserve_target": 0},
 }
+EXPERIMENTAL_PACKAGE_SCHEMA_VERSION = 1
+EXPERIMENTAL_PACKAGE_ARTIFACT_NAME = "experimental-package.tar.gz"
+EXPERIMENTAL_PACKAGE_MANIFEST_NAME = "experimental-package.manifest.json"
+EXPERIMENTAL_PACKAGE_METADATA_NAME = "experimental-package.metadata.json"
+EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
+EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
+EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "MASTER_PLAN.md"
+EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR = "wild_boar_proxy"
+EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
+    ".env",
+    ".env.local",
+    ".env.production",
+    "auth.json",
+    "auth.yaml",
+    "auth.yml",
+    "auth.toml",
+    "backend-registry.json",
+    "supervisor-state.json",
+    "runtime-mode.txt",
+    "runtime-effective-mode.txt",
+    "stable-runtime-config.generated.yaml",
+    "evidence-packet.json",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS = {
+    ".codex-custom-cli",
+    "__pycache__",
+    "cache",
+    "caches",
+    "log",
+    "logs",
+    "temp",
+    "tmp",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_FILE_SUFFIXES = {
+    ".dump",
+    ".dmp",
+    ".key",
+    ".lock",
+    ".log",
+    ".pid",
+    ".secret",
+    ".sqlite",
+    ".sqlite3",
+    ".temp",
+    ".tmp",
+    ".token",
+}
+EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS = {
+    "dump",
+    "dmp",
+    "key",
+    "private",
+    "secret",
+    "session",
+    "temp",
+    "tmp",
+    "token",
+}
+SERIALIZED_LOCK_LOCAL_OWNERS: dict[str, dict[str, int]] = {}
+SERIALIZED_LOCK_LOCAL_OWNERS_GUARD = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -238,13 +314,22 @@ def sanitized_env() -> dict[str, str]:
         CURRENT_PROXY_URL_HANDOFF_ENV,
     ):
         env.pop(key, None)
+    env["PATH"] = DETERMINISTIC_RUNTIME_PATH
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
     return env
 
 
+def get_repo_owned_python_bin() -> str:
+    candidate = Path(sys.executable).expanduser()
+    if candidate.is_absolute() and candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+    return "/usr/bin/python3"
+
+
 def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env = sanitized_env()
+    env["WBP_PYTHON_BIN"] = get_repo_owned_python_bin()
     env["WBP_PROFILE_DIR"] = str(paths.profile_dir)
     env["WBP_MANAGED_DIR"] = str(paths.managed_dir)
     env["WBP_STABLE_CONFIG"] = str(paths.stable_config)
@@ -302,7 +387,7 @@ def dispatch_external_client(
     paths: RuntimePaths, client_path: Path, client_path_kind: str
 ) -> dict[str, Any]:
     if client_path_kind == "macos_app_bundle":
-        open_bin = shutil.which("open")
+        open_bin = str(SYSTEM_OPEN_BIN) if SYSTEM_OPEN_BIN.is_file() and os.access(SYSTEM_OPEN_BIN, os.X_OK) else None
         if not open_bin:
             raise RuntimeErrorInfo(
                 "macOS app-bundle launch is unavailable because `open` is missing.",
@@ -426,6 +511,10 @@ def read_toml_string(path: Path, key: str) -> str:
     return ""
 
 
+def read_stable_proxy_url(paths: RuntimePaths) -> str:
+    return read_yaml_value(paths.stable_config, "proxy-url")
+
+
 def write_text_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")
@@ -519,8 +608,252 @@ def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str,
         return data
 
 
-def get_model(paths: RuntimePaths, fallback: str = "gpt-5.4") -> str:
+def is_transient_attestation_timeout_error(error_detail: str) -> bool:
+    normalized = error_detail.strip().lower()
+    return bool(normalized) and (
+        "timed out" in normalized or "timeout" in normalized
+    )
+
+
+def get_rollout_attestation_retry_delay_seconds() -> float:
+    raw = os.environ.get("WBP_ROLLOUT_ATTESTATION_RETRY_SECONDS", "0.5").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.5
+    return value if value >= 0 else 0.5
+
+
+def run_rollout_attestation_healthcheck(
+    paths: RuntimePaths,
+    *,
+    allow_stable_fallback_write: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=allow_stable_fallback_write,
+    )
+    last_error = str(payload.get("last_error", ""))
+    retry_summary = {
+        "status": "not_invoked",
+        "attempted": False,
+        "eligible": payload.get("machine_error_code") == "ATTESTATION_FAILED"
+        and is_transient_attestation_timeout_error(last_error),
+        "retry_delay_seconds": 0.0,
+        "initial_status": str(payload.get("status", "")),
+        "initial_machine_error_code": str(payload.get("machine_error_code", "")),
+        "initial_last_error": last_error,
+        "final_status": str(payload.get("status", "")),
+        "final_machine_error_code": str(payload.get("machine_error_code", "")),
+        "final_last_error": last_error,
+        "outcome": "not_needed",
+        "confirmation_basis": "",
+        "guardrail_status": "not_invoked",
+    }
+    if not retry_summary["eligible"]:
+        return payload, retry_summary
+
+    retry_delay_seconds = get_rollout_attestation_retry_delay_seconds()
+    retry_summary["status"] = "owner_path_emitted"
+    retry_summary["attempted"] = True
+    retry_summary["retry_delay_seconds"] = retry_delay_seconds
+    retry_summary["outcome"] = "retry_failed"
+    retry_summary["guardrail_status"] = "blocked"
+    if retry_delay_seconds > 0:
+        time.sleep(retry_delay_seconds)
+
+    retried_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+        allow_stable_fallback_write=allow_stable_fallback_write,
+    )
+    retried_last_error = str(retried_payload.get("last_error", ""))
+    retry_summary["final_status"] = str(retried_payload.get("status", ""))
+    retry_summary["final_machine_error_code"] = str(
+        retried_payload.get("machine_error_code", "")
+    )
+    retry_summary["final_last_error"] = retried_last_error
+    retry_summary["outcome"] = (
+        "healthy_on_retry"
+        if retried_payload.get("status") == "ok"
+        and str(retried_payload.get("effective_mode")) == "managed"
+        else "retry_failed"
+    )
+    if retry_summary["outcome"] == "healthy_on_retry":
+        retry_summary["confirmation_basis"] = "retry_observation_only"
+        retry_summary["guardrail_status"] = "observation_only"
+    return retried_payload, retry_summary
+
+
+def get_model(paths: RuntimePaths, fallback: str = "gpt-5.3-codex") -> str:
     return read_toml_string(paths.config_toml, "model") or fallback
+
+
+def get_configured_proxy_url(paths: RuntimePaths, effective_mode: str) -> str:
+    if effective_mode == "managed":
+        return read_yaml_value(paths.managed_config_file, "proxy-url")
+    return read_stable_proxy_url(paths)
+
+
+def truth_drift_detail(
+    *,
+    configured_model: str,
+    requested_model: str,
+    model_match: bool,
+    configured_proxy_url: str,
+    current_proxy_url: str,
+    proxy_url_match: bool,
+) -> str:
+    drift_parts: list[str] = []
+    if not model_match:
+        drift_parts.append(
+            f"model drift: configured={configured_model or '<empty>'}, requested={requested_model or '<empty>'}"
+        )
+    if not proxy_url_match:
+        drift_parts.append(
+            f"proxy drift: configured={configured_proxy_url or '<empty>'}, current={current_proxy_url or '<empty>'}"
+        )
+    return "; ".join(drift_parts)
+
+
+def build_launch_readiness_surface(
+    *,
+    owner_command_surface: str,
+    delegated_from_status: bool,
+    listener_ok: bool,
+    models_ok: bool,
+    responses_ok: bool,
+    base_url_match: bool,
+    effective_mode_match: bool,
+    model_match: bool,
+    proxy_url_match: bool,
+    machine_error_code: str,
+    error_detail: str,
+    auth_pool_hygiene: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    failed_checks: list[str] = []
+    if not listener_ok:
+        failed_checks.append("listener_unreachable")
+    if listener_ok and not models_ok:
+        failed_checks.append("models_surface_unavailable_or_invalid")
+    if listener_ok and models_ok and not responses_ok:
+        failed_checks.append("responses_probe_failed")
+    if not base_url_match:
+        failed_checks.append("base_url_mismatch")
+    if not effective_mode_match:
+        failed_checks.append("effective_mode_truth_drift")
+    if not model_match:
+        failed_checks.append("model_truth_drift")
+    if not proxy_url_match:
+        failed_checks.append("proxy_truth_drift")
+    auth_pool_hygiene_status = ""
+    launch_capable_backend_count = None
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene_status = str(auth_pool_hygiene.get("status", ""))
+        launch_capable_backend_count = auth_pool_hygiene.get(
+            "launch_capable_backend_count"
+        )
+        if (
+            listener_ok
+            and models_ok
+            and not responses_ok
+            and auth_pool_hygiene_status == "launch_capable_empty"
+        ):
+            failed_checks.insert(0, "usable_auth_pool_empty")
+    gate_passed = not failed_checks
+    return {
+        "status": "ready" if gate_passed else "blocked",
+        "owner_command_surface": owner_command_surface,
+        "delegated_from_status": delegated_from_status,
+        "real_inference_required": True,
+        "listener_reachable": listener_ok,
+        "models_surface_reachable": models_ok,
+        "responses_proof_passed": responses_ok,
+        "truth_alignment_passed": (
+            base_url_match and effective_mode_match and model_match and proxy_url_match
+        ),
+        "base_url_match": base_url_match,
+        "effective_mode_match": effective_mode_match,
+        "model_match": model_match,
+        "proxy_url_match": proxy_url_match,
+        "gate_passed": gate_passed,
+        "blocking_reason": "" if gate_passed else failed_checks[0],
+        "failed_checks": failed_checks,
+        "machine_error_code": machine_error_code,
+        "last_error": error_detail,
+        "auth_pool_hygiene_status": auth_pool_hygiene_status,
+        "launch_capable_backend_count": launch_capable_backend_count,
+    }
+
+
+def build_runtime_guardrail_surface(
+    paths: RuntimePaths,
+    *,
+    launch_readiness: dict[str, Any] | None,
+    auth_pool_hygiene: dict[str, Any] | None,
+    recovery_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    lock_preflight = get_lock_preflight(paths)
+    failed_checks: list[str] = []
+    lock_status = str(lock_preflight.get("status", "unknown"))
+    if lock_status == "held":
+        failed_checks.append("mutation_lock_held")
+    elif lock_status == "stale":
+        failed_checks.append("mutation_lock_stale")
+
+    launch_status = ""
+    launch_blocking_reason = ""
+    if isinstance(launch_readiness, dict):
+        launch_status = str(launch_readiness.get("status", ""))
+        launch_blocking_reason = str(launch_readiness.get("blocking_reason", ""))
+        if launch_status == "blocked" and launch_blocking_reason:
+            failed_checks.append(launch_blocking_reason)
+
+    auth_pool_status = ""
+    auth_pool_blocking_reason = ""
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_status = str(auth_pool_hygiene.get("status", ""))
+        auth_pool_blocking_reason = str(auth_pool_hygiene.get("blocking_reason", ""))
+        if auth_pool_status == "launch_capable_empty" and auth_pool_blocking_reason:
+            if auth_pool_blocking_reason not in failed_checks:
+                failed_checks.append(auth_pool_blocking_reason)
+
+    recovery_guardrail_status = ""
+    recovery_confirmation_basis = ""
+    recovery_effectful_claim_allowed = None
+    if isinstance(recovery_result, dict):
+        recovery_guardrail_status = str(recovery_result.get("guardrail_status", ""))
+        recovery_confirmation_basis = str(recovery_result.get("confirmation_basis", ""))
+        recovery_effectful_claim_allowed = recovery_result.get("effectful_claim_allowed")
+        if recovery_guardrail_status == "blocked":
+            failed_checks.append("recovery_claim_blocked")
+
+    if failed_checks:
+        status = "blocked"
+    elif recovery_guardrail_status == "observation_only":
+        status = "caution"
+    else:
+        status = "clear"
+
+    return {
+        "status": status,
+        "owner_command_surface": "healthcheck --json",
+        "lock_status": lock_status,
+        "launch_readiness_status": launch_status,
+        "launch_blocking_reason": launch_blocking_reason,
+        "auth_pool_hygiene_status": auth_pool_status,
+        "auth_pool_blocking_reason": auth_pool_blocking_reason,
+        "recovery_guardrail_status": recovery_guardrail_status,
+        "recovery_confirmation_basis": recovery_confirmation_basis,
+        "recovery_effectful_claim_allowed": recovery_effectful_claim_allowed,
+        "failed_checks": failed_checks,
+        "blocking_reason": "" if not failed_checks else failed_checks[0],
+    }
 
 
 def default_launcher_script_path(profile_dir: Path) -> Path:
@@ -566,7 +899,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             'if [ "$mode" = "smoke" ]; then',
             '  printf "stable\\n" > "$WBP_RUNTIME_EFFECTIVE_MODE_FILE"',
-            "  proxy_env python3 - <<'PY'",
+            '  proxy_env "${WBP_PYTHON_BIN:?}" - <<\'PY\'',
             "import json",
             "import os",
             "from pathlib import Path",
@@ -601,7 +934,7 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             "fi",
             f'if [ "$mode" = "{CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE}" ]; then',
             '  [ -n "${WBP_CURRENT_PROXY_URL:-}" ] || exit 8',
-            "  proxy_env python3 - <<'PY'",
+            '  proxy_env "${WBP_PYTHON_BIN:?}" - <<\'PY\'',
             "import json",
             "import os",
             "from pathlib import Path",
@@ -1051,6 +1384,36 @@ def get_stable_auth_inventory_source(paths: RuntimePaths) -> tuple[Path, dict[st
     }
 
 
+def get_auth_inventory_entries_digest(entries: list[str]) -> str:
+    normalized = sorted(str(item) for item in entries)
+    encoded = json.dumps(normalized, separators=(",", ":"), ensure_ascii=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def get_onboarding_auth_snapshot_before_login(paths: RuntimePaths) -> dict[str, Any]:
+    stable_auth_dir, inventory_source = get_stable_auth_inventory_source(paths)
+    if not stable_auth_dir.is_dir():
+        return {
+            "status": "source_unavailable",
+            "count": 0,
+            "digest": get_auth_inventory_entries_digest([]),
+            "source": inventory_source,
+        }
+    entries = sorted(
+        path.name
+        for path in stable_auth_dir.glob("codex-*.json")
+        if path.is_file()
+    )
+    return {
+        "status": "ok",
+        "count": len(entries),
+        "digest": get_auth_inventory_entries_digest(entries),
+        "source": inventory_source,
+    }
+
+
 def get_backend_identifier(backend: dict[str, Any], index: int) -> str:
     backend_id = backend.get("id")
     if backend_id:
@@ -1065,12 +1428,25 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
     missing_auth_refs = []
     empty_auth_ref_backends = []
     invalid_auth_basenames = []
+    invalid_backend_pools = []
+    registry_schema_version = registry.get("schema_version")
+    unsupported_schema_versions = []
+
+    if registry_schema_version != BACKEND_REGISTRY_SCHEMA_VERSION:
+        unsupported_schema_versions.append(
+            "missing"
+            if registry_schema_version is None
+            else str(registry_schema_version)
+        )
 
     for index, backend in enumerate(backends):
         backend_key = get_backend_identifier(backend, index)
         backend_id = backend.get("id")
         if backend_id:
             backend_ids.setdefault(str(backend_id), []).append(backend_key)
+        observed_pool = str(backend.get("pool", ""))
+        if observed_pool not in VALID_BACKEND_REGISTRY_POOLS:
+            invalid_backend_pools.append(f"{backend_key}:{observed_pool or '<missing>'}")
 
         if "auth_ref" not in backend:
             missing_auth_refs.append(backend_key)
@@ -1101,6 +1477,8 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
         or missing_auth_refs
         or empty_auth_ref_backends
         or invalid_auth_basenames
+        or invalid_backend_pools
+        or unsupported_schema_versions
     )
     claim_blockers = [
         "stable-15-proved",
@@ -1115,6 +1493,9 @@ def get_registry_identity(registry: dict[str, Any]) -> dict[str, Any]:
         "missing_auth_refs": sorted(missing_auth_refs),
         "empty_auth_ref_backends": sorted(empty_auth_ref_backends),
         "invalid_auth_basenames": sorted(invalid_auth_basenames),
+        "invalid_backend_pools": sorted(invalid_backend_pools),
+        "registry_schema_version": registry_schema_version,
+        "unsupported_schema_versions": unsupported_schema_versions,
         "claim_blockers": claim_blockers if ambiguous else [],
         "next_action": "inspect_registry_identity" if ambiguous else "none",
     }
@@ -1130,11 +1511,15 @@ def stable_repair_registry_identity_requires_block(
             "missing_auth_refs",
             "empty_auth_ref_backends",
             "invalid_auth_basenames",
+            "invalid_backend_pools",
+            "unsupported_schema_versions",
         )
     )
 
 
-def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
+def backend_in_launch_candidate_universe(
+    backend: dict[str, Any],
+) -> tuple[bool, list[str]]:
     reasons = []
     if backend.get("enabled", True) is False:
         reasons.append("disabled")
@@ -1142,11 +1527,196 @@ def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
         reasons.append("pool_not_active")
     if bool(backend.get("manual_hold")):
         reasons.append("manual_hold")
-    if str(backend.get("status", "")).lower() in {"down", "fatal", "retired"}:
-        reasons.append("status_not_allowed")
     if not backend.get("auth_ref"):
         reasons.append("missing_auth_ref")
+    if str(backend.get("status", "")).lower() in {"retired", "fatal"}:
+        reasons.append("terminal_status")
     return not reasons, reasons
+
+
+def classify_backend_runtime_eligibility(
+    backend: dict[str, Any],
+) -> tuple[str, list[str]]:
+    eligible, reasons = backend_in_launch_candidate_universe(backend)
+    if not eligible:
+        return "excluded", reasons
+
+    status = str(backend.get("status", "")).lower()
+    last_error_class = str(backend.get("last_error_class", "")).lower()
+    last_error = str(backend.get("last_error", "")).lower()
+    cooldown_until = str(backend.get("cooldown_until") or "").strip()
+
+    if (
+        last_error_class == "auth"
+        or "auth_unavailable" in last_error
+        or "authentication token has been invalidated" in last_error
+    ):
+        return "auth_invalid", ["auth_invalid"]
+    if (
+        last_error_class == "quota"
+        or "usage_limit_reached" in last_error
+        or ("quota" in last_error and "model_cooldown" not in last_error)
+    ):
+        return "quota_exhausted", ["quota_exhausted"]
+    if "model_cooldown" in last_error or (
+        cooldown_until and status != "healthy" and not last_error_class
+    ):
+        return "cooldown_only", ["cooldown_only"]
+    if status == "healthy" and not cooldown_until and not last_error_class and not last_error:
+        return "live_capable", []
+    return "unknown_unverified", ["unknown_unverified"]
+
+
+def backend_in_stage_posture_candidate_universe(
+    backend: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    reasons = []
+    if backend.get("enabled", True) is False:
+        reasons.append("disabled")
+    if bool(backend.get("manual_hold")):
+        reasons.append("manual_hold")
+    if not backend.get("auth_ref"):
+        reasons.append("missing_auth_ref")
+    if str(backend.get("status", "")).lower() in {"retired", "fatal"}:
+        reasons.append("terminal_status")
+    return not reasons, reasons
+
+
+def classify_backend_stage_posture_eligibility(
+    backend: dict[str, Any],
+) -> tuple[str, list[str]]:
+    eligible, reasons = backend_in_stage_posture_candidate_universe(backend)
+    if not eligible:
+        return "excluded", reasons
+
+    status = str(backend.get("status", "")).lower()
+    last_error_class = str(backend.get("last_error_class", "")).lower()
+    last_error = str(backend.get("last_error", "")).lower()
+    cooldown_until = str(backend.get("cooldown_until") or "").strip()
+
+    if (
+        last_error_class == "auth"
+        or "auth_unavailable" in last_error
+        or "authentication token has been invalidated" in last_error
+    ):
+        return "auth_invalid", ["auth_invalid"]
+    if (
+        last_error_class == "quota"
+        or "usage_limit_reached" in last_error
+        or ("quota" in last_error and "model_cooldown" not in last_error)
+    ):
+        return "quota_exhausted", ["quota_exhausted"]
+    if "model_cooldown" in last_error or (
+        cooldown_until and status != "healthy" and not last_error_class
+    ):
+        return "cooldown_only", ["cooldown_only"]
+    if (
+        status == "healthy"
+        and not cooldown_until
+        and not last_error_class
+        and not last_error
+    ):
+        return "live_capable", []
+    return "unknown_unverified", ["unknown_unverified"]
+
+
+def get_launch_capable_backend_ids(registry: dict[str, Any]) -> list[str]:
+    return sorted(
+        str(item.get("id")).strip()
+        for item in registry.get("backends", [])
+        if str(item.get("id") or "").strip()
+        and classify_backend_runtime_eligibility(item)[0] == "live_capable"
+    )
+
+
+def summarize_auth_pool_hygiene(
+    registry: dict[str, Any], state: dict[str, Any]
+) -> dict[str, Any]:
+    candidate_universe_backend_ids: list[str] = []
+    class_backend_ids = {
+        "live_capable": [],
+        "quota_exhausted": [],
+        "auth_invalid": [],
+        "cooldown_only": [],
+        "unknown_unverified": [],
+    }
+    for backend in registry.get("backends", []):
+        backend_id = backend.get("id")
+        if backend_id is None:
+            continue
+        eligibility_class, _ = classify_backend_runtime_eligibility(backend)
+        if eligibility_class == "excluded":
+            continue
+        normalized_id = str(backend_id)
+        candidate_universe_backend_ids.append(normalized_id)
+        class_backend_ids.setdefault(eligibility_class, []).append(normalized_id)
+
+    selected_backend_ids = sorted(
+        str(item) for item in state.get("selected_backend_ids", []) or []
+    )
+    launch_capable_backend_ids = sorted(class_backend_ids["live_capable"])
+    launch_capable_backend_id_set = set(launch_capable_backend_ids)
+    selected_launch_capable_backend_ids = [
+        backend_id
+        for backend_id in selected_backend_ids
+        if backend_id in launch_capable_backend_id_set
+    ]
+    selected_unusable_backend_ids = [
+        backend_id
+        for backend_id in selected_backend_ids
+        if backend_id not in launch_capable_backend_id_set
+    ]
+
+    if launch_capable_backend_ids:
+        status = "launch_capable_available"
+        machine_error_code = "OK"
+        blocking_reason = ""
+    else:
+        status = "launch_capable_empty"
+        machine_error_code = "USABLE_AUTH_POOL_EMPTY"
+        blocking_reason = "no_live_capable_active_backends"
+
+    if selected_backend_ids and selected_unusable_backend_ids:
+        selection_alignment_status = "selected_backend_outside_live_capable_lane"
+    else:
+        selection_alignment_status = "aligned"
+
+    return {
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "blocking_reason": blocking_reason,
+        "claim_scope": "bounded_runtime_auth_usability_only",
+        "candidate_universe_backend_ids": sorted(candidate_universe_backend_ids),
+        "launch_capable_backend_ids": launch_capable_backend_ids,
+        "quota_exhausted_backend_ids": sorted(class_backend_ids["quota_exhausted"]),
+        "auth_invalid_backend_ids": sorted(class_backend_ids["auth_invalid"]),
+        "cooldown_only_backend_ids": sorted(class_backend_ids["cooldown_only"]),
+        "unknown_unverified_backend_ids": sorted(
+            class_backend_ids["unknown_unverified"]
+        ),
+        "launch_capable_backend_count": len(launch_capable_backend_ids),
+        "candidate_universe_backend_count": len(candidate_universe_backend_ids),
+        "selected_backend_ids_observed": selected_backend_ids,
+        "selected_launch_capable_backend_ids": selected_launch_capable_backend_ids,
+        "selected_unusable_backend_ids": selected_unusable_backend_ids,
+        "selected_launch_capable_backend_count": len(selected_launch_capable_backend_ids),
+        "selected_unusable_backend_count": len(selected_unusable_backend_ids),
+        "selection_alignment_status": selection_alignment_status,
+    }
+
+
+def is_stable_auth_allowed(backend: dict[str, Any]) -> tuple[bool, list[str]]:
+    eligibility_class, reasons = classify_backend_runtime_eligibility(backend)
+    if eligibility_class == "live_capable":
+        return True, []
+    status = str(backend.get("status", "")).lower()
+    if status in {"down", "degraded", "failed", "error"}:
+        if "status_not_allowed" not in reasons:
+            reasons = [*reasons, "status_not_allowed"]
+        return False, reasons
+    if eligibility_class == "excluded":
+        return False, reasons
+    return False, reasons or [eligibility_class]
 
 
 def get_stable_policy_drift_for_inventory_source(
@@ -1322,15 +1892,7 @@ def should_use_approved_target_policy_drift(
 
 
 def get_active_routing_candidate_backend_ids(registry: dict[str, Any]) -> list[str]:
-    candidate_ids: list[str] = []
-    for backend in registry.get("backends") or []:
-        backend_id = backend.get("id")
-        if not backend_id:
-            continue
-        allowed, _ = is_stable_auth_allowed(backend)
-        if allowed:
-            candidate_ids.append(str(backend_id))
-    return sorted(candidate_ids)
+    return get_launch_capable_backend_ids(registry)
 
 
 def summarize_registry_identity(registry_identity: dict[str, Any]) -> dict[str, Any]:
@@ -1678,6 +2240,74 @@ def restore_current_proxy_owner_path_runtime_surfaces(
     )
 
 
+def managed_pid_matches_expected(paths: RuntimePaths, pid_text: str) -> bool:
+    try:
+        pid = int(pid_text.strip())
+    except ValueError:
+        return False
+    command_line = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "command="],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    expected = f"{paths.managed_config_file}"
+    return bool(command_line) and expected in command_line
+
+
+def snapshot_sync_current_proxy_recovery_runtime_surfaces(
+    paths: RuntimePaths,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "state_file": snapshot_path_state(paths.state_file),
+        "managed_config_file": snapshot_path_state(paths.managed_config_file),
+        "config_toml": snapshot_path_state(paths.config_toml),
+        "runtime_effective_mode_file": snapshot_path_state(
+            paths.runtime_effective_mode_file
+        ),
+        "managed_pid_file": snapshot_path_state(managed_pid_path(paths)),
+    }
+
+
+def restore_sync_current_proxy_recovery_runtime_surfaces(
+    paths: RuntimePaths, snapshots: dict[str, dict[str, Any]]
+) -> None:
+    current_pid_text = read_text(managed_pid_path(paths))
+    snapshot_pid_text = str(
+        snapshots.get("managed_pid_file", {}).get("text", "")
+        if snapshots.get("managed_pid_file", {}).get("state") == "file"
+        else ""
+    ).strip()
+    if (
+        current_pid_text.strip()
+        and current_pid_text.strip() != snapshot_pid_text
+        and managed_pid_matches_expected(paths, current_pid_text)
+        and process_is_alive(current_pid_text)
+    ):
+        try:
+            os.kill(int(current_pid_text.strip()), signal.SIGTERM)
+        except OSError:
+            pass
+    restore_path_state(
+        paths.state_file, snapshots.get("state_file", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.managed_config_file,
+        snapshots.get("managed_config_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        paths.config_toml, snapshots.get("config_toml", {"state": "missing"})
+    )
+    restore_path_state(
+        paths.runtime_effective_mode_file,
+        snapshots.get("runtime_effective_mode_file", {"state": "missing"}),
+    )
+    restore_path_state(
+        managed_pid_path(paths),
+        snapshots.get("managed_pid_file", {"state": "missing"}),
+    )
+
+
 def rollback_target_switch_apply(
     paths: RuntimePaths,
     *,
@@ -1750,10 +2380,40 @@ def build_target_switch_surface_context(paths: RuntimePaths) -> dict[str, Any]:
 
 def build_stable_runtime_generated_config_surface(
     paths: RuntimePaths,
+    state: dict[str, Any],
 ) -> dict[str, Any]:
     generated_path = paths.stable_runtime_generated_config_file
+    snapshot = get_valid_stable_runtime_consumer_snapshot(state)
+    activation_snapshot_present = snapshot is not None
+    activation_snapshot_observed_at_utc = ""
+    activation_snapshot_freshness = "unknown"
+    activation_snapshot_references_generated_config = False
+    if snapshot is not None:
+        activation_snapshot_observed_at_utc = str(
+            snapshot.get("observed_at_utc") or ""
+        ).strip()
+        activation_snapshot_freshness = selected_backend_snapshot_freshness(
+            activation_snapshot_observed_at_utc
+        )
+        activation_snapshot_references_generated_config = (
+            str(snapshot.get("selected_config_file")) == str(generated_path)
+        )
+    if not generated_path.exists():
+        status = "declared_not_materialized"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "fresh"
+    ):
+        status = "materialized_with_fresh_activation_evidence"
+    elif (
+        activation_snapshot_references_generated_config
+        and activation_snapshot_freshness == "stale"
+    ):
+        status = "materialized_with_stale_activation_evidence"
+    else:
+        status = "materialized_unactivated"
     return {
-        "status": "materialized_unactivated" if generated_path.exists() else "declared_not_materialized",
+        "status": status,
         "config_file": str(generated_path),
         "ownership": "control_layer",
         "location_scope": "companion_managed_data",
@@ -1761,6 +2421,13 @@ def build_stable_runtime_generated_config_surface(
         "truth_surface": False,
         "activation_method": STABLE_RUNTIME_GENERATED_CONFIG_METHOD,
         "exists": generated_path.exists(),
+        "activation_snapshot_present": activation_snapshot_present,
+        "activation_snapshot_observed_at_utc": activation_snapshot_observed_at_utc,
+        "activation_snapshot_freshness": activation_snapshot_freshness,
+        "activation_snapshot_references_generated_config": (
+            activation_snapshot_references_generated_config
+        ),
+        "activation_snapshot_alone_sufficient": False,
     }
 
 
@@ -1787,7 +2454,19 @@ def build_stable_runtime_activation_evidence_surface(
     snapshot_shape_valid = snapshot_present and all(
         field in snapshot for field in STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS
     )
+    snapshot_observed_at_utc = ""
+    snapshot_freshness = "unknown"
+    snapshot_references_generated_config = False
     if snapshot_shape_valid:
+        snapshot_observed_at_utc = str(snapshot.get("observed_at_utc") or "").strip()
+        snapshot_freshness = selected_backend_snapshot_freshness(snapshot_observed_at_utc)
+        snapshot_references_generated_config = (
+            str(snapshot.get("selected_config_file"))
+            == str(paths.stable_runtime_generated_config_file)
+        )
+    if snapshot_shape_valid and snapshot_freshness == "stale":
+        status = "snapshot_stale"
+    elif snapshot_shape_valid:
         status = "snapshot_present"
     elif snapshot_present:
         status = "snapshot_shape_invalid"
@@ -1804,6 +2483,11 @@ def build_stable_runtime_activation_evidence_surface(
         "required_fields": STABLE_RUNTIME_CONSUMER_SNAPSHOT_REQUIRED_FIELDS,
         "snapshot_present": snapshot_present,
         "snapshot_shape_valid": snapshot_shape_valid,
+        "snapshot_observed_at_utc": snapshot_observed_at_utc,
+        "snapshot_freshness": snapshot_freshness,
+        "snapshot_references_generated_config": snapshot_references_generated_config,
+        "generated_config_file": str(paths.stable_runtime_generated_config_file),
+        "snapshot_alone_sufficient": False,
     }
     if snapshot_present:
         payload["current_snapshot"] = snapshot
@@ -1851,21 +2535,27 @@ def build_deterministic_stable_recovery_contract(
         },
         "failure_taxonomy_redesign_forbidden": True,
         "shared_activation_mechanics": {
-            "status": "contract_fixed_not_implemented",
+            "status": "owner_path_emitted",
             "reuse_existing_launch_smoke_activation_helper": True,
             "generated_config_file": str(paths.stable_runtime_generated_config_file),
             "handoff_env_var": STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV,
             "snapshot_topic": STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC,
+            "owner_paths": ["healthcheck --json", "launch smoke --json"],
         },
-        "generated_config_regeneration_status": "contract_fixed_not_implemented",
+        "generated_config_regeneration_status": "owner_path_emitted",
         "generated_config_regeneration_policy": "regenerate_each_recovery_attempt",
         "generated_config_derivation_source": (
             "current_baseline_stable_config_plus_current_approved_target_reference"
         ),
+        "generated_config_regeneration_owner_paths": [
+            "healthcheck --json",
+            "launch smoke --json",
+        ],
         "stale_generated_config_authoritative": False,
         "generated_config_existence_alone_sufficient": False,
-        "snapshot_refresh_status": "contract_fixed_not_implemented",
+        "snapshot_refresh_status": "owner_path_emitted",
         "snapshot_refresh_after_stable_live_outcome": True,
+        "snapshot_refresh_owner_paths": ["healthcheck --json", "launch smoke --json"],
         "snapshot_schema_widening_required": False,
         "new_persisted_recovery_metadata_required": False,
         "stable_service_disabled_classification": {
@@ -1933,6 +2623,15 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
         "status_delegates_to_owner": True,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
+        "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "status": "available" if paths.sync_script.exists() else "unavailable",
+            "command_surface": "sync --json",
+            "owner_path_private": True,
+            "allowed_when_launcher_lane_ineligible": True,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "writes_managed_config_proxy_url": True,
+            "reproof_required": True,
+        },
         "state_file": str(paths.state_file),
         "state_fields": [
             LAST_KNOWN_GOOD_PROXY_URL_FIELD,
@@ -2070,6 +2769,15 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         "status_delegates_to_owner": True,
         "sync_owner_forbidden": True,
         "launch_smoke_owner_forbidden": True,
+        "launcher_lane_ineligible_sync_owner_recovery_surface": {
+            "status": "available" if paths.sync_script.exists() else "unavailable",
+            "command_surface": "sync --json",
+            "owner_path_private": True,
+            "allowed_when_launcher_lane_ineligible": True,
+            "restart_scope": "managed_runtime_restart_with_proxy_refresh",
+            "writes_managed_config_proxy_url": True,
+            "reproof_required": True,
+        },
         "state_file": str(paths.state_file),
         "activation_surface_status": "owner_path_private_launcher_activation_available",
         "activation_surface_kind": "repo_owned_handoff_env_var",
@@ -2126,7 +2834,11 @@ def build_current_proxy_adoption_contract(paths: RuntimePaths) -> dict[str, Any]
         },
         "write_owner": "serialized_healthcheck_owner_path",
         "current_proxy_url_write_path_status": "owner_path_success_only_write_available",
+        "candidate_probe_depth": PROXY_REPROBE_DEPTH,
+        "candidate_probe_scope": "bounded_local_listener_reachability_only",
         "adoption_requires_same_owner_path_live_reproof": True,
+        "post_adoption_runtime_validation_surface": "healthcheck.attestation",
+        "separate_control_layer_deep_probe_surface_default": False,
         "adoption_from_candidate_liveness_alone_forbidden": True,
         "adoption_from_last_known_good_alone_forbidden": True,
         "adoption_from_working_candidate_alone_forbidden": True,
@@ -2207,6 +2919,18 @@ def refresh_last_known_good_proxy_from_healthcheck(
         ]
         write_json_atomic(paths.state_file, live_state)
     return refreshed_state
+
+
+def get_reported_current_proxy_url(
+    paths: RuntimePaths, state: dict[str, Any], reported_effective_mode: str
+) -> str:
+    current_proxy_url = str(state.get("current_proxy_url", ""))
+    if reported_effective_mode != "stable":
+        return current_proxy_url
+    stable_proxy_url = str(read_stable_proxy_url(paths) or "")
+    if parse_local_proxy_candidate(stable_proxy_url) is None:
+        return current_proxy_url
+    return stable_proxy_url
 
 
 def get_stable_runtime_consumer_selection_context(
@@ -2304,7 +3028,12 @@ def build_stable_runtime_consumer_contract(
         and str(health_payload.get("effective_mode")) == "stable"
     )
     snapshot = get_valid_stable_runtime_consumer_snapshot(state)
-    if live_stable_runtime_ok and snapshot:
+    snapshot_freshness = (
+        selected_backend_snapshot_freshness(snapshot.get("observed_at_utc"))
+        if snapshot
+        else "unknown"
+    )
+    if live_stable_runtime_ok and snapshot and snapshot_freshness == "fresh":
         snapshot_selected_kind = str(snapshot.get("selected_source_kind"))
         snapshot_selected_path = Path(str(snapshot.get("selected_source_path")))
         snapshot_outcome = str(snapshot.get("activation_outcome"))
@@ -2380,7 +3109,7 @@ def build_stable_runtime_consumer_contract(
             "matches_desired": desired_matches_effective,
         },
         "derived_stable_runtime_config_surface": (
-            build_stable_runtime_generated_config_surface(paths)
+            build_stable_runtime_generated_config_surface(paths, state)
         ),
         "launcher_handoff_contract": build_stable_runtime_launcher_handoff_contract(
             paths
@@ -2438,9 +3167,13 @@ def build_generated_stable_runtime_config_text(paths: RuntimePaths) -> str:
 
 
 def write_stable_runtime_consumer_snapshot(
-    paths: RuntimePaths, snapshot: dict[str, Any]
+    paths: RuntimePaths,
+    snapshot: dict[str, Any],
+    *,
+    lock_acquired: bool = False,
 ) -> None:
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         state = read_json(paths.state_file, required=False)
         state[STABLE_RUNTIME_CONSUMER_SNAPSHOT_TOPIC] = snapshot
         write_json_atomic(paths.state_file, state)
@@ -2551,13 +3284,21 @@ def build_deterministic_stable_recovery_result(
     snapshot_refreshed: bool,
     fallback_reason: str,
     live_runtime_observation_confirmed: bool,
+    confirmation_basis: str,
+    effectful_claim_allowed: bool,
 ) -> dict[str, Any]:
     if not attempted:
         status = "not_invoked"
+        guardrail_status = "not_invoked"
     elif outcome == "recovery_failed_before_stable_healthy":
         status = "failed"
+        guardrail_status = "blocked"
+    elif effectful_claim_allowed:
+        status = "completed"
+        guardrail_status = "confirmed"
     else:
         status = "completed"
+        guardrail_status = "observation_only"
     return {
         "status": status,
         "owner_command_surface": "healthcheck --json",
@@ -2572,6 +3313,9 @@ def build_deterministic_stable_recovery_result(
         "snapshot_refreshed": snapshot_refreshed,
         "fallback_reason": fallback_reason,
         "live_runtime_observation_confirmed": live_runtime_observation_confirmed,
+        "confirmation_basis": confirmation_basis,
+        "effectful_claim_allowed": effectful_claim_allowed,
+        "guardrail_status": guardrail_status,
     }
 
 
@@ -2886,6 +3630,294 @@ def build_registry_source_input_item(backend: dict[str, Any]) -> dict[str, Any]:
 
 def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def discover_experimental_package_repo_root() -> Path:
+    module_dir = Path(__file__).resolve().parent
+    for candidate in (module_dir, *module_dir.parents):
+        if (
+            (candidate / EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE).is_file()
+            and (candidate / EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR).is_dir()
+        ):
+            return candidate
+    raise RuntimeErrorInfo(
+        (
+            "Failed to determine experimental package source root from module location. "
+            "Set WBP_PACKAGE_SOURCE_ROOT explicitly."
+        ),
+        machine_error_code="PACKAGE_SOURCE_ROOT_UNRESOLVED",
+        severity="recoverable",
+        operator_action="user_action",
+    )
+
+
+def get_experimental_package_source_root() -> Path:
+    configured_root = os.environ.get("WBP_PACKAGE_SOURCE_ROOT")
+    source_root = (
+        Path(configured_root).expanduser().resolve()
+        if configured_root
+        else discover_experimental_package_repo_root()
+    )
+    if not source_root.exists() or not source_root.is_dir():
+        raise RuntimeErrorInfo(
+            f"Experimental package source root is not a directory: {source_root}",
+            machine_error_code="PACKAGE_SOURCE_ROOT_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    return source_root
+
+
+def is_experimental_package_root_file_allowed(relative_path: Path) -> bool:
+    return (
+        len(relative_path.parts) == 1
+        and relative_path.suffix.lower() in EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES
+    )
+
+
+def is_experimental_package_path_excluded(relative_path: Path) -> bool:
+    lowered_parts = [part.lower() for part in relative_path.parts]
+    basename = relative_path.name.lower()
+    if basename.startswith("."):
+        return True
+    if any(part.startswith(".") for part in lowered_parts):
+        return True
+    if basename in EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES:
+        return True
+    if any(part in EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS for part in lowered_parts):
+        return True
+    suffixes = {suffix.lower() for suffix in relative_path.suffixes}
+    if suffixes.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_FILE_SUFFIXES):
+        return True
+    stem_tokens = {
+        token for token in re.split(r"[^a-z0-9]+", relative_path.stem.lower()) if token
+    }
+    if stem_tokens.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS):
+        return True
+    return False
+
+
+def list_experimental_package_files(source_root: Path, output_dir: Path) -> list[Path]:
+    package_files: list[Path] = []
+    for root_entry in sorted(source_root.iterdir(), key=lambda item: item.name):
+        if root_entry.name.startswith("."):
+            continue
+        if root_entry.resolve() == output_dir:
+            continue
+        if root_entry.is_file():
+            relative_path = root_entry.relative_to(source_root)
+            if is_experimental_package_root_file_allowed(relative_path):
+                package_files.append(root_entry)
+            continue
+        if not root_entry.is_dir():
+            continue
+        if root_entry.name not in EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS:
+            continue
+        for entry in sorted(root_entry.rglob("*")):
+            if not entry.is_file() or entry.is_symlink():
+                continue
+            if "__pycache__" in entry.parts:
+                continue
+            if output_dir in entry.parents:
+                continue
+            if is_experimental_package_path_excluded(entry.relative_to(source_root)):
+                continue
+            package_files.append(entry)
+    return package_files
+
+
+def read_experimental_plan_metadata(source_root: Path) -> dict[str, str]:
+    plan_path = source_root / "MASTER_PLAN.md"
+    if not plan_path.is_file():
+        return {}
+    plan_version = ""
+    plan_date = ""
+    for raw_line in plan_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("PLAN_VERSION:"):
+            plan_version = line.split(":", 1)[1].strip()
+        if line.startswith("PLAN_DATE:"):
+            plan_date = line.split(":", 1)[1].strip()
+    metadata: dict[str, str] = {}
+    if plan_version:
+        metadata["plan_version"] = plan_version
+    if plan_date:
+        metadata["plan_date"] = plan_date
+    return metadata
+
+
+def run_package_experimental_build(
+    _paths: RuntimePaths, output_dir_raw: str
+) -> dict[str, Any]:
+    output_dir = Path(output_dir_raw).expanduser().resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to prepare output directory: {output_dir} ({exc})",
+            machine_error_code="PACKAGE_OUTPUT_DIR_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+
+    source_root = get_experimental_package_source_root()
+    package_files = list_experimental_package_files(source_root, output_dir)
+    artifact_path = output_dir / EXPERIMENTAL_PACKAGE_ARTIFACT_NAME
+    manifest_path = output_dir / EXPERIMENTAL_PACKAGE_MANIFEST_NAME
+    metadata_path = output_dir / EXPERIMENTAL_PACKAGE_METADATA_NAME
+
+    try:
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            for file_path in package_files:
+                archive.add(file_path, arcname=str(file_path.relative_to(source_root)))
+        artifact_sha256 = hash_file(artifact_path)
+        metadata = {
+            "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "source_root": str(source_root),
+            "allowlist": {
+                "top_level_dirs": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS),
+                "root_file_suffixes": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES),
+            },
+            "included_file_count": len(package_files),
+            "included_files": [
+                str(path.relative_to(source_root)) for path in package_files
+            ],
+            **read_experimental_plan_metadata(source_root),
+        }
+        manifest = {
+            "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "artifact_path": artifact_path.name,
+            "artifact_sha256": artifact_sha256,
+            "artifact_format": "tar.gz",
+            "metadata_path": metadata_path.name,
+        }
+        write_json_artifact(metadata_path, metadata)
+        write_json_artifact(manifest_path, manifest)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to build experimental package: {exc}",
+            machine_error_code="PACKAGE_BUILD_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+
+    changed_files = [str(artifact_path), str(manifest_path), str(metadata_path)]
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            f"Experimental package built with {len(package_files)} allowlisted files."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "package_result": {
+                "status": "built",
+                "source_root": str(source_root),
+                "artifact_path": str(artifact_path),
+                "manifest_path": str(manifest_path),
+                "metadata_path": str(metadata_path),
+                "artifact_sha256": artifact_sha256,
+                "included_file_count": len(package_files),
+            }
+        },
+    )
+
+
+def run_package_experimental_verify(
+    _paths: RuntimePaths, manifest_raw: str
+) -> dict[str, Any]:
+    manifest_path = Path(manifest_raw).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing experimental package manifest: {manifest_path}",
+            machine_error_code="PACKAGE_MANIFEST_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid experimental package manifest JSON: {exc}",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeErrorInfo(
+            "Experimental package manifest must be a JSON object.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_raw = manifest.get("artifact_path")
+    expected_sha256 = manifest.get("artifact_sha256")
+    if not artifact_path_raw or not expected_sha256:
+        raise RuntimeErrorInfo(
+            "Experimental package manifest is missing required checksum fields.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_candidate = Path(str(artifact_path_raw))
+    artifact_path = (
+        artifact_path_candidate
+        if artifact_path_candidate.is_absolute()
+        else (manifest_path.parent / artifact_path_candidate).resolve()
+    )
+    if not artifact_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing experimental package artifact: {artifact_path}",
+            machine_error_code="PACKAGE_ARTIFACT_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_sha256 = hash_file(artifact_path)
+    checksum_match = observed_sha256 == str(expected_sha256)
+    if not checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Experimental package checksum verification failed.",
+            machine_error_code="PACKAGE_CHECKSUM_MISMATCH",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "checksum_mismatch",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": False,
+                }
+            },
+        )
+    return build_command_payload(
+        ok=True,
+        human_message="Experimental package checksum verification passed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "package_result": {
+                "status": "verified",
+                "manifest_path": str(manifest_path),
+                "artifact_path": str(artifact_path),
+                "artifact_sha256_expected": str(expected_sha256),
+                "artifact_sha256_observed": observed_sha256,
+                "checksum_match": True,
+            }
+        },
+    )
 
 
 def list_target_inventory_entries(path: Path) -> list[str]:
@@ -3648,6 +4680,24 @@ def is_proxy_path_error(error_detail: str) -> bool:
     )
 
 
+def classify_http_failure_machine_error(error_detail: str) -> str | None:
+    lowered = error_detail.lower()
+    if "auth_unavailable" in lowered:
+        return "AUTH_UNAVAILABLE"
+    if "model_cooldown" in lowered:
+        return "MODEL_COOLDOWN"
+    if "usage_limit_reached" in lowered or "quota" in lowered:
+        return "QUOTA_EXHAUSTED"
+    if (
+        "model_unavailable" in lowered
+        or "model_not_found" in lowered
+        or "model not found" in lowered
+        or "does not exist" in lowered
+    ):
+        return "MODEL_UNAVAILABLE"
+    return None
+
+
 def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
     try:
         parsed = urllib.parse.urlparse(candidate)
@@ -3678,7 +4728,7 @@ def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
             continue
         candidates.append(candidate)
         seen.add(candidate)
-        if len(candidates) >= 8:
+        if len(candidates) >= PROXY_REPROBE_MAX_CANDIDATES:
             break
     return candidates
 
@@ -3691,24 +4741,46 @@ def probe_proxy_candidate(candidate: str) -> bool:
     return socket_is_listening(host, port)
 
 
-def run_proxy_reprobe(state: dict[str, Any]) -> dict[str, Any]:
-    candidates = get_proxy_reprobe_candidates(state)
-    for candidate in candidates:
-        if probe_proxy_candidate(candidate):
-            return {
-                "attempted": True,
-                "candidate_count": len(candidates),
-                "candidates": candidates,
-                "found_candidate": True,
-                "working_candidate": candidate,
-            }
+def build_proxy_reprobe_result(
+    candidates: list[str],
+    *,
+    found_candidate: bool,
+    working_candidate: str | None,
+    probed_candidate_count: int,
+) -> dict[str, Any]:
     return {
         "attempted": bool(candidates),
         "candidate_count": len(candidates),
         "candidates": candidates,
-        "found_candidate": False,
-        "working_candidate": None,
+        "found_candidate": found_candidate,
+        "working_candidate": working_candidate,
+        "probed_candidate_count": probed_candidate_count,
+        "candidate_budget": PROXY_REPROBE_MAX_CANDIDATES,
+        "probe_concurrency_limit": PROXY_REPROBE_CONCURRENCY_LIMIT,
+        "probe_depth": PROXY_REPROBE_DEPTH,
+        "probe_strategy": PROXY_REPROBE_STRATEGY,
+        "candidate_source_order": list(PROXY_REPROBE_CANDIDATE_SOURCE_ORDER),
     }
+
+
+def run_proxy_reprobe(state: dict[str, Any]) -> dict[str, Any]:
+    candidates = get_proxy_reprobe_candidates(state)
+    probed_candidate_count = 0
+    for candidate in candidates:
+        probed_candidate_count += 1
+        if probe_proxy_candidate(candidate):
+            return build_proxy_reprobe_result(
+                candidates,
+                found_candidate=True,
+                working_candidate=candidate,
+                probed_candidate_count=probed_candidate_count,
+            )
+    return build_proxy_reprobe_result(
+        candidates,
+        found_candidate=False,
+        working_candidate=None,
+        probed_candidate_count=probed_candidate_count,
+    )
 
 
 def process_is_alive(pid_text: str) -> bool:
@@ -3781,10 +4853,47 @@ def reconcile_stable_recovery_success(
 
 @contextmanager
 def serialized_lock(paths: RuntimePaths):
+    lock_key = str(paths.lock_file.expanduser().resolve())
+    owner_pid = os.getpid()
+    owner_thread_id = threading.get_ident()
+    created_lock_file = False
+    reentrant = False
+
+    # Nested owner-surface calls inside one composite execution path may
+    # reenter the lock, but cross-thread attempts must still observe LOCK_HELD.
+    with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+        local_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+        if (
+            isinstance(local_owner, dict)
+            and local_owner.get("pid") == owner_pid
+            and local_owner.get("thread_id") == owner_thread_id
+        ):
+            local_owner["depth"] = int(local_owner.get("depth", 1)) + 1
+            reentrant = True
+
+    if reentrant:
+        try:
+            yield
+        finally:
+            with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+                nested_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+                if (
+                    isinstance(nested_owner, dict)
+                    and nested_owner.get("pid") == owner_pid
+                    and nested_owner.get("thread_id") == owner_thread_id
+                ):
+                    nested_owner["depth"] = max(
+                        0, int(nested_owner.get("depth", 1)) - 1
+                    )
+                    if nested_owner["depth"] == 0:
+                        SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
+        return
+
     paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
     while True:
         try:
             fd = os.open(paths.lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            created_lock_file = True
             break
         except FileExistsError:
             holder = read_text(paths.lock_file)
@@ -3799,9 +4908,30 @@ def serialized_lock(paths: RuntimePaths):
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(f"{os.getpid()}\n")
+        with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+            SERIALIZED_LOCK_LOCAL_OWNERS[lock_key] = {
+                "pid": owner_pid,
+                "thread_id": owner_thread_id,
+                "depth": 1,
+            }
         yield
     finally:
-        paths.lock_file.unlink(missing_ok=True)
+        release_lock_file = False
+        with SERIALIZED_LOCK_LOCAL_OWNERS_GUARD:
+            local_owner = SERIALIZED_LOCK_LOCAL_OWNERS.get(lock_key)
+            if (
+                isinstance(local_owner, dict)
+                and local_owner.get("pid") == owner_pid
+                and local_owner.get("thread_id") == owner_thread_id
+            ):
+                local_owner["depth"] = max(0, int(local_owner.get("depth", 1)) - 1)
+                if local_owner["depth"] == 0:
+                    SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
+                    release_lock_file = True
+            elif created_lock_file:
+                release_lock_file = True
+        if release_lock_file:
+            paths.lock_file.unlink(missing_ok=True)
 
 
 def build_command_payload(
@@ -3838,6 +4968,7 @@ def summarize_status(
     desired_mode = get_desired_mode(paths)
     health_payload = health_payload or run_healthcheck(paths)
     registry = read_json(paths.registry_file)
+    pool_counts = summarize_registry_pool_counts(registry)
     policy_drift_observed = get_stable_policy_drift(paths, registry)
     state = read_json(paths.state_file, required=False)
     stable_runtime_consumer = build_stable_runtime_consumer_contract(
@@ -3885,15 +5016,46 @@ def summarize_status(
     if not isinstance(proxy_reprobe_adoption_result, dict):
         proxy_reprobe_adoption_result = None
     pool_summary = {
-        "active": int(state.get("active_count", 0) or 0),
-        "reserve": int(state.get("reserve_count", 0) or 0),
-        "retired": int(state.get("retired_count", 0) or 0),
+        "active": int(pool_counts.get("active", 0) or 0),
+        "reserve": int(pool_counts.get("reserve", 0) or 0),
+        "retired": int(pool_counts.get("retired", 0) or 0),
         "healthy": int(state.get("healthy_count", 0) or 0),
         "degraded": int(state.get("degraded_count", 0) or 0),
         "down": int(state.get("down_count", 0) or 0),
         "selected_backend_ids": state.get("selected_backend_ids") or [],
         "backend_count": len(registry.get("backends") or []),
     }
+    auth_pool_hygiene = health_payload.get("auth_pool_hygiene")
+    if isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene = {
+            **auth_pool_hygiene,
+            "delegated_from_status": True,
+        }
+    else:
+        auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
+        auth_pool_hygiene["delegated_from_status"] = False
+    launch_readiness = health_payload.get("launch_readiness")
+    if isinstance(launch_readiness, dict):
+        launch_readiness = {
+            **launch_readiness,
+            "delegated_from_status": True,
+        }
+    runtime_guardrails = health_payload.get("runtime_guardrails")
+    if isinstance(runtime_guardrails, dict):
+        runtime_guardrails = {
+            **runtime_guardrails,
+            "delegated_from_status": True,
+            "owner_command_surface": "status --json",
+        }
+    else:
+        runtime_guardrails = build_runtime_guardrail_surface(
+            paths,
+            launch_readiness=launch_readiness if isinstance(launch_readiness, dict) else None,
+            auth_pool_hygiene=auth_pool_hygiene if isinstance(auth_pool_hygiene, dict) else None,
+            recovery_result=recovery_result if isinstance(recovery_result, dict) else None,
+        )
+        runtime_guardrails["delegated_from_status"] = False
+        runtime_guardrails["owner_command_surface"] = "status --json"
 
     return build_command_payload(
         ok=health_payload["status"] == "ok",
@@ -3912,6 +5074,9 @@ def summarize_status(
             "desired_mode": desired_mode,
             "effective_mode": health_payload["effective_mode"],
             "endpoint": health_payload["endpoint"],
+            "configured_model": health_payload.get("configured_model"),
+            "requested_model": health_payload.get("requested_model"),
+            "configured_proxy_url": health_payload.get("configured_proxy_url"),
             "current_proxy_url": current_proxy_url,
             "current_proxy_adoption_contract": current_proxy_adoption_contract,
             "last_known_good_proxy_contract": last_known_good_proxy_contract,
@@ -3924,12 +5089,31 @@ def summarize_status(
                 else {}
             ),
             "pool_summary": pool_summary,
+            "auth_pool_hygiene": auth_pool_hygiene,
             "policy_drift": policy_drift,
             "policy_drift_observed": policy_drift_observed,
             "stable_runtime_consumer": stable_runtime_consumer,
+            **(
+                {
+                    "launch_readiness": launch_readiness,
+                }
+                if isinstance(launch_readiness, dict)
+                else {}
+            ),
+            **(
+                {
+                    "runtime_guardrails": runtime_guardrails,
+                }
+                if isinstance(runtime_guardrails, dict)
+                else {}
+            ),
             "registry_identity_summary": summarize_registry_identity(registry_identity),
             "claim_gate": get_claim_gate(policy_drift, registry_identity),
-            "last_error": health_payload.get("last_error", state.get("last_error", "")),
+            "last_error": (
+                ""
+                if health_payload["status"] == "ok"
+                else health_payload.get("last_error", state.get("last_error", ""))
+            ),
             "attestation_summary": {
                 "status": health_payload["status"],
                 "machine_error_code": health_payload["machine_error_code"],
@@ -3944,16 +5128,19 @@ def observe_runtime_precondition_for_launch_client(
     paths: RuntimePaths, model: str | None = None
 ) -> dict[str, Any]:
     state = read_json(paths.state_file, required=False)
+    registry = read_json(paths.registry_file)
+    auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
     host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
     configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    configured_model = get_model(paths)
     listener_ok = socket_is_listening(host, port)
     reported_effective_mode = reconcile_effective_mode_for_reporting(
         effective_mode, listener_ok=listener_ok
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
-    model_name = model or get_model(paths)
+    model_name = model or configured_model
     models_ok = False
     responses_ok = False
     error_detail = ""
@@ -3983,16 +5170,39 @@ def observe_runtime_precondition_for_launch_client(
     effective_mode_artifact = read_effective_mode_artifact(paths)
     expected_base_url = reported_endpoint
     base_url_match = configured_base_url == expected_base_url
+    current_proxy_url = str(state.get("current_proxy_url", ""))
+    configured_proxy_url = get_configured_proxy_url(paths, reported_effective_mode)
+    model_match = model_name == configured_model
+    proxy_url_match = (
+        not configured_proxy_url
+        or not current_proxy_url
+        or configured_proxy_url == current_proxy_url
+    )
     effective_mode_match = (
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    if not error_detail:
+        error_detail = truth_drift_detail(
+            configured_model=configured_model,
+            requested_model=model_name,
+            model_match=model_match,
+            configured_proxy_url=configured_proxy_url,
+            current_proxy_url=current_proxy_url,
+            proxy_url_match=proxy_url_match,
+        )
     attestation = {
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "model_match": model_match,
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
+        "configured_proxy_url": configured_proxy_url,
+        "current_proxy_url": current_proxy_url,
+        "proxy_url_match": proxy_url_match,
         "selected_backends_digest": get_selected_backends_digest(state),
         "observed_at_utc": now_iso(),
         "runtime_version": str(
@@ -4002,10 +5212,40 @@ def observe_runtime_precondition_for_launch_client(
     }
 
     if not listener_ok:
+        machine_error_code = "LISTENER_DOWN"
+    elif (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
+        machine_error_code = "OK"
+    else:
+        machine_error_code = (
+            classify_http_failure_machine_error(error_detail) or "ATTESTATION_FAILED"
+        )
+    launch_readiness = build_launch_readiness_surface(
+        owner_command_surface="launch client precondition",
+        delegated_from_status=False,
+        listener_ok=listener_ok,
+        models_ok=models_ok,
+        responses_ok=responses_ok,
+        base_url_match=base_url_match,
+        effective_mode_match=effective_mode_match,
+        model_match=model_match,
+        proxy_url_match=proxy_url_match,
+        machine_error_code=machine_error_code,
+        error_detail=error_detail,
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+
+    if not listener_ok:
         return build_command_payload(
             ok=False,
             human_message=f"Listener is not reachable at {attestation_endpoint}.",
-            machine_error_code="LISTENER_DOWN",
+            machine_error_code=machine_error_code,
             liveness="down",
             severity="recoverable",
             operator_action="retry",
@@ -4015,16 +5255,25 @@ def observe_runtime_precondition_for_launch_client(
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
                 "attestation": attestation,
+                "auth_pool_hygiene": auth_pool_hygiene,
+                "launch_readiness": launch_readiness,
                 "last_error": error_detail
                 or f"Listener is not reachable at {attestation_endpoint}.",
             },
         )
 
-    if models_ok and responses_ok and base_url_match and effective_mode_match:
+    if (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
         return build_command_payload(
             ok=True,
             human_message="Runtime precondition passed for host-client launch.",
-            machine_error_code="OK",
+            machine_error_code=machine_error_code,
             liveness="healthy",
             severity="recoverable",
             operator_action="none",
@@ -4034,6 +5283,8 @@ def observe_runtime_precondition_for_launch_client(
                 "effective_mode": reported_effective_mode,
                 "endpoint": reported_endpoint,
                 "attestation": attestation,
+                "auth_pool_hygiene": auth_pool_hygiene,
+                "launch_readiness": launch_readiness,
                 "last_error": "",
             },
         )
@@ -4051,6 +5302,8 @@ def observe_runtime_precondition_for_launch_client(
             "effective_mode": reported_effective_mode,
             "endpoint": reported_endpoint,
             "attestation": attestation,
+            "auth_pool_hygiene": auth_pool_hygiene,
+            "launch_readiness": launch_readiness,
             "last_error": error_detail or "Runtime precondition failed one or more checks.",
         },
     )
@@ -4077,6 +5330,7 @@ def run_healthcheck(
         effective_mode, listener_ok=listener_ok
     )
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    successful_reconcile_detail = ""
     managed_preflight_failure_candidate = effective_mode == "managed" and not listener_ok
 
     stale_managed_residue = (
@@ -4105,6 +5359,7 @@ def run_healthcheck(
             error_message=error_message,
             stable_listener_ok=stable_listener_ok,
         )
+        successful_reconcile_detail = str(state.get("last_error", ""))
         effective_mode = get_effective_mode(paths, state)
         host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
         configured_base_url = read_toml_string(paths.config_toml, "base_url")
@@ -4124,6 +5379,8 @@ def run_healthcheck(
             snapshot_refreshed=False,
             fallback_reason="",
             live_runtime_observation_confirmed=False,
+            confirmation_basis="",
+            effectful_claim_allowed=False,
         )
     recovery_attempt: StableRuntimeLaunchAttempt | None = None
     if allow_recovery:
@@ -4178,8 +5435,12 @@ def run_healthcheck(
 
     models_ok = False
     responses_ok = False
-    model_name = model or get_model(paths)
+    configured_model = get_model(paths)
+    model_name = model or configured_model
     error_detail = ""
+    registry = read_json(paths.registry_file)
+    auth_pool_hygiene = summarize_auth_pool_hygiene(registry, state)
+    current_proxy_url = str(state.get("current_proxy_url", ""))
     proxy_reprobe: dict[str, Any] | None = None
     proxy_reprobe_adoption_result: dict[str, Any] | None = None
 
@@ -4212,10 +5473,29 @@ def run_healthcheck(
     _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
     expected_base_url = reported_endpoint
     base_url_match = configured_base_url == expected_base_url
+    configured_proxy_url = get_configured_proxy_url(paths, reported_effective_mode)
+    current_proxy_truth_url = get_reported_current_proxy_url(
+        paths, state, reported_effective_mode
+    )
+    model_match = model_name == configured_model
+    proxy_url_match = (
+        not configured_proxy_url
+        or not current_proxy_truth_url
+        or configured_proxy_url == current_proxy_truth_url
+    )
     effective_mode_match = (
         state_effective_mode in {None, "", reported_effective_mode}
         and effective_mode_artifact == reported_effective_mode
     )
+    if not error_detail:
+        error_detail = truth_drift_detail(
+            configured_model=configured_model,
+            requested_model=model_name,
+            model_match=model_match,
+            configured_proxy_url=configured_proxy_url,
+            current_proxy_url=current_proxy_truth_url,
+            proxy_url_match=proxy_url_match,
+        )
 
     if not listener_ok:
         liveness = "down"
@@ -4230,7 +5510,14 @@ def run_healthcheck(
         else:
             human_message = f"Listener is not reachable at {attestation_endpoint}."
         ok = False
-    elif models_ok and responses_ok and base_url_match and effective_mode_match:
+    elif (
+        models_ok
+        and responses_ok
+        and base_url_match
+        and effective_mode_match
+        and model_match
+        and proxy_url_match
+    ):
         liveness = "healthy"
         severity = "recoverable"
         operator_action = "none"
@@ -4266,7 +5553,10 @@ def run_healthcheck(
                     "no bounded local proxy candidate is reachable."
                 )
         else:
-            machine_error_code = "ATTESTATION_FAILED"
+            machine_error_code = (
+                classify_http_failure_machine_error(error_detail)
+                or "ATTESTATION_FAILED"
+            )
             human_message = "Runtime attestation failed one or more checks."
         ok = False
 
@@ -4277,94 +5567,133 @@ def run_healthcheck(
         and proxy_reprobe["found_candidate"]
     ):
         working_candidate = str(proxy_reprobe["working_candidate"] or "")
-        activation_attempt = run_current_proxy_owner_path_activation(
-            paths, working_candidate
-        )
-        proxy_reprobe_adoption_result = {
-            "status": "owner_path_emitted",
-            "attempted": activation_attempt.activation_attempted,
-            "working_candidate": working_candidate,
-            "launcher_lane_eligibility": activation_attempt.launcher_lane_eligibility,
-            "launcher_readiness_status": activation_attempt.launcher_readiness_status,
-            "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
-            "prerequisite_materialized": activation_attempt.prerequisite_materialized,
-            "activation_attempted": activation_attempt.activation_attempted,
-            "activation_exit_code": activation_attempt.activation_exit_code,
-            "adoption_outcome": (
-                "launcher_lane_ineligible"
-                if not activation_attempt.activation_attempted
-                else "activation_failed"
-            ),
-            "current_proxy_url_rewritten": False,
-            "live_runtime_observation_confirmed": False,
-            "last_known_good_refreshed": False,
-        }
-        if (
-            activation_attempt.activation_attempted
-            and activation_attempt.activation_exit_code == 0
-        ):
-            reproof_payload = run_healthcheck(
-                paths,
-                model=model,
-                allow_recovery=False,
-                allow_last_known_good_proxy_write=False,
-                allow_current_proxy_auto_adoption=False,
+        # Keep activation and immediate reproof inside one serialized owner
+        # window so cross-thread mutations cannot interleave between them.
+        with serialized_lock(paths):
+            activation_attempt = run_current_proxy_owner_path_activation(
+                paths, working_candidate
             )
-            reproof_ok = (
-                reproof_payload["status"] == "ok"
-                and str(reproof_payload["effective_mode"]) == "managed"
-            )
-            state = read_json(paths.state_file, required=False)
-            reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
-            same_current_reconfirmed = (
-                activation_attempt.prior_current_proxy_url == working_candidate
-                and reproof_ok
-            )
-            candidate_adopted = (
-                activation_attempt.prior_current_proxy_url != working_candidate
-                and reproof_ok
-                and reproof_current_proxy_url == working_candidate
-            )
-            if same_current_reconfirmed or candidate_adopted:
-                attestation = reproof_payload["attestation"]
-                listener_ok = bool(attestation["listener_ok"])
-                models_ok = bool(attestation["models_ok"])
-                responses_ok = bool(attestation["responses_ok"])
-                effective_mode_match = bool(attestation["effective_mode_match"])
-                base_url_match = bool(attestation["base_url_match"])
-                error_detail = str(reproof_payload.get("last_error", ""))
-                effective_mode = str(reproof_payload["effective_mode"])
-                reported_effective_mode = effective_mode
-                _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
-                host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
-                configured_base_url = read_toml_string(paths.config_toml, "base_url")
-                liveness = str(reproof_payload["liveness"])
-                severity = str(reproof_payload["severity"])
-                operator_action = str(reproof_payload["operator_action"])
-                machine_error_code = str(reproof_payload["machine_error_code"])
-                human_message = str(reproof_payload["human_message"])
-                ok = True
-                proxy_reprobe_adoption_result["adoption_outcome"] = (
-                    "same_current_reconfirmed"
-                    if same_current_reconfirmed
-                    else "candidate_adopted"
+            proxy_reprobe_adoption_result = {
+                "status": "owner_path_emitted",
+                "attempted": activation_attempt.activation_attempted,
+                "working_candidate": working_candidate,
+                "launcher_lane_eligibility": activation_attempt.launcher_lane_eligibility,
+                "launcher_readiness_status": activation_attempt.launcher_readiness_status,
+                "handoff_env_var": CURRENT_PROXY_URL_HANDOFF_ENV,
+                "prerequisite_materialized": activation_attempt.prerequisite_materialized,
+                "activation_attempted": activation_attempt.activation_attempted,
+                "activation_exit_code": activation_attempt.activation_exit_code,
+                "adoption_outcome": (
+                    "launcher_lane_ineligible"
+                    if not activation_attempt.activation_attempted
+                    else "activation_failed"
+                ),
+                "current_proxy_url_rewritten": False,
+                "live_runtime_observation_confirmed": False,
+                "last_known_good_refreshed": False,
+            }
+            if (
+                activation_attempt.activation_attempted
+                and activation_attempt.activation_exit_code == 0
+            ):
+                reproof_payload = run_healthcheck(
+                    paths,
+                    model=model,
+                    allow_recovery=False,
+                    allow_last_known_good_proxy_write=False,
+                    allow_current_proxy_auto_adoption=False,
                 )
-                proxy_reprobe_adoption_result["current_proxy_url_rewritten"] = (
-                    candidate_adopted
+                reproof_ok = (
+                    reproof_payload["status"] == "ok"
+                    and str(reproof_payload["effective_mode"]) == "managed"
                 )
-                proxy_reprobe_adoption_result[
-                    "live_runtime_observation_confirmed"
-                ] = True
-            else:
-                with serialized_lock(paths):
+                state = read_json(paths.state_file, required=False)
+                reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
+                same_current_reconfirmed = (
+                    activation_attempt.prior_current_proxy_url == working_candidate
+                    and reproof_ok
+                    and reproof_current_proxy_url == working_candidate
+                )
+                candidate_adopted = (
+                    activation_attempt.prior_current_proxy_url != working_candidate
+                    and reproof_ok
+                    and reproof_current_proxy_url == working_candidate
+                )
+                if same_current_reconfirmed or candidate_adopted:
+                    attestation = reproof_payload["attestation"]
+                    listener_ok = bool(attestation["listener_ok"])
+                    models_ok = bool(attestation["models_ok"])
+                    responses_ok = bool(attestation["responses_ok"])
+                    effective_mode_match = bool(attestation["effective_mode_match"])
+                    base_url_match = bool(attestation["base_url_match"])
+                    error_detail = str(reproof_payload.get("last_error", ""))
+                    effective_mode = str(reproof_payload["effective_mode"])
+                    reported_effective_mode = effective_mode
+                    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+                    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                    liveness = str(reproof_payload["liveness"])
+                    severity = str(reproof_payload["severity"])
+                    operator_action = str(reproof_payload["operator_action"])
+                    machine_error_code = str(reproof_payload["machine_error_code"])
+                    human_message = str(reproof_payload["human_message"])
+                    ok = True
+                    proxy_reprobe_adoption_result["adoption_outcome"] = (
+                        "same_current_reconfirmed"
+                        if same_current_reconfirmed
+                        else "candidate_adopted"
+                    )
+                    proxy_reprobe_adoption_result["current_proxy_url_rewritten"] = (
+                        candidate_adopted
+                    )
+                    proxy_reprobe_adoption_result[
+                        "live_runtime_observation_confirmed"
+                    ] = True
+                else:
                     restore_current_proxy_owner_path_runtime_surfaces(
                         paths, activation_attempt.rollback_surface_snapshots
                     )
-                state = read_json(paths.state_file, required=False)
-                error_detail = str(reproof_payload.get("last_error", error_detail))
-                proxy_reprobe_adoption_result["adoption_outcome"] = (
-                    "live_reproof_failed"
+                    state = read_json(paths.state_file, required=False)
+                    error_detail = str(reproof_payload.get("last_error", error_detail))
+                    proxy_reprobe_adoption_result["adoption_outcome"] = (
+                        "live_reproof_failed"
+                    )
+            elif (
+                paths.sync_script.exists()
+                and activation_attempt.launcher_lane_eligibility
+                not in {
+                    "default_path_present_repo_marker_invalid",
+                    "default_path_present_repo_marker_unrecognized",
+                }
+            ):
+                sync_recovery_result, sync_reproof_payload = (
+                    attempt_sync_current_proxy_recovery_under_lock(
+                        paths,
+                        working_candidate=working_candidate,
+                        prior_current_proxy_url=current_proxy_url,
+                    )
                 )
+                proxy_reprobe_adoption_result.update(sync_recovery_result)
+                if sync_reproof_payload is not None:
+                    state = read_json(paths.state_file, required=False)
+                    attestation = sync_reproof_payload["attestation"]
+                    listener_ok = bool(attestation["listener_ok"])
+                    models_ok = bool(attestation["models_ok"])
+                    responses_ok = bool(attestation["responses_ok"])
+                    effective_mode_match = bool(attestation["effective_mode_match"])
+                    base_url_match = bool(attestation["base_url_match"])
+                    error_detail = str(sync_reproof_payload.get("last_error", ""))
+                    effective_mode = str(sync_reproof_payload["effective_mode"])
+                    reported_effective_mode = effective_mode
+                    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+                    host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
+                    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+                    liveness = str(sync_reproof_payload["liveness"])
+                    severity = str(sync_reproof_payload["severity"])
+                    operator_action = str(sync_reproof_payload["operator_action"])
+                    machine_error_code = str(sync_reproof_payload["machine_error_code"])
+                    human_message = str(sync_reproof_payload["human_message"])
+                    ok = True
 
     snapshot_payload: dict[str, Any] | None = None
     if recovery_attempt is not None:
@@ -4388,6 +5717,8 @@ def run_healthcheck(
         fallback_reason = ""
         snapshot_refreshed = False
         live_runtime_observation_confirmed = ok and reported_effective_mode == "stable"
+        confirmation_basis = ""
+        effectful_claim_allowed = False
         if live_runtime_observation_confirmed:
             state = reconcile_stable_recovery_success(
                 paths, state, stable_endpoint=reported_endpoint
@@ -4397,6 +5728,10 @@ def run_healthcheck(
                 and recovery_attempt.launcher_exit_code == 0
             ):
                 recovery_outcome = "approved_target_recovered"
+                confirmation_basis = (
+                    "approved_target_activation_plus_live_runtime_observation"
+                )
+                effectful_claim_allowed = True
                 snapshot_payload = build_stable_runtime_consumer_snapshot_payload(
                     activation_method="process_local_env_override",
                     selected_config_file=str(paths.stable_runtime_generated_config_file),
@@ -4408,7 +5743,13 @@ def run_healthcheck(
                 recovery_selected_kind = "approved_repair_target"
                 recovery_selected_path = str(paths.repair_target_inventory_dir)
             else:
-                recovery_outcome = "observed_source_fallback_recovered"
+                recovery_outcome = "observed_source_live_recovered"
+                if recovery_attempt.activation_attempted:
+                    confirmation_basis = (
+                        "observed_source_live_runtime_observation_after_activation_attempt"
+                    )
+                else:
+                    confirmation_basis = "observed_source_live_runtime_observation"
                 if recovery_attempt.activation_attempted:
                     fallback_reason = (
                         "launcher_exit_nonzero"
@@ -4445,6 +5786,7 @@ def run_healthcheck(
                 if recovery_attempt.launcher_exit_code != 0
                 else "stable_listener_unreachable_after_recovery"
             )
+            confirmation_basis = "live_runtime_observation_not_confirmed"
         recovery_result = build_deterministic_stable_recovery_result(
             delegated_from_status=False,
             attempted=True,
@@ -4457,6 +5799,8 @@ def run_healthcheck(
             snapshot_refreshed=snapshot_refreshed,
             fallback_reason=fallback_reason,
             live_runtime_observation_confirmed=live_runtime_observation_confirmed,
+            confirmation_basis=confirmation_basis,
+            effectful_claim_allowed=effectful_claim_allowed,
         )
         if (
             not live_runtime_observation_confirmed
@@ -4485,7 +5829,9 @@ def run_healthcheck(
             attestation_ok=ok,
             reported_effective_mode=reported_effective_mode,
         )
-    current_proxy_url = str(state.get("current_proxy_url", ""))
+    current_proxy_url = get_reported_current_proxy_url(
+        paths, state, reported_effective_mode
+    )
     if proxy_reprobe_adoption_result is not None:
         proxy_reprobe_adoption_result["last_known_good_refreshed"] = (
             str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or "")
@@ -4494,28 +5840,78 @@ def run_healthcheck(
             != previous_last_known_good_proxy_observed_at
         )
     attestation = {
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "model_match": model_match,
         "listener_ok": listener_ok,
         "models_ok": models_ok,
         "responses_ok": responses_ok,
         "effective_mode_match": effective_mode_match,
         "base_url_match": base_url_match,
+        "configured_proxy_url": configured_proxy_url,
+        "current_proxy_url": current_proxy_url,
+        "proxy_url_match": proxy_url_match,
         "selected_backends_digest": get_selected_backends_digest(state),
         "observed_at_utc": now_iso(),
         "runtime_version": str(state.get("version", state.get("schema_version", "unknown"))),
         "attestation_source": "healthcheck --json",
     }
+    launch_readiness = build_launch_readiness_surface(
+        owner_command_surface="healthcheck --json",
+        delegated_from_status=False,
+        listener_ok=listener_ok,
+        models_ok=models_ok,
+        responses_ok=responses_ok,
+        base_url_match=base_url_match,
+        effective_mode_match=effective_mode_match,
+        model_match=model_match,
+        proxy_url_match=proxy_url_match,
+        machine_error_code=machine_error_code,
+        error_detail=(
+            ""
+            if ok
+            else error_detail
+            or (
+                "Missing or invalid runtime-effective-mode.txt"
+                if not effective_mode_artifact
+                else state.get("last_error", "")
+            )
+        ),
+        auth_pool_hygiene=auth_pool_hygiene,
+    )
+    runtime_guardrails = build_runtime_guardrail_surface(
+        paths,
+        launch_readiness=launch_readiness,
+        auth_pool_hygiene=auth_pool_hygiene,
+        recovery_result=recovery_result,
+    )
+    reported_last_error = (
+        successful_reconcile_detail
+        if ok and successful_reconcile_detail
+        else (
+            ""
+            if ok
+            else error_detail
+            or (
+                "Missing or invalid runtime-effective-mode.txt"
+                if not effective_mode_artifact
+                else state.get("last_error", "")
+            )
+        )
+    )
     extra = {
         "desired_mode": desired_mode,
         "effective_mode": reported_effective_mode,
         "endpoint": reported_endpoint,
+        "configured_model": configured_model,
+        "requested_model": model_name,
+        "configured_proxy_url": configured_proxy_url,
         "current_proxy_url": current_proxy_url,
+        "auth_pool_hygiene": auth_pool_hygiene,
         "attestation": attestation,
-        "last_error": error_detail
-        or (
-            "Missing or invalid runtime-effective-mode.txt"
-            if not effective_mode_artifact
-            else state.get("last_error", "")
-        ),
+        "launch_readiness": launch_readiness,
+        "runtime_guardrails": runtime_guardrails,
+        "last_error": reported_last_error,
     }
     if proxy_reprobe is not None:
         extra["proxy_reprobe"] = proxy_reprobe
@@ -4647,15 +6043,19 @@ def detect_changed_files_by_state(
 
 
 def get_launch_stabilization_seconds() -> float:
-    raw = os.environ.get("WBP_LAUNCH_STABILIZATION_SECONDS", "30")
+    raw = os.environ.get("WBP_LAUNCH_STABILIZATION_SECONDS", "1")
     try:
         value = float(raw)
     except ValueError:
-        return 30.0
-    return value if value >= 0 else 30.0
+        return 1.0
+    return value if value >= 0 else 1.0
 
 
-def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
+def run_launch_smoke(
+    paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     ensure_repo_owned_default_launcher_consumer(paths)
     if not paths.launcher_script.exists():
@@ -4739,7 +6139,9 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
                 fallback_reason="",
             )
     if snapshot_payload is not None:
-        write_stable_runtime_consumer_snapshot(paths, snapshot_payload)
+        write_stable_runtime_consumer_snapshot(
+            paths, snapshot_payload, lock_acquired=lock_acquired
+        )
     changed_files = detect_changed_files(
         before,
         runtime_write_surface_candidates(paths),
@@ -4773,6 +6175,9 @@ def run_launch_smoke(paths: RuntimePaths) -> dict[str, Any]:
             "stable_runtime_consumer": status_payload.get(
                 "stable_runtime_consumer", {}
             ),
+            "auth_pool_hygiene": status_payload.get("auth_pool_hygiene", {}),
+            "launch_readiness": status_payload.get("launch_readiness", {}),
+            "runtime_guardrails": status_payload.get("runtime_guardrails", {}),
             "attestation_summary": status_payload.get("attestation_summary", {}),
             "last_error": status_payload.get("last_error", ""),
             "launch_mode": "smoke",
@@ -4866,15 +6271,38 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             exit_code=exc.exit_code,
         )
     status_observed = summarize_owner_path_status_observation(status_payload)
+    launch_readiness = status_payload.get("launch_readiness")
+    auth_pool_hygiene = status_payload.get("auth_pool_hygiene")
+    runtime_guardrails = status_payload.get("runtime_guardrails")
+    if not isinstance(runtime_guardrails, dict):
+        recovery_result = None
+        stable_runtime_consumer = status_payload.get("stable_runtime_consumer")
+        if isinstance(stable_runtime_consumer, dict):
+            nested_recovery = stable_runtime_consumer.get(
+                "deterministic_stable_recovery_result"
+            )
+            if isinstance(nested_recovery, dict):
+                recovery_result = nested_recovery
+        runtime_guardrails = build_runtime_guardrail_surface(
+            paths,
+            launch_readiness=launch_readiness if isinstance(launch_readiness, dict) else None,
+            auth_pool_hygiene=auth_pool_hygiene if isinstance(auth_pool_hygiene, dict) else None,
+            recovery_result=recovery_result,
+        )
+        runtime_guardrails["delegated_from_status"] = False
+        runtime_guardrails["owner_command_surface"] = "launch client --json"
+    runtime_precondition_status = (
+        str(launch_readiness.get("status"))
+        if isinstance(launch_readiness, dict)
+        else ("ready" if status_payload["status"] == "ok" else "blocked")
+    )
     client_launch_result: dict[str, Any] = {
         "status": "runtime_precondition_checked",
         "attempted": True,
         "client_path": str(client_path),
         "client_path_kind": client_path_kind,
         "runtime_precondition_checked": True,
-        "runtime_precondition_status": (
-            "ok" if status_payload["status"] == "ok" else "failed"
-        ),
+        "runtime_precondition_status": runtime_precondition_status,
         "effective_mode_observed": str(status_payload.get("effective_mode", "")),
         "endpoint_observed": str(status_payload.get("endpoint", "")),
         "profile_context": profile_context,
@@ -4905,6 +6333,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "launch_readiness": launch_readiness,
+                    }
+                    if isinstance(launch_readiness, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=int(status_payload.get("exit_code", 1) or 1),
         )
@@ -4950,6 +6399,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "launch_readiness": launch_readiness,
+                    }
+                    if isinstance(launch_readiness, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=exc.exit_code,
         )
@@ -4990,6 +6460,20 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "endpoint": str(status_payload.get("endpoint", "")),
                 "client_launch_result": client_launch_result,
                 "status_observed": status_observed,
+                **(
+                    {
+                        "auth_pool_hygiene": auth_pool_hygiene,
+                    }
+                    if isinstance(auth_pool_hygiene, dict)
+                    else {}
+                ),
+                **(
+                    {
+                        "runtime_guardrails": runtime_guardrails,
+                    }
+                    if isinstance(runtime_guardrails, dict)
+                    else {}
+                ),
             },
             exit_code=(
                 int(dispatch_exit_code) if isinstance(dispatch_exit_code, int) else 1
@@ -5010,6 +6494,27 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             "endpoint": str(status_payload.get("endpoint", "")),
             "client_launch_result": client_launch_result,
             "status_observed": status_observed,
+            **(
+                {
+                    "auth_pool_hygiene": auth_pool_hygiene,
+                }
+                if isinstance(auth_pool_hygiene, dict)
+                else {}
+            ),
+            **(
+                {
+                    "launch_readiness": launch_readiness,
+                }
+                if isinstance(launch_readiness, dict)
+                else {}
+            ),
+            **(
+                {
+                    "runtime_guardrails": runtime_guardrails,
+                }
+                if isinstance(runtime_guardrails, dict)
+                else {}
+            ),
         },
     )
 
@@ -5131,7 +6636,11 @@ def list_accounts(paths: RuntimePaths) -> dict[str, Any]:
     )
 
 
-def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
+def run_rollout_rotation_inspect(
+    paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     evidence_result: dict[str, Any] = {
         "schema_version": ROTATION_EVIDENCE_SCHEMA_VERSION,
         "status": "owner_path_emitted",
@@ -5182,7 +6691,8 @@ def run_rollout_rotation_inspect(paths: RuntimePaths) -> dict[str, Any]:
         "final_outcome": "pending_observation",
     }
 
-    with serialized_lock(paths):
+    observation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with observation_lock:
         registry = read_json(paths.registry_file)
         state = read_json(paths.state_file, required=False)
         registry_identity = get_registry_identity(registry)
@@ -5983,12 +7493,8 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     registry = read_json(paths.registry_file)
     state = read_json(paths.state_file, required=False)
     observed_at_utc = now_iso()
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-        allow_stable_fallback_write=False,
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(
+        paths, allow_stable_fallback_write=False
     )
     status_payload = summarize_status(paths, health_payload=health_payload)
     accounts_payload = list_accounts(paths)
@@ -6133,6 +7639,7 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         "runtime_version": runtime_version,
         "environment_note": "local_mac_control_layer_evidence_packet",
         "runtime_attestation_status": runtime_attestation_status,
+        "runtime_attestation_retry_summary": healthcheck_retry,
         "strict_json_command_api_status": strict_json_status,
         "state_serialization_status": state_serialization_status,
         "rotation_evidence_status": rotation_status,
@@ -6266,7 +7773,367 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
     )
 
 
-def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+def summarize_rollout_posture_candidate_classes(
+    registry: dict[str, Any],
+) -> dict[str, list[str]]:
+    classes: dict[str, list[str]] = {
+        "active_live_capable": [],
+        "reserve_live_capable": [],
+        "active_quota_exhausted": [],
+        "reserve_quota_exhausted": [],
+        "active_auth_invalid": [],
+        "reserve_auth_invalid": [],
+        "active_cooldown_only": [],
+        "reserve_cooldown_only": [],
+        "active_unknown_unverified": [],
+        "reserve_unknown_unverified": [],
+        "active_excluded": [],
+        "reserve_excluded": [],
+    }
+    for backend in registry.get("backends", []):
+        backend_id = str(backend.get("id") or "").strip()
+        if not backend_id:
+            continue
+        pool = str(backend.get("pool", ""))
+        if pool not in {"active", "reserve"}:
+            continue
+        eligibility_class, _ = classify_backend_stage_posture_eligibility(backend)
+        bucket = f"{pool}_{eligibility_class}"
+        if bucket in classes:
+            classes[bucket].append(backend_id)
+    for backend_ids in classes.values():
+        backend_ids.sort()
+    return classes
+
+
+def summarize_rollout_posture_runtime_truth(
+    paths: RuntimePaths,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    desired_mode = get_desired_mode(paths)
+    effective_mode = get_effective_mode(paths, state)
+    host, port, endpoint = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    selected_backend_ids = sorted(
+        str(item).strip()
+        for item in state.get("selected_backend_ids", []) or []
+        if str(item).strip()
+    )
+    return {
+        "surface": "rollout posture inspect",
+        "read_only": True,
+        "live_attestation_checked": False,
+        "desired_mode": desired_mode,
+        "state_effective_mode": str(state.get("effective_mode", "unknown")),
+        "effective_mode": reported_effective_mode,
+        "endpoint": reported_endpoint,
+        "configured_base_url": configured_base_url,
+        "base_url_match": configured_base_url == reported_endpoint,
+        "listener_host": host,
+        "listener_port": port,
+        "listener_ok": listener_ok,
+        "state_status": str(state.get("status", "unknown")),
+        "state_active_count": coerce_nonnegative_int(state.get("active_count")),
+        "state_reserve_count": coerce_nonnegative_int(state.get("reserve_count")),
+        "selected_backend_ids": selected_backend_ids,
+        "state_last_error_present": bool(str(state.get("last_error", "")).strip()),
+        "required_live_prechecks": [
+            "status --json",
+            "healthcheck --json",
+            "rollout rotation inspect --json",
+        ],
+    }
+
+
+def run_rollout_posture_inspect(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+    requested_stage = str(stage).strip()
+    stage_advance_config = {
+        "15": {"source_stage": "10"},
+        "20": {"source_stage": "15"},
+    }
+    posture_result: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_stage": requested_stage,
+        "source_stage": "",
+        "classification": "pending",
+        "blocker_code": "PENDING",
+        "pool_count_summary": {},
+        "candidate_summary": {},
+        "runtime_truth_summary": {},
+        "policy_stage_summary": {},
+        "rotation_summary": {},
+        "normalization_decision_packet": {},
+        "final_outcome": "pending_observation",
+    }
+
+    def build_posture_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str = "none",
+        severity: str = "recoverable",
+        exit_code: int | None = None,
+    ) -> dict[str, Any]:
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=[],
+            extra={"rollout_posture_result": posture_result},
+            exit_code=exit_code,
+        )
+
+    config = stage_advance_config.get(requested_stage)
+    if config is None:
+        posture_result["classification"] = "UNSUPPORTED_TARGET_STAGE"
+        posture_result["blocker_code"] = "STAGE_ADVANCE_UNSUPPORTED_STAGE"
+        posture_result["final_outcome"] = "unsupported_target_stage"
+        return build_posture_payload(
+            ok=False,
+            human_message="Rollout posture inspect supports target stages 15 and 20.",
+            machine_error_code="STAGE_ADVANCE_UNSUPPORTED_STAGE",
+            operator_action="user_action",
+        )
+
+    source_stage = str(config["source_stage"])
+    posture_result["source_stage"] = source_stage
+    source_policy = dict(STAGED_POOL_POLICY_PACKETS[source_stage])
+    target_policy = dict(STAGED_POOL_POLICY_PACKETS[requested_stage])
+    source_active_target = int(source_policy["active_target"])
+    source_reserve_target = int(source_policy["reserve_target"])
+    target_active_target = int(target_policy["active_target"])
+    target_reserve_target = int(target_policy["reserve_target"])
+
+    registry = read_json(paths.registry_file)
+    state = read_json(paths.state_file, required=False)
+    observed_stage = observe_current_stage_from_pool_policy(registry)
+    current_stage = str(observed_stage.get("observed_stage", ""))
+    pool_counts = summarize_registry_pool_counts(registry)
+    active_count = int(pool_counts.get("active", 0) or 0)
+    reserve_count = int(pool_counts.get("reserve", 0) or 0)
+    retired_count = int(pool_counts.get("retired", 0) or 0)
+    managed_pool_count = active_count + reserve_count + retired_count
+    candidate_classes = summarize_rollout_posture_candidate_classes(registry)
+    active_live_capable_ids = list(candidate_classes["active_live_capable"])
+    reserve_live_capable_ids = list(candidate_classes["reserve_live_capable"])
+    active_overflow_live_capable_ids = (
+        active_live_capable_ids[source_active_target:]
+        if len(active_live_capable_ids) > source_active_target
+        else []
+    )
+    reserve_candidate_id = (
+        reserve_live_capable_ids[0]
+        if reserve_live_capable_ids
+        else (active_overflow_live_capable_ids[0] if active_overflow_live_capable_ids else "")
+    )
+    selected_backend_ids = sorted(
+        str(item).strip()
+        for item in state.get("selected_backend_ids", []) or []
+        if str(item).strip()
+    )
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    protected_active = active_live_capable_ids[:source_active_target]
+    hold_set = sorted(
+        set(candidate_classes["active_quota_exhausted"])
+        | set(candidate_classes["active_auth_invalid"])
+        | set(candidate_classes["active_cooldown_only"])
+        | set(candidate_classes["active_unknown_unverified"])
+    )
+    do_not_touch = sorted(set(protected_active) | set(selected_backend_ids))
+
+    posture_result["pool_count_summary"] = {
+        "active_count": active_count,
+        "reserve_count": reserve_count,
+        "retired_count": retired_count,
+        "managed_pool_count": managed_pool_count,
+        "source_active_target": source_active_target,
+        "source_reserve_target": source_reserve_target,
+        "target_active_target": target_active_target,
+        "target_reserve_target": target_reserve_target,
+    }
+    posture_result["candidate_summary"] = {
+        **candidate_classes,
+        "active_live_capable_count": len(active_live_capable_ids),
+        "reserve_live_capable_count": len(reserve_live_capable_ids),
+        "active_overflow_live_capable_ids": active_overflow_live_capable_ids,
+        "selected_backend_ids": selected_backend_ids,
+        "reserve_candidate_id": reserve_candidate_id,
+    }
+    posture_result["runtime_truth_summary"] = summarize_rollout_posture_runtime_truth(
+        paths, state
+    )
+    posture_result["policy_stage_summary"] = {
+        **observed_stage,
+        "source_stage": source_stage,
+        "requested_stage": requested_stage,
+        "source_policy": source_policy,
+        "target_policy": target_policy,
+    }
+    posture_result["rotation_summary"] = {
+        "status": rotation_payload.get("status"),
+        "machine_error_code": rotation_payload.get("machine_error_code"),
+        "participation_status": rotation_status,
+        "evidence_status": rotation_result.get("evidence_status"),
+        "evidence_reason": rotation_result.get("evidence_reason"),
+        "selected_backend_snapshot_present": rotation_result.get(
+            "selected_backend_snapshot_present"
+        ),
+        "selected_backend_snapshot_validation_status": rotation_result.get(
+            "selected_backend_snapshot_validation_status"
+        ),
+        "selected_backend_ids_observed": rotation_result.get(
+            "selected_backend_ids_observed", []
+        ),
+        "active_routing_candidate_ids_observed": rotation_result.get(
+            "active_routing_candidate_ids_observed", []
+        ),
+    }
+    posture_result["normalization_decision_packet"] = {
+        "protected_active": protected_active,
+        "reserve_candidate": reserve_candidate_id,
+        "reserve_set": active_overflow_live_capable_ids,
+        "hold_set": hold_set,
+        "retire_set": [],
+        "do_not_touch": do_not_touch,
+        "expected_source_posture_after_normalization": {
+            "active_window_target": source_active_target,
+            "reserve_target": source_reserve_target,
+            "explicit_reserve_candidate_required": True,
+        },
+        "expected_target_posture_after_stage_advance": {
+            "active_window_target": target_active_target,
+            "reserve_target": target_reserve_target,
+            "stage_advance_candidate": reserve_candidate_id,
+        },
+    }
+
+    if observed_stage.get("status") != "matched" or current_stage not in {
+        source_stage,
+        requested_stage,
+    }:
+        posture_result["classification"] = "POLICY_STAGE_NOT_CANONICAL"
+        posture_result["blocker_code"] = "STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL"
+        posture_result["final_outcome"] = "blocked_by_policy_stage"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because policy stage is not canonical "
+                "for the requested advance target."
+            ),
+            machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
+            operator_action="user_action",
+        )
+
+    if current_stage == requested_stage:
+        if active_count == target_active_target and reserve_count == target_reserve_target:
+            posture_result["classification"] = "READY_ALREADY_ON_TARGET"
+            posture_result["blocker_code"] = "OK"
+            posture_result["final_outcome"] = "target_stage_already_satisfied"
+            return build_posture_payload(
+                ok=True,
+                human_message="Rollout posture is already on the requested target stage.",
+                machine_error_code="OK",
+            )
+        posture_result["classification"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["blocker_code"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["final_outcome"] = "target_stage_posture_needs_normalization"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is on the requested target stage but lifecycle "
+                "posture is not aligned with the canonical target window."
+            ),
+            machine_error_code="LIVE_POSTURE_DRIFT_ONLY",
+            operator_action="user_action",
+        )
+
+    if len(active_live_capable_ids) < source_active_target:
+        posture_result["classification"] = "INSUFFICIENT_ELIGIBLE_POOL"
+        posture_result["blocker_code"] = "INSUFFICIENT_ELIGIBLE_POOL"
+        posture_result["final_outcome"] = "insufficient_source_stage_live_capable_pool"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because source-stage live-capable active "
+                "pool is insufficient."
+            ),
+            machine_error_code="INSUFFICIENT_ELIGIBLE_POOL",
+            operator_action="user_action",
+        )
+
+    if active_count > source_active_target:
+        posture_result["classification"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["blocker_code"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["final_outcome"] = "source_stage_overfull_but_normalizable"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture has enough eligible inventory, but active posture "
+                "is over the source active window and needs normalization first."
+            ),
+            machine_error_code="LIVE_POSTURE_DRIFT_ONLY",
+            operator_action="user_action",
+        )
+
+    if not reserve_candidate_id:
+        posture_result["classification"] = "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        posture_result["blocker_code"] = "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        posture_result["final_outcome"] = "reserve_candidate_missing"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because no explicit live-capable reserve "
+                "candidate is available."
+            ),
+            machine_error_code="RESERVE_CANDIDATE_NOT_IDENTIFIED",
+            operator_action="user_action",
+        )
+
+    if rotation_status != "available":
+        posture_result["classification"] = "ROTATION_EVIDENCE_INSUFFICIENT"
+        posture_result["blocker_code"] = "ROTATION_EVIDENCE_INSUFFICIENT"
+        posture_result["final_outcome"] = "rotation_evidence_not_available"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because bounded rotation evidence is "
+                "not available."
+            ),
+            machine_error_code="ROTATION_EVIDENCE_INSUFFICIENT",
+            operator_action="user_action",
+        )
+
+    posture_result["classification"] = "READY_FOR_STAGE_ADVANCE"
+    posture_result["blocker_code"] = "OK"
+    posture_result["final_outcome"] = "ready_for_explicit_reserve_stage_advance"
+    return build_posture_payload(
+        ok=True,
+        human_message=(
+            "Rollout posture is ready for one explicit reserve-first stage advance."
+        ),
+        machine_error_code="OK",
+    )
+
+
+def run_rollout_stage_prove(
+    paths: RuntimePaths,
+    stage: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     requested_stage_label = str(stage).strip()
     stage_proof_result: dict[str, Any] = {
@@ -6382,7 +8249,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
     rotation_status = str(rotation_result.get("participation_status", "unknown"))
     active_pool_count_observed = coerce_nonnegative_int(
@@ -6461,11 +8330,8 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    pre_health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
+    pre_health_payload, pre_healthcheck_retry = run_rollout_attestation_healthcheck(
+        paths
     )
     pre_status_payload = summarize_status(paths, health_payload=pre_health_payload)
     pre_pool_summary = pre_status_payload.get("pool_summary", {})
@@ -6502,6 +8368,7 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
                     "last_known_good_proxy", {}
                 ),
             },
+            "pre_smoke_healthcheck_retry_summary": pre_healthcheck_retry,
             "pre_smoke_status_summary": {
                 "status": pre_status_payload.get("status"),
                 "machine_error_code": pre_status_payload.get("machine_error_code"),
@@ -6559,7 +8426,7 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             operator_action="user_action",
         )
 
-    smoke_payload = run_launch_smoke(paths)
+    smoke_payload = run_launch_smoke(paths, lock_acquired=lock_acquired)
     stage_proof_result["runtime_smoke_status"] = (
         "passed" if smoke_payload.get("status") == "ok" else "failed"
     )
@@ -6585,11 +8452,8 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             exit_code=int(smoke_payload.get("exit_code", 1) or 1),
         )
 
-    post_health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
+    post_health_payload, post_healthcheck_retry = (
+        run_rollout_attestation_healthcheck(paths)
     )
     post_status_payload = summarize_status(paths, health_payload=post_health_payload)
     post_rollback_readiness = summarize_stable_10_rollback_readiness(
@@ -6618,6 +8482,9 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
         ),
         "last_known_good_proxy": post_health_payload.get("last_known_good_proxy", {}),
     }
+    stage_proof_result["delegated_evidence"]["post_smoke_healthcheck_retry_summary"] = (
+        post_healthcheck_retry
+    )
     stage_proof_result["delegated_evidence"]["post_smoke_status_summary"] = {
         "status": post_status_payload.get("status"),
         "machine_error_code": post_status_payload.get("machine_error_code"),
@@ -6671,15 +8538,14 @@ def run_rollout_stage_prove(paths: RuntimePaths, stage: str) -> dict[str, Any]:
 
 def summarize_rollout_stage_advance_preflight(
     paths: RuntimePaths,
+    *,
+    lock_acquired: bool = False,
 ) -> tuple[bool, str, str, dict[str, Any]]:
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-    )
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(paths)
     status_payload = summarize_status(paths, health_payload=health_payload)
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
 
     attestation_ok = (
@@ -6701,6 +8567,7 @@ def summarize_rollout_stage_advance_preflight(
             "effective_mode": health_payload.get("effective_mode"),
             "liveness": health_payload.get("liveness"),
         },
+        "healthcheck_retry_summary": healthcheck_retry,
         "status_summary": summarize_owner_path_status_observation(status_payload),
         "rotation_summary": {
             "status": rotation_payload.get("status"),
@@ -6771,20 +8638,18 @@ def summarize_rollout_stage_advance_postflight(
     expected_stage: str,
     backend_id: str,
     active_pool_count_before: int,
+    lock_acquired: bool = False,
 ) -> tuple[bool, str, str, dict[str, Any]]:
     registry = read_json(paths.registry_file)
     observed_stage = observe_current_stage_from_pool_policy(registry)
     pool_counts = summarize_registry_pool_counts(registry)
     backend_matches = get_registry_backends_by_id(registry, backend_id)
     promoted_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    health_payload = run_healthcheck(
-        paths,
-        allow_recovery=False,
-        allow_last_known_good_proxy_write=False,
-        allow_current_proxy_auto_adoption=False,
-    )
+    health_payload, healthcheck_retry = run_rollout_attestation_healthcheck(paths)
     status_payload = summarize_status(paths, health_payload=health_payload)
-    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_payload = run_rollout_rotation_inspect(
+        paths, lock_acquired=lock_acquired
+    )
     rotation_result = rotation_payload.get("rotation_evidence_result", {})
     readiness = summarize_stable_10_rollback_readiness(health_payload, status_payload)
 
@@ -6851,6 +8716,7 @@ def summarize_rollout_stage_advance_postflight(
             "effective_mode": health_payload.get("effective_mode"),
             "liveness": health_payload.get("liveness"),
         },
+        "healthcheck_retry_summary": healthcheck_retry,
         "status_summary": summarize_owner_path_status_observation(status_payload),
         "rotation_summary": {
             "status": rotation_payload.get("status"),
@@ -6871,6 +8737,41 @@ def summarize_rollout_stage_advance_postflight(
     if not readiness_ok:
         return False, "STAGE_ADVANCE_POSTFLIGHT_READINESS_FAILED", "user_action", summary
     return True, "OK", "none", summary
+
+
+def allow_stage_advance_source_proof_with_one_explicit_reserve_candidate(
+    *,
+    proof_payload: dict[str, Any],
+    proof_result: dict[str, Any],
+    source_stage: str,
+    backend_precondition_status: str,
+    active_count_before: int,
+    reserve_count_before: int,
+) -> bool:
+    source_policy = STAGED_POOL_POLICY_PACKETS.get(source_stage, {})
+    source_active_target = coerce_nonnegative_int(source_policy.get("active_target"))
+    source_reserve_target = coerce_nonnegative_int(source_policy.get("reserve_target"))
+    active_pool_count_observed = coerce_nonnegative_int(
+        proof_result.get("active_pool_count_observed")
+    )
+    reserve_pool_count_observed = coerce_nonnegative_int(
+        proof_result.get("reserve_pool_count_observed")
+    )
+    return bool(
+        proof_payload.get("status") != "ok"
+        and proof_payload.get("machine_error_code")
+        == "STAGE_PROOF_RESERVE_POSTURE_MISMATCH"
+        and backend_precondition_status == "eligible_reserve_backend"
+        and source_active_target is not None
+        and source_reserve_target is not None
+        and active_count_before == source_active_target
+        and reserve_count_before == source_reserve_target + 1
+        and active_pool_count_observed == source_active_target
+        and reserve_pool_count_observed == source_reserve_target + 1
+        and str(proof_result.get("rotation_evidence_status", "unknown")) == "available"
+        and str(proof_result.get("runtime_attestation_status", "failed")) == "passed"
+        and str(proof_result.get("rollback_readiness_status", "failed")) == "ready"
+    )
 
 
 def run_rollout_stage_advance(
@@ -6899,6 +8800,7 @@ def run_rollout_stage_advance(
         "delegated_evidence": {},
         "final_outcome": "pending_preconditions",
     }
+    composite_owner_lock_acquired = False
 
     def build_stage_advance_payload(
         *,
@@ -6951,7 +8853,7 @@ def run_rollout_stage_advance(
 
         stage_advancement_result["rollback_attempted"] = True
         try:
-            with serialized_lock(paths):
+            if composite_owner_lock_acquired:
                 restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
                 stable_auth_entry_snapshot = snapshots.get("stable_auth_entry_file")
                 stable_auth_entry_path = snapshots.get("stable_auth_entry_path")
@@ -6969,6 +8871,25 @@ def run_rollout_stage_advance(
                     restore_rollout_stage_advance_inventory_dir_state(
                         Path(stable_auth_dir_path), stable_auth_dir_snapshot
                     )
+            else:
+                with serialized_lock(paths):
+                    restore_promotion_owner_path_runtime_surfaces(paths, snapshots)
+                    stable_auth_entry_snapshot = snapshots.get("stable_auth_entry_file")
+                    stable_auth_entry_path = snapshots.get("stable_auth_entry_path")
+                    stable_auth_dir_snapshot = snapshots.get("stable_auth_dir")
+                    stable_auth_dir_path = snapshots.get("stable_auth_dir_path")
+                    if isinstance(stable_auth_entry_snapshot, dict) and isinstance(
+                        stable_auth_entry_path, str
+                    ):
+                        restore_path_state(
+                            Path(stable_auth_entry_path), stable_auth_entry_snapshot
+                        )
+                    if isinstance(stable_auth_dir_snapshot, dict) and isinstance(
+                        stable_auth_dir_path, str
+                    ):
+                        restore_rollout_stage_advance_inventory_dir_state(
+                            Path(stable_auth_dir_path), stable_auth_dir_snapshot
+                        )
             stage_advancement_result["rollback_outcome"] = "completed"
             stage_advancement_result["final_outcome"] = final_outcome
             return build_stage_advance_payload(
@@ -7045,351 +8966,391 @@ def run_rollout_stage_advance(
             operator_action="user_action",
         )
 
-    registry = read_json(paths.registry_file)
-    observed_stage = observe_current_stage_from_pool_policy(registry)
-    stage_advancement_result["preflight_policy_status"] = str(
-        observed_stage.get("status", "invalid")
-    )
-    stage_advancement_result["delegated_evidence"]["policy_stage_summary"] = observed_stage
-    if observed_stage.get("status") != "matched":
-        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message="Rollout stage advance is blocked because policy stage is not canonical.",
-            machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
-            operator_action="user_action",
+    with serialized_lock(paths):
+        composite_owner_lock_acquired = True
+        registry = read_json(paths.registry_file)
+        observed_stage = observe_current_stage_from_pool_policy(registry)
+        stage_advancement_result["preflight_policy_status"] = str(
+            observed_stage.get("status", "invalid")
         )
+        stage_advancement_result["delegated_evidence"]["policy_stage_summary"] = observed_stage
+        if observed_stage.get("status") != "matched":
+            stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message="Rollout stage advance is blocked because policy stage is not canonical.",
+                machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
+                operator_action="user_action",
+            )
 
-    current_stage = str(observed_stage.get("observed_stage", ""))
-    desired_policy = STAGED_POOL_POLICY_PACKETS[requested_stage]
-    pool_counts = summarize_registry_pool_counts(registry)
-    active_count_before = int(pool_counts.get("active", 0) or 0)
-    reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
-    active_target = int(desired_policy["active_target"])
-    reserve_target = int(desired_policy["reserve_target"])
-    target_already_satisfied = (
-        current_stage == requested_stage
-        and active_count_before == active_target
-        and reserve_count_before == reserve_target
-    )
-    stage_advancement_result["delegated_evidence"]["pool_count_summary_before"] = {
-        "active_count_observed": active_count_before,
-        "reserve_count_observed": reserve_count_before,
-        "active_target": active_target,
-        "reserve_target": reserve_target,
-    }
+        current_stage = str(observed_stage.get("observed_stage", ""))
+        desired_policy = STAGED_POOL_POLICY_PACKETS[requested_stage]
+        pool_counts = summarize_registry_pool_counts(registry)
+        active_count_before = int(pool_counts.get("active", 0) or 0)
+        reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
+        active_target = int(desired_policy["active_target"])
+        reserve_target = int(desired_policy["reserve_target"])
+        target_already_satisfied = (
+            current_stage == requested_stage
+            and active_count_before == active_target
+            and reserve_count_before == reserve_target
+        )
+        stage_advancement_result["delegated_evidence"]["pool_count_summary_before"] = {
+            "active_count_observed": active_count_before,
+            "reserve_count_observed": reserve_count_before,
+            "active_target": active_target,
+            "reserve_target": reserve_target,
+        }
 
-    if current_stage not in {source_stage, requested_stage}:
-        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message=(
-                f"Rollout stage advance requires canonical source stage {source_stage} "
-                f"or in-progress stage {requested_stage}."
+        if current_stage not in {source_stage, requested_stage}:
+            stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message=(
+                    f"Rollout stage advance requires canonical source stage {source_stage} "
+                    f"or in-progress stage {requested_stage}."
+                ),
+                machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
+                operator_action="user_action",
+            )
+
+        backend_matches = get_registry_backends_by_id(registry, requested_backend_id)
+        selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+        selected_backend_auth_basename = (
+            get_auth_basename(selected_backend.get("auth_ref"))
+            if isinstance(selected_backend, dict)
+            else None
+        )
+        backend_precondition_status = "eligible_reserve_backend"
+        if not backend_matches:
+            backend_precondition_status = "backend_missing"
+        elif len(backend_matches) > 1:
+            backend_precondition_status = "ambiguous_backend_id"
+        elif bool(selected_backend.get("manual_hold", False)):
+            backend_precondition_status = "backend_on_hold"
+        elif str(selected_backend.get("pool", "")) == "retired":
+            backend_precondition_status = "backend_retired"
+        elif target_already_satisfied:
+            backend_precondition_status = "valid_existing_backend"
+        elif str(selected_backend.get("pool", "")) != "reserve":
+            backend_precondition_status = "backend_not_reserve"
+        stage_advancement_result["delegated_evidence"]["backend_precondition_summary"] = {
+            "backend_id": requested_backend_id,
+            "precondition_status": backend_precondition_status,
+            "match_count": len(backend_matches),
+            "observed_pool": (
+                str(selected_backend.get("pool", ""))
+                if isinstance(selected_backend, dict)
+                else ""
             ),
-            machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
-            operator_action="user_action",
-        )
+            "observed_manual_hold": (
+                bool(selected_backend.get("manual_hold", False))
+                if isinstance(selected_backend, dict)
+                else False
+            ),
+        }
+        if backend_precondition_status not in {
+            "eligible_reserve_backend",
+            "valid_existing_backend",
+        }:
+            stage_advancement_result["final_outcome"] = "backend_not_eligible"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message="Rollout stage advance requires one explicit eligible reserve backend id.",
+                machine_error_code="STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
+                operator_action="user_action",
+            )
 
-    backend_matches = get_registry_backends_by_id(registry, requested_backend_id)
-    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    selected_backend_auth_basename = (
-        get_auth_basename(selected_backend.get("auth_ref"))
-        if isinstance(selected_backend, dict)
-        else None
-    )
-    backend_precondition_status = "eligible_reserve_backend"
-    if not backend_matches:
-        backend_precondition_status = "backend_missing"
-    elif len(backend_matches) > 1:
-        backend_precondition_status = "ambiguous_backend_id"
-    elif bool(selected_backend.get("manual_hold", False)):
-        backend_precondition_status = "backend_on_hold"
-    elif str(selected_backend.get("pool", "")) == "retired":
-        backend_precondition_status = "backend_retired"
-    elif target_already_satisfied:
-        backend_precondition_status = "valid_existing_backend"
-    elif str(selected_backend.get("pool", "")) != "reserve":
-        backend_precondition_status = "backend_not_reserve"
-    stage_advancement_result["delegated_evidence"]["backend_precondition_summary"] = {
-        "backend_id": requested_backend_id,
-        "precondition_status": backend_precondition_status,
-        "match_count": len(backend_matches),
-        "observed_pool": (
-            str(selected_backend.get("pool", ""))
-            if isinstance(selected_backend, dict)
-            else ""
-        ),
-        "observed_manual_hold": (
-            bool(selected_backend.get("manual_hold", False))
-            if isinstance(selected_backend, dict)
-            else False
-        ),
-    }
-    if backend_precondition_status not in {
-        "eligible_reserve_backend",
-        "valid_existing_backend",
-    }:
-        stage_advancement_result["final_outcome"] = "backend_not_eligible"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message="Rollout stage advance requires one explicit eligible reserve backend id.",
-            machine_error_code="STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
-            operator_action="user_action",
-        )
+        if target_already_satisfied:
+            stage_advancement_result["policy_transition_status"] = "already_on_stage"
+            stage_advancement_result["promotion_status"] = "not_needed"
+            stage_advancement_result["final_outcome"] = already_target_outcome
+            return build_stage_advance_payload(
+                ok=True,
+                human_message=(
+                    f"Rollout stage advance found canonical stage-{requested_stage} "
+                    "target already satisfied."
+                ),
+                machine_error_code="OK",
+            )
 
-    if target_already_satisfied:
-        stage_advancement_result["policy_transition_status"] = "already_on_stage"
-        stage_advancement_result["promotion_status"] = "not_needed"
-        stage_advancement_result["final_outcome"] = already_target_outcome
+        step_snapshots: dict[str, dict[str, Any]] | None = None
+        if current_stage == source_stage:
+            step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+            if selected_backend_auth_basename:
+                stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+                stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+                extra_write_surfaces.append(stable_auth_entry_path)
+                before_extra_states.setdefault(
+                    stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+                )
+                if stable_auth_dir not in extra_write_surfaces:
+                    extra_write_surfaces.append(stable_auth_dir)
+                before_extra_states.setdefault(
+                    stable_auth_dir, snapshot_path_state(stable_auth_dir)
+                )
+                step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                    stable_auth_entry_path
+                )
+                step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+                step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+                step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+            proof_payload = run_rollout_stage_prove(
+                paths, source_stage, lock_acquired=True
+            )
+            proof_result = proof_payload.get("stage_proof_result", {})
+            stage_advancement_result["delegated_evidence"][
+                f"stable_{source_stage}_proof_summary"
+            ] = {
+                "status": proof_payload.get("status"),
+                "machine_error_code": proof_payload.get("machine_error_code"),
+                "exit_code": proof_payload.get("exit_code"),
+                "proof_gate_status": proof_result.get("proof_gate_status"),
+                "final_outcome": proof_result.get("final_outcome"),
+            }
+            if proof_payload.get("status") != "ok":
+                if allow_stage_advance_source_proof_with_one_explicit_reserve_candidate(
+                    proof_payload=proof_payload,
+                    proof_result=proof_result,
+                    source_stage=source_stage,
+                    backend_precondition_status=backend_precondition_status,
+                    active_count_before=active_count_before,
+                    reserve_count_before=reserve_count_before,
+                ):
+                    stage_advancement_result["delegated_evidence"][
+                        f"stable_{source_stage}_proof_summary"
+                    ]["reserve_candidate_override_status"] = (
+                        "accepted_single_explicit_reserve_candidate"
+                    )
+                else:
+                    stage_advancement_result[preflight_status_field] = "failed"
+                    return rollback_after_failed_step(
+                        human_message=(
+                            f"Rollout stage advance is blocked because stable-{source_stage} "
+                            "proof is not satisfied."
+                        ),
+                        machine_error_code=str(
+                            proof_payload.get(
+                                "machine_error_code", "STAGE_ADVANCE_PROOF_FAILED"
+                            )
+                        ),
+                        operator_action=str(
+                            proof_payload.get("operator_action", "user_action")
+                        ),
+                        exit_code=int(proof_payload.get("exit_code", 1) or 1),
+                        snapshots=step_snapshots,
+                        final_outcome=proof_failure_outcome,
+                    )
+            stage_advancement_result[preflight_status_field] = "passed"
+
+            policy_payload = run_policy_stage_set(
+                paths, requested_stage, lock_acquired=True
+            )
+            policy_result = policy_payload.get("pool_policy_update_result", {})
+            stage_advancement_result["delegated_evidence"]["policy_transition_summary"] = {
+                "status": policy_payload.get("status"),
+                "machine_error_code": policy_payload.get("machine_error_code"),
+                "exit_code": policy_payload.get("exit_code"),
+                "final_outcome": policy_result.get("final_outcome"),
+            }
+            if policy_payload.get("status") != "ok":
+                stage_advancement_result["policy_transition_status"] = "failed"
+                return rollback_after_failed_step(
+                    human_message=(
+                        "Rollout stage advance failed while updating policy stage to "
+                        f"{requested_stage}."
+                    ),
+                    machine_error_code=str(
+                        policy_payload.get(
+                            "machine_error_code", "POOL_POLICY_UPDATE_FAILED"
+                        )
+                    ),
+                    operator_action=str(policy_payload.get("operator_action", "retry")),
+                    exit_code=int(policy_payload.get("exit_code", 1) or 1),
+                    snapshots=step_snapshots,
+                    final_outcome="policy_transition_failed",
+                )
+            stage_advancement_result["policy_transition_status"] = str(
+                policy_result.get("final_outcome", "updated")
+            )
+        else:
+            step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
+            if selected_backend_auth_basename:
+                stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
+                stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
+                extra_write_surfaces.append(stable_auth_entry_path)
+                before_extra_states.setdefault(
+                    stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
+                )
+                if stable_auth_dir not in extra_write_surfaces:
+                    extra_write_surfaces.append(stable_auth_dir)
+                before_extra_states.setdefault(
+                    stable_auth_dir, snapshot_path_state(stable_auth_dir)
+                )
+                step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
+                    stable_auth_entry_path
+                )
+                step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
+                step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
+                step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
+            preflight_ok, preflight_code, preflight_action, preflight_summary = (
+                summarize_rollout_stage_advance_preflight(paths, lock_acquired=True)
+            )
+            stage_advancement_result["delegated_evidence"][
+                "preflight_summary"
+            ] = preflight_summary
+            if not preflight_ok:
+                stage_advancement_result[preflight_status_field] = "not_required"
+                stage_advancement_result["postflight_attestation_status"] = str(
+                    preflight_summary.get("attestation_status", "failed")
+                )
+                stage_advancement_result["postflight_rotation_status"] = str(
+                    preflight_summary.get("rotation_status", "unknown")
+                )
+                stage_advancement_result["rollback_readiness_status"] = str(
+                    preflight_summary.get("readiness_status", "failed")
+                )
+                return rollback_after_failed_step(
+                    human_message=(
+                        "Rollout stage advance is blocked because current "
+                        f"stage-{requested_stage} rollout posture fails bounded "
+                        "preflight verification."
+                    ),
+                    machine_error_code=preflight_code,
+                    operator_action=preflight_action,
+                    snapshots=step_snapshots,
+                    final_outcome="preflight_verification_failed",
+                )
+            stage_advancement_result[preflight_status_field] = "not_required"
+            stage_advancement_result["policy_transition_status"] = "already_on_stage"
+
+        promote_payload = run_promote(
+            paths, requested_backend_id, lock_acquired=True
+        )
+        promote_result = promote_payload.get("promotion_result", {})
+        stage_advancement_result["delegated_evidence"]["promotion_summary"] = {
+            "status": promote_payload.get("status"),
+            "machine_error_code": promote_payload.get("machine_error_code"),
+            "exit_code": promote_payload.get("exit_code"),
+            "precondition_status": promote_result.get("precondition_status"),
+            "final_outcome": promote_result.get("final_outcome"),
+        }
+        if promote_payload.get("status") != "ok":
+            stage_advancement_result["promotion_status"] = "failed"
+            return rollback_after_failed_step(
+                human_message="Rollout stage advance failed while promoting the explicit backend id.",
+                machine_error_code=str(
+                    promote_payload.get("machine_error_code", "PROMOTION_FAILED")
+                ),
+                operator_action=str(promote_payload.get("operator_action", "user_action")),
+                exit_code=int(promote_payload.get("exit_code", 1) or 1),
+                snapshots=step_snapshots,
+            )
+        stage_advancement_result["promotion_status"] = "promoted"
+        updated_registry = read_json(paths.registry_file)
+        promoted_backend_matches = get_registry_backends_by_id(
+            updated_registry, requested_backend_id
+        )
+        promoted_backend = (
+            promoted_backend_matches[0] if len(promoted_backend_matches) == 1 else None
+        )
+        if not isinstance(promoted_backend, dict):
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance could not verify a uniquely identifiable promoted backend before stable inventory materialization."
+                ),
+                machine_error_code="STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED",
+                operator_action="user_action",
+                snapshots=step_snapshots,
+            )
+        try:
+            stable_auth_materialization = materialize_rollout_stage_advance_stable_auth(
+                paths, promoted_backend
+            )
+        except RuntimeErrorInfo as exc:
+            stage_advancement_result["delegated_evidence"][
+                "stable_auth_materialization_summary"
+            ] = {
+                "status": "failed",
+                "machine_error_code": exc.machine_error_code,
+                "operator_action": exc.operator_action,
+            }
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance failed while materializing the promoted backend into stable auth inventory."
+                ),
+                machine_error_code=exc.machine_error_code,
+                operator_action=exc.operator_action,
+                exit_code=exc.exit_code,
+                snapshots=step_snapshots,
+            )
+        stage_advancement_result["delegated_evidence"][
+            "stable_auth_materialization_summary"
+        ] = {
+            "status": "materialized",
+            "machine_error_code": "OK",
+            **stable_auth_materialization,
+        }
+
+        postflight_ok, postflight_code, postflight_action, postflight_summary = (
+            summarize_rollout_stage_advance_postflight(
+                paths,
+                expected_stage=requested_stage,
+                backend_id=requested_backend_id,
+                active_pool_count_before=active_count_before,
+                lock_acquired=True,
+            )
+        )
+        stage_advancement_result["postflight_attestation_status"] = str(
+            postflight_summary.get("attestation_status", "failed")
+        )
+        stage_advancement_result["postflight_rotation_status"] = str(
+            postflight_summary.get("rotation_status", "unknown")
+        )
+        stage_advancement_result["rollback_readiness_status"] = str(
+            postflight_summary.get("readiness_status", "failed")
+        )
+        stage_advancement_result["delegated_evidence"][
+            "postflight_summary"
+        ] = postflight_summary
+        if not postflight_ok:
+            return rollback_after_failed_step(
+                human_message=(
+                    "Rollout stage advance step completed, but postflight checks detected a contradiction or readiness gap."
+                ),
+                machine_error_code=postflight_code,
+                operator_action=postflight_action,
+                snapshots=step_snapshots,
+            )
+
+        updated_registry = read_json(paths.registry_file)
+        updated_counts = summarize_registry_pool_counts(updated_registry)
+        stage_advancement_result["delegated_evidence"][
+            "pool_count_summary_after_step"
+        ] = {
+            "active_count_observed": int(updated_counts.get("active", 0) or 0),
+            "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
+            "active_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["active_target"],
+            "reserve_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["reserve_target"],
+        }
+        stage_advancement_result["rollback_outcome"] = "not_needed"
+        stage_advancement_result["final_outcome"] = "advanced_one_step"
         return build_stage_advance_payload(
             ok=True,
             human_message=(
-                f"Rollout stage advance found canonical stage-{requested_stage} "
-                "target already satisfied."
+                "Rollout stage advance completed one controlled promotion step "
+                f"toward canonical stage {requested_stage}."
             ),
             machine_error_code="OK",
         )
 
-    step_snapshots: dict[str, dict[str, Any]] | None = None
-    if current_stage == source_stage:
-        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
-        if selected_backend_auth_basename:
-            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
-            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
-            extra_write_surfaces.append(stable_auth_entry_path)
-            before_extra_states.setdefault(
-                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
-            )
-            if stable_auth_dir not in extra_write_surfaces:
-                extra_write_surfaces.append(stable_auth_dir)
-            before_extra_states.setdefault(
-                stable_auth_dir, snapshot_path_state(stable_auth_dir)
-            )
-            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
-                stable_auth_entry_path
-            )
-            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
-            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
-            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
-        proof_payload = run_rollout_stage_prove(paths, source_stage)
-        proof_result = proof_payload.get("stage_proof_result", {})
-        stage_advancement_result["delegated_evidence"][
-            f"stable_{source_stage}_proof_summary"
-        ] = {
-            "status": proof_payload.get("status"),
-            "machine_error_code": proof_payload.get("machine_error_code"),
-            "exit_code": proof_payload.get("exit_code"),
-            "proof_gate_status": proof_result.get("proof_gate_status"),
-            "final_outcome": proof_result.get("final_outcome"),
-        }
-        if proof_payload.get("status") != "ok":
-            stage_advancement_result[preflight_status_field] = "failed"
-            return rollback_after_failed_step(
-                human_message=(
-                    f"Rollout stage advance is blocked because stable-{source_stage} "
-                    "proof is not satisfied."
-                ),
-                machine_error_code=str(
-                    proof_payload.get("machine_error_code", "STAGE_ADVANCE_PROOF_FAILED")
-                ),
-                operator_action=str(proof_payload.get("operator_action", "user_action")),
-                exit_code=int(proof_payload.get("exit_code", 1) or 1),
-                snapshots=step_snapshots,
-                final_outcome=proof_failure_outcome,
-            )
-        stage_advancement_result[preflight_status_field] = "passed"
 
-        policy_payload = run_policy_stage_set(paths, requested_stage)
-        policy_result = policy_payload.get("pool_policy_update_result", {})
-        stage_advancement_result["delegated_evidence"]["policy_transition_summary"] = {
-            "status": policy_payload.get("status"),
-            "machine_error_code": policy_payload.get("machine_error_code"),
-            "exit_code": policy_payload.get("exit_code"),
-            "final_outcome": policy_result.get("final_outcome"),
-        }
-        if policy_payload.get("status") != "ok":
-            stage_advancement_result["policy_transition_status"] = "failed"
-            return rollback_after_failed_step(
-                human_message=(
-                    "Rollout stage advance failed while updating policy stage to "
-                    f"{requested_stage}."
-                ),
-                machine_error_code=str(
-                    policy_payload.get("machine_error_code", "POOL_POLICY_UPDATE_FAILED")
-                ),
-                operator_action=str(policy_payload.get("operator_action", "retry")),
-                exit_code=int(policy_payload.get("exit_code", 1) or 1),
-                snapshots=step_snapshots,
-                final_outcome="policy_transition_failed",
-            )
-        stage_advancement_result["policy_transition_status"] = str(
-            policy_result.get("final_outcome", "updated")
-        )
-    else:
-        step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
-        if selected_backend_auth_basename:
-            stable_auth_dir, _ = get_stable_auth_inventory_source(paths)
-            stable_auth_entry_path = stable_auth_dir / selected_backend_auth_basename
-            extra_write_surfaces.append(stable_auth_entry_path)
-            before_extra_states.setdefault(
-                stable_auth_entry_path, snapshot_path_state(stable_auth_entry_path)
-            )
-            if stable_auth_dir not in extra_write_surfaces:
-                extra_write_surfaces.append(stable_auth_dir)
-            before_extra_states.setdefault(
-                stable_auth_dir, snapshot_path_state(stable_auth_dir)
-            )
-            step_snapshots["stable_auth_entry_file"] = snapshot_path_state(
-                stable_auth_entry_path
-            )
-            step_snapshots["stable_auth_entry_path"] = str(stable_auth_entry_path)
-            step_snapshots["stable_auth_dir"] = snapshot_path_state(stable_auth_dir)
-            step_snapshots["stable_auth_dir_path"] = str(stable_auth_dir)
-        preflight_ok, preflight_code, preflight_action, preflight_summary = (
-            summarize_rollout_stage_advance_preflight(paths)
-        )
-        stage_advancement_result["delegated_evidence"]["preflight_summary"] = preflight_summary
-        if not preflight_ok:
-            stage_advancement_result[preflight_status_field] = "not_required"
-            stage_advancement_result["postflight_attestation_status"] = str(
-                preflight_summary.get("attestation_status", "failed")
-            )
-            stage_advancement_result["postflight_rotation_status"] = str(
-                preflight_summary.get("rotation_status", "unknown")
-            )
-            stage_advancement_result["rollback_readiness_status"] = str(
-                preflight_summary.get("readiness_status", "failed")
-            )
-            return rollback_after_failed_step(
-                human_message=(
-                    "Rollout stage advance is blocked because current "
-                    f"stage-{requested_stage} rollout posture fails bounded "
-                    "preflight verification."
-                ),
-                machine_error_code=preflight_code,
-                operator_action=preflight_action,
-                snapshots=step_snapshots,
-                final_outcome="preflight_verification_failed",
-            )
-        stage_advancement_result[preflight_status_field] = "not_required"
-        stage_advancement_result["policy_transition_status"] = "already_on_stage"
-
-    promote_payload = run_promote(paths, requested_backend_id)
-    promote_result = promote_payload.get("promotion_result", {})
-    stage_advancement_result["delegated_evidence"]["promotion_summary"] = {
-        "status": promote_payload.get("status"),
-        "machine_error_code": promote_payload.get("machine_error_code"),
-        "exit_code": promote_payload.get("exit_code"),
-        "precondition_status": promote_result.get("precondition_status"),
-        "final_outcome": promote_result.get("final_outcome"),
-    }
-    if promote_payload.get("status") != "ok":
-        stage_advancement_result["promotion_status"] = "failed"
-        return rollback_after_failed_step(
-            human_message="Rollout stage advance failed while promoting the explicit backend id.",
-            machine_error_code=str(
-                promote_payload.get("machine_error_code", "PROMOTION_FAILED")
-            ),
-            operator_action=str(promote_payload.get("operator_action", "user_action")),
-            exit_code=int(promote_payload.get("exit_code", 1) or 1),
-            snapshots=step_snapshots,
-        )
-    stage_advancement_result["promotion_status"] = "promoted"
-    updated_registry = read_json(paths.registry_file)
-    promoted_backend_matches = get_registry_backends_by_id(
-        updated_registry, requested_backend_id
-    )
-    promoted_backend = (
-        promoted_backend_matches[0] if len(promoted_backend_matches) == 1 else None
-    )
-    if not isinstance(promoted_backend, dict):
-        return rollback_after_failed_step(
-            human_message=(
-                "Rollout stage advance could not verify a uniquely identifiable promoted backend before stable inventory materialization."
-            ),
-            machine_error_code="STAGE_ADVANCE_POSTFLIGHT_PROMOTION_FAILED",
-            operator_action="user_action",
-            snapshots=step_snapshots,
-        )
-    try:
-        stable_auth_materialization = materialize_rollout_stage_advance_stable_auth(
-            paths, promoted_backend
-        )
-    except RuntimeErrorInfo as exc:
-        stage_advancement_result["delegated_evidence"][
-            "stable_auth_materialization_summary"
-        ] = {
-            "status": "failed",
-            "machine_error_code": exc.machine_error_code,
-            "operator_action": exc.operator_action,
-        }
-        return rollback_after_failed_step(
-            human_message=(
-                "Rollout stage advance failed while materializing the promoted backend into stable auth inventory."
-            ),
-            machine_error_code=exc.machine_error_code,
-            operator_action=exc.operator_action,
-            exit_code=exc.exit_code,
-            snapshots=step_snapshots,
-        )
-    stage_advancement_result["delegated_evidence"][
-        "stable_auth_materialization_summary"
-    ] = {
-        "status": "materialized",
-        "machine_error_code": "OK",
-        **stable_auth_materialization,
-    }
-
-    postflight_ok, postflight_code, postflight_action, postflight_summary = (
-        summarize_rollout_stage_advance_postflight(
-            paths,
-            expected_stage=requested_stage,
-            backend_id=requested_backend_id,
-            active_pool_count_before=active_count_before,
-        )
-    )
-    stage_advancement_result["postflight_attestation_status"] = str(
-        postflight_summary.get("attestation_status", "failed")
-    )
-    stage_advancement_result["postflight_rotation_status"] = str(
-        postflight_summary.get("rotation_status", "unknown")
-    )
-    stage_advancement_result["rollback_readiness_status"] = str(
-        postflight_summary.get("readiness_status", "failed")
-    )
-    stage_advancement_result["delegated_evidence"]["postflight_summary"] = postflight_summary
-    if not postflight_ok:
-        return rollback_after_failed_step(
-            human_message=(
-                "Rollout stage advance step completed, but postflight checks detected a contradiction or readiness gap."
-            ),
-            machine_error_code=postflight_code,
-            operator_action=postflight_action,
-            snapshots=step_snapshots,
-        )
-
-    updated_registry = read_json(paths.registry_file)
-    updated_counts = summarize_registry_pool_counts(updated_registry)
-    stage_advancement_result["delegated_evidence"]["pool_count_summary_after_step"] = {
-        "active_count_observed": int(updated_counts.get("active", 0) or 0),
-        "reserve_count_observed": int(updated_counts.get("reserve", 0) or 0),
-        "active_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["active_target"],
-        "reserve_target": STAGED_POOL_POLICY_PACKETS[requested_stage]["reserve_target"],
-    }
-    stage_advancement_result["rollback_outcome"] = "not_needed"
-    stage_advancement_result["final_outcome"] = "advanced_one_step"
-    return build_stage_advance_payload(
-        ok=True,
-        human_message=(
-            "Rollout stage advance completed one controlled promotion step "
-            f"toward canonical stage {requested_stage}."
-        ),
-        machine_error_code="OK",
-    )
-
-
-def run_policy_stage_set(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+def run_policy_stage_set(
+    paths: RuntimePaths,
+    stage: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     policy_update_result: dict[str, Any] = {
         "status": "owner_path_emitted",
@@ -7436,7 +9397,8 @@ def run_policy_stage_set(paths: RuntimePaths, stage: str) -> dict[str, Any]:
             exit_code=exit_code,
         )
 
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         registry = read_json(paths.registry_file)
         current_pool_policy = registry.get("pool_policy")
         policy_update_result["previous_pool_policy"] = current_pool_policy
@@ -7673,6 +9635,83 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         "effective_mode": sync_reported_effective_mode,
         "endpoint": sync_reported_endpoint,
     }
+
+
+def attempt_sync_current_proxy_recovery_under_lock(
+    paths: RuntimePaths,
+    *,
+    working_candidate: str,
+    prior_current_proxy_url: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    rollback_surface_snapshots = snapshot_sync_current_proxy_recovery_runtime_surfaces(
+        paths
+    )
+    result = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "working_candidate": working_candidate,
+        "activation_surface_kind": "sync_owner_path_restart",
+        "activation_command_surface": "sync --json",
+        "adoption_outcome": "sync_owner_path_failed",
+        "current_proxy_url_rewritten": False,
+        "live_runtime_observation_confirmed": False,
+        "sync_result_status": "not_run",
+        "sync_result_machine_error_code": "",
+        "sync_result_exit_code": None,
+        "selected_proxy_url": "",
+        "rollback_restored": False,
+    }
+    sync_payload = run_sync_for_owner_path_under_lock(paths)
+    result["sync_result_status"] = str(sync_payload["status"])
+    result["sync_result_machine_error_code"] = str(
+        sync_payload["machine_error_code"]
+    )
+    result["sync_result_exit_code"] = sync_payload["exit_code"]
+    if sync_payload["status"] != "ok":
+        restore_sync_current_proxy_recovery_runtime_surfaces(
+            paths, rollback_surface_snapshots
+        )
+        result["rollback_restored"] = True
+        return result, None
+    reproof_payload = run_healthcheck(
+        paths,
+        allow_recovery=False,
+        allow_last_known_good_proxy_write=False,
+        allow_current_proxy_auto_adoption=False,
+    )
+    reproof_ok = (
+        reproof_payload["status"] == "ok"
+        and str(reproof_payload["effective_mode"]) == "managed"
+    )
+    state = read_json(paths.state_file, required=False)
+    reproof_current_proxy_url = str(state.get("current_proxy_url", ""))
+    result["selected_proxy_url"] = reproof_current_proxy_url
+    same_current_reconfirmed = (
+        prior_current_proxy_url == working_candidate
+        and reproof_ok
+        and reproof_current_proxy_url == working_candidate
+    )
+    candidate_adopted = (
+        prior_current_proxy_url != working_candidate
+        and reproof_ok
+        and reproof_current_proxy_url == working_candidate
+    )
+    if same_current_reconfirmed or candidate_adopted:
+        if same_current_reconfirmed:
+            result["adoption_outcome"] = "sync_owner_path_same_current_reconfirmed"
+        else:
+            result["adoption_outcome"] = "sync_owner_path_candidate_adopted"
+        result["current_proxy_url_rewritten"] = (
+            reproof_current_proxy_url != prior_current_proxy_url
+        )
+        result["live_runtime_observation_confirmed"] = True
+        return result, reproof_payload
+    restore_sync_current_proxy_recovery_runtime_surfaces(
+        paths, rollback_surface_snapshots
+    )
+    result["rollback_restored"] = True
+    result["adoption_outcome"] = "sync_owner_path_live_reproof_failed"
+    return result, None
 
 
 def observe_status_proof_for_owner_path_under_lock(
@@ -9020,7 +11059,12 @@ def run_protective_lifecycle_owner_path(
         )
 
 
-def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
+def run_promote(
+    paths: RuntimePaths,
+    backend_id: str,
+    *,
+    lock_acquired: bool = False,
+) -> dict[str, Any]:
     if not paths.accounts_bin.exists():
         raise RuntimeErrorInfo(
             f"Missing accounts command: {paths.accounts_bin}",
@@ -9042,6 +11086,9 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
         "active_target_observed": None,
         "reserve_count_before": None,
         "reserve_target_observed": None,
+        "active_pool_count_after": None,
+        "reserve_count_after": None,
+        "policy_verification_status": "not_verified",
         "rollback_point_captured": False,
         "routing_change_attempted": False,
         "routing_change_observed": False,
@@ -9132,7 +11179,8 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
                 extra=payload_extra,
             )
 
-    with serialized_lock(paths):
+    mutation_lock = nullcontext() if lock_acquired else serialized_lock(paths)
+    with mutation_lock:
         before_registry = read_json(paths.registry_file)
         before_state = read_json(paths.state_file, required=False)
         backend_matches = get_registry_backends_by_id(before_registry, backend_id)
@@ -9428,21 +11476,42 @@ def run_promote(paths: RuntimePaths, backend_id: str) -> dict[str, Any]:
             verified_backend = (
                 verified_matches[0] if len(verified_matches) == 1 else None
             )
+            verified_pool_counts = summarize_registry_pool_counts(verified_registry)
             verified_selected_backend_ids = {
                 str(item) for item in verified_state.get("selected_backend_ids", []) or []
             }
+            active_pool_count_after = int(verified_pool_counts.get("active", 0) or 0)
+            reserve_count_after = int(verified_pool_counts.get("reserve", 0) or 0)
+            promotion_result["active_pool_count_after"] = active_pool_count_after
+            promotion_result["reserve_count_after"] = reserve_count_after
+            if lock_acquired:
+                promotion_policy_verified = True
+                promotion_result["policy_verification_status"] = "delegated_to_caller"
+            else:
+                promotion_policy_verified = bool(
+                    active_pool_count_after == active_pool_count_before + 1
+                    and active_pool_count_after <= active_target
+                    and reserve_count_after == reserve_target
+                )
+                promotion_result["policy_verification_status"] = (
+                    "passed" if promotion_policy_verified else "failed"
+                )
             promotion_result["routing_change_observed"] = bool(
                 status_payload["status"] == "ok"
                 and isinstance(verified_backend, dict)
                 and str(verified_backend.get("pool", "")) == "active"
                 and not bool(verified_backend.get("manual_hold", False))
                 and backend_id in verified_selected_backend_ids
+                and promotion_policy_verified
             )
             if status_payload["status"] != "ok" or not promotion_result["routing_change_observed"]:
+                failure_message = (
+                    "Promotion did not preserve staged reserve/active pool policy after status proof."
+                    if status_payload["status"] == "ok" and not promotion_policy_verified
+                    else "Promotion did not produce verified active routing after status proof."
+                )
                 return rollback_after_failed_verification(
-                    human_message=(
-                        "Promotion did not produce verified active routing after status proof."
-                    ),
+                    human_message=failure_message,
                     machine_error_code="PROMOTION_STATUS_FAILED",
                     liveness=str(status_payload.get("liveness", "unknown")),
                     operator_action=str(status_payload.get("operator_action", "retry")),
@@ -9539,13 +11608,7 @@ def get_registry_backends_by_id(
 
 
 def routing_eligible_active_backend_ids(registry: dict[str, Any]) -> list[str]:
-    return sorted(
-        str(item.get("id"))
-        for item in registry.get("backends", [])
-        if item.get("id") is not None
-        and str(item.get("pool", "")) == "active"
-        and not bool(item.get("manual_hold", False))
-    )
+    return get_launch_capable_backend_ids(registry)
 
 
 def auth_ref_matches(expected_auth_ref: str, backend_auth_ref: Any) -> bool:
@@ -9661,6 +11724,7 @@ def run_onboard(
     paths: RuntimePaths,
     *,
     auth_ref: str | None,
+    loop: bool,
     skip_login: bool,
     no_sync: bool,
     non_interactive: bool,
@@ -9674,7 +11738,8 @@ def run_onboard(
     before = snapshot_known_files(paths)
     before_registry = read_json(paths.registry_file)
     before_state = read_json(paths.state_file, required=False)
-    command = [str(paths.onboard_bin), "--once"]
+    auth_snapshot_before_login = get_onboarding_auth_snapshot_before_login(paths)
+    command = [str(paths.onboard_bin), "--loop" if loop else "--once"]
     if auth_ref:
         command.extend(["--auth-ref", auth_ref])
     if skip_login:
@@ -9739,6 +11804,18 @@ def run_onboard(
         "selected_backend_id": selected_backend_id,
         "selection_status": selection_status,
         "reserve_first_enforced": reserve_first_enforced,
+        "auth_snapshot_before_login_status": str(
+            auth_snapshot_before_login.get("status", "source_unavailable")
+        ),
+        "auth_snapshot_before_login_count": int(
+            auth_snapshot_before_login.get("count", 0) or 0
+        ),
+        "auth_snapshot_before_login_digest": str(
+            auth_snapshot_before_login.get(
+                "digest", get_auth_inventory_entries_digest([])
+            )
+        ),
+        "auth_snapshot_before_login_source": auth_snapshot_before_login.get("source", {}),
         "pool_after_onboarding": summarize_registry_pool_counts(after_registry),
         "validate_attempted": False,
         "validate_outcome": "not_attempted",
@@ -9987,4 +12064,229 @@ def export_diagnostics(paths: RuntimePaths) -> dict[str, Any]:
         operator_action="none",
         changed_files=[str(export_dir)],
         extra={"bundle_path": str(export_dir)},
+    )
+
+
+def build_installer_default_registry_payload() -> dict[str, Any]:
+    return {
+        "schema_version": BACKEND_REGISTRY_SCHEMA_VERSION,
+        "version": BACKEND_REGISTRY_SCHEMA_VERSION,
+        "updated_at": now_iso(),
+        "stable_default_backend_id": "",
+        "pool_policy": {"active_min": 0, "active_target": 0, "reserve_target": 0},
+        "backends": [],
+    }
+
+
+def build_installer_default_state_payload() -> dict[str, Any]:
+    return {
+        "schema_version": 2,
+        "version": 2,
+        "status": "unknown",
+        "effective_mode": "stable",
+        "last_sync_at": "",
+        "last_error": "",
+        "selected_backend_ids": [],
+        "managed_port": 8320,
+        "current_proxy_url": "",
+        "stable_default_backend_id": "",
+        "active_count": 0,
+        "reserve_count": 0,
+        "retired_count": 0,
+        "healthy_count": 0,
+        "degraded_count": 0,
+        "down_count": 0,
+    }
+
+
+def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
+    before_state = snapshot_path_states(
+        [
+            paths.profile_dir,
+            paths.managed_dir,
+            paths.managed_dir / "bin",
+            paths.registry_file,
+            paths.state_file,
+            paths.config_toml,
+            paths.runtime_mode_file,
+            paths.runtime_effective_mode_file,
+        ]
+    )
+    with serialized_lock(paths):
+        paths.profile_dir.mkdir(parents=True, exist_ok=True)
+        paths.managed_dir.mkdir(parents=True, exist_ok=True)
+        (paths.managed_dir / "bin").mkdir(parents=True, exist_ok=True)
+        if not paths.runtime_mode_file.exists():
+            write_text_atomic(paths.runtime_mode_file, "stable")
+        if not paths.runtime_effective_mode_file.exists():
+            write_text_atomic(paths.runtime_effective_mode_file, "stable")
+        if not paths.registry_file.exists():
+            write_json_atomic(paths.registry_file, build_installer_default_registry_payload())
+        if not paths.state_file.exists():
+            write_json_atomic(paths.state_file, build_installer_default_state_payload())
+        if not paths.config_toml.exists():
+            write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
+    changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
+    return build_command_payload(
+        ok=True,
+        human_message="Installer baseline initialization completed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "installer_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "baseline_initialized",
+            }
+        },
+    )
+
+
+def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
+    source_dir = Path(source_dir_raw).expanduser()
+    write_targets = [
+        paths.registry_file,
+        paths.state_file,
+        paths.config_toml,
+        paths.runtime_mode_file,
+        paths.runtime_effective_mode_file,
+    ]
+    before_state = snapshot_path_states(write_targets)
+    legacy_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "source_dir": str(source_dir),
+        "transaction_phase": "snapshot",
+        "rollback_attempted": False,
+        "rollback_outcome": "not_needed",
+        "final_outcome": "pending",
+    }
+    if not source_dir.exists() or not source_dir.is_dir():
+        legacy_result["final_outcome"] = "source_missing"
+        return build_command_payload(
+            ok=False,
+            human_message="Legacy import source directory is missing.",
+            machine_error_code="LEGACY_IMPORT_SOURCE_MISSING",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={"legacy_import_result": legacy_result},
+        )
+    try:
+        with serialized_lock(paths):
+            legacy_result["transaction_phase"] = "stage"
+            staged_registry = read_json(source_dir / "backend-registry.json")
+            staged_state = read_json(source_dir / "supervisor-state.json")
+            staged_config = read_text(source_dir / "config.toml")
+            staged_mode = read_text(source_dir / "runtime-mode.txt", default="stable")
+            staged_effective = read_text(
+                source_dir / "runtime-effective-mode.txt", default=staged_mode
+            )
+
+            legacy_result["transaction_phase"] = "verify"
+            if not isinstance(staged_registry.get("backends"), list):
+                raise RuntimeErrorInfo(
+                    "Legacy import registry backends must be a list.",
+                    machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
+                    operator_action="user_action",
+                )
+            if not isinstance(staged_state, dict):
+                raise RuntimeErrorInfo(
+                    "Legacy import state must be a JSON object.",
+                    machine_error_code="LEGACY_IMPORT_VERIFY_FAILED",
+                    operator_action="user_action",
+                )
+
+            legacy_result["transaction_phase"] = "switch"
+            write_json_atomic(paths.registry_file, staged_registry)
+            write_json_atomic(paths.state_file, staged_state)
+            if staged_config:
+                write_text_atomic(paths.config_toml, staged_config)
+            write_text_atomic(paths.runtime_mode_file, staged_mode or "stable")
+            write_text_atomic(paths.runtime_effective_mode_file, staged_effective or "stable")
+    except RuntimeErrorInfo as exc:
+        legacy_result["rollback_attempted"] = True
+        legacy_result["transaction_phase"] = "rollback"
+        for path, snapshot in before_state.items():
+            restore_path_state(path, snapshot)
+        legacy_result["rollback_outcome"] = "completed"
+        legacy_result["final_outcome"] = "rollback_completed_after_failed_import"
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=detect_changed_files_by_state(before_state, write_targets),
+            extra={"legacy_import_result": legacy_result},
+            exit_code=exc.exit_code,
+        )
+    legacy_result["final_outcome"] = "import_completed"
+    return build_command_payload(
+        ok=True,
+        human_message="Legacy import completed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before_state, write_targets),
+        extra={"legacy_import_result": legacy_result},
+    )
+
+
+def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict[str, Any]:
+    targets = [
+        paths.managed_dir,
+        paths.registry_file,
+        paths.state_file,
+        paths.managed_config_file,
+        paths.config_toml,
+        paths.runtime_mode_file,
+        paths.runtime_effective_mode_file,
+        paths.stable_runtime_generated_config_file,
+        paths.launcher_script,
+    ]
+    before_state = snapshot_path_states(targets)
+    reset_result: dict[str, Any] = {
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "uninstall_mode": uninstall,
+        "auth_file_preserved": bool(paths.auth_file.exists()),
+        "final_outcome": "pending",
+    }
+    with serialized_lock(paths):
+        if paths.managed_dir.exists():
+            shutil.rmtree(paths.managed_dir)
+        for file_path in (
+            paths.config_toml,
+            paths.runtime_mode_file,
+            paths.runtime_effective_mode_file,
+            paths.stable_runtime_generated_config_file,
+            paths.launcher_script,
+        ):
+            if file_path.exists():
+                file_path.unlink()
+        if uninstall and paths.profile_dir.exists() and paths.profile_dir.is_dir():
+            try:
+                next(paths.profile_dir.iterdir())
+            except StopIteration:
+                paths.profile_dir.rmdir()
+    reset_result["auth_file_preserved"] = bool(paths.auth_file.exists())
+    reset_result["final_outcome"] = "companion_data_removed"
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Companion uninstall completed."
+            if uninstall
+            else "Companion reset completed."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before_state, targets),
+        extra={"reset_result": reset_result},
     )

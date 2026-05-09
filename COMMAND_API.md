@@ -24,6 +24,7 @@ All operator commands must support `--json`.
 - `mode set managed --json`
 - `policy stage set <10|15|20> --json`
 - `rollout rotation inspect --json`
+- `rollout posture inspect <15|20> --json`
 - `rollout evidence capture 16 --json`
 - `rollout stage prove 10 --json`
 - `rollout stage prove 15 --json`
@@ -38,6 +39,12 @@ All operator commands must support `--json`.
 - `accounts retire <id> --json`
 - `accounts onboard --json`
 - `diagnostics export --json`
+- `installer init --json`
+- `legacy import --source-dir <path> --json`
+- `companion reset --json`
+- `companion uninstall --json`
+- `package experimental build --output-dir <path> --json`
+- `package experimental verify --manifest <path> --json`
 
 ## Required response fields
 
@@ -66,16 +73,36 @@ Every command response must include all required fields on both success and fail
 - commands that carry runtime attestation must expose an `attestation` object
   containing the required attestation fields from `RUNTIME_CONTRACT.md`
 
-## Error classes
+## Severity classes
 
 - `recoverable`
-- `needs_user_action`
 - `fatal`
+
+## Additional experimental package owner surface
+
+`package experimental build --output-dir <path> --json` is the owner surface for
+local experimental package materialization.
+
+It must emit:
+
+- a package artifact (`tar.gz` or `zip`) built from allowlisted repo
+  source/docs material only
+- a checksum manifest for the artifact
+- metadata with plan version/date when available
+
+The package surface must not include runtime/private data such as auth files,
+runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+`package experimental verify --manifest <path> --json` is the owner surface for
+artifact existence + checksum verification from the manifest.
 
 ## Additional onboarding owner surface
 
 `accounts onboard --json` is the owner surface for reserve-first onboarding
 truth.
+The onboarding owner lane supports external launcher invocation modes `--once`
+and `--loop`; the selected mode must remain visible in the emitted owner
+packet command surface.
 
 Onboarding success must not be inferred from external onboarding process exit
 code alone.
@@ -99,6 +126,10 @@ Preferred fields include:
 - `selected_backend_id`
 - `selection_status`
 - `reserve_first_enforced`
+- `auth_snapshot_before_login_status`
+- `auth_snapshot_before_login_count`
+- `auth_snapshot_before_login_digest`
+- `auth_snapshot_before_login_source`
 - `pool_after_onboarding`
 - `validate_attempted`
 - `validate_outcome`
@@ -394,6 +425,67 @@ Rotation evidence `machine_error_code` values include:
 - policy mutation under `policy stage set ... --json`
 - runtime-health ownership in `healthcheck --json`
 
+## Additional rollout posture classification surface
+
+`rollout posture inspect <15|20> --json` is the read-only owner surface for
+pre-stage-advance posture classification.
+
+It must not mutate registry, state, policy, mode files, selected-backend
+snapshots, stable inventory, auth files, or repair targets. It may aggregate
+cached local state, policy-stage truth, lifecycle candidate classification, and
+bounded rotation-evidence observation. It must not run hidden recovery, policy
+repair, registry normalization, promotion, demotion, or stage advancement.
+
+Top-level `machine_error_code` remains the authoritative command truth surface.
+Nested `classification` and `blocker_code` under `rollout_posture_result`
+provide explanatory posture detail only and must not contradict the top-level
+command outcome.
+
+The command may expose a nested `rollout_posture_result` surface. Required
+fields include:
+
+- `requested_stage`
+- `source_stage`
+- `classification`
+- `blocker_code`
+- `pool_count_summary`
+- `candidate_summary`
+- `runtime_truth_summary`
+- `policy_stage_summary`
+- `rotation_summary`
+- `normalization_decision_packet`
+- `final_outcome`
+
+Canonical posture classifications include:
+
+- `INSUFFICIENT_ELIGIBLE_POOL`
+- `RESERVE_CANDIDATE_NOT_IDENTIFIED`
+- `LIVE_POSTURE_DRIFT_ONLY`
+- `ROTATION_EVIDENCE_INSUFFICIENT`
+- `READY_FOR_STAGE_ADVANCE`
+- `READY_ALREADY_ON_TARGET`
+
+`rollout posture inspect <15|20> --json` may also surface canonical target-stage
+blockers such as `STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL` when the requested
+advance target is not on a canonical policy-stage path.
+
+A `READY_FOR_STAGE_ADVANCE` classification means only that the current read-only
+posture is compatible with a later explicit
+`rollout stage advance <stage> <reserve-id> --json` attempt. It is not a
+`STABLE_20_PROVED`, `SCALE_COMPLETE`, `PILOT_READY`, or live scale-proof claim.
+
+`runtime_truth_summary` is intentionally not a live runtime attestation.
+`status --json`, `healthcheck --json`, `rollout rotation inspect --json`, and
+any required smoke or fallback checks remain separate gates.
+
+`rollout posture inspect <15|20> --json` remains separate from:
+
+- lifecycle mutation under `accounts ... --json`
+- policy mutation under `policy stage set ... --json`
+- stage-proof ownership under `rollout stage prove ... --json`
+- stage-advance ownership under `rollout stage advance ... --json`
+- live runtime attestation under `healthcheck --json`
+
 ## Additional scale evidence packet surface
 
 `rollout evidence capture 16 --json` is the owner surface for the
@@ -563,6 +655,15 @@ Canonical stage-proof outcomes include:
 - `rollback_readiness_failed`
 - `proof_blocked`
 
+Current reserve-semantics note:
+
+- `accounts promote <id> --json` preserves `reserve_target` as a reserve floor
+- `rollout stage prove 10 --json` and `rollout stage prove 15 --json` currently
+  require exact reserve-posture alignment against the stage target when closing
+  proof
+- surplus reserve may therefore remain promotion-legal while still producing
+  `reserve_posture_mismatch` in stage proof
+
 `rollout stage prove 10 --json` and `rollout stage prove 15 --json` remain separate from:
 
 - policy mutation under `policy stage set ... --json`
@@ -606,6 +707,13 @@ Successful owner packets must prove, machine-readably:
 - delegated failures resolve conservatively and may trigger rollback of the
   bounded advancement step
 - no stronger claim than one-step control-layer progression; no stage-proof claim
+
+Current reserve-semantics note:
+
+- postflight promotion verification currently expects exact reserve-posture
+  alignment against the target-stage reserve target
+- this is stricter than the promotion-floor rule used by
+  `accounts promote <id> --json`
 
 `rollout stage advance 15 <id> --json` and `rollout stage advance 20 <id> --json`
 may expose a nested
@@ -1141,6 +1249,13 @@ Field meaning rules:
   only as delegated reporting
 - `proxy_reprobe.working_candidate` remains nested bounded evidence only and
   must not become `current_proxy_url` by mere presence
+- current bounded candidate discovery remains
+  `shallow_socket_listener_only` and is limited to local listener reachability
+  rather than a separate deep-probing truth surface
+- top-level current-proxy adoption success still requires same-owner live
+  runtime reproof through `healthcheck.attestation`
+- no separate control-layer deep-probing surface is active by default; deeper
+  runtime validation remains delegated to the live reproof surface above
 - `status --json` may expose the same `last_known_good_proxy` readout only as
   delegated reporting
 - delegated `status --json` must propagate those owner-path writes honestly in

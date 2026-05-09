@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "artifact": "owner_surface_capture",
+  "step": "step37",
+  "captured_at_utc": "2026-05-08T19:24:20Z",
+  "commands": [
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "desired_mode": "stable",
+        "effective_mode": "stable",
+        "configured_proxy_url": "http://127.0.0.1:10808",
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "policy_drift": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "configured_active_count": 24,
+          "allowed_stable_auth_count": 2,
+          "stable_auth_inventory_count": 2
+        },
+        "claim_gate": {
+          "status": "clear",
+          "machine_error_code": "OK"
+        },
+        "launch_readiness": {
+          "status": "ready",
+          "machine_error_code": "OK",
+          "blocking_reason": ""
+        },
+        "runtime_guardrails": {
+          "status": "clear",
+          "blocking_reason": ""
+        },
+        "stable_runtime_consumer": {
+          "effective_stable_runtime_consumer_source": {
+            "status": "approved_target_active_by_activation_evidence",
+            "source_kind": "approved_repair_target",
+            "matches_desired": true
+          }
+        }
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "desired_mode": "stable",
+        "effective_mode": "stable",
+        "configured_proxy_url": "http://127.0.0.1:10808",
+        "current_proxy_url": "http://127.0.0.1:10808",
+        "launch_readiness": {
+          "status": "ready",
+          "machine_error_code": "OK",
+          "blocking_reason": "",
+          "launch_capable_backend_count": 2
+        },
+        "runtime_guardrails": {
+          "status": "clear",
+          "blocking_reason": ""
+        }
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy accounts list --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "pool_policy": {
+          "active_target": 15,
+          "active_min": 15,
+          "reserve_target": 0
+        },
+        "account_summary": {
+          "active_count": 24,
+          "reserve_count": 0,
+          "retired_count": 0,
+          "healthy_active_backend_ids": [
+            "open17-plus",
+            "new-new55555"
+          ]
+        }
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "exit_code": 0,
+      "stdout_json": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "rotation_evidence_result": {
+          "selected_backend_snapshot_present": true,
+          "selected_backend_snapshot_validation_status": "valid",
+          "selected_backend_ids": [
+            "new-new55555",
+            "open17-plus"
+          ],
+          "participation_status": "available",
+          "evidence_source_name": "sync --json"
+        }
+      }
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout stage advance 20 open17-plus --json",
+      "exit_code": 1,
+      "stdout_json": {
+        "status": "error",
+        "machine_error_code": "STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
+        "requested_stage": "20",
+        "requested_backend_id": "open17-plus",
+        "stage_advancement_result": {
+          "preflight_policy_status": "matched",
+          "policy_transition_status": "not_invoked",
+          "promotion_status": "not_invoked",
+          "postflight_attestation_status": "not_checked",
+          "postflight_rotation_status": "not_checked",
+          "rollback_readiness_status": "not_checked",
+          "delegated_evidence": {
+            "policy_stage_summary": {
+              "status": "matched",
+              "observed_stage": "15",
+              "pool_policy_summary": {
+                "active_min": 15,
+                "active_target": 15,
+                "reserve_target": 0
+              }
+            },
+            "pool_count_summary_before": {
+              "active_count_observed": 24,
+              "reserve_count_observed": 0,
+              "active_target": 20,
+              "reserve_target": 0
+            },
+            "backend_precondition_summary": {
+              "backend_id": "open17-plus",
+              "precondition_status": "backend_not_reserve",
+              "match_count": 1,
+              "observed_pool": "active",
+              "observed_manual_hold": false
+            }
+          },
+          "final_outcome": "backend_not_eligible"
+        }
+      }
+    }
+  ]
+}

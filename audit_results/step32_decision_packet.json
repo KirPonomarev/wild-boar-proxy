@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-05-08T18:50:18Z",
+  "contour": "Repo-Owned Stable Launcher Provisioning For Claim-Gate Reclear",
+  "result": "launcher_provisioning_closed_claim_gate_still_blocked",
+  "result_basis": {
+    "launcher_provisioning_closed": true,
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "root_blocker": "proxy_truth_drift",
+    "desired_mode": "stable",
+    "effective_mode_after_status": "managed",
+    "current_proxy_url_after_status": "http://127.0.0.1:10808",
+    "launch_smoke_machine_error_code": "PROXY_PATH_BROKEN",
+    "launch_smoke_proxy_url": "http://127.0.0.1:12334",
+    "consumer_activation_readiness_machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "effective_stable_runtime_consumer_source": "observed_stable_inventory_source",
+    "approved_target_became_effective": false
+  },
+  "next_contour": "Stable Approved-Target Activation / Proxy Truth Reclear For Final Validation",
+  "independent_audit": {
+    "agent": "Carver",
+    "contour_status": "blocked",
+    "root_blocker": "proxy_truth_drift",
+    "launcher_provisioning_closed": true,
+    "next_step": "repair_proxy_truth_mismatch_then_rerun_launch_smoke"
+  }
+}

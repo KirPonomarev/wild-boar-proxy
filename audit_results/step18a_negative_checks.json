@@ -1,0 +1,32 @@
+{
+  "step": "STEP-18A_OWNER_EVIDENCE_CLOSURE",
+  "generated_at_utc": "2026-05-07T05:00:16Z",
+  "checks": [
+    {
+      "name": "required_commands_present",
+      "passed": true,
+      "observed_missing_commands": []
+    },
+    {
+      "name": "required_runs_exit_zero",
+      "passed": true,
+      "non_zero_commands": []
+    },
+    {
+      "name": "forbidden_claim_tokens_absent_from_positive_claim_fields",
+      "passed": true,
+      "violations": []
+    },
+    {
+      "name": "pilot_gate_two_week_metrics_remain_blocked_if_no_new_evidence",
+      "passed": true,
+      "fact": "No two-week metrics command/artifact exists in required step18A test scope; blocker remains explicit."
+    },
+    {
+      "name": "scale20_remains_blocked_without_new_proof",
+      "passed": true,
+      "fact": "No new step18A command validates controlled staged rollout completion to 20."
+    }
+  ],
+  "overall_passed": true
+}

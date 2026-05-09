@@ -41,3 +41,29 @@ low-level routing.
 - each closed write contour must reach GitHub, not just a local commit
 - architecture is designed for 20 accounts from day one
 - scaling proof is staged: 10, then 15, then 20
+
+## Owner authorization rule
+
+The project owner may grant project-scoped standing approval in the current
+thread for any legal project-development action, including live runtime
+contours.
+
+Current standing approval phrase:
+
+`разрешаю тебе любые законные действия в рамках разработки проекта`
+
+Standing approval must be explicit, project-scoped, and present in the active
+thread.
+
+If that standing approval exists in the current thread and has not been
+revoked, it satisfies owner authorization for later project-scoped live
+commands that are otherwise allowed by canon and runbooks.
+
+Exact one-off owner markers remain valid and may still be used.
+
+Generic phrases such as `start`, `go`, `begin work`, or `начинай работу` do
+not themselves authorize live commands unless the thread already contains the
+standing owner approval or a more specific owner marker.
+
+Standing approval does not widen command scope beyond what canon and runbooks
+already allow.

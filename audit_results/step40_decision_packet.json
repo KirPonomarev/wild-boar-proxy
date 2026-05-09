@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "artifact": "decision_packet",
+  "step": "step40",
+  "generated_at_utc": "2026-05-08T20:58:08Z",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "commit": "d757f1ee40bd42f9193960d34b9264380b3a3f8c",
+  "contour": "authorized_single_sync_reclear",
+  "verdict": "NO_GO",
+  "contour_outcome": "NO_GO_RUNTIME_RECLEAR_FAILED",
+  "primary_blocker_code": "STABLE_POLICY_DRIFT",
+  "secondary_blockers": [
+    "CLAIM_GATE_BLOCKED",
+    "ROTATION_EVIDENCE_CONTRADICTED"
+  ],
+  "facts": [
+    "explicit owner authorization was present in the active thread before sync executed",
+    "exactly one sync --json was executed",
+    "sync --json returned OK and its changed_files matched the declared write set exactly",
+    "status --json remained machine_error_code=OK but claim_gate.status=blocked with machine_error_code=CLAIM_GATE_BLOCKED",
+    "status --json remained policy_drift.status=detected with machine_error_code=STABLE_POLICY_DRIFT",
+    "healthcheck --json remained machine_error_code=OK with launch_readiness.status=ready and runtime_guardrails.status=clear",
+    "accounts list --json still showed active_count=24 reserve_count=0 while pool_policy.active_target=15",
+    "rollout rotation inspect --json no longer reported stale evidence; it now reported ROTATION_EVIDENCE_CONTRADICTED with evidence_reason=policy_drift_detected",
+    "selected backend evidence narrowed to open17-plus and launch_capable backend count dropped to 1"
+  ],
+  "contract_checks": {
+    "owner_authorization_explicit": true,
+    "one_sync_rule_honored": true,
+    "declared_write_set_match": true,
+    "launch_smoke_opened": false
+  },
+  "independent_inspection": {
+    "reopen_authorization_verdict": "REOPEN_AUTHORIZED",
+    "post_sync_audit_verdict": "NO_GO_RUNTIME_RECLEAR_FAILED",
+    "cross_check_status": "matched"
+  },
+  "next_action": "do_not_open_posture_normalization; investigate post-sync stable policy drift and contradicted rotation evidence on owner surfaces"
+}

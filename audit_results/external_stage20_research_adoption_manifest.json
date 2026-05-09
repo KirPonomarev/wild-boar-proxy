@@ -1,0 +1,62 @@
+{
+  "bundle_name": "external_stage20_research_bundle",
+  "reviewed_at": "2026-05-09",
+  "repository": "wild-boar-proxy",
+  "current_branch": "codex/wave-1c-prereq-closeout",
+  "current_head": "701774c",
+  "inputs": {
+    "patch": "/Users/kirillponomarev/Downloads/wbp_execution_core_stage20_fix.patch",
+    "notes": "/Users/kirillponomarev/Downloads/wbp_agent_integration_notes.md",
+    "files_archive": "/Users/kirillponomarev/Downloads/wbp_execution_core_stage20_fix_files.tar.gz"
+  },
+  "apply_status": {
+    "status": "DOES_NOT_APPLY",
+    "verified_on_current_branch": true,
+    "failure_summary": [
+      "patch failed: wild_boar_proxy/runtime.py:1567",
+      "wild_boar_proxy/runtime.py: patch does not apply"
+    ]
+  },
+  "ideas": [
+    {
+      "id": "rollout_posture_inspect",
+      "classification": "safe_to_port",
+      "reason": "Adds a missing read-only owner surface for explicit posture classification before live stage advance."
+    },
+    {
+      "id": "stage_advance_lock_fix",
+      "classification": "safe_to_port",
+      "reason": "Closes a real precondition-read window by moving stage-advance preconditions under serialized owner lock."
+    },
+    {
+      "id": "reserve_minimum_depth_semantics",
+      "classification": "contract_review_required",
+      "reason": "Changes current exact-count reserve canon into minimum-depth semantics and affects proof/postflight behavior."
+    },
+    {
+      "id": "direct_patch_application",
+      "classification": "reject_or_rewrite",
+      "reason": "Patch does not apply to current HEAD and must be ported manually."
+    }
+  ],
+  "verification_contract": {
+    "required_fields": [
+      "py_compile",
+      "targeted_tests",
+      "relevant_contour_tests",
+      "full_suite"
+    ],
+    "note": "Targeted rollout tests must not be reported as equivalent to full merge readiness."
+  },
+  "required_next_steps": [
+    "Create a manual adoption matrix.",
+    "Implement rollout posture inspect in a dedicated PR.",
+    "Move stage-advance precondition reads under serialized lock in a dedicated PR.",
+    "Write an ADR for reserve semantics before any behavior change."
+  ],
+  "exports": [
+    "audit_results/external_stage20_research_assessment.md",
+    "audit_results/external_stage20_research_adoption_tz.md",
+    "audit_results/external_stage20_research_adoption_manifest.json"
+  ]
+}

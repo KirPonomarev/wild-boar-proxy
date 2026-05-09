@@ -1,0 +1,104 @@
+{
+  "contour_id": "STAGE20_C1_RESEARCH_CLEANUP_CANON",
+  "date": "2026-05-09",
+  "branch": "codex/wave-1c-prereq-closeout",
+  "target_commit": "701774c",
+  "status": "completed",
+  "verdict": "GO_STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR",
+  "scope": {
+    "repo_only": true,
+    "live_mutation_authorized": false
+  },
+  "source_material_reviewed": [
+    "/Users/kirillponomarev/Downloads/external_stage20_research_adoption.patch",
+    "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_patchset.tar.gz",
+    "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_manifest.json",
+    "/Users/kirillponomarev/Downloads/external_stage20_adoption_matrix.md",
+    "/Users/kirillponomarev/Downloads/external_research_output_contract.md",
+    "/Users/kirillponomarev/Downloads/ADR-0001-reserve-semantics-stage-proof.md",
+    "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_closeout.md"
+  ],
+  "local_findings": {
+    "original_external_patch": {
+      "status": "DOES_NOT_APPLY",
+      "evidence": [
+        "git apply --check /Users/kirillponomarev/Downloads/wbp_execution_core_stage20_fix.patch failed earlier on runtime.py context",
+        "repo-local adoption remains manual-port only"
+      ]
+    },
+    "reworked_external_adoption_patch": {
+      "status": "DOES_NOT_APPLY_TO_REAL_TARGET",
+      "target_commit": "701774c",
+      "evidence": [
+        "git apply --check /Users/kirillponomarev/Downloads/external_stage20_research_adoption.patch failed on clean 701774c worktree",
+        "failure: wild_boar_proxy/runtime.py:1567 patch does not apply"
+      ]
+    },
+    "baseline_full_suite_claim": {
+      "status": "DISPROVEN_FOR_REAL_TARGET",
+      "evidence": [
+        "python3 -m unittest tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success passed on clean 701774c",
+        "python3 -m unittest tests.test_cli.CliTests.test_healthcheck_auto_reconciles_to_healthy_stable_when_listener_is_live passed on clean 701774c",
+        "independent local full-suite replay on clean 701774c was previously green: 332 tests OK"
+      ]
+    }
+  },
+  "adoption_decisions": {
+    "take_now": [
+      "repo-local external research output contract discipline",
+      "repo-local adoption matrix discipline",
+      "stage-advance precondition lock-fix idea",
+      "rollout posture inspect owner-surface idea"
+    ],
+    "adr_only": [
+      "reserve minimum-depth semantics",
+      "any proof/postflight behavior change implied by reserve minimum-depth semantics"
+    ],
+    "reject_as_is": [
+      "blind application of the original external patch",
+      "blind application of the reworked external adoption patch",
+      "claim that baseline full-suite failures exist on clean 701774c",
+      "claim that the external adoption patch is merge-ready for the real target"
+    ]
+  },
+  "corrections_required_in_downloaded_bundle": [
+    {
+      "file": "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_manifest.json",
+      "field": "verification.full_suite",
+      "replacement": "not established by the reported targeted checks; clean 701774c replay did not confirm the two cited baseline failures"
+    },
+    {
+      "file": "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_manifest.json",
+      "field": "baseline_full_suite_failures_confirmed",
+      "replacement": []
+    },
+    {
+      "file": "/Users/kirillponomarev/Downloads/external_stage20_adoption_matrix.md",
+      "field": "full_suite narrative",
+      "replacement": "full-suite not established by the reported targeted checks; the two cited baseline failures were not reproduced on clean 701774c"
+    },
+    {
+      "file": "/Users/kirillponomarev/Downloads/external_stage20_research_adoption_closeout.md",
+      "field": "full-suite limitation paragraph",
+      "replacement": "full-suite green is not established by this bundle; the two cited baseline failures were not reproduced on clean 701774c"
+    }
+  ],
+  "independent_audit": {
+    "agent": "Boyle",
+    "status": "matched_local_findings",
+    "key_points": [
+      "external adoption patch does not apply cleanly to clean 701774c",
+      "the two cited baseline test failures both pass on clean 701774c",
+      "downloaded manifest/matrix/closeout need correction"
+    ]
+  },
+  "repo_local_truth_exports": [
+    "audit_results/external_stage20_research_assessment.md",
+    "audit_results/external_stage20_research_adoption_tz.md",
+    "audit_results/external_stage20_research_adoption_manifest.json",
+    "audit_results/stage20_c1_spec.md",
+    "audit_results/stage20_c1_decision_packet.json",
+    "audit_results/stage20_c1_closeout_report.md"
+  ],
+  "next_contour": "STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR"
+}
