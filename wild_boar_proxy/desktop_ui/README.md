@@ -14,6 +14,33 @@ Rules for the browser renderer boundary:
 - no log parsing
 - no runtime truth ownership
 
+## App Launcher
+
+Launch the first Overview screen through the local desktop companion launcher:
+
+`python3 -m wild_boar_proxy.desktop_ui.app`
+
+The launcher:
+
+- updates the live overview snapshot through the existing live snapshot module
+- starts the safe transport on `127.0.0.1`
+- starts a bounded static renderer service on `127.0.0.1`
+- prints a structured startup packet
+- prints the exact dev-preview URL when an embedded renderer is unavailable
+- does not auto-open the default browser by default
+
+Run a start-and-stop smoke check with:
+
+`python3 -m wild_boar_proxy.desktop_ui.app --smoke`
+
+Open the fallback preview explicitly with:
+
+`python3 -m wild_boar_proxy.desktop_ui.app --open-dev-preview`
+
+The fallback preview is a dev-preview path, not a product web UI. The current
+local dependency state may report `embedded_unavailable_dev_preview` until an
+embedded HTML renderer such as `pywebview` is installed and admitted.
+
 The visual baseline is:
 
 `/Users/kirillponomarev/Desktop/кабан дизайн/эталон дизайна.zip`
