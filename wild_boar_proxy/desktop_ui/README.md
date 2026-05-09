@@ -66,9 +66,31 @@ The transport is not a public web app, not a general API, and not runtime truth.
 It delegates only to `overview_bridge.run_bridge_request`, rejects forbidden
 request fields before bridge execution, and does not read state files or logs.
 
-The browser still defaults to the simulated lifecycle until a separate full
-implantation contour wires the renderer to this admitted transport. Preview the
-simulation with:
+Full implantation status:
+
+`OVERVIEW_FULL_IMPLANTATION=FIRST_SCREEN_TRANSPORT_MODE`
+
+The browser can use the admitted transport only when an endpoint is provided by
+desktop launcher config:
+
+`window.__WBP_OVERVIEW_TRANSPORT_ENDPOINT = "http://127.0.0.1:<port>/overview-bridge"`
+
+For local test/dev preview, the same endpoint may be supplied by query param:
+
+`http://127.0.0.1:<static-port>/index.html?mode=live&bridge=transport&transport=http://127.0.0.1:<transport-port>/overview-bridge`
+
+The renderer validates the endpoint before use:
+
+- protocol must be `http:`
+- hostname must be `127.0.0.1`
+- path must be `/overview-bridge`
+- credentials, hash, and query on the transport endpoint are rejected
+
+The browser does not send CLI commands from the browser. It sends only fixed
+bridge request objects such as `refresh_overview` or admitted `action_id`
+values.
+
+The simulated lifecycle remains available as a clearly labeled fallback:
 
 `http://127.0.0.1:<port>/index.html?mode=live&bridge=simulated`
 

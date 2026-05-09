@@ -1,0 +1,111 @@
+{
+  "document_type": "UI_DESKTOP_HTML_OVERVIEW_FULL_IMPLANTATION_PACKET",
+  "document_status": "implementation_verified",
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_FULL_IMPLANTATION",
+  "created_at": "2026-05-09",
+  "branch": "codex/ui-desktop-html-overview-full-implantation",
+  "base_branch": "codex/ui-desktop-html-overview-safe-transport",
+  "goal": "Connect the first Overview screen to the admitted local safe transport without adding other render screens or changing runtime truth.",
+  "write_surfaces": [
+    "wild_boar_proxy/desktop_ui/screens/overview.js",
+    "wild_boar_proxy/desktop_ui/overview_transport.py",
+    "wild_boar_proxy/desktop_ui/styles/overview.css",
+    "wild_boar_proxy/desktop_ui/README.md",
+    "tests/test_desktop_ui_overview_implantation.py",
+    "tests/test_desktop_ui_overview_transport.py",
+    "audit_results/ui_desktop_html_overview_full_implantation_screenshot.png",
+    "audit_results/ui_desktop_html_overview_full_implantation_packet.json",
+    "audit_results/ui_desktop_html_overview_full_implantation_closeout.md"
+  ],
+  "layer_boundary": {
+    "ui_layer": "Builds fixed bridge requests and renders transport, bridge, and action result states.",
+    "transport_layer": "Uses already admitted localhost-only /overview-bridge transport.",
+    "bridge_layer": "Continues to validate operation_id and action_id in backend-owned overview_bridge.",
+    "command_layer": "Remains the only runtime truth path through strict JSON command surfaces.",
+    "state_logs": "Not read directly by UI or transport."
+  },
+  "endpoint_rule": {
+    "normal_source": "window.__WBP_OVERVIEW_TRANSPORT_ENDPOINT",
+    "test_source": "transport query parameter only when bridge=transport",
+    "protocol": "http:",
+    "hostname": "127.0.0.1",
+    "path": "/overview-bridge",
+    "credentials_allowed": false,
+    "hash_allowed": false,
+    "query_on_endpoint_allowed": false
+  },
+  "request_shapes": [
+    {
+      "operation_id": "refresh_overview"
+    },
+    {
+      "operation_id": "run_overview_action",
+      "action_id": "launch_client|run_smoke|switch_stable|run_sync",
+      "confirmed": "boolean"
+    }
+  ],
+  "deferred": [
+    "other render screens",
+    "accounts screen",
+    "diagnostics screen",
+    "settings screen",
+    "modal system",
+    "stable repair UI",
+    "rollout/stage/policy/stable target actions",
+    "final pixel-perfect pass"
+  ],
+  "acceptance_status": {
+    "fixture_mode_preserved": "implemented",
+    "live_snapshot_mode_preserved": "implemented",
+    "simulated_bridge_mode_preserved": "implemented",
+    "transport_mode_added": "implemented",
+    "endpoint_validation_added": "implemented",
+    "raw_cli_commands_in_browser": false,
+    "direct_state_or_log_reads": false,
+    "other_screens_integrated": false,
+    "visual_polish_scope": "transport_state_labels_only"
+  },
+  "verification": [
+    {
+      "command": "node --check wild_boar_proxy/desktop_ui/screens/overview.js",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/overview_transport.py tests/test_desktop_ui_overview_transport.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m unittest tests.test_desktop_ui_command_adapter tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_overview_transport tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 65
+    },
+    {
+      "command": "python3 -m json.tool audit_results/ui_desktop_html_overview_full_implantation_packet.json",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"status --json|healthcheck --json|mode set|accounts promote|rollout stage|policy stage|evidence capture|stable target switch|command_adapter|overview_bridge|XMLHttpRequest|child_process|window\\\\.pywebview|localhost\" wild_boar_proxy/desktop_ui/screens/overview.js",
+      "result": "pass",
+      "matches": 0
+    },
+    {
+      "command": "browser visual smoke against local static server plus local safe transport",
+      "result": "pass",
+      "evidence": "audit_results/ui_desktop_html_overview_full_implantation_screenshot.png",
+      "observed": "transport_live state, live snapshot + admitted transport, refresh returned Overview snapshot refreshed."
+    }
+  ],
+  "independent_inspection": {
+    "result": "pass",
+    "runtime_cli_web_ui_ui_shell_touched": false,
+    "endpoint_validation": "strict",
+    "raw_cli_strings_in_browser_js": false,
+    "cors_general_api": false,
+    "other_screens_integrated": false,
+    "residual_risks": [
+      "simulated fallback remains available",
+      "query-param transport endpoint remains available only with localhost-only validation"
+    ]
+  },
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_VISUAL_QA_PASS"
+}

@@ -21,6 +21,7 @@ SOURCE_ID = "ui_desktop_html_overview_safe_transport"
 BRIDGE_ROUTE = "/overview-bridge"
 LOCAL_BIND_HOST = "127.0.0.1"
 MAX_REQUEST_BYTES = 64 * 1024
+ALLOWED_CORS_REQUEST_HEADERS = "content-type"
 
 BridgeRunner = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 
@@ -34,6 +35,31 @@ class OverviewTransportServer(ThreadingHTTPServer):
 class OverviewTransportHandler(BaseHTTPRequestHandler):
     server: OverviewTransportServer
 
+    def end_headers(self) -> None:
+        origin = self._admitted_origin()
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib handler API
+        if self.path != BRIDGE_ROUTE:
+            self._send_error(
+                404,
+                "TRANSPORT_ROUTE_FORBIDDEN",
+                "Only the fixed Overview bridge route is admitted.",
+            )
+            return
+        if self._admitted_origin() is None:
+            self._send_error(403, "TRANSPORT_ORIGIN_FORBIDDEN", "Overview transport origin is not admitted.")
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Methods", "POST")
+        self.send_header("Access-Control-Allow-Headers", ALLOWED_CORS_REQUEST_HEADERS)
+        self.send_header("Access-Control-Max-Age", "300")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
         if self.path != BRIDGE_ROUTE:
             self._send_error(
@@ -41,6 +67,9 @@ class OverviewTransportHandler(BaseHTTPRequestHandler):
                 "TRANSPORT_ROUTE_FORBIDDEN",
                 "Only the fixed Overview bridge route is admitted.",
             )
+            return
+        if self.headers.get("Origin") and self._admitted_origin() is None:
+            self._send_error(403, "TRANSPORT_ORIGIN_FORBIDDEN", "Overview transport origin is not admitted.")
             return
 
         raw_body = self._read_body()
@@ -92,6 +121,20 @@ class OverviewTransportHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         return
+
+    def _admitted_origin(self) -> str | None:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+        try:
+            parsed = json_urlparse(origin)
+        except ValueError:
+            return None
+        if parsed["protocol"] != "http" or parsed["hostname"] != LOCAL_BIND_HOST:
+            return None
+        if parsed["username"] or parsed["password"] or parsed["path"] not in ("", "/") or parsed["query"] or parsed["fragment"]:
+            return None
+        return origin
 
     def _method_forbidden(self) -> None:
         self._send_error(
@@ -155,6 +198,23 @@ def create_transport_server(
     server = OverviewTransportServer((host, port), OverviewTransportHandler)
     server.bridge_runner = bridge_runner or default_runner
     return server
+
+
+def json_urlparse(value: str) -> dict[str, str]:
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(value)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("URL must be absolute.")
+    return {
+        "protocol": parsed.scheme,
+        "hostname": parsed.hostname or "",
+        "username": parsed.username or "",
+        "password": parsed.password or "",
+        "path": parsed.path,
+        "query": parsed.query,
+        "fragment": parsed.fragment,
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -11,14 +11,14 @@ README = DESKTOP_UI / "README.md"
 
 
 class DesktopUiOverviewImplantationTests(unittest.TestCase):
-    def test_safe_transport_is_admitted_but_not_full_browser_implantation(self) -> None:
+    def test_safe_transport_is_admitted_for_first_screen_only(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")
         readme = README.read_text(encoding="utf-8")
 
-        self.assertIn('const TRANSPORT_GATE = "RED";', overview)
+        self.assertIn('const TRANSPORT_GATE = "ADMITTED_LOCAL_ONLY";', overview)
         self.assertIn("OVERVIEW_SAFE_TRANSPORT=ADMITTED_LOCAL_ONLY", readme)
-        self.assertIn("browser still defaults to the simulated lifecycle", readme)
-        self.assertIn("does not call backend commands from the browser", readme)
+        self.assertIn("Full implantation status", readme)
+        self.assertIn("does not send CLI commands from the browser", readme)
 
     def test_browser_builds_only_fixed_bridge_operation_shapes(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")
@@ -58,14 +58,35 @@ class DesktopUiOverviewImplantationTests(unittest.TestCase):
             "window.pywebview",
             "child_process",
             "XMLHttpRequest",
-            "http://127.0.0.1",
             "localhost",
             "overview_bridge",
             "command_adapter",
         ):
             self.assertNotIn(forbidden, overview)
 
-    def test_simulated_lifecycle_is_labeled(self) -> None:
+    def test_transport_endpoint_validation_is_strict(self) -> None:
+        overview = OVERVIEW_JS.read_text(encoding="utf-8")
+
+        self.assertIn("window.__WBP_OVERVIEW_TRANSPORT_ENDPOINT", overview)
+        self.assertIn('parsed.protocol !== "http:"', overview)
+        self.assertIn("parsed.hostname !== TRANSPORT_HOST", overview)
+        self.assertIn("parsed.pathname !== TRANSPORT_ROUTE", overview)
+        self.assertIn("parsed.username || parsed.password || parsed.hash || parsed.search", overview)
+        self.assertIn('const TRANSPORT_HOST = "127.0.0.1";', overview)
+        self.assertIn('const TRANSPORT_ROUTE = "/overview-bridge";', overview)
+
+    def test_real_transport_mode_uses_fetch_without_raw_commands(self) -> None:
+        overview = OVERVIEW_JS.read_text(encoding="utf-8")
+
+        self.assertIn("runTransportBridgeAction", overview)
+        self.assertIn("callTransportBridge", overview)
+        self.assertIn('method: "POST"', overview)
+        self.assertIn("JSON.stringify(request)", overview)
+        self.assertNotIn("status --json", overview)
+        self.assertNotIn("healthcheck --json", overview)
+        self.assertNotIn("mode set", overview)
+
+    def test_simulated_lifecycle_is_labeled_as_fallback(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")
 
         self.assertIn("SIMULATED_TRANSPORT_GATE_RED", overview)
