@@ -1,0 +1,75 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_LIVE_READ_BINDING",
+  "date": "2026-05-09",
+  "base_branch": "codex/ui-desktop-html-command-adapter-boundary",
+  "work_branch": "codex/ui-desktop-html-overview-live-read-binding",
+  "status": "passed_local_verification",
+  "runtime_scope": {
+    "runtime_core_changed": false,
+    "cli_changed": false,
+    "web_ui_changed": false,
+    "ui_shell_changed": false,
+    "browser_command_execution_added": false,
+    "mutating_ui_actions_enabled": false
+  },
+  "live_read_commands": [
+    "status",
+    "healthcheck",
+    "mode.get",
+    "accounts.list",
+    "rollout.rotation.inspect"
+  ],
+  "snapshot_policy": {
+    "browser_loads_snapshot_only": true,
+    "snapshot_source": "ui_desktop_html_live_overview_snapshot",
+    "snapshot_git_ignored": "wild_boar_proxy/desktop_ui/live/*.json",
+    "raw_account_auth_refs_exposed": false,
+    "rotation_scale_claim": "not_claimed"
+  },
+  "observed_live_snapshot": {
+    "source": "ui_desktop_html_live_overview_snapshot",
+    "synthetic": false,
+    "live_mode": true,
+    "fixture_state": "degraded",
+    "desired_mode": "managed",
+    "effective_mode": "stable",
+    "mode_mismatch": true,
+    "rotation_adapter_status": "command_error",
+    "rotation_proof_claim": "not_claimed",
+    "private_path_scan": "pass_no_matches"
+  },
+  "verification": [
+    {
+      "command": "python3 -m unittest -q tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_static tests.test_desktop_ui_command_adapter",
+      "result": "pass",
+      "tests": 27
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/live_overview.py wild_boar_proxy/desktop_ui/command_adapter.py tests/test_desktop_ui_overview_live_binding.py tests/test_desktop_ui_static.py tests/test_desktop_ui_command_adapter.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.live_overview --output /tmp/wbp_overview_live_snapshot.json",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m json.tool /tmp/wbp_overview_live_snapshot.json",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"auth_ref|/Users/|~/.codex|supervisor-state|backend-registry\" /tmp/wbp_overview_live_snapshot.json",
+      "result": "pass_no_matches"
+    },
+    {
+      "command": "rg -n \"shell=True|os\\.system|Popen\\(|subprocess\\.run\\([^\\n]*shell=True|~/.codex|backend-registry|supervisor-state|stable target switch|rollout stage|policy stage|evidence capture|auth_ref\" wild_boar_proxy/desktop_ui -g '!README.md'",
+      "result": "pass_no_matches"
+    },
+    {
+      "command": "headless Chrome screenshot at http://127.0.0.1:8765/index.html?mode=live",
+      "result": "pass",
+      "screenshot": "audit_results/ui_desktop_html_overview_live_binding_screenshot.png",
+      "screenshot_dimensions": "1600x1000"
+    }
+  ],
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_ACTION_WIRING"
+}

@@ -29,6 +29,15 @@ Preview fixture variants with:
 
 `http://127.0.0.1:<port>/index.html?fixture=overview_degraded`
 
+Preview an explicit live snapshot with:
+
+`python3 -m wild_boar_proxy.desktop_ui.live_overview --output wild_boar_proxy/desktop_ui/live/overview_live_snapshot.json`
+
+`http://127.0.0.1:<port>/index.html?mode=live`
+
+The live browser path reads only the generated snapshot file. It does not run
+commands from JavaScript.
+
 ## Command Adapter Boundary
 
 `command_adapter.py` is a backend-side utility. Browser JavaScript does not
