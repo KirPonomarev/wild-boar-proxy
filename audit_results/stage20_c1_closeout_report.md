@@ -10,10 +10,9 @@ before starting any execution-core code adoption.
 
 ## Result
 
-- status: verification_complete_pending_git_closeout
-- final verdict: `READY_FOR_STAGE20_C1_GIT_CLOSEOUT`
-- next action: commit and push this contour, then open
-  `STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR`
+- status: completed
+- final verdict: `GO_STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR`
+- next action: open `STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR`
 
 ## Verification
 
@@ -60,9 +59,10 @@ before starting any execution-core code adoption.
 
 ## Git
 
-- branch: to be recorded at git closeout
-- commit: to be recorded at git closeout
-- pushed: to be recorded at git closeout
+- branch: `codex/stage20-c1-research-cleanup-canon`
+- commit: `d8eb0ef` (primary artifact commit)
+- pushed: yes
+- pull request: `#36` draft, targeting `codex/wave-1c-prereq-closeout`
 
 ## Scope Check
 
