@@ -2,7 +2,7 @@
   "contour_id": "STAGE20_C2_STAGE_ADVANCE_LOCK_REPAIR",
   "date": "2026-05-09",
   "branch": "codex/stage20-c2-stage-advance-lock-repair",
-  "status": "verification_complete_pending_git_closeout",
+  "status": "completed",
   "scope": {
     "repo_only": true,
     "live_mutation_authorized": false
@@ -53,5 +53,11 @@
       "finding": "no reserve semantics drift detected; new test sufficiently covers target-satisfied precondition window"
     }
   ],
+  "git": {
+    "primary_commit": "aef164c",
+    "branch": "codex/stage20-c2-stage-advance-lock-repair",
+    "pushed": true,
+    "pull_request": "#37"
+  },
   "next_contour": "STAGE20_C3_ROLLOUT_POSTURE_INSPECT"
 }

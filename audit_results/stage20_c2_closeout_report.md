@@ -11,10 +11,9 @@ observed only under `serialized_lock`.
 
 ## Result
 
-- status: verification_complete_pending_git_closeout
-- final verdict: `READY_FOR_STAGE20_C2_GIT_CLOSEOUT`
-- next action: commit and push this contour, then open
-  `STAGE20_C3_ROLLOUT_POSTURE_INSPECT`
+- status: completed
+- final verdict: `GO_STAGE20_C3_ROLLOUT_POSTURE_INSPECT`
+- next action: open `STAGE20_C3_ROLLOUT_POSTURE_INSPECT`
 
 ## Verification
 
@@ -58,8 +57,9 @@ observed only under `serialized_lock`.
 ## Git
 
 - branch: `codex/stage20-c2-stage-advance-lock-repair`
-- commit: pending
-- pushed: pending
+- commit: `aef164c` (primary artifact commit)
+- pushed: yes
+- pull request: `#37` draft, targeting `codex/stage20-c1-research-cleanup-canon`
 
 ## Scope Check
 
