@@ -1,0 +1,59 @@
+{
+  "fixture_id": "overview_managed_mismatch",
+  "fixture_state": "degraded",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Desired mode is managed, effective mode is stable.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "retry",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "retry",
+    "desired_mode": "managed",
+    "effective_mode": "stable",
+    "endpoint": "127.0.0.1:8318",
+    "last_error": "Managed mode is not effective because no healthy managed backend was selected."
+  },
+  "mode_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "retry",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "retry",
+    "desired_mode": "managed",
+    "effective_mode": "stable"
+  },
+  "accounts_packet": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Managed pool has no selected healthy backend.",
+    "machine_error_code": "NO_HEALTHY_BACKENDS",
+    "changed_files": [],
+    "next_action": "retry",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "retry",
+    "account_summary": {
+      "active_count": 24,
+      "reserve_count": 0,
+      "hold_count": 0,
+      "problem_count": 24,
+      "active_note": "ждет восстановления",
+      "reserve_note": "нет резерва",
+      "hold_note": "нет",
+      "problem_note": "0 healthy"
+    }
+  },
+  "events": [
+    { "tone": "amber", "icon": "!", "message": "Desired managed, effective stable", "time": "fixture" },
+    { "tone": "red", "icon": "!", "message": "No healthy managed backends available", "time": "fixture" }
+  ]
+}

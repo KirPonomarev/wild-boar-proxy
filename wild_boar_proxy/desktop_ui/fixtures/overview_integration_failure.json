@@ -1,0 +1,25 @@
+{
+  "fixture_id": "overview_integration_failure",
+  "fixture_state": "integration-failure",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": null,
+  "mode_packet": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Fixture intentionally models invalid integration input.",
+    "machine_error_code": "INTEGRATION_FAILURE",
+    "changed_files": [],
+    "next_action": "inspect",
+    "liveness": "unknown",
+    "severity": "error",
+    "operator_action": "inspect",
+    "desired_mode": "-",
+    "effective_mode": "-"
+  },
+  "accounts_packet": null,
+  "events": [
+    { "tone": "red", "icon": "!", "message": "Invalid fixture packet", "time": "fixture" }
+  ],
+  "notice": "Fixture intentionally omits required packets."
+}

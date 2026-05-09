@@ -1,0 +1,58 @@
+{
+  "fixture_id": "overview_unknown",
+  "fixture_state": "unknown",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Runtime status is unknown.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "-",
+    "last_error": ""
+  },
+  "mode_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are unknown.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "desired_mode": "stable",
+    "effective_mode": "stable"
+  },
+  "accounts_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Account pool state is unknown.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "account_summary": {
+      "active_count": 0,
+      "reserve_count": 0,
+      "hold_count": 0,
+      "problem_count": 0,
+      "active_note": "нет данных",
+      "reserve_note": "нет данных",
+      "hold_note": "нет данных",
+      "problem_note": "нет данных"
+    }
+  },
+  "events": [
+    { "tone": "neutral", "icon": "•", "message": "No current command packet is loaded", "time": "fixture" }
+  ]
+}
