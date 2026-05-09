@@ -28,16 +28,16 @@
       "provider": "cerebras",
       "provider_type": "direct_provider",
       "availability_state": "provider_visible_but_unverified",
-      "lane_role": "comparison",
+      "lane_role": "secondary_reasoning",
       "cost_class": "entitled_direct_limited",
       "capability_tags": [
         "reasoning_lane",
         "selective_use",
-        "comparison_lane"
+        "secondary_reasoning_lane"
       ],
-      "fallback_eligible": true,
+      "fallback_eligible": false,
       "max_context_hint": null,
-      "evidence_level": "runtime_failure",
+      "evidence_level": "limits_ui",
       "last_verified_at": "2026-05-07T00:00:00+00:00",
       "blocked_reason_optional": null,
       "evidence_sources": [
