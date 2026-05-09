@@ -1,0 +1,91 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_RENDERER_ADMISSION_AND_PASSPORTS",
+  "artifact_type": "render_surface_registry",
+  "status": "created",
+  "registry_rules": {
+    "visual_baseline_is_not_runtime_truth": true,
+    "visibility_does_not_equal_availability": true,
+    "all_interactive_actions_require_command_allowlist": true,
+    "deferred_actions_must_not_be_silently_enabled": true,
+    "ui_shell_py_remains_fallback_control_baseline": true
+  },
+  "surfaces": [
+    {
+      "surface_id": "brand-lockup",
+      "source_screen": "00_brand_lockup",
+      "admission_status": "reference_only",
+      "screen_role": "Brand and style reference",
+      "implementation_order": null
+    },
+    {
+      "surface_id": "overview-dashboard",
+      "source_screen": "01_overview_dashboard",
+      "admission_status": "first_implementation_target",
+      "screen_role": "Main runtime status and mode overview",
+      "implementation_order": 1
+    },
+    {
+      "surface_id": "setup-client",
+      "source_screen": "02_setup_client",
+      "admission_status": "conditional_setup_candidate",
+      "screen_role": "Setup/onboarding candidate",
+      "implementation_order": null
+    },
+    {
+      "surface_id": "select-codex-client",
+      "source_screen": "03_select_codex_client",
+      "admission_status": "conditional_settings_setup_candidate",
+      "screen_role": "Client selection/settings candidate",
+      "implementation_order": null
+    },
+    {
+      "surface_id": "accounts",
+      "source_screen": "04_accounts",
+      "admission_status": "account_pool_target",
+      "screen_role": "Account pool management",
+      "implementation_order": 2
+    },
+    {
+      "surface_id": "add-account-modal",
+      "source_screen": "05_add_account_modal",
+      "admission_status": "onboarding_modal_target",
+      "screen_role": "Account onboarding modal",
+      "implementation_order": 3
+    },
+    {
+      "surface_id": "diagnostics",
+      "source_screen": "06_diagnostics",
+      "admission_status": "diagnostics_target",
+      "screen_role": "Diagnostics and support snapshot",
+      "implementation_order": 4
+    },
+    {
+      "surface_id": "settings",
+      "source_screen": "07_settings",
+      "admission_status": "bounded_settings_display_target",
+      "screen_role": "Bounded settings display",
+      "implementation_order": 5
+    },
+    {
+      "surface_id": "import-existing",
+      "source_screen": "08_import_existing",
+      "admission_status": "deferred_until_command_contract_support",
+      "screen_role": "Existing installation import flow",
+      "implementation_order": null
+    },
+    {
+      "surface_id": "confirm-action",
+      "source_screen": "09_confirm_action",
+      "admission_status": "reusable_confirmation_modal_target",
+      "screen_role": "Reusable confirmation modal",
+      "implementation_order": 3
+    }
+  ],
+  "first_implementation_target": "overview-dashboard",
+  "deferred_surfaces": [
+    {
+      "surface_id": "import-existing",
+      "reason": "Current first-pass UI command contract does not admit import-existing as an active command flow."
+    }
+  ]
+}

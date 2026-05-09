@@ -1,0 +1,293 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_RENDERER_ADMISSION_AND_PASSPORTS",
+  "artifact_type": "screen_passports",
+  "status": "created",
+  "global_rules": {
+    "primary_truth_must_be_command_json": true,
+    "direct_state_file_truth_allowed": false,
+    "log_parsing_truth_allowed": false,
+    "top_level_machine_error_code_authoritative": true,
+    "exit_code_alone_is_never_success": true
+  },
+  "allowed_truth_commands": [
+    "status --json",
+    "healthcheck --json",
+    "mode get --json",
+    "accounts list --json",
+    "rollout rotation inspect --json"
+  ],
+  "allowed_first_pass_actions": [
+    "mode set stable --json",
+    "mode set managed --json",
+    "sync --json",
+    "launch client --json",
+    "launch smoke --json",
+    "stable repair --dry-run --json",
+    "stable repair --apply --json",
+    "accounts onboard --json",
+    "accounts validate <id> --json",
+    "accounts promote <id> --json",
+    "accounts demote <id> --json",
+    "accounts hold <id> --json",
+    "accounts release <id> --json",
+    "accounts retire <id> --json",
+    "diagnostics export --json"
+  ],
+  "deferred_actions": [
+    "policy stage set ... --json",
+    "rollout stage prove ... --json",
+    "rollout stage advance ... --json",
+    "rollout evidence capture 16 --json",
+    "stable target switch ... --json"
+  ],
+  "passports": [
+    {
+      "surface_id": "brand-lockup",
+      "source_html": "wild_boar_proxy_redesign/html/00_brand_lockup.html",
+      "source_png": "wild_boar_proxy_redesign/png/00_brand_lockup.png",
+      "admission_status": "reference_only",
+      "screen_role": "Brand and visual style reference",
+      "primary_truth_commands": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "fallback_state": "not_applicable",
+      "interactive_now": false,
+      "requires_future_command": false,
+      "visual_parity_target": "reference_style_only",
+      "notes": "Use for brand, palette, typography, and component temperament. Do not implement as a runtime screen."
+    },
+    {
+      "surface_id": "overview-dashboard",
+      "source_html": "wild_boar_proxy_redesign/html/01_overview_dashboard.html",
+      "source_png": "wild_boar_proxy_redesign/png/01_overview_dashboard.png",
+      "admission_status": "first_implementation_target",
+      "screen_role": "Main runtime status, mode controls, account summary, and recent command-derived events",
+      "primary_truth_commands": [
+        "status --json",
+        "healthcheck --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_actions": [
+        "mode set stable --json",
+        "mode set managed --json",
+        "sync --json",
+        "launch client --json",
+        "launch smoke --json"
+      ],
+      "deferred_actions": [
+        "policy stage set ... --json",
+        "rollout stage prove ... --json",
+        "rollout stage advance ... --json",
+        "rollout evidence capture 16 --json",
+        "stable target switch ... --json"
+      ],
+      "fallback_state": "integration-failure",
+      "interactive_now": true,
+      "requires_future_command": false,
+      "visual_parity_target": "faithful_static_overview_at_1600x1000",
+      "notes": "First coding target. Start with fixtures before live command binding."
+    },
+    {
+      "surface_id": "setup-client",
+      "source_html": "wild_boar_proxy_redesign/html/02_setup_client.html",
+      "source_png": "wild_boar_proxy_redesign/png/02_setup_client.png",
+      "admission_status": "conditional_setup_candidate",
+      "screen_role": "Setup and local client path candidate",
+      "primary_truth_commands": [
+        "status --json",
+        "mode get --json"
+      ],
+      "allowed_actions": [
+        "launch client --json",
+        "launch smoke --json"
+      ],
+      "deferred_actions": [
+        "direct config path mutation",
+        "OAuth/browser callback handling",
+        "import existing installation apply"
+      ],
+      "fallback_state": "view-only-or-integration-failure",
+      "interactive_now": false,
+      "requires_future_command": true,
+      "visual_parity_target": "conditional",
+      "notes": "May be used as bounded setup display later. It must not write config files directly."
+    },
+    {
+      "surface_id": "select-codex-client",
+      "source_html": "wild_boar_proxy_redesign/html/03_select_codex_client.html",
+      "source_png": "wild_boar_proxy_redesign/png/03_select_codex_client.png",
+      "admission_status": "conditional_settings_setup_candidate",
+      "screen_role": "Client selection or settings candidate",
+      "primary_truth_commands": [
+        "status --json",
+        "mode get --json"
+      ],
+      "allowed_actions": [
+        "launch client --json",
+        "launch smoke --json"
+      ],
+      "deferred_actions": [
+        "direct config mutation",
+        "stable target switch ... --json"
+      ],
+      "fallback_state": "view-only-or-integration-failure",
+      "interactive_now": false,
+      "requires_future_command": true,
+      "visual_parity_target": "conditional",
+      "notes": "Can be admitted only if backed by existing command surfaces or a future approved command contour."
+    },
+    {
+      "surface_id": "accounts",
+      "source_html": "wild_boar_proxy_redesign/html/04_accounts.html",
+      "source_png": "wild_boar_proxy_redesign/png/04_accounts.png",
+      "admission_status": "account_pool_target",
+      "screen_role": "Account pool list and lifecycle actions",
+      "primary_truth_commands": [
+        "accounts list --json",
+        "status --json"
+      ],
+      "allowed_actions": [
+        "accounts validate <id> --json",
+        "accounts promote <id> --json",
+        "accounts demote <id> --json",
+        "accounts hold <id> --json",
+        "accounts release <id> --json",
+        "accounts retire <id> --json"
+      ],
+      "deferred_actions": [
+        "rollout stage advance ... --json",
+        "policy stage set ... --json"
+      ],
+      "fallback_state": "integration-failure",
+      "interactive_now": true,
+      "requires_future_command": false,
+      "visual_parity_target": "faithful_accounts_at_1600x1000",
+      "notes": "Promotion is not scale proof. Active count must not imply pilot readiness."
+    },
+    {
+      "surface_id": "add-account-modal",
+      "source_html": "wild_boar_proxy_redesign/html/05_add_account_modal.html",
+      "source_png": "wild_boar_proxy_redesign/png/05_add_account_modal.png",
+      "admission_status": "onboarding_modal_target",
+      "screen_role": "Account onboarding modal",
+      "primary_truth_commands": [
+        "accounts list --json",
+        "status --json"
+      ],
+      "allowed_actions": [
+        "accounts onboard --json"
+      ],
+      "deferred_actions": [
+        "direct auth file mutation",
+        "OAuth/browser callback handling"
+      ],
+      "fallback_state": "user-action-required-or-integration-failure",
+      "interactive_now": true,
+      "requires_future_command": false,
+      "visual_parity_target": "faithful_modal_at_1600x1000",
+      "notes": "No-new-auth is not success. User action required must stay visible."
+    },
+    {
+      "surface_id": "diagnostics",
+      "source_html": "wild_boar_proxy_redesign/html/06_diagnostics.html",
+      "source_png": "wild_boar_proxy_redesign/png/06_diagnostics.png",
+      "admission_status": "diagnostics_target",
+      "screen_role": "Diagnostics and support export",
+      "primary_truth_commands": [
+        "status --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_actions": [
+        "diagnostics export --json",
+        "stable repair --dry-run --json",
+        "stable repair --apply --json"
+      ],
+      "deferred_actions": [
+        "rollout evidence capture 16 --json",
+        "stable target switch ... --json"
+      ],
+      "fallback_state": "integration-failure",
+      "interactive_now": true,
+      "requires_future_command": false,
+      "visual_parity_target": "faithful_diagnostics_at_1600x1000",
+      "notes": "Diagnostics are support snapshots, not runtime health truth."
+    },
+    {
+      "surface_id": "settings",
+      "source_html": "wild_boar_proxy_redesign/html/07_settings.html",
+      "source_png": "wild_boar_proxy_redesign/png/07_settings.png",
+      "admission_status": "bounded_settings_display_target",
+      "screen_role": "Bounded settings display",
+      "primary_truth_commands": [
+        "status --json",
+        "mode get --json"
+      ],
+      "allowed_actions": [
+        "mode set stable --json",
+        "mode set managed --json"
+      ],
+      "deferred_actions": [
+        "direct config mutation",
+        "stable target switch ... --json"
+      ],
+      "fallback_state": "view-only-or-integration-failure",
+      "interactive_now": false,
+      "requires_future_command": true,
+      "visual_parity_target": "conditional",
+      "notes": "Settings must not write configuration files directly."
+    },
+    {
+      "surface_id": "import-existing",
+      "source_html": "wild_boar_proxy_redesign/html/08_import_existing.html",
+      "source_png": "wild_boar_proxy_redesign/png/08_import_existing.png",
+      "admission_status": "deferred_until_command_contract_support",
+      "screen_role": "Existing installation import flow",
+      "primary_truth_commands": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "import existing installation apply",
+        "direct file mutation",
+        "direct state/registry mutation"
+      ],
+      "fallback_state": "deferred",
+      "interactive_now": false,
+      "requires_future_command": true,
+      "visual_parity_target": "deferred",
+      "notes": "The render shows import/apply behavior that is not admitted by the first-pass command contract."
+    },
+    {
+      "surface_id": "confirm-action",
+      "source_html": "wild_boar_proxy_redesign/html/09_confirm_action.html",
+      "source_png": "wild_boar_proxy_redesign/png/09_confirm_action.png",
+      "admission_status": "reusable_confirmation_modal_target",
+      "screen_role": "Reusable confirmation modal",
+      "primary_truth_commands": [],
+      "allowed_actions": [
+        "mode set stable --json",
+        "mode set managed --json",
+        "sync --json",
+        "stable repair --apply --json",
+        "accounts onboard --json",
+        "accounts promote <id> --json",
+        "accounts demote <id> --json",
+        "accounts hold <id> --json",
+        "accounts release <id> --json",
+        "accounts retire <id> --json"
+      ],
+      "deferred_actions": [
+        "rollout stage advance ... --json",
+        "policy stage set ... --json",
+        "rollout evidence capture 16 --json",
+        "stable target switch ... --json"
+      ],
+      "fallback_state": "not_applicable",
+      "interactive_now": true,
+      "requires_future_command": false,
+      "visual_parity_target": "faithful_confirmation_modal_at_1600x1000",
+      "notes": "Confirmation changes no command meaning. It only gates approved actions."
+    }
+  ]
+}

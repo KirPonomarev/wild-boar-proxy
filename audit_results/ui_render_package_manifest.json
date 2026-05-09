@@ -1,0 +1,128 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_RENDERER_ADMISSION_AND_PASSPORTS",
+  "artifact_type": "render_package_manifest",
+  "status": "admitted_visual_baseline",
+  "source_package": {
+    "path": "/Users/kirillponomarev/Desktop/кабан дизайн/эталон дизайна.zip",
+    "sha256": "bc09f7f8d0811ca2f80ffa77e43d02250b699bea3f94aa8fb290e6e5095492ae",
+    "role": "visual_baseline_not_runtime_canon"
+  },
+  "package_root": "wild_boar_proxy_redesign",
+  "inventory": {
+    "html_count": 10,
+    "png_count": 10,
+    "asset_count": 1,
+    "contact_sheet_count": 1,
+    "readme_present": true
+  },
+  "design_baseline": {
+    "logical_viewport": "1600x1000",
+    "png_baseline_size": "3200x2000",
+    "scale_factor": 2,
+    "style_summary": "Warm technical editorial; large brand sidebar; soft cards; monospaced discipline; calm operational statuses."
+  },
+  "assets": [
+    {
+      "path": "wild_boar_proxy_redesign/assets/boar_mark.png",
+      "size_bytes": 38472,
+      "dimensions": "178x187",
+      "role": "brand_mark"
+    }
+  ],
+  "screens": [
+    {
+      "screen_id": "00_brand_lockup",
+      "html": "wild_boar_proxy_redesign/html/00_brand_lockup.html",
+      "html_size_bytes": 126311,
+      "png": "wild_boar_proxy_redesign/png/00_brand_lockup.png",
+      "png_size_bytes": 420882,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "html": "wild_boar_proxy_redesign/html/01_overview_dashboard.html",
+      "html_size_bytes": 85812,
+      "png": "wild_boar_proxy_redesign/png/01_overview_dashboard.png",
+      "png_size_bytes": 413718,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "html": "wild_boar_proxy_redesign/html/02_setup_client.html",
+      "html_size_bytes": 76070,
+      "png": "wild_boar_proxy_redesign/png/02_setup_client.png",
+      "png_size_bytes": 246627,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "html": "wild_boar_proxy_redesign/html/03_select_codex_client.html",
+      "html_size_bytes": 81333,
+      "png": "wild_boar_proxy_redesign/png/03_select_codex_client.png",
+      "png_size_bytes": 353577,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "04_accounts",
+      "html": "wild_boar_proxy_redesign/html/04_accounts.html",
+      "html_size_bytes": 86323,
+      "png": "wild_boar_proxy_redesign/png/04_accounts.png",
+      "png_size_bytes": 454113,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "05_add_account_modal",
+      "html": "wild_boar_proxy_redesign/html/05_add_account_modal.html",
+      "html_size_bytes": 90521,
+      "png": "wild_boar_proxy_redesign/png/05_add_account_modal.png",
+      "png_size_bytes": 479473,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "06_diagnostics",
+      "html": "wild_boar_proxy_redesign/html/06_diagnostics.html",
+      "html_size_bytes": 95406,
+      "png": "wild_boar_proxy_redesign/png/06_diagnostics.png",
+      "png_size_bytes": 471974,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "07_settings",
+      "html": "wild_boar_proxy_redesign/html/07_settings.html",
+      "html_size_bytes": 80563,
+      "png": "wild_boar_proxy_redesign/png/07_settings.png",
+      "png_size_bytes": 350476,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "html": "wild_boar_proxy_redesign/html/08_import_existing.html",
+      "html_size_bytes": 85279,
+      "png": "wild_boar_proxy_redesign/png/08_import_existing.png",
+      "png_size_bytes": 357898,
+      "png_dimensions": "3200x2000"
+    },
+    {
+      "screen_id": "09_confirm_action",
+      "html": "wild_boar_proxy_redesign/html/09_confirm_action.html",
+      "html_size_bytes": 98656,
+      "png": "wild_boar_proxy_redesign/png/09_confirm_action.png",
+      "png_size_bytes": 479490,
+      "png_dimensions": "3200x2000"
+    }
+  ],
+  "html_profile": {
+    "style_tags_per_screen": 1,
+    "script_tags_per_screen": 0,
+    "external_http_references_detected": false,
+    "inline_svg_icons_detected": true,
+    "local_image_asset_detected": true
+  },
+  "admission_rules": {
+    "visual_baseline_only": true,
+    "runtime_canon": false,
+    "direct_state_file_truth_allowed": false,
+    "log_parsing_truth_allowed": false,
+    "live_command_wiring_in_this_contour": false
+  }
+}
