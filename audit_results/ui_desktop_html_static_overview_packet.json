@@ -1,0 +1,69 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_STATIC_OVERVIEW_WITH_FIXTURES",
+  "status": "completed",
+  "verdict": "STATIC_OVERVIEW_WITH_FIXTURES_READY",
+  "base_branch": "codex/ui-desktop-html-renderer-admission-passports",
+  "implementation": {
+    "screen": "01_overview_dashboard",
+    "target_directory": "wild_boar_proxy/desktop_ui",
+    "fixture_only": true,
+    "live_command_wiring": false,
+    "command_adapter": false,
+    "runtime_changes": false,
+    "cli_changes": false,
+    "web_ui_changes": false,
+    "ui_shell_changes": false
+  },
+  "renderer_spike": {
+    "first_target": "pywebview",
+    "pywebview_available": false,
+    "dependency_installed": false,
+    "fallback": "browser-openable static shell",
+    "fallback_verified": true
+  },
+  "fixtures": {
+    "synthetic": true,
+    "generated_from_live_state": false,
+    "states": [
+      "healthy",
+      "degraded",
+      "down",
+      "stale",
+      "unknown",
+      "integration-failure",
+      "managed-mismatch",
+      "command-error"
+    ],
+    "files": [
+      "wild_boar_proxy/desktop_ui/fixtures/overview_healthy.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_degraded.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_down.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_stale.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_unknown.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_integration_failure.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_managed_mismatch.json",
+      "wild_boar_proxy/desktop_ui/fixtures/overview_command_error.json"
+    ]
+  },
+  "visual_evidence": {
+    "screenshot": "audit_results/ui_desktop_html_static_overview_screenshot.png",
+    "screenshot_dimensions": "1600x1000",
+    "reference_screen": "wild_boar_proxy_redesign/png/01_overview_dashboard.png",
+    "reference_dimensions": "3200x2000",
+    "review": "manual_structural_visual_review_completed"
+  },
+  "verification": {
+    "fixture_json_validated": true,
+    "static_tests": {
+      "command": "python3 -m unittest -q tests.test_desktop_ui_static",
+      "result": "passed",
+      "tests_run": 5
+    },
+    "command_safety_scan": {
+      "command": "rg -n \"subprocess|Popen|os.system|~/.codex|backend-registry|supervisor-state\" wild_boar_proxy/desktop_ui",
+      "result": "no_matches"
+    },
+    "git_diff_check": "passed"
+  },
+  "next_contour": "UI_DESKTOP_HTML_COMMAND_ADAPTER_BOUNDARY"
+}

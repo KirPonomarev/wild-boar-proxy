@@ -1,0 +1,62 @@
+{
+  "fixture_id": "overview_healthy",
+  "fixture_state": "healthy",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Runtime status is available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "healthy",
+    "severity": "info",
+    "operator_action": "none",
+    "desired_mode": "managed",
+    "effective_mode": "managed",
+    "endpoint": "127.0.0.1:8320",
+    "last_error": ""
+  },
+  "mode_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "healthy",
+    "severity": "info",
+    "operator_action": "none",
+    "desired_mode": "managed",
+    "effective_mode": "managed"
+  },
+  "accounts_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Account pool is available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "healthy",
+    "severity": "info",
+    "operator_action": "none",
+    "account_summary": {
+      "active_count": 10,
+      "reserve_count": 15,
+      "hold_count": 1,
+      "problem_count": 2,
+      "active_note": "+1 за последние 24 ч",
+      "reserve_note": "ротация без задержек",
+      "hold_note": "ожидает оператора",
+      "problem_note": "2 проверки не прошли"
+    }
+  },
+  "events": [
+    { "tone": "green", "icon": "✓", "message": "Синхронизация завершена успешно", "time": "Сегодня, 12:45:02" },
+    { "tone": "blue", "icon": "↻", "message": "Переключение в управляемый режим выполнено", "time": "Сегодня, 12:44:10" },
+    { "tone": "green", "icon": "+", "message": "Аккаунт #034 переведен в активные", "time": "Сегодня, 12:42:38" },
+    { "tone": "red", "icon": "!", "message": "Ошибка проверки аккаунта #021: недоступен", "time": "Сегодня, 12:38:54" },
+    { "tone": "green", "icon": "✓", "message": "Проверка работы завершена: OK", "time": "Сегодня, 12:36:21" }
+  ]
+}

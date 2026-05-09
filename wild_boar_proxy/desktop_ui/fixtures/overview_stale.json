@@ -1,0 +1,58 @@
+{
+  "fixture_id": "overview_stale",
+  "fixture_state": "stale",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Runtime status is stale.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "stale",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "127.0.0.1:8318",
+    "last_error": "Last status packet is stale."
+  },
+  "mode_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "stale",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "desired_mode": "stable",
+    "effective_mode": "stable"
+  },
+  "accounts_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Account pool snapshot is stale.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "refresh",
+    "liveness": "stale",
+    "severity": "recoverable",
+    "operator_action": "refresh",
+    "account_summary": {
+      "active_count": 10,
+      "reserve_count": 12,
+      "hold_count": 1,
+      "problem_count": 3,
+      "active_note": "снимок устарел",
+      "reserve_note": "нужна проверка",
+      "hold_note": "без изменений",
+      "problem_note": "требует refresh"
+    }
+  },
+  "events": [
+    { "tone": "amber", "icon": "↻", "message": "Snapshot is stale; refresh required", "time": "fixture" }
+  ]
+}

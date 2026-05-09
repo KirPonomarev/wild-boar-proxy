@@ -1,0 +1,60 @@
+{
+  "fixture_id": "overview_degraded",
+  "fixture_state": "degraded",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Runtime is degraded.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "inspect_accounts",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "review",
+    "desired_mode": "managed",
+    "effective_mode": "managed",
+    "endpoint": "127.0.0.1:8320",
+    "last_error": "Some managed backends are degraded."
+  },
+  "mode_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "review",
+    "desired_mode": "managed",
+    "effective_mode": "managed"
+  },
+  "accounts_packet": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Account pool is degraded.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "validate",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "review",
+    "account_summary": {
+      "active_count": 8,
+      "reserve_count": 7,
+      "hold_count": 2,
+      "problem_count": 5,
+      "active_note": "2 требуют проверки",
+      "reserve_note": "часть пула на лимитах",
+      "hold_note": "ручная пауза",
+      "problem_note": "5 требуют внимания"
+    }
+  },
+  "events": [
+    { "tone": "amber", "icon": "!", "message": "Managed pool degraded", "time": "fixture" },
+    { "tone": "amber", "icon": "↻", "message": "Sync requires account review", "time": "fixture" },
+    { "tone": "green", "icon": "✓", "message": "Stable fallback remains available", "time": "fixture" }
+  ]
+}

@@ -1,0 +1,54 @@
+/* SPDX-FileCopyrightText: 2026 Kirill Ponomarev */
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+:root {
+  --canvas: #f6f1ea;
+  --surface: #fcfaf7;
+  --surface-muted: #f1ebe3;
+  --border: #d9d0c3;
+  --border-strong: #c7bcae;
+  --text: #1e1b18;
+  --secondary: #6e675f;
+  --muted: #8d857b;
+  --blue: #315c99;
+  --green: #2d7a4b;
+  --amber: #a86a10;
+  --red: #b6402c;
+  --success-bg: #eaf3ed;
+  --blue-bg: #eaf0f8;
+  --amber-bg: #f7eee0;
+  --red-bg: #f7e8e4;
+  --neutral-bg: #f1ebe3;
+  --shadow: 0 1px 2px rgba(30, 27, 24, .04), 0 10px 30px rgba(30, 27, 24, .045);
+  --window-shadow: 0 24px 80px rgba(30, 27, 24, .14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: var(--canvas);
+}
+
+body {
+  color: var(--text);
+  font-family: "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  text-rendering: geometricPrecision;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: default;
+}

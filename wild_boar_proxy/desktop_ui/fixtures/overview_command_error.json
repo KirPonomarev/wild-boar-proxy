@@ -1,0 +1,59 @@
+{
+  "fixture_id": "overview_command_error",
+  "fixture_state": "error",
+  "synthetic": true,
+  "source": "ui_desktop_html_static_overview_fixture",
+  "status_packet": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Command packet returned an error.",
+    "machine_error_code": "COMMAND_ERROR",
+    "changed_files": [],
+    "next_action": "inspect",
+    "liveness": "unknown",
+    "severity": "error",
+    "operator_action": "inspect",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "127.0.0.1:8318",
+    "last_error": "Synthetic command error fixture."
+  },
+  "mode_packet": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Mode command returned an error.",
+    "machine_error_code": "COMMAND_ERROR",
+    "changed_files": [],
+    "next_action": "inspect",
+    "liveness": "unknown",
+    "severity": "error",
+    "operator_action": "inspect",
+    "desired_mode": "stable",
+    "effective_mode": "stable"
+  },
+  "accounts_packet": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Accounts command returned an error.",
+    "machine_error_code": "COMMAND_ERROR",
+    "changed_files": [],
+    "next_action": "inspect",
+    "liveness": "unknown",
+    "severity": "error",
+    "operator_action": "inspect",
+    "account_summary": {
+      "active_count": 0,
+      "reserve_count": 0,
+      "hold_count": 0,
+      "problem_count": 0,
+      "active_note": "ошибка команды",
+      "reserve_note": "ошибка команды",
+      "hold_note": "ошибка команды",
+      "problem_note": "ошибка команды"
+    }
+  },
+  "events": [
+    { "tone": "red", "icon": "!", "message": "Synthetic command packet returned COMMAND_ERROR", "time": "fixture" }
+  ],
+  "notice": "Error packets are shown as errors, not success."
+}

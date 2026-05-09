@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1600,height=1000">
+    <title>Wild Boar Proxy</title>
+    <link rel="stylesheet" href="./styles/tokens.css">
+    <link rel="stylesheet" href="./styles/overview.css">
+  </head>
+  <body>
+    <div class="desktop">
+      <div class="window" data-runtime-state="unknown">
+        <div class="traffic" aria-hidden="true"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <aside class="sidebar">
+          <div class="brand">
+            <img src="./assets/boar_mark.png" alt="">
+            <div class="name">WILD BOAR PROXY</div>
+            <div class="caption">SF Mono Medium</div>
+          </div>
+          <nav class="nav" aria-label="Primary">
+            <a class="nav-item active" href="#" aria-current="page"><span class="icon">◇</span><span>Обзор</span></a>
+            <a class="nav-item disabled" href="#"><span class="icon">□</span><span>Аккаунты</span></a>
+            <a class="nav-item disabled" href="#"><span class="icon">△</span><span>Диагностика</span></a>
+            <a class="nav-item disabled" href="#"><span class="icon">○</span><span>Настройки</span></a>
+          </nav>
+          <div class="sidebar-footer">
+            <div class="status-line"><span class="dot"></span><span data-field="sidebar-status">Состояние неизвестно</span></div>
+            <div>fixture-only</div>
+          </div>
+        </aside>
+        <main class="main">
+          <header class="main-header">
+            <div>
+              <h1>Обзор</h1>
+              <p class="subtitle">Состояние локального прокси, клиента Codex и пула аккаунтов.</p>
+            </div>
+            <div class="header-actions">
+              <button class="button primary" type="button" data-fixture-action="refresh">Обновить</button>
+              <button class="button" type="button" data-fixture-action="launch-client">Запустить Codex</button>
+            </div>
+          </header>
+          <section class="grid overview-top">
+            <article class="card system-card">
+              <div class="card-title-row">
+                <h2 class="card-title">Состояние системы</h2>
+                <span class="chip" data-field="status-chip"><span class="dot"></span><span>Неизвестно</span></span>
+              </div>
+              <dl class="kv">
+                <dt>Состояние</dt><dd data-field="runtime-label">Неизвестно</dd>
+                <dt>Желаемый режим</dt><dd data-field="desired-mode">-</dd>
+                <dt>Фактический режим</dt><dd data-field="effective-mode">-</dd>
+                <dt>Адрес подключения</dt><dd data-field="endpoint">-</dd>
+                <dt>Последняя ошибка</dt><dd data-field="last-error">-</dd>
+              </dl>
+            </article>
+            <article class="card mode-card">
+              <h2 class="card-title">Режим работы</h2>
+              <div class="segmented" aria-label="Mode">
+                <span data-mode-option="managed">Управляемый</span>
+                <span data-mode-option="stable">Стабильный</span>
+              </div>
+              <div class="action-row">
+                <button class="action-tile" type="button" data-fixture-action="sync"><span class="tile-icon">↻</span><span>Синхронизировать</span></button>
+                <button class="action-tile" type="button" data-fixture-action="smoke"><span class="tile-icon">✓</span><span>Проверить работу</span></button>
+                <button class="action-tile" type="button" data-fixture-action="stable"><span class="tile-icon">⇄</span><span>Стабильный режим</span></button>
+                <button class="action-tile" type="button" data-fixture-action="diagnostics"><span class="tile-icon">⋯</span><span>Открыть диагностику</span></button>
+              </div>
+            </article>
+          </section>
+          <section class="grid overview-kpis" aria-label="Account summary">
+            <article class="card kpi-card green"><div><div class="kpi-head">Активные</div><div class="kpi-note" data-field="active-note">-</div></div><div class="kpi-line"><span class="kpi-number" data-field="active-count">0</span><span class="kpi-note">аккаунтов</span></div></article>
+            <article class="card kpi-card blue"><div><div class="kpi-head">Резерв</div><div class="kpi-note" data-field="reserve-note">-</div></div><div class="kpi-line"><span class="kpi-number" data-field="reserve-count">0</span><span class="kpi-note">готовы</span></div></article>
+            <article class="card kpi-card amber"><div><div class="kpi-head">На удержании</div><div class="kpi-note" data-field="hold-note">-</div></div><div class="kpi-line"><span class="kpi-number" data-field="hold-count">0</span><span class="kpi-note">пауза</span></div></article>
+            <article class="card kpi-card red"><div><div class="kpi-head">Проблемные</div><div class="kpi-note" data-field="problem-note">-</div></div><div class="kpi-line"><span class="kpi-number" data-field="problem-count">0</span><span class="kpi-note">требуют внимания</span></div></article>
+          </section>
+          <section class="card log-card">
+            <div class="log-head">
+              <h2 class="card-title">Последние события</h2>
+              <button class="button ghost small" type="button" data-fixture-action="show-all">Показать все</button>
+            </div>
+            <div class="log-list" data-field="events"></div>
+          </section>
+          <aside class="toast" data-field="toast" hidden></aside>
+        </main>
+      </div>
+    </div>
+    <script type="module" src="./screens/overview.js"></script>
+  </body>
+</html>
