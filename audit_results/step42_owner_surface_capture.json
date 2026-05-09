@@ -1,0 +1,84 @@
+{
+  "status": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "policy_drift_observed_status": "detected",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "pool_summary": {
+      "active": 24,
+      "reserve": 0,
+      "retired": 0,
+      "healthy": 1,
+      "degraded": 0,
+      "down": 1,
+      "selected_backend_ids": [],
+      "backend_count": 24
+    }
+  },
+  "healthcheck": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "effective_mode": "stable",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "launch_capable_backend_count": 1
+  },
+  "accounts_list": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "active_count": 24,
+    "reserve_count": 0,
+    "healthy_active_ids": [
+      "open17-plus"
+    ],
+    "probing_active_ids": [
+      "new-new55555"
+    ],
+    "pool_policy": {
+      "active_target": 15,
+      "active_min": 15,
+      "reserve_target": 0
+    }
+  },
+  "rotation_inspect": {
+    "status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_INSUFFICIENT",
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_claim_surface_source": "approved_repair_target",
+    "participation_status": "insufficient",
+    "evidence_reason": "active_routing_candidates_not_expanded",
+    "selected_backend_snapshot_validation_status": "valid",
+    "selected_backend_ids": [
+      "open17-plus"
+    ],
+    "active_routing_candidate_ids_observed": [
+      "open17-plus"
+    ],
+    "registry_active_pool_count_observed": 24,
+    "runtime_active_pool_count_observed": 24
+  },
+  "bounded_recheck": {
+    "status_policy_drift_status": "detected",
+    "status_claim_gate_status": "blocked",
+    "rotation_policy_drift_status": "clear",
+    "rotation_participation_status": "insufficient",
+    "persistent_contradiction": true
+  },
+  "normalized_findings": {
+    "authorization_gate_status": "open",
+    "repo_side_admissibility_status": "revalidated_true",
+    "step41_next_action_still_matches_step42": true,
+    "owner_surface_truth_status": "contradiction_persistent_after_bounded_recheck",
+    "runtime_attestation_status": "ready",
+    "claim_gate_status": "blocked",
+    "posture_blocker_status": "ROTATION_EVIDENCE_INSUFFICIENT",
+    "reserve_count": 0
+  }
+}
