@@ -101,6 +101,30 @@ SMOKE_RESULT_FIELDS = (
     "stable_runtime_consumer",
 )
 DIAGNOSTICS_RESULT_FIELDS = ("bundle_path",)
+HEALTHCHECK_RESULT_FIELDS = (
+    "launch_readiness_status",
+    "launch_readiness_machine_error_code",
+    "launch_readiness_blocking_reason",
+    "runtime_guardrails_status",
+    "runtime_guardrails_blocking_reason",
+    "listener_ok",
+    "models_ok",
+    "responses_ok",
+    "effective_mode_match",
+    "base_url_match",
+    "attestation_source",
+    "observed_at_utc",
+)
+ROTATION_RESULT_FIELDS = (
+    "evidence_status",
+    "evidence_reason",
+    "evidence_freshness",
+    "participation_status",
+    "selected_backend_ids_observed",
+    "active_routing_candidate_ids_observed",
+    "policy_drift_status",
+    "registry_identity_status",
+)
 STABLE_REPAIR_RESULT_FIELDS = ()
 ACCOUNT_CAPACITY_TARGET = 25
 DEFAULT_ACTIVE_WINDOW_TARGET = 10
@@ -511,8 +535,9 @@ def run_diagnostics_export_and_refresh(
 
 def run_stable_repair_and_refresh(
     runner: JsonCommandRunner,
+    command: tuple[str, ...] = ("stable", "repair", "--apply", "--json"),
 ) -> tuple[dict[str, Any], RuntimeSnapshot, AccountPoolSnapshot]:
-    action_result = runner.run("stable", "repair", "--apply", "--json")
+    action_result = runner.run(*command)
     status_payload = runner.run("status", "--json").payload
     accounts_payload = runner.run("accounts", "list", "--json").payload
     mode_payload = runner.run("mode", "get", "--json").payload
@@ -671,6 +696,99 @@ def build_diagnostics_field_values(action_payload: dict[str, Any]) -> dict[str, 
     return result
 
 
+def build_healthcheck_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in HEALTHCHECK_RESULT_FIELDS}
+    launch_readiness = action_payload.get("launch_readiness")
+    runtime_guardrails = action_payload.get("runtime_guardrails")
+    attestation = action_payload.get("attestation")
+    if launch_readiness is not None and not isinstance(launch_readiness, dict):
+        raise UiShellError("launch_readiness must be an object when present")
+    if runtime_guardrails is not None and not isinstance(runtime_guardrails, dict):
+        raise UiShellError("runtime_guardrails must be an object when present")
+    if attestation is not None and not isinstance(attestation, dict):
+        raise UiShellError("attestation must be an object when present")
+
+    if isinstance(launch_readiness, dict):
+        result["launch_readiness_status"] = format_onboarding_value(
+            launch_readiness.get("status")
+        )
+        result["launch_readiness_machine_error_code"] = format_onboarding_value(
+            launch_readiness.get("machine_error_code")
+        )
+        result["launch_readiness_blocking_reason"] = format_onboarding_value(
+            launch_readiness.get("blocking_reason")
+        )
+    if isinstance(runtime_guardrails, dict):
+        result["runtime_guardrails_status"] = format_onboarding_value(
+            runtime_guardrails.get("status")
+        )
+        result["runtime_guardrails_blocking_reason"] = format_onboarding_value(
+            runtime_guardrails.get("blocking_reason")
+        )
+    if isinstance(attestation, dict):
+        result["listener_ok"] = format_onboarding_value(attestation.get("listener_ok"))
+        result["models_ok"] = format_onboarding_value(attestation.get("models_ok"))
+        result["responses_ok"] = format_onboarding_value(attestation.get("responses_ok"))
+        result["effective_mode_match"] = format_onboarding_value(
+            attestation.get("effective_mode_match")
+        )
+        result["base_url_match"] = format_onboarding_value(attestation.get("base_url_match"))
+        result["attestation_source"] = format_onboarding_value(
+            attestation.get("attestation_source")
+        )
+        result["observed_at_utc"] = format_onboarding_value(attestation.get("observed_at_utc"))
+    return result
+
+
+def build_rotation_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in ROTATION_RESULT_FIELDS}
+    evidence = action_payload.get("rotation_evidence_result")
+    delegated = action_payload.get("delegated_evidence")
+    if evidence is not None and not isinstance(evidence, dict):
+        raise UiShellError("rotation_evidence_result must be an object when present")
+    if delegated is not None and not isinstance(delegated, dict):
+        raise UiShellError("delegated_evidence must be an object when present")
+
+    if isinstance(evidence, dict):
+        result["evidence_status"] = format_onboarding_value(evidence.get("evidence_status"))
+        result["evidence_reason"] = format_onboarding_value(evidence.get("evidence_reason"))
+        result["evidence_freshness"] = format_onboarding_value(
+            evidence.get("evidence_freshness")
+        )
+        participation_summary = evidence.get("participation_summary")
+        if participation_summary is not None and not isinstance(participation_summary, dict):
+            raise UiShellError("participation_summary must be an object when present")
+        if isinstance(participation_summary, dict):
+            result["participation_status"] = format_onboarding_value(
+                participation_summary.get("status")
+            )
+        result["selected_backend_ids_observed"] = format_onboarding_value(
+            evidence.get("selected_backend_ids_observed")
+        )
+        result["active_routing_candidate_ids_observed"] = format_onboarding_value(
+            evidence.get("active_routing_candidate_ids_observed")
+        )
+
+    if isinstance(delegated, dict):
+        policy_drift_summary = delegated.get("policy_drift_summary")
+        registry_identity_summary = delegated.get("registry_identity_summary")
+        if policy_drift_summary is not None and not isinstance(policy_drift_summary, dict):
+            raise UiShellError("policy_drift_summary must be an object when present")
+        if registry_identity_summary is not None and not isinstance(
+            registry_identity_summary, dict
+        ):
+            raise UiShellError("registry_identity_summary must be an object when present")
+        if isinstance(policy_drift_summary, dict):
+            result["policy_drift_status"] = format_onboarding_value(
+                policy_drift_summary.get("status")
+            )
+        if isinstance(registry_identity_summary, dict):
+            result["registry_identity_status"] = format_onboarding_value(
+                registry_identity_summary.get("status")
+            )
+    return result
+
+
 def classify_smoke_rendered_state(
     action_payload: dict[str, Any], *, malformed: bool
 ) -> str:
@@ -763,6 +881,26 @@ class MinimalCompanionShell:
             field: StringVar(value="")
             for field in DIAGNOSTICS_RESULT_FIELDS
         }
+        self.healthcheck_command_status_var = StringVar(value="")
+        self.healthcheck_command_exit_code_var = StringVar(value="")
+        self.healthcheck_command_human_message_var = StringVar(value="")
+        self.healthcheck_command_machine_error_var = StringVar(value="")
+        self.healthcheck_command_changed_files_var = StringVar(value="")
+        self.healthcheck_command_next_action_var = StringVar(value="")
+        self.healthcheck_field_vars = {
+            field: StringVar(value="")
+            for field in HEALTHCHECK_RESULT_FIELDS
+        }
+        self.rotation_command_status_var = StringVar(value="")
+        self.rotation_command_exit_code_var = StringVar(value="")
+        self.rotation_command_human_message_var = StringVar(value="")
+        self.rotation_command_machine_error_var = StringVar(value="")
+        self.rotation_command_changed_files_var = StringVar(value="")
+        self.rotation_command_next_action_var = StringVar(value="")
+        self.rotation_field_vars = {
+            field: StringVar(value="")
+            for field in ROTATION_RESULT_FIELDS
+        }
         self.stable_repair_command_status_var = StringVar(value="")
         self.stable_repair_command_exit_code_var = StringVar(value="")
         self.stable_repair_command_human_message_var = StringVar(value="")
@@ -844,8 +982,13 @@ class MinimalCompanionShell:
         ).pack(fill="x", pady=4)
         ttk.Button(
             controls_box,
-            text="Run Stable Repair",
-            command=self.run_stable_repair_action,
+            text="Run Healthcheck",
+            command=self.run_healthcheck_action,
+        ).pack(fill="x", pady=4)
+        ttk.Button(
+            controls_box,
+            text="Inspect Rotation",
+            command=self.run_rotation_action,
         ).pack(fill="x", pady=4)
         ttk.Button(
             controls_box,
@@ -1011,8 +1154,112 @@ class MinimalCompanionShell:
             self.diagnostics_field_vars["bundle_path"],
         )
 
+        healthcheck_box = ttk.LabelFrame(controls_box, text="Healthcheck Detail", padding=8)
+        healthcheck_box.pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            healthcheck_box,
+            "Command status",
+            self.healthcheck_command_status_var,
+        )
+        self._add_status_row(
+            healthcheck_box,
+            "Exit code",
+            self.healthcheck_command_exit_code_var,
+        )
+        self._add_status_row(
+            healthcheck_box,
+            "Human message",
+            self.healthcheck_command_human_message_var,
+        )
+        self._add_status_row(
+            healthcheck_box,
+            "Machine error",
+            self.healthcheck_command_machine_error_var,
+        )
+        self._add_status_row(
+            healthcheck_box,
+            "Changed files",
+            self.healthcheck_command_changed_files_var,
+        )
+        self._add_status_row(
+            healthcheck_box,
+            "Next action",
+            self.healthcheck_command_next_action_var,
+        )
+        for label, field in (
+            ("Launch readiness", "launch_readiness_status"),
+            ("Launch machine error", "launch_readiness_machine_error_code"),
+            ("Launch blocking", "launch_readiness_blocking_reason"),
+            ("Guardrails", "runtime_guardrails_status"),
+            ("Guardrail blocking", "runtime_guardrails_blocking_reason"),
+            ("Listener OK", "listener_ok"),
+            ("Models OK", "models_ok"),
+            ("Responses OK", "responses_ok"),
+            ("Mode match", "effective_mode_match"),
+            ("Base URL match", "base_url_match"),
+            ("Attestation source", "attestation_source"),
+            ("Observed at", "observed_at_utc"),
+        ):
+            self._add_status_row(healthcheck_box, label, self.healthcheck_field_vars[field])
+
+        rotation_box = ttk.LabelFrame(controls_box, text="Rotation Detail", padding=8)
+        rotation_box.pack(fill="x", pady=(8, 0))
+        self._add_status_row(
+            rotation_box,
+            "Command status",
+            self.rotation_command_status_var,
+        )
+        self._add_status_row(
+            rotation_box,
+            "Exit code",
+            self.rotation_command_exit_code_var,
+        )
+        self._add_status_row(
+            rotation_box,
+            "Human message",
+            self.rotation_command_human_message_var,
+        )
+        self._add_status_row(
+            rotation_box,
+            "Machine error",
+            self.rotation_command_machine_error_var,
+        )
+        self._add_status_row(
+            rotation_box,
+            "Changed files",
+            self.rotation_command_changed_files_var,
+        )
+        self._add_status_row(
+            rotation_box,
+            "Next action",
+            self.rotation_command_next_action_var,
+        )
+        for label, field in (
+            ("Evidence status", "evidence_status"),
+            ("Evidence reason", "evidence_reason"),
+            ("Evidence freshness", "evidence_freshness"),
+            ("Participation", "participation_status"),
+            ("Selected backends", "selected_backend_ids_observed"),
+            ("Routing candidates", "active_routing_candidate_ids_observed"),
+            ("Policy drift", "policy_drift_status"),
+            ("Registry identity", "registry_identity_status"),
+        ):
+            self._add_status_row(rotation_box, label, self.rotation_field_vars[field])
+
         stable_repair_box = ttk.LabelFrame(controls_box, text="Stable Repair", padding=8)
         stable_repair_box.pack(fill="x", pady=(8, 0))
+        stable_repair_actions = ttk.Frame(stable_repair_box)
+        stable_repair_actions.pack(fill="x", pady=(0, 8))
+        ttk.Button(
+            stable_repair_actions,
+            text="Stable Repair Dry Run",
+            command=self.run_stable_repair_dry_run_action,
+        ).pack(side="left")
+        ttk.Button(
+            stable_repair_actions,
+            text="Stable Repair Apply",
+            command=self.run_stable_repair_action,
+        ).pack(side="left", padx=(8, 0))
         self._add_status_row(
             stable_repair_box,
             "Command status",
@@ -1371,17 +1618,42 @@ class MinimalCompanionShell:
         self.banner_var.set("Running diagnostics export...")
         threading.Thread(target=self._diagnostics_worker, daemon=True).start()
 
+    def run_healthcheck_action(self) -> None:
+        if self._busy:
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running healthcheck detail...")
+        threading.Thread(target=self._healthcheck_worker, daemon=True).start()
+
+    def run_rotation_action(self) -> None:
+        if self._busy:
+            return
+        self.set_busy(True)
+        self.banner_var.set("Inspecting rotation evidence...")
+        threading.Thread(target=self._rotation_worker, daemon=True).start()
+
     def run_stable_repair_action(self) -> None:
         if self._busy:
             return
         if not messagebox.askyesno(
             "Confirm action",
-            "Run stable repair and refresh command truth?",
+            "Run stable repair apply and refresh command truth?",
             parent=self.root,
         ):
             return
         self.set_busy(True)
-        self.banner_var.set("Running stable repair...")
+        self.banner_var.set("Running stable repair apply...")
+        threading.Thread(
+            target=self._stable_repair_worker,
+            args=(("stable", "repair", "--apply", "--json"),),
+            daemon=True,
+        ).start()
+
+    def run_stable_repair_dry_run_action(self) -> None:
+        if self._busy:
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running stable repair dry run...")
         threading.Thread(target=self._stable_repair_worker, daemon=True).start()
 
     def run_onboard_action(self) -> None:
@@ -1622,10 +1894,53 @@ class MinimalCompanionShell:
             ),
         )
 
-    def _stable_repair_worker(self) -> None:
+    def _healthcheck_worker(self) -> None:
+        try:
+            action_payload = self.runner.run("healthcheck", "--json").payload
+            banner = str(action_payload.get("human_message", "Healthcheck detail available."))
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_healthcheck_results(action_payload, banner=banner),
+        )
+
+    def _rotation_worker(self) -> None:
+        try:
+            action_payload = self.runner.run("rollout", "rotation", "inspect", "--json").payload
+            banner = str(action_payload.get("human_message", "Rotation detail available."))
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+            }
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_rotation_results(action_payload, banner=banner),
+        )
+
+    def _stable_repair_worker(
+        self,
+        command: tuple[str, ...] = ("stable", "repair", "--dry-run", "--json"),
+    ) -> None:
         try:
             action_payload, runtime_snapshot, account_snapshot = (
-                run_stable_repair_and_refresh(self.runner)
+                run_stable_repair_and_refresh(self.runner, command)
             )
             banner = str(action_payload["human_message"])
         except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
@@ -1822,6 +2137,72 @@ class MinimalCompanionShell:
     ) -> None:
         self._apply_stable_repair_payload(action_payload)
         self._apply_refresh_results(runtime_snapshot, account_snapshot, banner=banner)
+
+    def _apply_healthcheck_payload(self, action_payload: dict[str, Any]) -> None:
+        self.healthcheck_command_status_var.set(str(action_payload.get("status", "")))
+        self.healthcheck_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.healthcheck_command_human_message_var.set(
+            str(action_payload.get("human_message", ""))
+        )
+        self.healthcheck_command_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.healthcheck_command_next_action_var.set(str(action_payload.get("next_action", "")))
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.healthcheck_command_changed_files_var.set("")
+        else:
+            self.healthcheck_command_changed_files_var.set(
+                format_onboarding_value(changed_files_value)
+            )
+        try:
+            field_values = build_healthcheck_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in HEALTHCHECK_RESULT_FIELDS}
+        for field, value in field_values.items():
+            self.healthcheck_field_vars[field].set(value)
+
+    def _apply_healthcheck_results(
+        self,
+        action_payload: dict[str, Any],
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_healthcheck_payload(action_payload)
+        self.banner_var.set(banner)
+        self.set_busy(False)
+
+    def _apply_rotation_payload(self, action_payload: dict[str, Any]) -> None:
+        self.rotation_command_status_var.set(str(action_payload.get("status", "")))
+        self.rotation_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.rotation_command_human_message_var.set(str(action_payload.get("human_message", "")))
+        self.rotation_command_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.rotation_command_next_action_var.set(str(action_payload.get("next_action", "")))
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.rotation_command_changed_files_var.set("")
+        else:
+            self.rotation_command_changed_files_var.set(
+                format_onboarding_value(changed_files_value)
+            )
+        try:
+            field_values = build_rotation_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in ROTATION_RESULT_FIELDS}
+        for field, value in field_values.items():
+            self.rotation_field_vars[field].set(value)
+
+    def _apply_rotation_results(
+        self,
+        action_payload: dict[str, Any],
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_rotation_payload(action_payload)
+        self.banner_var.set(banner)
+        self.set_busy(False)
 
     def _apply_onboarding_payload(self, action_payload: dict[str, Any]) -> None:
         self.onboarding_command_status_var.set(str(action_payload.get("status", "")))

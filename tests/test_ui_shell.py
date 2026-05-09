@@ -10,7 +10,9 @@ from unittest import mock
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
     DIAGNOSTICS_RESULT_FIELDS,
+    HEALTHCHECK_RESULT_FIELDS,
     ONBOARDING_RESULT_FIELDS,
+    ROTATION_RESULT_FIELDS,
     SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
     JsonCommandRunner,
@@ -19,7 +21,9 @@ from wild_boar_proxy.ui_shell import (
     build_account_pool_snapshot,
     build_client_launch_field_values,
     build_diagnostics_field_values,
+    build_healthcheck_field_values,
     build_smoke_field_values,
+    build_rotation_field_values,
     classify_client_launch_rendered_state,
     classify_smoke_rendered_state,
     build_onboarding_field_values,
@@ -176,6 +180,59 @@ def accounts_payload(**overrides: object) -> dict[str, object]:
         },
         pool_policy={"active_min": 1, "active_target": 2, "reserve_target": 0},
         stable_default_backend_id="backend-a",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def healthcheck_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Runtime attestation passed.",
+        liveness="healthy",
+        severity="info",
+        operator_action="none",
+        desired_mode="managed",
+        effective_mode="managed",
+        endpoint="127.0.0.1:9999",
+        current_proxy_url="http://127.0.0.1:10808",
+        launch_readiness={
+            "status": "ready",
+            "machine_error_code": "OK",
+            "blocking_reason": "",
+        },
+        runtime_guardrails={
+            "status": "clear",
+            "blocking_reason": "",
+        },
+        attestation={
+            "listener_ok": True,
+            "models_ok": True,
+            "responses_ok": True,
+            "effective_mode_match": True,
+            "base_url_match": True,
+            "attestation_source": "healthcheck --json",
+            "observed_at_utc": "2026-05-05T10:00:00+00:00",
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
+def rotation_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Rotation evidence is available.",
+        rotation_evidence_result={
+            "evidence_status": "participation_evidence_available",
+            "evidence_reason": "",
+            "evidence_freshness": "fresh",
+            "participation_summary": {"status": "confirmed"},
+            "selected_backend_ids_observed": ["backend-a"],
+            "active_routing_candidate_ids_observed": ["backend-a", "backend-b"],
+        },
+        delegated_evidence={
+            "policy_drift_summary": {"status": "clear"},
+            "registry_identity_summary": {"status": "clear"},
+        },
     )
     payload.update(overrides)
     return payload
@@ -514,6 +571,51 @@ class ModeControlTests(unittest.TestCase):
                 ("mode", "get", "--json"),
             ],
         )
+
+    def test_run_stable_repair_and_refresh_supports_dry_run(self) -> None:
+        runner = FakeRunner(
+            {
+                ("stable", "repair", "--dry-run", "--json"): command_payload(
+                    human_message="Stable repair plan available."
+                ),
+                ("status", "--json"): status_payload(),
+                ("accounts", "list", "--json"): accounts_payload(),
+                ("mode", "get", "--json"): mode_payload(),
+            }
+        )
+
+        action_payload, runtime_snapshot, account_snapshot = run_stable_repair_and_refresh(
+            runner, ("stable", "repair", "--dry-run", "--json")
+        )
+
+        self.assertEqual(action_payload["human_message"], "Stable repair plan available.")
+        self.assertEqual(runtime_snapshot.effective_mode, "managed")
+        self.assertEqual(account_snapshot.active_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("stable", "repair", "--dry-run", "--json"),
+                ("status", "--json"),
+                ("accounts", "list", "--json"),
+                ("mode", "get", "--json"),
+            ],
+        )
+
+    def test_build_healthcheck_field_values_maps_nested_truth(self) -> None:
+        values = build_healthcheck_field_values(healthcheck_payload())
+
+        self.assertEqual(values["launch_readiness_status"], "ready")
+        self.assertEqual(values["runtime_guardrails_status"], "clear")
+        self.assertEqual(values["listener_ok"], "true")
+        self.assertEqual(values["attestation_source"], "healthcheck --json")
+
+    def test_build_rotation_field_values_maps_nested_truth(self) -> None:
+        values = build_rotation_field_values(rotation_payload())
+
+        self.assertEqual(values["evidence_status"], "participation_evidence_available")
+        self.assertEqual(values["participation_status"], "confirmed")
+        self.assertEqual(values["selected_backend_ids_observed"], '["backend-a"]')
+        self.assertEqual(values["policy_drift_status"], "clear")
 
     def test_run_stable_repair_and_refresh_rejects_capacity_count_mismatch(self) -> None:
         runner = FakeRunner(
@@ -1504,12 +1606,87 @@ class UiDispatchTests(unittest.TestCase):
                 shell.run_stable_repair_action()
 
         shell.set_busy.assert_called_once_with(True)
-        shell.banner_var.set.assert_called_once_with("Running stable repair...")
+        shell.banner_var.set.assert_called_once_with("Running stable repair apply...")
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._stable_repair_worker)
+        self.assertEqual(
+            kwargs["args"] if "args" in kwargs else (),
+            (("stable", "repair", "--apply", "--json"),),
+        )
+        thread_instance.start.assert_called_once_with()
+
+    def test_run_stable_repair_dry_run_action_starts_worker_without_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch(
+            "wild_boar_proxy.ui_shell.threading.Thread",
+            return_value=thread_instance,
+        ) as thread_mock:
+            shell.run_stable_repair_dry_run_action()
+
+        shell.set_busy.assert_called_once_with(True)
+        shell.banner_var.set.assert_called_once_with("Running stable repair dry run...")
         thread_mock.assert_called_once()
         kwargs = thread_mock.call_args.kwargs
         self.assertEqual(kwargs["target"], shell._stable_repair_worker)
         self.assertEqual(kwargs["args"] if "args" in kwargs else (), ())
         thread_instance.start.assert_called_once_with()
+
+    def test_apply_healthcheck_payload_maps_command_and_nested_fields(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.healthcheck_command_status_var = mock.Mock()
+        shell.healthcheck_command_exit_code_var = mock.Mock()
+        shell.healthcheck_command_human_message_var = mock.Mock()
+        shell.healthcheck_command_machine_error_var = mock.Mock()
+        shell.healthcheck_command_changed_files_var = mock.Mock()
+        shell.healthcheck_command_next_action_var = mock.Mock()
+        shell.healthcheck_field_vars = {
+            field: mock.Mock() for field in HEALTHCHECK_RESULT_FIELDS
+        }
+
+        shell._apply_healthcheck_payload(healthcheck_payload())
+
+        shell.healthcheck_command_status_var.set.assert_called_once_with("ok")
+        shell.healthcheck_command_machine_error_var.set.assert_called_once_with("OK")
+        shell.healthcheck_field_vars["launch_readiness_status"].set.assert_called_once_with(
+            "ready"
+        )
+        shell.healthcheck_field_vars["runtime_guardrails_status"].set.assert_called_once_with(
+            "clear"
+        )
+        shell.healthcheck_field_vars["listener_ok"].set.assert_called_once_with("true")
+
+    def test_apply_rotation_payload_maps_command_and_nested_fields(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.rotation_command_status_var = mock.Mock()
+        shell.rotation_command_exit_code_var = mock.Mock()
+        shell.rotation_command_human_message_var = mock.Mock()
+        shell.rotation_command_machine_error_var = mock.Mock()
+        shell.rotation_command_changed_files_var = mock.Mock()
+        shell.rotation_command_next_action_var = mock.Mock()
+        shell.rotation_field_vars = {
+            field: mock.Mock() for field in ROTATION_RESULT_FIELDS
+        }
+
+        shell._apply_rotation_payload(rotation_payload())
+
+        shell.rotation_command_status_var.set.assert_called_once_with("ok")
+        shell.rotation_command_machine_error_var.set.assert_called_once_with("OK")
+        shell.rotation_field_vars["evidence_status"].set.assert_called_once_with(
+            "participation_evidence_available"
+        )
+        shell.rotation_field_vars["participation_status"].set.assert_called_once_with(
+            "confirmed"
+        )
+        shell.rotation_field_vars["policy_drift_status"].set.assert_called_once_with(
+            "clear"
+        )
 
     def test_apply_smoke_payload_blanks_fields_for_malformed_nested_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
@@ -1654,7 +1831,7 @@ class UiDispatchTests(unittest.TestCase):
         shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
         shell._apply_stable_repair_results = mock.Mock()
 
-        shell._stable_repair_worker()
+        shell._stable_repair_worker(("stable", "repair", "--apply", "--json"))
 
         shell._apply_stable_repair_results.assert_called_once()
         action_payload = shell._apply_stable_repair_results.call_args.args[0]
