@@ -1,0 +1,71 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_BRIDGE_CONTRACT",
+  "date": "2026-05-09",
+  "base_branch": "codex/ui-desktop-html-overview-action-runner",
+  "work_branch": "codex/ui-desktop-html-overview-bridge-contract",
+  "status": "passed_local_verification",
+  "runtime_scope": {
+    "runtime_core_changed": false,
+    "cli_changed": false,
+    "web_ui_changed": false,
+    "ui_shell_changed": false,
+    "browser_click_wiring_added": false,
+    "renderer_bridge_added": false,
+    "live_mutating_smoke_run": false
+  },
+  "allowed_operation_ids": [
+    "refresh_overview",
+    "run_overview_action"
+  ],
+  "forbidden_request_fields": [
+    "argv",
+    "command",
+    "cwd",
+    "env",
+    "log_path",
+    "path",
+    "registry_path",
+    "runtime_file",
+    "shell",
+    "snapshot_path",
+    "state_path"
+  ],
+  "guards": {
+    "fixed_operation_allowlist": true,
+    "forbidden_field_guard": true,
+    "request_controlled_snapshot_path": false,
+    "request_controlled_command": false,
+    "browser_shell_execution": false,
+    "strict_json_errors": true
+  },
+  "verification": [
+    {
+      "command": "python3 -m unittest -q tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_command_adapter tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 47
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/overview_bridge.py wild_boar_proxy/desktop_ui/overview_actions.py wild_boar_proxy/desktop_ui/live_overview.py wild_boar_proxy/desktop_ui/command_adapter.py tests/test_desktop_ui_overview_bridge.py tests/test_desktop_ui_overview_actions.py tests/test_desktop_ui_overview_live_binding.py tests/test_desktop_ui_static.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.overview_bridge --request-json '{\"operation_id\":\"refresh_overview\",\"command\":\"status --json\"}' --output /tmp/wbp_overview_bridge_forbidden.json",
+      "result": "pass_expected_exit_1",
+      "machine_error_code": "BRIDGE_REQUEST_FORBIDDEN_FIELD"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.overview_bridge --request-json '{\"operation_id\":\"unknown\"}' --output /tmp/wbp_overview_bridge_unknown.json",
+      "result": "pass_expected_exit_1",
+      "machine_error_code": "BRIDGE_OPERATION_FORBIDDEN"
+    },
+    {
+      "command": "python3 -m json.tool /tmp/wbp_overview_bridge_forbidden.json && python3 -m json.tool /tmp/wbp_overview_bridge_unknown.json",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"shell=True|os\\.system|Popen\\(|subprocess\\.run\\([^\\n]*shell=True|~/.codex|backend-registry|supervisor-state|stable target switch|rollout stage|policy stage|evidence capture|auth_ref\" wild_boar_proxy/desktop_ui -g '!README.md'",
+      "result": "pass_no_matches"
+    }
+  ],
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_FULL_IMPLANTATION"
+}

@@ -20,6 +20,7 @@ class DesktopUiStaticTests(unittest.TestCase):
             DESKTOP_UI / "styles" / "tokens.css",
             DESKTOP_UI / "styles" / "overview.css",
             DESKTOP_UI / "screens" / "overview.js",
+            DESKTOP_UI / "overview_bridge.py",
             DESKTOP_UI / "live_overview.py",
             DESKTOP_UI / "overview_actions.py",
             DESKTOP_UI / "assets" / "boar_mark.png",
@@ -112,6 +113,8 @@ class DesktopUiStaticTests(unittest.TestCase):
         overview = (DESKTOP_UI / "screens" / "overview.js").read_text(encoding="utf-8")
         self.assertNotIn("overview_actions", index)
         self.assertNotIn("overview_actions", overview)
+        self.assertNotIn("overview_bridge", index)
+        self.assertNotIn("overview_bridge", overview)
 
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(
