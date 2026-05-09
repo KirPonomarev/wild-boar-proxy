@@ -10411,6 +10411,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(advance["rollback_readiness_status"], "ready")
         self.assertEqual(advance["final_outcome"], "advanced_one_step")
 
+    def test_rollout_stage_advance_20_reads_target_satisfied_preconditions_under_serialized_lock(
+        self,
+    ) -> None:
+        self.configure_stage_proof_fixture(20)
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli(
+            "rollout", "stage", "advance", "20", "backend-00", "--json"
+        )
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertNotIn("stage_advancement_result", payload)
+        self.assertEqual(before, after)
+
     def test_rollout_stage_advance_20_blocks_held_lock_without_mutation(self) -> None:
         self.configure_stable_fifteen_proof_fixture()
         reserve_backend_id = "backend-reserve-lock-20"

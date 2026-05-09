@@ -8558,114 +8558,114 @@ def run_rollout_stage_advance(
             operator_action="user_action",
         )
 
-    registry = read_json(paths.registry_file)
-    observed_stage = observe_current_stage_from_pool_policy(registry)
-    stage_advancement_result["preflight_policy_status"] = str(
-        observed_stage.get("status", "invalid")
-    )
-    stage_advancement_result["delegated_evidence"]["policy_stage_summary"] = observed_stage
-    if observed_stage.get("status") != "matched":
-        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message="Rollout stage advance is blocked because policy stage is not canonical.",
-            machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
-            operator_action="user_action",
-        )
-
-    current_stage = str(observed_stage.get("observed_stage", ""))
-    desired_policy = STAGED_POOL_POLICY_PACKETS[requested_stage]
-    pool_counts = summarize_registry_pool_counts(registry)
-    active_count_before = int(pool_counts.get("active", 0) or 0)
-    reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
-    active_target = int(desired_policy["active_target"])
-    reserve_target = int(desired_policy["reserve_target"])
-    target_already_satisfied = (
-        current_stage == requested_stage
-        and active_count_before == active_target
-        and reserve_count_before == reserve_target
-    )
-    stage_advancement_result["delegated_evidence"]["pool_count_summary_before"] = {
-        "active_count_observed": active_count_before,
-        "reserve_count_observed": reserve_count_before,
-        "active_target": active_target,
-        "reserve_target": reserve_target,
-    }
-
-    if current_stage not in {source_stage, requested_stage}:
-        stage_advancement_result["final_outcome"] = "invalid_stage_policy"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message=(
-                f"Rollout stage advance requires canonical source stage {source_stage} "
-                f"or in-progress stage {requested_stage}."
-            ),
-            machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
-            operator_action="user_action",
-        )
-
-    backend_matches = get_registry_backends_by_id(registry, requested_backend_id)
-    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
-    selected_backend_auth_basename = (
-        get_auth_basename(selected_backend.get("auth_ref"))
-        if isinstance(selected_backend, dict)
-        else None
-    )
-    backend_precondition_status = "eligible_reserve_backend"
-    if not backend_matches:
-        backend_precondition_status = "backend_missing"
-    elif len(backend_matches) > 1:
-        backend_precondition_status = "ambiguous_backend_id"
-    elif bool(selected_backend.get("manual_hold", False)):
-        backend_precondition_status = "backend_on_hold"
-    elif str(selected_backend.get("pool", "")) == "retired":
-        backend_precondition_status = "backend_retired"
-    elif target_already_satisfied:
-        backend_precondition_status = "valid_existing_backend"
-    elif str(selected_backend.get("pool", "")) != "reserve":
-        backend_precondition_status = "backend_not_reserve"
-    stage_advancement_result["delegated_evidence"]["backend_precondition_summary"] = {
-        "backend_id": requested_backend_id,
-        "precondition_status": backend_precondition_status,
-        "match_count": len(backend_matches),
-        "observed_pool": (
-            str(selected_backend.get("pool", ""))
-            if isinstance(selected_backend, dict)
-            else ""
-        ),
-        "observed_manual_hold": (
-            bool(selected_backend.get("manual_hold", False))
-            if isinstance(selected_backend, dict)
-            else False
-        ),
-    }
-    if backend_precondition_status not in {
-        "eligible_reserve_backend",
-        "valid_existing_backend",
-    }:
-        stage_advancement_result["final_outcome"] = "backend_not_eligible"
-        return build_stage_advance_payload(
-            ok=False,
-            human_message="Rollout stage advance requires one explicit eligible reserve backend id.",
-            machine_error_code="STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
-            operator_action="user_action",
-        )
-
-    if target_already_satisfied:
-        stage_advancement_result["policy_transition_status"] = "already_on_stage"
-        stage_advancement_result["promotion_status"] = "not_needed"
-        stage_advancement_result["final_outcome"] = already_target_outcome
-        return build_stage_advance_payload(
-            ok=True,
-            human_message=(
-                f"Rollout stage advance found canonical stage-{requested_stage} "
-                "target already satisfied."
-            ),
-            machine_error_code="OK",
-        )
-
     with serialized_lock(paths):
         composite_owner_lock_acquired = True
+        registry = read_json(paths.registry_file)
+        observed_stage = observe_current_stage_from_pool_policy(registry)
+        stage_advancement_result["preflight_policy_status"] = str(
+            observed_stage.get("status", "invalid")
+        )
+        stage_advancement_result["delegated_evidence"]["policy_stage_summary"] = observed_stage
+        if observed_stage.get("status") != "matched":
+            stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message="Rollout stage advance is blocked because policy stage is not canonical.",
+                machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
+                operator_action="user_action",
+            )
+
+        current_stage = str(observed_stage.get("observed_stage", ""))
+        desired_policy = STAGED_POOL_POLICY_PACKETS[requested_stage]
+        pool_counts = summarize_registry_pool_counts(registry)
+        active_count_before = int(pool_counts.get("active", 0) or 0)
+        reserve_count_before = int(pool_counts.get("reserve", 0) or 0)
+        active_target = int(desired_policy["active_target"])
+        reserve_target = int(desired_policy["reserve_target"])
+        target_already_satisfied = (
+            current_stage == requested_stage
+            and active_count_before == active_target
+            and reserve_count_before == reserve_target
+        )
+        stage_advancement_result["delegated_evidence"]["pool_count_summary_before"] = {
+            "active_count_observed": active_count_before,
+            "reserve_count_observed": reserve_count_before,
+            "active_target": active_target,
+            "reserve_target": reserve_target,
+        }
+
+        if current_stage not in {source_stage, requested_stage}:
+            stage_advancement_result["final_outcome"] = "invalid_stage_policy"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message=(
+                    f"Rollout stage advance requires canonical source stage {source_stage} "
+                    f"or in-progress stage {requested_stage}."
+                ),
+                machine_error_code="STAGE_ADVANCE_SOURCE_STAGE_UNSUPPORTED",
+                operator_action="user_action",
+            )
+
+        backend_matches = get_registry_backends_by_id(registry, requested_backend_id)
+        selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+        selected_backend_auth_basename = (
+            get_auth_basename(selected_backend.get("auth_ref"))
+            if isinstance(selected_backend, dict)
+            else None
+        )
+        backend_precondition_status = "eligible_reserve_backend"
+        if not backend_matches:
+            backend_precondition_status = "backend_missing"
+        elif len(backend_matches) > 1:
+            backend_precondition_status = "ambiguous_backend_id"
+        elif bool(selected_backend.get("manual_hold", False)):
+            backend_precondition_status = "backend_on_hold"
+        elif str(selected_backend.get("pool", "")) == "retired":
+            backend_precondition_status = "backend_retired"
+        elif target_already_satisfied:
+            backend_precondition_status = "valid_existing_backend"
+        elif str(selected_backend.get("pool", "")) != "reserve":
+            backend_precondition_status = "backend_not_reserve"
+        stage_advancement_result["delegated_evidence"]["backend_precondition_summary"] = {
+            "backend_id": requested_backend_id,
+            "precondition_status": backend_precondition_status,
+            "match_count": len(backend_matches),
+            "observed_pool": (
+                str(selected_backend.get("pool", ""))
+                if isinstance(selected_backend, dict)
+                else ""
+            ),
+            "observed_manual_hold": (
+                bool(selected_backend.get("manual_hold", False))
+                if isinstance(selected_backend, dict)
+                else False
+            ),
+        }
+        if backend_precondition_status not in {
+            "eligible_reserve_backend",
+            "valid_existing_backend",
+        }:
+            stage_advancement_result["final_outcome"] = "backend_not_eligible"
+            return build_stage_advance_payload(
+                ok=False,
+                human_message="Rollout stage advance requires one explicit eligible reserve backend id.",
+                machine_error_code="STAGE_ADVANCE_BACKEND_NOT_ELIGIBLE",
+                operator_action="user_action",
+            )
+
+        if target_already_satisfied:
+            stage_advancement_result["policy_transition_status"] = "already_on_stage"
+            stage_advancement_result["promotion_status"] = "not_needed"
+            stage_advancement_result["final_outcome"] = already_target_outcome
+            return build_stage_advance_payload(
+                ok=True,
+                human_message=(
+                    f"Rollout stage advance found canonical stage-{requested_stage} "
+                    "target already satisfied."
+                ),
+                machine_error_code="OK",
+            )
+
         step_snapshots: dict[str, dict[str, Any]] | None = None
         if current_stage == source_stage:
             step_snapshots = snapshot_promotion_owner_path_runtime_surfaces(paths)
