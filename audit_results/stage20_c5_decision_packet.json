@@ -70,6 +70,23 @@
       "docs_only": true
     }
   },
+  "independent_audits": [
+    {
+      "auditor": "Mendel",
+      "finding": "identified the initial doc/code contradiction and localized the mixed current reserve model"
+    },
+    {
+      "auditor": "Halley",
+      "verdict": "SAFE",
+      "finding": "revised ADR plus STATE_SCHEMA and COMMAND_API now document the mixed current model truthfully without claiming a runtime change"
+    }
+  ],
+  "git": {
+    "primary_commit": "a52a7da",
+    "branch": "codex/stage20-c5-reserve-semantics-adr",
+    "pushed": true,
+    "pull_request": "#39"
+  },
   "next_contour_decision": {
     "if_mixed_canon_documented_without_contradiction": "STAGE20_C6_FINAL_VERIFICATION_AND_UI_GATE",
     "if_real_contradiction_found": "STOP_AND_DIAGNOSE"

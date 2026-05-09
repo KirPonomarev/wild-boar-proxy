@@ -60,9 +60,9 @@ remains a future alternative rather than a silent behavior change.
 ## Git
 
 - branch: `codex/stage20-c5-reserve-semantics-adr`
-- commit: pending closeout commit
-- pushed: pending closeout push
-- pull request: pending
+- commit: `a52a7da` (primary artifact commit)
+- pushed: yes
+- pull request: `#39` draft, targeting `codex/stage20-c3-rollout-posture-inspect`
 
 ## Scope Check
 
