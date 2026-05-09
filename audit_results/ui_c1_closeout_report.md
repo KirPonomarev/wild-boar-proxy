@@ -66,6 +66,13 @@ it with the current canon-backed JSON command surfaces without drifting into
 - new truth surface invented: no
 - deferred rollout controls exposed: no
 
+## Git
+
+- branch: `codex/ui-c1-basic-companion-ui-reentry`
+- commit: `c657072` (primary artifact commit)
+- pushed: yes
+- pull request: `#41` draft, targeting `codex/stage20-c6-final-verification-ui-gate`
+
 ## Notes
 
 - support/open-file actions remain a later bounded UI contour, not a blocker for
