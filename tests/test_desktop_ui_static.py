@@ -20,6 +20,7 @@ class DesktopUiStaticTests(unittest.TestCase):
             DESKTOP_UI / "styles" / "tokens.css",
             DESKTOP_UI / "styles" / "overview.css",
             DESKTOP_UI / "screens" / "overview.js",
+            DESKTOP_UI / "live_overview.py",
             DESKTOP_UI / "assets" / "boar_mark.png",
         ]
         for path in expected:
@@ -91,6 +92,19 @@ class DesktopUiStaticTests(unittest.TestCase):
         for path in sorted((DESKTOP_UI / "screens").glob("*.js")):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("command_adapter", text, path)
+
+    def test_browser_shell_has_no_command_surface_strings(self) -> None:
+        for path in sorted((DESKTOP_UI / "screens").glob("*.js")):
+            text = path.read_text(encoding="utf-8")
+            for forbidden in (
+                "status --json",
+                "healthcheck --json",
+                "mode set",
+                "accounts promote",
+                "rollout stage",
+                "stable target",
+            ):
+                self.assertNotIn(forbidden, text, path)
 
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(

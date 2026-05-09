@@ -217,6 +217,12 @@ h1 {
   color: #fcfaf7;
 }
 
+.button:disabled,
+.action-tile:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
 .button.ghost {
   background: transparent;
   border-color: transparent;

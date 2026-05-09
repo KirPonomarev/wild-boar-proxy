@@ -3,6 +3,7 @@
 
 const FIXTURE_DIR = "./fixtures";
 const DEFAULT_FIXTURE = "overview_healthy";
+const DEFAULT_LIVE_SNAPSHOT = "./live/overview_live_snapshot.json";
 
 const statusView = {
   healthy: { label: "Работает", sidebar: "Все системы работают нормально", chip: "green" },
@@ -101,7 +102,8 @@ function renderIntegrationFailure(message) {
   renderCounts({ account_summary: {} });
   setText("endpoint", "-");
   setText("last-error", message);
-  renderEvents([{ tone: "red", icon: "!", message: "Fixture integration failure", time: "local preview" }]);
+  setText("truth-source", "integration-failure");
+  renderEvents([{ tone: "red", icon: "!", message: "Overview integration failure", time: "local preview" }]);
   renderToast(message);
 }
 
@@ -121,11 +123,22 @@ function renderOverview(payload) {
   renderCounts(accountsPacket);
   setText("endpoint", statusPacket.endpoint || "-");
   setText("last-error", statusPacket.last_error || "нет");
+  setText("truth-source", payload.live_mode ? "live snapshot" : "fixture-only");
   renderEvents(payload.events);
   renderToast(payload.notice || "");
 }
 
+function setActionPolicy(mode) {
+  document.querySelectorAll("[data-fixture-action]").forEach((node) => {
+    const action = node.dataset.fixtureAction;
+    const allowed = action === "refresh";
+    node.disabled = mode === "live" && !allowed;
+    node.title = mode === "live" && !allowed ? "Deferred in live read contour" : "";
+  });
+}
+
 async function setFixture(name) {
+  setActionPolicy("fixture");
   try {
     const payload = await loadFixture(name);
     renderOverview(payload);
@@ -134,12 +147,47 @@ async function setFixture(name) {
   }
 }
 
+async function loadLiveSnapshot(source) {
+  const response = await fetch(source, { cache: "no-store" });
+  if (!response.ok) throw new Error(`live snapshot load failed: ${source}`);
+  return response.json();
+}
+
+async function setLiveSnapshot(source) {
+  setActionPolicy("live");
+  try {
+    const payload = await loadLiveSnapshot(source);
+    if (!payload || payload.source !== "ui_desktop_html_live_overview_snapshot" || payload.synthetic !== false) {
+      throw new Error("live snapshot source is not admitted");
+    }
+    renderOverview(payload);
+  } catch (error) {
+    renderIntegrationFailure(error.message);
+  }
+}
+
 document.querySelectorAll("[data-fixture-action]").forEach((node) => {
   node.addEventListener("click", () => {
-    renderToast(`Fixture-only: ${node.dataset.fixtureAction}`);
+    if (node.dataset.fixtureAction === "refresh") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") === "live") {
+        setLiveSnapshot(params.get("live") || DEFAULT_LIVE_SNAPSHOT);
+      } else {
+        setFixture(params.get("fixture") || DEFAULT_FIXTURE);
+      }
+      return;
+    }
+    renderToast(`Deferred in this contour: ${node.dataset.fixtureAction}`);
   });
 });
 
-const queryFixture = new URLSearchParams(window.location.search).get("fixture");
+const params = new URLSearchParams(window.location.search);
+const queryFixture = params.get("fixture");
 window.setOverviewFixture = setFixture;
-setFixture(queryFixture || DEFAULT_FIXTURE);
+window.setOverviewLiveSnapshot = setLiveSnapshot;
+
+if (params.get("mode") === "live") {
+  setLiveSnapshot(params.get("live") || DEFAULT_LIVE_SNAPSHOT);
+} else {
+  setFixture(queryFixture || DEFAULT_FIXTURE);
+}
