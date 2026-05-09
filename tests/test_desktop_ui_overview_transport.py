@@ -30,22 +30,45 @@ def running_transport(bridge_runner):
         thread.join(timeout=2)
 
 
-def request_json(base_url: str, path: str, body: Any | bytes | None, *, method: str = "POST") -> tuple[int, Mapping[str, Any]]:
+def request_json(
+    base_url: str,
+    path: str,
+    body: Any | bytes | None,
+    *,
+    method: str = "POST",
+    origin: str | None = None,
+) -> tuple[int, Mapping[str, Any]]:
     data = None
     if isinstance(body, bytes):
         data = body
     elif body is not None:
         data = json.dumps(body).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if origin:
+        headers["Origin"] = origin
     request = urllib.request.Request(
         f"{base_url}{path}",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method=method,
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         with opener.open(request, timeout=3) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode("utf-8"))
+
+
+def request_options(base_url: str, path: str, *, origin: str | None = None) -> tuple[int, Mapping[str, str] | Mapping[str, Any]]:
+    headers = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
+    if origin:
+        headers["Origin"] = origin
+    request = urllib.request.Request(f"{base_url}{path}", headers=headers, method="OPTIONS")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=3) as response:
+            return response.status, dict(response.headers)
     except urllib.error.HTTPError as exc:
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
@@ -149,6 +172,36 @@ class DesktopUiOverviewTransportTests(unittest.TestCase):
 
         self.assertEqual(status, 404)
         self.assertEqual(packet["machine_error_code"], "TRANSPORT_ROUTE_FORBIDDEN")
+
+    def test_localhost_origin_is_admitted_for_browser_transport(self) -> None:
+        with running_transport(lambda request: {"status": "ok"}) as base_url:
+            status, headers = request_options(base_url, BRIDGE_ROUTE, origin="http://127.0.0.1:8123")
+
+        self.assertEqual(status, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "http://127.0.0.1:8123")
+        self.assertEqual(headers["Access-Control-Allow-Methods"], "POST")
+
+    def test_non_localhost_origin_is_rejected(self) -> None:
+        with running_transport(lambda request: {}) as base_url:
+            status, packet = request_options(base_url, BRIDGE_ROUTE, origin="http://localhost:8123")
+
+        self.assertEqual(status, 403)
+        self.assertEqual(packet["machine_error_code"], "TRANSPORT_ORIGIN_FORBIDDEN")
+
+    def test_post_from_non_localhost_origin_is_rejected_before_bridge(self) -> None:
+        calls: list[Mapping[str, Any]] = []
+
+        with running_transport(lambda request: calls.append(request) or {}) as base_url:
+            status, packet = request_json(
+                base_url,
+                BRIDGE_ROUTE,
+                {"operation_id": "refresh_overview"},
+                origin="http://localhost:8123",
+            )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(packet["machine_error_code"], "TRANSPORT_ORIGIN_FORBIDDEN")
+        self.assertEqual(calls, [])
 
     def test_transport_binds_only_to_localhost(self) -> None:
         server = create_transport_server()

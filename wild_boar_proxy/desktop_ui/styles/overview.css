@@ -28,6 +28,20 @@
   margin-left: 6px;
 }
 
+.window[data-bridge-state="transport_live"] .status-line::after {
+  color: var(--green);
+  content: "transport live";
+  margin-left: 6px;
+}
+
+.window[data-bridge-state="transport_error"] .status-line::after,
+.window[data-bridge-state="bridge_command_error"] .status-line::after,
+.window[data-bridge-state="confirmation_required"] .status-line::after {
+  color: var(--red);
+  content: "transport error";
+  margin-left: 6px;
+}
+
 .window::after {
   background: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 18%);
   content: "";
