@@ -46,6 +46,13 @@ This action runner is not browser click wiring. It accepts fixed action IDs,
 uses `command_adapter.py`, and regenerates the live overview snapshot after the
 action. Browser buttons remain deferred until a separate renderer bridge contour.
 
+Run a backend bridge contract operation with:
+
+`python3 -m wild_boar_proxy.desktop_ui.overview_bridge --request-json '{"operation_id":"refresh_overview"}'`
+
+The bridge accepts fixed operation IDs only. It does not let the browser choose
+commands, argv, paths, environment variables, or working directories.
+
 ## Command Adapter Boundary
 
 `command_adapter.py` is a backend-side utility. Browser JavaScript does not
