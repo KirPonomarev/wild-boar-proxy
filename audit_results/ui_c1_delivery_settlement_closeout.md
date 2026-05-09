@@ -82,9 +82,9 @@ UI base.
 ## Git
 
 - branch: `codex/ui-c1-delivery-settlement`
-- commit: pending finalization
-- pushed: pending finalization
-- pull request: pending finalization
+- commit: `6aea388` (primary artifact commit)
+- pushed: yes
+- pull request: `#42` draft, targeting `codex/ui-c1-basic-companion-ui-reentry`
 
 ## Notes
 
