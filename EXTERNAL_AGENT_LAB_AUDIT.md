@@ -52,3 +52,10 @@ Path hygiene:
 
 - acceptance artifacts in this lane must be repository-relative
 - reviewer-specific temporary paths are forbidden in acceptance truth packets
+
+## Artifact References
+
+- canonical contour index:
+  - `audit_results/external_agent_lab_isolated_import_contour.md`
+- acceptance verification:
+  - `external_agent_lab_acceptance_verification.md`
