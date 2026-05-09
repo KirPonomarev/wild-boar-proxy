@@ -1,0 +1,78 @@
+{
+  "document_type": "UI_DESKTOP_HTML_OVERVIEW_SAFE_TRANSPORT_PACKET",
+  "document_status": "implementation_verified",
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_SAFE_TRANSPORT",
+  "created_at": "2026-05-09",
+  "branch": "codex/ui-desktop-html-overview-safe-transport",
+  "base_branch": "codex/ui-desktop-html-overview-implantation-transport-gate",
+  "goal": "Admit a minimal localhost-only desktop transport for fixed Overview bridge JSON requests.",
+  "write_surfaces": [
+    "wild_boar_proxy/desktop_ui/overview_transport.py",
+    "wild_boar_proxy/desktop_ui/README.md",
+    "tests/test_desktop_ui_overview_implantation.py",
+    "tests/test_desktop_ui_overview_transport.py",
+    "tests/test_desktop_ui_static.py",
+    "audit_results/ui_desktop_html_overview_safe_transport_packet.json",
+    "audit_results/ui_desktop_html_overview_safe_transport_closeout.md"
+  ],
+  "transport_shape": {
+    "host": "127.0.0.1",
+    "route": "/overview-bridge",
+    "method": "POST",
+    "max_request_bytes": 65536,
+    "runtime_truth_owner": "overview_bridge_and_existing_strict_json_command_surfaces",
+    "general_api": false,
+    "public_web_surface": false
+  },
+  "allowed_operations": [
+    "refresh_overview",
+    "run_overview_action"
+  ],
+  "forbidden_request_fields": [
+    "argv",
+    "command",
+    "cwd",
+    "env",
+    "log_path",
+    "path",
+    "registry_path",
+    "runtime_file",
+    "shell",
+    "snapshot_path",
+    "state_path"
+  ],
+  "acceptance_status": {
+    "localhost_only": "implemented",
+    "fixed_route_only": "implemented",
+    "strict_json_only": "implemented",
+    "invalid_json_structured_error": "implemented",
+    "forbidden_fields_rejected_before_bridge": "implemented",
+    "unknown_operation_structured_error": "delegated_to_overview_bridge",
+    "no_direct_command_execution_in_transport": "implemented",
+    "no_direct_state_or_log_reads_in_transport": "implemented",
+    "other_screens_integrated": false
+  },
+  "verification": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/overview_transport.py tests/test_desktop_ui_overview_transport.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m unittest tests.test_desktop_ui_overview_transport tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 26
+    },
+    {
+      "command": "python3 -m unittest tests.test_desktop_ui_command_adapter tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_overview_transport tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 60
+    },
+    {
+      "command": "rg -n \"shell=True|Popen|os\\\\.system|status --json|healthcheck --json|mode set|accounts promote|rollout stage|policy stage|evidence capture|stable target switch|backend-registry|supervisor-state|runtime\\\\.py|cli\\\\.py\" wild_boar_proxy/desktop_ui",
+      "result": "pass",
+      "matches": 0
+    }
+  ],
+  "known_non_blocking_note": "Transport unit tests disable urllib proxy handling explicitly so localhost assertions test the local transport instead of any operator proxy environment.",
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_FULL_IMPLANTATION"
+}

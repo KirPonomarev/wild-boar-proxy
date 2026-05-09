@@ -1,15 +1,15 @@
 <!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-# Desktop UI Static Overview
+# Desktop UI Overview
 
-This directory contains the fixture-only desktop HTML renderer slice for
+This directory contains the desktop HTML renderer slice for
 `01_overview_dashboard`.
 
-Rules for this contour:
+Rules for the browser renderer boundary:
 
-- no live commands
-- no command adapter
+- no direct live commands
+- no direct command adapter import
 - no runtime file reads
 - no log parsing
 - no runtime truth ownership
@@ -53,12 +53,22 @@ Run a backend bridge contract operation with:
 The bridge accepts fixed operation IDs only. It does not let the browser choose
 commands, argv, paths, environment variables, or working directories.
 
-Transport gate status:
+Safe transport status:
 
-`TRANSPORT_GATE=RED`
+`OVERVIEW_SAFE_TRANSPORT=ADMITTED_LOCAL_ONLY`
 
-No safe browser-to-backend renderer transport is proven in the current repo
-context. Preview the browser lifecycle simulation with:
+`overview_transport.py` admits a localhost-only desktop transport for fixed
+`overview_bridge` JSON requests:
+
+`POST http://127.0.0.1:<port>/overview-bridge`
+
+The transport is not a public web app, not a general API, and not runtime truth.
+It delegates only to `overview_bridge.run_bridge_request`, rejects forbidden
+request fields before bridge execution, and does not read state files or logs.
+
+The browser still defaults to the simulated lifecycle until a separate full
+implantation contour wires the renderer to this admitted transport. Preview the
+simulation with:
 
 `http://127.0.0.1:<port>/index.html?mode=live&bridge=simulated`
 
