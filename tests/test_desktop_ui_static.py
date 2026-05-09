@@ -21,8 +21,10 @@ class DesktopUiStaticTests(unittest.TestCase):
             DESKTOP_UI / "styles" / "overview.css",
             DESKTOP_UI / "screens" / "overview.js",
             DESKTOP_UI / "overview_bridge.py",
+            DESKTOP_UI / "overview_transport.py",
             DESKTOP_UI / "live_overview.py",
             DESKTOP_UI / "overview_actions.py",
+            ROOT / "tests" / "test_desktop_ui_overview_transport.py",
             ROOT / "tests" / "test_desktop_ui_overview_implantation.py",
             DESKTOP_UI / "assets" / "boar_mark.png",
         ]

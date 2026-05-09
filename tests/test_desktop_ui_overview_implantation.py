@@ -11,12 +11,13 @@ README = DESKTOP_UI / "README.md"
 
 
 class DesktopUiOverviewImplantationTests(unittest.TestCase):
-    def test_transport_gate_is_red_and_not_full_implantation(self) -> None:
+    def test_safe_transport_is_admitted_but_not_full_browser_implantation(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")
         readme = README.read_text(encoding="utf-8")
 
         self.assertIn('const TRANSPORT_GATE = "RED";', overview)
-        self.assertIn("TRANSPORT_GATE=RED", readme)
+        self.assertIn("OVERVIEW_SAFE_TRANSPORT=ADMITTED_LOCAL_ONLY", readme)
+        self.assertIn("browser still defaults to the simulated lifecycle", readme)
         self.assertIn("does not call backend commands from the browser", readme)
 
     def test_browser_builds_only_fixed_bridge_operation_shapes(self) -> None:
