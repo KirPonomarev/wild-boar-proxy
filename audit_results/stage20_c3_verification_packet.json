@@ -1,0 +1,86 @@
+{
+  "contour_id": "STAGE20_C3_ROLLOUT_POSTURE_INSPECT",
+  "date": "2026-05-09",
+  "branch": "codex/stage20-c3-rollout-posture-inspect",
+  "status": "completed",
+  "scope": {
+    "repo_only": true,
+    "live_mutation_authorized": false
+  },
+  "files_changed": [
+    "wild_boar_proxy/runtime.py",
+    "wild_boar_proxy/cli.py",
+    "tests/test_cli.py",
+    "COMMAND_API.md",
+    "audit_results/stage20_c3_spec.md",
+    "audit_results/stage20_c3_verification_packet.json",
+    "audit_results/stage20_c3_closeout_report.md"
+  ],
+  "implementation_summary": {
+    "runtime_change": "added read-only rollout posture classification surface for stages 15 and 20, including candidate summaries, policy-stage observation, rotation-summary projection, and normalization packet planning",
+    "cli_change": "added `rollout posture inspect <15|20> --json` parser and dispatch",
+    "test_change": "added parser, insufficiency, reserve-candidate, rotation-insufficiency, live-drift, stage-15 ready, stage-20 ready, target-already-satisfied, and noncanonical-policy posture coverage",
+    "reserve_semantics_changed": false,
+    "live_mutation_added": false,
+    "candidate_filtering_opened_as_separate_contour": false
+  },
+  "verification": {
+    "py_compile": {
+      "command": "python3 -m py_compile wild_boar_proxy/runtime.py wild_boar_proxy/cli.py tests/test_cli.py",
+      "status": "passed"
+    },
+    "posture_selector": {
+      "command": "python3 -m unittest tests.test_cli -k rollout_posture",
+      "status": "passed",
+      "observed_result": "Ran 9 tests in 1.195s OK"
+    },
+    "rotation_selector": {
+      "command": "python3 -m unittest tests.test_cli -k rollout_rotation_inspect",
+      "status": "passed",
+      "observed_result": "Ran 30 tests in 4.477s OK"
+    },
+    "stage_advance_selector": {
+      "command": "python3 -m unittest tests.test_cli -k stage_advance",
+      "status": "passed",
+      "observed_result": "Ran 35 tests in 18.037s OK"
+    },
+    "full_suite": {
+      "command": "python3 -m unittest -f tests.test_cli",
+      "status": "passed",
+      "observed_result": "Ran 342 tests in 163.156s OK"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  },
+  "manual_review": {
+    "diff_scope": "runtime/cli/tests/COMMAND_API plus contour artifacts only",
+    "top_level_truth_authoritative": true,
+    "nested_posture_detail_contradiction_found": false,
+    "runtime_data_committed": false,
+    "unrelated_ui_or_live_work_mixed_in": false
+  },
+  "independent_audits": [
+    {
+      "auditor": "Huygens",
+      "finding": "mapped the minimal CLI/runtime/test/doc surface for posture inspect and identified current JSON packet conventions"
+    },
+    {
+      "auditor": "Noether",
+      "finding": "confirmed existing rollout parser/dispatch gaps, stage/pool helper insertion zone, and top-level packet contract boundaries"
+    },
+    {
+      "auditor": "Halley",
+      "verdict": "SAFE",
+      "finding": "new posture path appears read-only and keeps top-level machine_error_code authoritative; initial stage-15/policy-stage test gaps were identified and then closed in the final test set"
+    }
+  ],
+  "git": {
+    "primary_commit": "f97b8cd",
+    "branch": "codex/stage20-c3-rollout-posture-inspect",
+    "pushed": true,
+    "pull_request": "#38"
+  },
+  "next_contour": "STAGE20_C5_RESERVE_SEMANTICS_ADR"
+}
