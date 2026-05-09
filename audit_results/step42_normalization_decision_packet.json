@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "contour_id": "step42_posture_normalization_decision_packet",
+  "authorization_gate_status": "open",
+  "repo_side_admissibility_status": "revalidated_true",
+  "owner_surface_truth_status": "contradiction_persistent_after_bounded_recheck",
+  "current_blockers": [
+    "OWNER_SURFACE_CONTRADICTION",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "NO_EXPLICIT_RESERVE_POSTURE"
+  ],
+  "blocker_classification": {
+    "primary": "OWNER_SURFACE_CONTRADICTION",
+    "secondary": "POSTURE_PARTICIPATION",
+    "evidence": {
+      "status_policy_drift_status": "detected",
+      "status_claim_gate_status": "blocked",
+      "rotation_policy_drift_status": "clear",
+      "rotation_participation_status": "insufficient",
+      "accounts_active_count": 24,
+      "accounts_reserve_count": 0,
+      "launch_capable_backend_count": 1,
+      "bounded_recheck_confirms_contradiction": true
+    }
+  },
+  "decision_verdict": "NO_GO_OWNER_SURFACE_CONTRADICTION",
+  "normalization_contour_admissible": false,
+  "human_reason": "Top-level status truth and rollout rotation participation truth disagree persistently on policy drift after bounded recheck; live normalization cannot open on top of contradictory owner surfaces.",
+  "next_action": "do_not_open_live_normalization; inspect_status_vs_rotation_policy_drift_owner_mismatch"
+}
