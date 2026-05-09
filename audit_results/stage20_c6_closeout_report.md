@@ -95,9 +95,9 @@ and decide whether the UI gate is truthfully earned.
 ## Git
 
 - branch: `codex/stage20-c6-final-verification-ui-gate`
-- commit: pending finalization
-- pushed: pending finalization
-- pull request: pending finalization
+- commit: `84be490` (primary artifact commit)
+- pushed: yes
+- pull request: `#40` draft, targeting `codex/stage20-c5-reserve-semantics-adr`
 
 ## Scope Check
 
