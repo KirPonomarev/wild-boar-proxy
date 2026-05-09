@@ -38,6 +38,14 @@ Preview an explicit live snapshot with:
 The live browser path reads only the generated snapshot file. It does not run
 commands from JavaScript.
 
+Run an admitted backend-only overview action with:
+
+`python3 -m wild_boar_proxy.desktop_ui.overview_actions switch_stable --confirmed`
+
+This action runner is not browser click wiring. It accepts fixed action IDs,
+uses `command_adapter.py`, and regenerates the live overview snapshot after the
+action. Browser buttons remain deferred until a separate renderer bridge contour.
+
 ## Command Adapter Boundary
 
 `command_adapter.py` is a backend-side utility. Browser JavaScript does not

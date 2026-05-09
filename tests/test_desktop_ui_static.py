@@ -21,6 +21,7 @@ class DesktopUiStaticTests(unittest.TestCase):
             DESKTOP_UI / "styles" / "overview.css",
             DESKTOP_UI / "screens" / "overview.js",
             DESKTOP_UI / "live_overview.py",
+            DESKTOP_UI / "overview_actions.py",
             DESKTOP_UI / "assets" / "boar_mark.png",
         ]
         for path in expected:
@@ -105,6 +106,12 @@ class DesktopUiStaticTests(unittest.TestCase):
                 "stable target",
             ):
                 self.assertNotIn(forbidden, text, path)
+
+    def test_overview_action_runner_does_not_enable_browser_bridge(self) -> None:
+        index = (DESKTOP_UI / "index.html").read_text(encoding="utf-8")
+        overview = (DESKTOP_UI / "screens" / "overview.js").read_text(encoding="utf-8")
+        self.assertNotIn("overview_actions", index)
+        self.assertNotIn("overview_actions", overview)
 
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(

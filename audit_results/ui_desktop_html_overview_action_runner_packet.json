@@ -1,0 +1,70 @@
+{
+  "contour_id": "UI_DESKTOP_HTML_OVERVIEW_ACTION_RUNNER",
+  "date": "2026-05-09",
+  "base_branch": "codex/ui-desktop-html-overview-live-read-binding",
+  "work_branch": "codex/ui-desktop-html-overview-action-runner",
+  "status": "passed_local_verification",
+  "runtime_scope": {
+    "runtime_core_changed": false,
+    "cli_changed": false,
+    "web_ui_changed": false,
+    "ui_shell_changed": false,
+    "browser_click_wiring_added": false,
+    "renderer_bridge_added": false,
+    "live_mutating_smoke_run": false
+  },
+  "admitted_action_ids": [
+    "switch_stable",
+    "switch_managed",
+    "run_sync",
+    "launch_client",
+    "run_smoke"
+  ],
+  "deferred_action_families": [
+    "stable_repair",
+    "accounts",
+    "diagnostics",
+    "policy_stage",
+    "rollout_stage",
+    "rollout_evidence",
+    "stable_target_switch"
+  ],
+  "guards": {
+    "confirmation_required": true,
+    "free_form_command_strings": false,
+    "post_action_refresh_required": true,
+    "browser_shell_execution": false,
+    "state_or_log_truth": false,
+    "strict_json_for_deferred_actions": true
+  },
+  "verification": [
+    {
+      "command": "python3 -m unittest -q tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_command_adapter tests.test_desktop_ui_static",
+      "result": "pass",
+      "tests": 38
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/desktop_ui/overview_actions.py wild_boar_proxy/desktop_ui/live_overview.py wild_boar_proxy/desktop_ui/command_adapter.py tests/test_desktop_ui_overview_actions.py tests/test_desktop_ui_overview_live_binding.py tests/test_desktop_ui_static.py",
+      "result": "pass"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.overview_actions switch_stable --output /tmp/wbp_overview_action_unconfirmed.json",
+      "result": "pass_expected_exit_1",
+      "machine_error_code": "CONFIRMATION_REQUIRED"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy.desktop_ui.overview_actions stable_repair_apply --output /tmp/wbp_overview_action_deferred.json",
+      "result": "pass_expected_exit_1",
+      "machine_error_code": "ACTION_DEFERRED"
+    },
+    {
+      "command": "python3 -m json.tool /tmp/wbp_overview_action_deferred.json",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"shell=True|os\\.system|Popen\\(|subprocess\\.run\\([^\\n]*shell=True|~/.codex|backend-registry|supervisor-state|stable target switch|rollout stage|policy stage|evidence capture|auth_ref\" wild_boar_proxy/desktop_ui -g '!README.md'",
+      "result": "pass_no_matches"
+    }
+  ],
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_ACTION_BRIDGE"
+}
