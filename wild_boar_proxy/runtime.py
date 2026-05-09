@@ -1567,6 +1567,59 @@ def classify_backend_runtime_eligibility(
     return "unknown_unverified", ["unknown_unverified"]
 
 
+def backend_in_stage_posture_candidate_universe(
+    backend: dict[str, Any],
+) -> tuple[bool, list[str]]:
+    reasons = []
+    if backend.get("enabled", True) is False:
+        reasons.append("disabled")
+    if bool(backend.get("manual_hold")):
+        reasons.append("manual_hold")
+    if not backend.get("auth_ref"):
+        reasons.append("missing_auth_ref")
+    if str(backend.get("status", "")).lower() in {"retired", "fatal"}:
+        reasons.append("terminal_status")
+    return not reasons, reasons
+
+
+def classify_backend_stage_posture_eligibility(
+    backend: dict[str, Any],
+) -> tuple[str, list[str]]:
+    eligible, reasons = backend_in_stage_posture_candidate_universe(backend)
+    if not eligible:
+        return "excluded", reasons
+
+    status = str(backend.get("status", "")).lower()
+    last_error_class = str(backend.get("last_error_class", "")).lower()
+    last_error = str(backend.get("last_error", "")).lower()
+    cooldown_until = str(backend.get("cooldown_until") or "").strip()
+
+    if (
+        last_error_class == "auth"
+        or "auth_unavailable" in last_error
+        or "authentication token has been invalidated" in last_error
+    ):
+        return "auth_invalid", ["auth_invalid"]
+    if (
+        last_error_class == "quota"
+        or "usage_limit_reached" in last_error
+        or ("quota" in last_error and "model_cooldown" not in last_error)
+    ):
+        return "quota_exhausted", ["quota_exhausted"]
+    if "model_cooldown" in last_error or (
+        cooldown_until and status != "healthy" and not last_error_class
+    ):
+        return "cooldown_only", ["cooldown_only"]
+    if (
+        status == "healthy"
+        and not cooldown_until
+        and not last_error_class
+        and not last_error
+    ):
+        return "live_capable", []
+    return "unknown_unverified", ["unknown_unverified"]
+
+
 def get_launch_capable_backend_ids(registry: dict[str, Any]) -> list[str]:
     return sorted(
         str(item.get("id")).strip()
@@ -7717,6 +7770,361 @@ def run_rollout_evidence_capture(paths: RuntimePaths, target: str) -> dict[str, 
         operator_action="none" if ok else "user_action",
         changed_files=artifact_paths,
         extra={"scale_evidence_packet_result": packet_result},
+    )
+
+
+def summarize_rollout_posture_candidate_classes(
+    registry: dict[str, Any],
+) -> dict[str, list[str]]:
+    classes: dict[str, list[str]] = {
+        "active_live_capable": [],
+        "reserve_live_capable": [],
+        "active_quota_exhausted": [],
+        "reserve_quota_exhausted": [],
+        "active_auth_invalid": [],
+        "reserve_auth_invalid": [],
+        "active_cooldown_only": [],
+        "reserve_cooldown_only": [],
+        "active_unknown_unverified": [],
+        "reserve_unknown_unverified": [],
+        "active_excluded": [],
+        "reserve_excluded": [],
+    }
+    for backend in registry.get("backends", []):
+        backend_id = str(backend.get("id") or "").strip()
+        if not backend_id:
+            continue
+        pool = str(backend.get("pool", ""))
+        if pool not in {"active", "reserve"}:
+            continue
+        eligibility_class, _ = classify_backend_stage_posture_eligibility(backend)
+        bucket = f"{pool}_{eligibility_class}"
+        if bucket in classes:
+            classes[bucket].append(backend_id)
+    for backend_ids in classes.values():
+        backend_ids.sort()
+    return classes
+
+
+def summarize_rollout_posture_runtime_truth(
+    paths: RuntimePaths,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    desired_mode = get_desired_mode(paths)
+    effective_mode = get_effective_mode(paths, state)
+    host, port, endpoint = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    reported_effective_mode = reconcile_effective_mode_for_reporting(
+        effective_mode, listener_ok=listener_ok
+    )
+    _, _, reported_endpoint = get_endpoint(paths, reported_effective_mode)
+    configured_base_url = read_toml_string(paths.config_toml, "base_url")
+    selected_backend_ids = sorted(
+        str(item).strip()
+        for item in state.get("selected_backend_ids", []) or []
+        if str(item).strip()
+    )
+    return {
+        "surface": "rollout posture inspect",
+        "read_only": True,
+        "live_attestation_checked": False,
+        "desired_mode": desired_mode,
+        "state_effective_mode": str(state.get("effective_mode", "unknown")),
+        "effective_mode": reported_effective_mode,
+        "endpoint": reported_endpoint,
+        "configured_base_url": configured_base_url,
+        "base_url_match": configured_base_url == reported_endpoint,
+        "listener_host": host,
+        "listener_port": port,
+        "listener_ok": listener_ok,
+        "state_status": str(state.get("status", "unknown")),
+        "state_active_count": coerce_nonnegative_int(state.get("active_count")),
+        "state_reserve_count": coerce_nonnegative_int(state.get("reserve_count")),
+        "selected_backend_ids": selected_backend_ids,
+        "state_last_error_present": bool(str(state.get("last_error", "")).strip()),
+        "required_live_prechecks": [
+            "status --json",
+            "healthcheck --json",
+            "rollout rotation inspect --json",
+        ],
+    }
+
+
+def run_rollout_posture_inspect(paths: RuntimePaths, stage: str) -> dict[str, Any]:
+    requested_stage = str(stage).strip()
+    stage_advance_config = {
+        "15": {"source_stage": "10"},
+        "20": {"source_stage": "15"},
+    }
+    posture_result: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "owner_path_emitted",
+        "attempted": True,
+        "requested_stage": requested_stage,
+        "source_stage": "",
+        "classification": "pending",
+        "blocker_code": "PENDING",
+        "pool_count_summary": {},
+        "candidate_summary": {},
+        "runtime_truth_summary": {},
+        "policy_stage_summary": {},
+        "rotation_summary": {},
+        "normalization_decision_packet": {},
+        "final_outcome": "pending_observation",
+    }
+
+    def build_posture_payload(
+        *,
+        ok: bool,
+        human_message: str,
+        machine_error_code: str,
+        operator_action: str = "none",
+        severity: str = "recoverable",
+        exit_code: int | None = None,
+    ) -> dict[str, Any]:
+        return build_command_payload(
+            ok=ok,
+            human_message=human_message,
+            machine_error_code=machine_error_code,
+            liveness="unknown",
+            severity=severity,
+            operator_action=operator_action,
+            changed_files=[],
+            extra={"rollout_posture_result": posture_result},
+            exit_code=exit_code,
+        )
+
+    config = stage_advance_config.get(requested_stage)
+    if config is None:
+        posture_result["classification"] = "UNSUPPORTED_TARGET_STAGE"
+        posture_result["blocker_code"] = "STAGE_ADVANCE_UNSUPPORTED_STAGE"
+        posture_result["final_outcome"] = "unsupported_target_stage"
+        return build_posture_payload(
+            ok=False,
+            human_message="Rollout posture inspect supports target stages 15 and 20.",
+            machine_error_code="STAGE_ADVANCE_UNSUPPORTED_STAGE",
+            operator_action="user_action",
+        )
+
+    source_stage = str(config["source_stage"])
+    posture_result["source_stage"] = source_stage
+    source_policy = dict(STAGED_POOL_POLICY_PACKETS[source_stage])
+    target_policy = dict(STAGED_POOL_POLICY_PACKETS[requested_stage])
+    source_active_target = int(source_policy["active_target"])
+    source_reserve_target = int(source_policy["reserve_target"])
+    target_active_target = int(target_policy["active_target"])
+    target_reserve_target = int(target_policy["reserve_target"])
+
+    registry = read_json(paths.registry_file)
+    state = read_json(paths.state_file, required=False)
+    observed_stage = observe_current_stage_from_pool_policy(registry)
+    current_stage = str(observed_stage.get("observed_stage", ""))
+    pool_counts = summarize_registry_pool_counts(registry)
+    active_count = int(pool_counts.get("active", 0) or 0)
+    reserve_count = int(pool_counts.get("reserve", 0) or 0)
+    retired_count = int(pool_counts.get("retired", 0) or 0)
+    managed_pool_count = active_count + reserve_count + retired_count
+    candidate_classes = summarize_rollout_posture_candidate_classes(registry)
+    active_live_capable_ids = list(candidate_classes["active_live_capable"])
+    reserve_live_capable_ids = list(candidate_classes["reserve_live_capable"])
+    active_overflow_live_capable_ids = (
+        active_live_capable_ids[source_active_target:]
+        if len(active_live_capable_ids) > source_active_target
+        else []
+    )
+    reserve_candidate_id = (
+        reserve_live_capable_ids[0]
+        if reserve_live_capable_ids
+        else (active_overflow_live_capable_ids[0] if active_overflow_live_capable_ids else "")
+    )
+    selected_backend_ids = sorted(
+        str(item).strip()
+        for item in state.get("selected_backend_ids", []) or []
+        if str(item).strip()
+    )
+    rotation_payload = run_rollout_rotation_inspect(paths)
+    rotation_result = rotation_payload.get("rotation_evidence_result", {})
+    rotation_status = str(rotation_result.get("participation_status", "unknown"))
+    protected_active = active_live_capable_ids[:source_active_target]
+    hold_set = sorted(
+        set(candidate_classes["active_quota_exhausted"])
+        | set(candidate_classes["active_auth_invalid"])
+        | set(candidate_classes["active_cooldown_only"])
+        | set(candidate_classes["active_unknown_unverified"])
+    )
+    do_not_touch = sorted(set(protected_active) | set(selected_backend_ids))
+
+    posture_result["pool_count_summary"] = {
+        "active_count": active_count,
+        "reserve_count": reserve_count,
+        "retired_count": retired_count,
+        "managed_pool_count": managed_pool_count,
+        "source_active_target": source_active_target,
+        "source_reserve_target": source_reserve_target,
+        "target_active_target": target_active_target,
+        "target_reserve_target": target_reserve_target,
+    }
+    posture_result["candidate_summary"] = {
+        **candidate_classes,
+        "active_live_capable_count": len(active_live_capable_ids),
+        "reserve_live_capable_count": len(reserve_live_capable_ids),
+        "active_overflow_live_capable_ids": active_overflow_live_capable_ids,
+        "selected_backend_ids": selected_backend_ids,
+        "reserve_candidate_id": reserve_candidate_id,
+    }
+    posture_result["runtime_truth_summary"] = summarize_rollout_posture_runtime_truth(
+        paths, state
+    )
+    posture_result["policy_stage_summary"] = {
+        **observed_stage,
+        "source_stage": source_stage,
+        "requested_stage": requested_stage,
+        "source_policy": source_policy,
+        "target_policy": target_policy,
+    }
+    posture_result["rotation_summary"] = {
+        "status": rotation_payload.get("status"),
+        "machine_error_code": rotation_payload.get("machine_error_code"),
+        "participation_status": rotation_status,
+        "evidence_status": rotation_result.get("evidence_status"),
+        "evidence_reason": rotation_result.get("evidence_reason"),
+        "selected_backend_snapshot_present": rotation_result.get(
+            "selected_backend_snapshot_present"
+        ),
+        "selected_backend_snapshot_validation_status": rotation_result.get(
+            "selected_backend_snapshot_validation_status"
+        ),
+        "selected_backend_ids_observed": rotation_result.get(
+            "selected_backend_ids_observed", []
+        ),
+        "active_routing_candidate_ids_observed": rotation_result.get(
+            "active_routing_candidate_ids_observed", []
+        ),
+    }
+    posture_result["normalization_decision_packet"] = {
+        "protected_active": protected_active,
+        "reserve_candidate": reserve_candidate_id,
+        "reserve_set": active_overflow_live_capable_ids,
+        "hold_set": hold_set,
+        "retire_set": [],
+        "do_not_touch": do_not_touch,
+        "expected_source_posture_after_normalization": {
+            "active_window_target": source_active_target,
+            "reserve_target": source_reserve_target,
+            "explicit_reserve_candidate_required": True,
+        },
+        "expected_target_posture_after_stage_advance": {
+            "active_window_target": target_active_target,
+            "reserve_target": target_reserve_target,
+            "stage_advance_candidate": reserve_candidate_id,
+        },
+    }
+
+    if observed_stage.get("status") != "matched" or current_stage not in {
+        source_stage,
+        requested_stage,
+    }:
+        posture_result["classification"] = "POLICY_STAGE_NOT_CANONICAL"
+        posture_result["blocker_code"] = "STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL"
+        posture_result["final_outcome"] = "blocked_by_policy_stage"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because policy stage is not canonical "
+                "for the requested advance target."
+            ),
+            machine_error_code="STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL",
+            operator_action="user_action",
+        )
+
+    if current_stage == requested_stage:
+        if active_count == target_active_target and reserve_count == target_reserve_target:
+            posture_result["classification"] = "READY_ALREADY_ON_TARGET"
+            posture_result["blocker_code"] = "OK"
+            posture_result["final_outcome"] = "target_stage_already_satisfied"
+            return build_posture_payload(
+                ok=True,
+                human_message="Rollout posture is already on the requested target stage.",
+                machine_error_code="OK",
+            )
+        posture_result["classification"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["blocker_code"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["final_outcome"] = "target_stage_posture_needs_normalization"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is on the requested target stage but lifecycle "
+                "posture is not aligned with the canonical target window."
+            ),
+            machine_error_code="LIVE_POSTURE_DRIFT_ONLY",
+            operator_action="user_action",
+        )
+
+    if len(active_live_capable_ids) < source_active_target:
+        posture_result["classification"] = "INSUFFICIENT_ELIGIBLE_POOL"
+        posture_result["blocker_code"] = "INSUFFICIENT_ELIGIBLE_POOL"
+        posture_result["final_outcome"] = "insufficient_source_stage_live_capable_pool"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because source-stage live-capable active "
+                "pool is insufficient."
+            ),
+            machine_error_code="INSUFFICIENT_ELIGIBLE_POOL",
+            operator_action="user_action",
+        )
+
+    if active_count > source_active_target:
+        posture_result["classification"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["blocker_code"] = "LIVE_POSTURE_DRIFT_ONLY"
+        posture_result["final_outcome"] = "source_stage_overfull_but_normalizable"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture has enough eligible inventory, but active posture "
+                "is over the source active window and needs normalization first."
+            ),
+            machine_error_code="LIVE_POSTURE_DRIFT_ONLY",
+            operator_action="user_action",
+        )
+
+    if not reserve_candidate_id:
+        posture_result["classification"] = "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        posture_result["blocker_code"] = "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        posture_result["final_outcome"] = "reserve_candidate_missing"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because no explicit live-capable reserve "
+                "candidate is available."
+            ),
+            machine_error_code="RESERVE_CANDIDATE_NOT_IDENTIFIED",
+            operator_action="user_action",
+        )
+
+    if rotation_status != "available":
+        posture_result["classification"] = "ROTATION_EVIDENCE_INSUFFICIENT"
+        posture_result["blocker_code"] = "ROTATION_EVIDENCE_INSUFFICIENT"
+        posture_result["final_outcome"] = "rotation_evidence_not_available"
+        return build_posture_payload(
+            ok=False,
+            human_message=(
+                "Rollout posture is blocked because bounded rotation evidence is "
+                "not available."
+            ),
+            machine_error_code="ROTATION_EVIDENCE_INSUFFICIENT",
+            operator_action="user_action",
+        )
+
+    posture_result["classification"] = "READY_FOR_STAGE_ADVANCE"
+    posture_result["blocker_code"] = "OK"
+    posture_result["final_outcome"] = "ready_for_explicit_reserve_stage_advance"
+    return build_posture_payload(
+        ok=True,
+        human_message=(
+            "Rollout posture is ready for one explicit reserve-first stage advance."
+        ),
+        machine_error_code="OK",
     )
 
 

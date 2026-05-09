@@ -330,6 +330,15 @@ class CliTests(unittest.TestCase):
             command_path="rollout rotation inspect",
         )
 
+    def test_rollout_posture_inspect_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "rollout",
+            "posture",
+            "inspect",
+            "20",
+            command_path="rollout posture inspect",
+        )
+
     def test_installer_init_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection(
             "installer",
@@ -8929,6 +8938,313 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(evidence["evidence_status"], "participation_evidence_present")
         self.assertEqual(evidence["evidence_reason"], "multi_backend_snapshot")
+
+    def test_rollout_posture_inspect_20_reports_insufficient_eligible_pool_for_step41_shape(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["stable_default_backend_id"] = "open17-plus"
+        registry["pool_policy"] = {
+            "active_min": 15,
+            "active_target": 15,
+            "reserve_target": 0,
+        }
+        registry["backends"] = []
+        for index in range(24):
+            backend_id = "open17-plus" if index == 17 else f"open{index:02d}-blocked"
+            auth_name = f"codex-posture-{index:02d}.json"
+            backend = self.build_backend(
+                backend_id=backend_id,
+                auth_ref=f"/tmp/{auth_name}",
+                pool="active",
+                status="healthy",
+            )
+            if backend_id != "open17-plus":
+                backend["last_error_class"] = "quota"
+                backend["last_error"] = "usage_limit_reached"
+            registry["backends"].append(backend)
+            (self.stable_dir / auth_name).write_text("{}", encoding="utf-8")
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state.update(
+            {
+                "active_count": 24,
+                "reserve_count": 0,
+                "retired_count": 0,
+                "healthy_count": 1,
+                "degraded_count": 23,
+                "down_count": 0,
+                "selected_backend_ids": ["open17-plus"],
+                "selected_backend_ids_observed_at": runtime_mod.now_iso(),
+            }
+        )
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["machine_error_code"], "INSUFFICIENT_ELIGIBLE_POOL")
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["requested_stage"], "20")
+        self.assertEqual(posture["source_stage"], "15")
+        self.assertEqual(posture["classification"], "INSUFFICIENT_ELIGIBLE_POOL")
+        self.assertEqual(posture["blocker_code"], "INSUFFICIENT_ELIGIBLE_POOL")
+        self.assertEqual(posture["pool_count_summary"]["active_count"], 24)
+        self.assertEqual(posture["pool_count_summary"]["reserve_count"], 0)
+        self.assertEqual(posture["pool_count_summary"]["source_active_target"], 15)
+        self.assertEqual(
+            posture["candidate_summary"]["active_live_capable"], ["open17-plus"]
+        )
+        self.assertEqual(posture["candidate_summary"]["reserve_live_capable"], [])
+        self.assertEqual(posture["candidate_summary"]["active_live_capable_count"], 1)
+        self.assertEqual(posture["candidate_summary"]["reserve_live_capable_count"], 0)
+        self.assertEqual(payload["machine_error_code"], posture["blocker_code"])
+        self.assertTrue(posture["runtime_truth_summary"]["read_only"])
+        self.assertFalse(posture["runtime_truth_summary"]["live_attestation_checked"])
+        self.assertEqual(
+            posture["normalization_decision_packet"]["reserve_candidate"], ""
+        )
+
+    def test_rollout_posture_inspect_20_reports_reserve_candidate_not_identified(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture(
+            selected_backend_ids=["backend-00", "backend-01"]
+        )
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        )
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(
+            posture["classification"], "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        )
+        self.assertEqual(
+            posture["blocker_code"], "RESERVE_CANDIDATE_NOT_IDENTIFIED"
+        )
+        self.assertEqual(posture["candidate_summary"]["reserve_live_capable"], [])
+        self.assertEqual(
+            posture["normalization_decision_packet"]["reserve_candidate"], ""
+        )
+
+    def test_rollout_posture_inspect_20_reports_rotation_evidence_insufficiency(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture(selected_backend_ids=["backend-00"])
+        reserve_backend_id = "backend-reserve-posture-rotation"
+        reserve_auth_path = self.profile_dir / "codex-reserve-posture-rotation.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ROTATION_EVIDENCE_INSUFFICIENT")
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["classification"], "ROTATION_EVIDENCE_INSUFFICIENT")
+        self.assertEqual(posture["blocker_code"], "ROTATION_EVIDENCE_INSUFFICIENT")
+        self.assertEqual(
+            posture["rotation_summary"]["participation_status"], "insufficient"
+        )
+        self.assertEqual(
+            posture["rotation_summary"]["machine_error_code"],
+            "ROTATION_EVIDENCE_INSUFFICIENT",
+        )
+
+    def test_rollout_posture_inspect_20_reports_live_posture_drift_only(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture(
+            selected_backend_ids=["backend-00", "backend-01"]
+        )
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-overflow-posture",
+                auth_ref="/tmp/codex-overflow-posture.json",
+                pool="active",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["active_count"] = 16
+        state["healthy_count"] = 16
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LIVE_POSTURE_DRIFT_ONLY")
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["classification"], "LIVE_POSTURE_DRIFT_ONLY")
+        self.assertEqual(posture["blocker_code"], "LIVE_POSTURE_DRIFT_ONLY")
+        self.assertEqual(
+            posture["candidate_summary"]["active_overflow_live_capable_ids"],
+            ["backend-overflow-posture"],
+        )
+        self.assertEqual(
+            posture["normalization_decision_packet"]["reserve_candidate"],
+            "backend-overflow-posture",
+        )
+
+    def test_rollout_posture_inspect_15_reports_ready_for_stage_advance(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture(
+            selected_backend_ids=["backend-00", "backend-01"]
+        )
+        reserve_backend_id = "backend-reserve-posture-ready-15"
+        reserve_auth_path = self.profile_dir / "codex-reserve-posture-ready-15.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "15", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["requested_stage"], "15")
+        self.assertEqual(posture["source_stage"], "10")
+        self.assertEqual(posture["classification"], "READY_FOR_STAGE_ADVANCE")
+        self.assertEqual(
+            posture["candidate_summary"]["reserve_live_capable"], [reserve_backend_id]
+        )
+
+    def test_rollout_posture_inspect_20_reports_ready_for_stage_advance(
+        self,
+    ) -> None:
+        self.configure_stable_fifteen_proof_fixture(
+            selected_backend_ids=["backend-00", "backend-01"]
+        )
+        reserve_backend_id = "backend-reserve-posture-ready"
+        reserve_auth_path = self.profile_dir / "codex-reserve-posture-ready.json"
+        reserve_auth_path.write_text("{}", encoding="utf-8")
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id=reserve_backend_id,
+                auth_ref=str(reserve_auth_path),
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["classification"], "READY_FOR_STAGE_ADVANCE")
+        self.assertEqual(posture["blocker_code"], "OK")
+        self.assertEqual(
+            posture["candidate_summary"]["reserve_live_capable"], [reserve_backend_id]
+        )
+        self.assertEqual(
+            posture["normalization_decision_packet"]["reserve_candidate"],
+            reserve_backend_id,
+        )
+        self.assertEqual(
+            posture["rotation_summary"]["participation_status"], "available"
+        )
+
+    def test_rollout_posture_inspect_20_reports_ready_already_on_target(self) -> None:
+        self.configure_stage_proof_fixture(
+            20, selected_backend_ids=["backend-00", "backend-01"]
+        )
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["classification"], "READY_ALREADY_ON_TARGET")
+        self.assertEqual(posture["blocker_code"], "OK")
+        self.assertEqual(posture["policy_stage_summary"]["observed_stage"], "20")
+        self.assertEqual(posture["pool_count_summary"]["active_count"], 20)
+        self.assertEqual(posture["pool_count_summary"]["reserve_count"], 0)
+
+    def test_rollout_posture_inspect_20_rejects_noncanonical_policy_stage_without_mutation(
+        self,
+    ) -> None:
+        self.configure_stable_ten_proof_fixture(
+            selected_backend_ids=["backend-00", "backend-01"]
+        )
+        before = self.state_snapshot()
+
+        result = self.run_cli("rollout", "posture", "inspect", "20", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(before, after)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["machine_error_code"], "STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL"
+        )
+        self.assertEqual(payload["changed_files"], [])
+        posture = payload["rollout_posture_result"]
+        self.assertEqual(posture["classification"], "POLICY_STAGE_NOT_CANONICAL")
+        self.assertEqual(
+            posture["blocker_code"], "STAGE_ADVANCE_POLICY_STAGE_NOT_CANONICAL"
+        )
+        self.assertEqual(posture["policy_stage_summary"]["observed_stage"], "10")
 
     def test_rollout_stage_prove_10_reports_success_with_bounded_delegated_evidence(
         self,
