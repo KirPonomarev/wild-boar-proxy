@@ -1,0 +1,31 @@
+{
+  "status": "stop",
+  "machine_error_code": "ROTATION_EVIDENCE_STALE",
+  "contour_id": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "contour_result": "NO_GO_CONTOUR_PRECONDITION_FAILED",
+  "primary_verdict": "MANDATORY_ROTATION_EVIDENCE_NOT_GREEN",
+  "why_now": [
+    "Branch A requires runtime surfaces to be green before live posture normalization",
+    "bounded rotation reread remained ROTATION_EVIDENCE_STALE with evidence_reason selected_backend_snapshot_stale",
+    "posture reread still reported LIVE_POSTURE_DRIFT_ONLY but normalization_decision_packet.reserve_candidate remained empty",
+    "no admitted owner surface was selected and no mutation was executed"
+  ],
+  "blocking_fields": {
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_participation_status": "stale",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0
+  },
+  "mutation_executed": false,
+  "admitted_owner_surface": "",
+  "next_contour": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "downstream_blocked": [
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

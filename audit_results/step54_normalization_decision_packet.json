@@ -1,0 +1,67 @@
+{
+  "status": "owner_packet_reused_with_live_gate_assessment",
+  "captured_at": "2026-05-10T21:29:40Z",
+  "source_packet": "audit_results/step54_posture_reread.json",
+  "normalization_decision_packet": {
+    "protected_active": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "reserve_candidate": "",
+    "reserve_set": [],
+    "hold_set": [
+      "k-gpt-pro",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410",
+      "new-new11111",
+      "new-new44444",
+      "new-new55555"
+    ],
+    "retire_set": [],
+    "do_not_touch": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "expected_source_posture_after_normalization": {
+      "active_window_target": 15,
+      "reserve_target": 0,
+      "explicit_reserve_candidate_required": true
+    },
+    "expected_target_posture_after_stage_advance": {
+      "active_window_target": 20,
+      "reserve_target": 0,
+      "stage_advance_candidate": ""
+    }
+  },
+  "gate_assessment": {
+    "runtime_status_green": true,
+    "healthcheck_green": true,
+    "rotation_green": false,
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "rotation_participation_status": "stale",
+    "reserve_candidate_present": false,
+    "reserve_live_capable_count": 0,
+    "active_count": 16,
+    "source_active_target": 15,
+    "target_active_target": 20
+  },
+  "assessment_verdict": "rotation_not_green_and_explicit_reserve_candidate_missing",
+  "admitted_owner_surface": "",
+  "mutation_allowed": false
+}
