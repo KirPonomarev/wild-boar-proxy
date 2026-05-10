@@ -1,0 +1,54 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "basis_contour": "step50",
+  "basis_artifacts": {
+    "status": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_status_clean.json",
+    "healthcheck": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_healthcheck_clean.json",
+    "accounts": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_accounts_clean.json",
+    "rotation": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_rotation_clean.json",
+    "posture": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_posture_clean.json",
+    "lock_pre": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_lock_snapshot.json",
+    "lock_post": "/private/tmp/wbp-step50-lock-isolation-owner-truth-reclear/audit_results/step50_lock_snapshot_after_clean.json"
+  },
+  "optional_stability_check": {
+    "performed": true,
+    "reason": "step50 posture signal returned LOCK_HELD while external lock confounder had already been cleared",
+    "artifact": "step51_posture_reread.json",
+    "lock_artifact": "step51_lock_snapshot.json",
+    "result": {
+      "posture_machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+      "lock_machine_error_code": "OK"
+    }
+  },
+  "basis_summary": {
+    "status": {
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "healthcheck": {
+      "effective_mode": "managed",
+      "machine_error_code": "OK"
+    },
+    "accounts": {
+      "reserve_count_visible": 1,
+      "reserve_backend_ids": [
+        "k-gpt-pro"
+      ],
+      "reserve_backend_statuses": [
+        "down"
+      ]
+    },
+    "rotation": {
+      "machine_error_code": "OK",
+      "participation_status": "available",
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected"
+    },
+    "posture": {
+      "initial_machine_error_code": "LOCK_HELD",
+      "stability_reread_machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL"
+    }
+  }
+}

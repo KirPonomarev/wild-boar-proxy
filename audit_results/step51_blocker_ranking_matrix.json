@@ -1,0 +1,54 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "ranking_rule": [
+    "repo-owned contradiction outranks runtime blockers only if proven",
+    "top-level command truth outranks downstream reserve-readiness posture",
+    "unstable read-surface-local symptoms do not outrank stable top-level truth",
+    "rotation OK does not waive reserve-first or top-level truth blockers"
+  ],
+  "candidates": {
+    "A": {
+      "name": "top_level_runtime_truth_regression",
+      "rank": 1,
+      "primary": true,
+      "basis": [
+        "status --json.effective_mode=managed",
+        "status --json.claim_gate.status=blocked",
+        "status --json.policy_drift.status=detected",
+        "NEXT_CONTOUR_CANON_PLAN: if runtime truth is not green enough, repair runtime truth first"
+      ]
+    },
+    "B": {
+      "name": "reserve_readiness_degraded",
+      "rank": 2,
+      "primary": false,
+      "classification": "secondary_downstream",
+      "basis": [
+        "accounts list reserve backend `k-gpt-pro` exists but is down/quota",
+        "step51 posture reread -> INSUFFICIENT_ELIGIBLE_POOL",
+        "stage-20 reserve-first path remains blocked"
+      ]
+    },
+    "C": {
+      "name": "posture_surface_lock_symptom",
+      "rank": 3,
+      "primary": false,
+      "classification": "unstable_nonprimary",
+      "basis": [
+        "step50 posture packet -> LOCK_HELD",
+        "step51 bounded reread -> INSUFFICIENT_ELIGIBLE_POOL",
+        "step51 concurrent lock snapshot -> OK"
+      ]
+    },
+    "D": {
+      "name": "repo_owned_read_surface_contradiction",
+      "rank": 0,
+      "primary": false,
+      "classification": "not_proven",
+      "basis": [
+        "no canon/runtime contradiction proven from clean packet set"
+      ]
+    }
+  }
+}

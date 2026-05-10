@@ -1,0 +1,42 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "PRIMARY_BLOCKER_RECLASSIFICATION_FROM_CLEAN_OWNER_SNAPSHOT",
+  "contour_result": "GO_TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "primary_verdict": "PRIMARY_BLOCKER_SELECTED",
+  "goal_achieved": true,
+  "primary_blocker": {
+    "id": "A",
+    "name": "top_level_runtime_truth_regression",
+    "owner_surface": "status --json",
+    "key_signals": [
+      "effective_mode=managed",
+      "claim_gate.status=blocked",
+      "policy_drift.status=detected"
+    ]
+  },
+  "non_primary_blockers": [
+    {
+      "id": "B",
+      "name": "reserve_readiness_degraded",
+      "classification": "secondary_downstream"
+    },
+    {
+      "id": "C",
+      "name": "posture_surface_lock_symptom",
+      "classification": "unstable_nonprimary"
+    },
+    {
+      "id": "D",
+      "name": "repo_owned_read_surface_contradiction",
+      "classification": "not_proven"
+    }
+  ],
+  "next_contour": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "downstream_blocked": [
+    "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

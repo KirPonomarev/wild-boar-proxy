@@ -1,0 +1,27 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "inspector": "Noether",
+  "finding": {
+    "ordering": [
+      "D if proven",
+      "A",
+      "B",
+      "C"
+    ],
+    "primary_selection": "A",
+    "reason": "Top-level runtime truth surfaces are authoritative. Reserve-readiness is secondary, and posture LOCK_HELD is a concurrency/attribution symptom rather than the upstream blocker.",
+    "guardrails": [
+      "clean reread proves current read-surface truth only",
+      "clean reread does not authorize a write contour by itself",
+      "rotation OK does not waive explicit reserve-first requirement",
+      "posture inspect is read-only and not stage-20 proof"
+    ]
+  },
+  "orchestrator_adjudication": {
+    "accepted": true,
+    "notes": [
+      "Accepted with one refinement: Candidate C was demoted further by the bounded posture reread because the lock symptom did not persist."
+    ]
+  }
+}
