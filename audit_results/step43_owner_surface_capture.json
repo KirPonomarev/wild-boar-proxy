@@ -1,0 +1,23 @@
+{
+  "document_type": "STEP43_OWNER_SURFACE_CAPTURE_REDACTED",
+  "document_status": "FACTUAL_CAPTURE",
+  "contour_id": "step43_post_normalization_runtime_reclear_for_stale_rotation_evidence",
+  "phase0": {
+    "status_packet": "audit_results/step43_status_packet.json",
+    "healthcheck_packet": "audit_results/step43_healthcheck_packet.json",
+    "accounts_packet": "audit_results/step43_accounts_list_packet.json",
+    "rotation_packet": "audit_results/step43_rotation_inspect_packet.json"
+  },
+  "bounded_recheck": {
+    "status_packet": "audit_results/step43_status_recheck_packet.json",
+    "rotation_packet": "audit_results/step43_rotation_recheck_packet.json"
+  },
+  "summary": {
+    "stale_rotation_present_in_phase0": false,
+    "rotation_freshness_phase0": "fresh",
+    "rotation_participation_phase0": "available",
+    "status_claim_gate_phase0": "blocked",
+    "status_policy_drift_phase0": "detected",
+    "contradiction_persisted_on_recheck": true
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "document_type": "STEP43_INDEPENDENT_INSPECTION",
+  "document_status": "FACTUAL_AGENT_REPORT_SUMMARY",
+  "agent_id": "019e128d-27e6-75f1-bdb0-ababde9ab71f",
+  "agent_nickname": "Confucius",
+  "verdicts": {
+    "owner_authorization_sufficient_for_one_live_refresh_contour": true,
+    "standing_phrase_exact_present_in_active_context": false,
+    "explicit_project_scoped_owner_authorization_present_in_active_context": true,
+    "repo_visible_authorization_proof_alone_sufficient": false,
+    "freshness_producer_command_set_is_singleton": true
+  },
+  "allowed_freshness_producer": "python3 -m wild_boar_proxy sync --json",
+  "expected_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+  ],
+  "mandatory_stop_conditions": [
+    "authorization not explicit in active thread",
+    "any invalid JSON packet",
+    "sync failure",
+    "sync changed_files escaping declared write set",
+    "rotation remaining stale after one allowed sync",
+    "status remaining blocked/detected after one allowed sync",
+    "healthcheck no longer green enough",
+    "need for second sync",
+    "manual file edits required",
+    "repo or engine repair required",
+    "contradictory owner output appears"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "document_type": "STEP43_STATUS_PACKET_REDACTED",
+  "document_status": "FACTUAL_SUMMARY",
+  "raw_packet": "/private/tmp/wbp-step43-runtime-reclear-raw/phase0/status.json",
+  "raw_packet_committed": false,
+  "exit_code": 0,
+  "packet_status": "ok",
+  "machine_error_code": "OK",
+  "human_message": "Runtime status summary is available.",
+  "claim_gate": {
+    "status": "blocked",
+    "machine_error_code": "CLAIM_GATE_BLOCKED",
+    "next_action": "inspect_claim_gate"
+  },
+  "policy_drift": {
+    "status": "detected",
+    "machine_error_code": "STABLE_POLICY_DRIFT",
+    "next_action": "inspect_stable_policy_drift"
+  },
+  "policy_drift_observed": {
+    "status": "detected",
+    "machine_error_code": "STABLE_POLICY_DRIFT",
+    "next_action": "inspect_stable_policy_drift"
+  }
+}

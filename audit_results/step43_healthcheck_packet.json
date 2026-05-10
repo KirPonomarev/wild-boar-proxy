@@ -1,0 +1,10 @@
+{
+  "document_type": "STEP43_HEALTHCHECK_PACKET_REDACTED",
+  "document_status": "FACTUAL_SUMMARY",
+  "raw_packet": "/private/tmp/wbp-step43-runtime-reclear-raw/phase0/healthcheck.json",
+  "raw_packet_committed": false,
+  "exit_code": 0,
+  "packet_status": "ok",
+  "machine_error_code": "OK",
+  "human_message": "Runtime attestation passed."
+}
