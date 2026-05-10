@@ -1,0 +1,1 @@
+{"status": "ok", "exit_code": 0, "human_message": "Mode values are available.", "machine_error_code": "OK", "changed_files": [], "next_action": "none", "liveness": "unknown", "severity": "recoverable", "operator_action": "none", "desired_mode": "stable", "effective_mode": "managed"}

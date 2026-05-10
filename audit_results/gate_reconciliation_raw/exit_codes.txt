@@ -1,0 +1,6 @@
+status 0
+healthcheck 0
+mode 0
+accounts 0
+rotation 1
+posture20 1

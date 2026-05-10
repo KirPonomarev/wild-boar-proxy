@@ -1,0 +1,96 @@
+{
+  "contour_id": "EXECUTION_CORE_GATE_VERDICT_RECONCILIATION",
+  "contour_status": "completed",
+  "branch": "codex/execution-core-gate-verdict-reconciliation",
+  "head_at_start": "c32b3eb444deac15e4f393748a1516ce9c8ce04a",
+  "inspected_artifacts": {
+    "green_artifact": {
+      "path": "audit_results/stage20_c6_verification_packet.json",
+      "tracked": true,
+      "claim": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+      "ui_gate_path": "non-repo-owned NO_GO path",
+      "repo_owned_ambiguity_status": "closed",
+      "blocking_truths_preserved": [
+        "CLAIM_GATE_BLOCKED",
+        "STABLE_POLICY_DRIFT",
+        "ROTATION_EVIDENCE_INSUFFICIENT",
+        "INSUFFICIENT_ELIGIBLE_POOL"
+      ]
+    },
+    "latest_red_artifact": {
+      "source_branch": "origin/codex/execution-core-gate-closure",
+      "commit": "2280fda46f21b3d704ba6be75a36f43a65c91afc",
+      "path": "audit_results/gate_reconciliation_raw/latest_red_execution_core_gate_closure_packet.json",
+      "claim": "RED",
+      "machine_error_code": "DESIGN_GATE_NOT_EARNED",
+      "remaining_blocker": "ROTATION_EVIDENCE_CONTRADICTED"
+    }
+  },
+  "fresh_owner_packets": {
+    "status": {
+      "path": "audit_results/gate_reconciliation_raw/status.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "policy_drift_status": "detected",
+      "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT"
+    },
+    "healthcheck": {
+      "path": "audit_results/gate_reconciliation_raw/healthcheck.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    "mode": {
+      "path": "audit_results/gate_reconciliation_raw/mode.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    "accounts": {
+      "path": "audit_results/gate_reconciliation_raw/accounts.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "registry_identity_status": "clear"
+    },
+    "rotation": {
+      "path": "audit_results/gate_reconciliation_raw/rotation.json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "participation_status": "contradicted",
+      "evidence_status": "participation_evidence_contradicted",
+      "policy_drift_status": "detected",
+      "final_outcome": "participation_evidence_contradicted"
+    },
+    "posture20": {
+      "path": "audit_results/gate_reconciliation_raw/posture20.json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL"
+    }
+  },
+  "branch_rule_interpretation": {
+    "stage20_c6": "tracked historical green-for-UI artifact in current branch",
+    "execution_core_gate_closure": "pushed RED evidence branch, copied into this contour as comparison evidence",
+    "fresh_packets": "captured in this contour and used as active owner-packet truth"
+  },
+  "freshness_rule_interpretation": {
+    "stage20_c6_status": "stale_for_current_gate_verdict",
+    "reason": "Fresh owner packets show ROTATION_EVIDENCE_CONTRADICTED rather than the older stage20_c6 ROTATION_EVIDENCE_INSUFFICIENT non-repo-owned NO_GO shape.",
+    "older_artifact_not_ignored": "stage20_c6 remains valid historical evidence that UI was once allowed under a non-repo-owned NO_GO interpretation, but it is superseded for current gate truth by fresh owner packets."
+  },
+  "independent_inspection": {
+    "inspector": "Huygens",
+    "recommendation": "GREEN_FOR_BASIC_COMPANION_UI",
+    "used_for_final_verdict": false,
+    "reason_not_used_as_decisive": "The inspector evaluated tracked and pushed artifacts, but did not include this contour's fresh owner packet capture showing ROTATION_EVIDENCE_CONTRADICTED."
+  },
+  "final_verdict": "RED_EXECUTION_CORE_FOLLOWUP_REQUIRED",
+  "final_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+  "final_human_message": "UI expansion remains blocked because fresh owner packet truth reports contradicted rotation evidence and detected stable policy drift.",
+  "next_legal_contour": "ROLL_OUT_ROTATION_CONTRADICTION_REPAIR"
+}

@@ -1,0 +1,31 @@
+{
+  "inspection_status": "completed",
+  "inspector": "Huygens",
+  "inspected_scope": [
+    "AGENTS.md",
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "audit_results/stage20_c6_verification_packet.json",
+    "audit_results/stage20_c6_closeout_report.md",
+    "origin/codex/execution-core-gate-closure:audit_results/execution_core_gate_closure_packet.json",
+    "origin/codex/execution-core-gate-closure:audit_results/execution_core_gate_closure_closeout.md"
+  ],
+  "green_claim_observed": {
+    "final_verdict": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+    "ui_gate_path": "non-repo-owned NO_GO path",
+    "next_contour_allowed": "Build Basic Companion UI"
+  },
+  "red_evidence_observed": {
+    "branch": "origin/codex/execution-core-gate-closure",
+    "gate_status": "RED",
+    "machine_error_code": "DESIGN_GATE_NOT_EARNED",
+    "remaining_blocker": "ROTATION_EVIDENCE_CONTRADICTED"
+  },
+  "inspector_recommendation": "GREEN_FOR_BASIC_COMPANION_UI",
+  "inspector_uncertainty": [
+    "stage20_c6 uses both final verdict ready and later live blocker remains explicit",
+    "MASTER_PLAN.md summary can look stale unless read as pre-closeout plan snapshot",
+    "origin/codex/execution-core-gate-closure should be treated as prior history if stage20_c6 is current"
+  ],
+  "orchestrator_note": "The recommendation was not used as decisive because this contour captured fresh owner packets after the inspector prompt; those packets show ROTATION_EVIDENCE_CONTRADICTED."
+}
