@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "inspector": "Noether",
+  "finding": {
+    "closeout_class": "NO_GO",
+    "blocker_class": "LIVE_POSTURE_DRIFT_ONLY",
+    "reason": "The original reserve-readiness premise is no longer valid. Current truth points to Branch A posture drift, not Branch C insufficient eligible pool.",
+    "next_lawful_contour": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "guardrail": "This remains separate from stage-20 proof or advance."
+  },
+  "orchestrator_adjudication": {
+    "accepted": true,
+    "notes": [
+      "Independent closeout classification accepted.",
+      "Contour closes without any write step because the preflight changed branch identity."
+    ]
+  }
+}

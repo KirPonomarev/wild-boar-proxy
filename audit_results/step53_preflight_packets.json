@@ -1,0 +1,43 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "preflight_capture": {
+    "status_packet": "step53_status_packet.json",
+    "healthcheck_packet": "step53_healthcheck_packet.json",
+    "accounts_packet": "step53_accounts_packet.json",
+    "rotation_packet": "step53_rotation_packet.json",
+    "posture_packet": "step53_posture_packet.json",
+    "posture_reread_packet": "step53_posture_reread.json",
+    "lock_snapshot": "step53_lock_snapshot.json",
+    "unregistered_auth_scan": "step53_unregistered_auth_scan.json"
+  },
+  "preflight_summary": {
+    "top_level_runtime_truth": {
+      "effective_mode": "stable",
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear"
+    },
+    "rotation_lane": {
+      "machine_error_code": "OK",
+      "participation_status": "available",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear"
+    },
+    "accounts_lane": {
+      "active_count": 16,
+      "reserve_count": 0,
+      "retired_count": 8
+    },
+    "posture_lane": {
+      "initial_machine_error_code": "LOCK_HELD",
+      "reread_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+      "observed_stage": "20",
+      "target_stage": "20",
+      "classification": "LIVE_POSTURE_DRIFT_ONLY"
+    },
+    "auth_scan": {
+      "unregistered_count": 0
+    }
+  }
+}

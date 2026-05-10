@@ -1,0 +1,21 @@
+{
+  "status": "stop",
+  "machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "contour_result": "NO_GO_CONTOUR_PREMISE_INVALIDATED",
+  "primary_verdict": "LIVE_POSTURE_DRIFT_ONLY_BRANCH_SELECTED",
+  "goal_achieved": false,
+  "write_step_executed": false,
+  "why_not_executed": [
+    "top-level runtime truth is already green",
+    "accounts posture is active=16 reserve=0",
+    "bounded posture reread classifies LIVE_POSTURE_DRIFT_ONLY on observed stage 20",
+    "no unregistered auth input exists for one-surface onboarding path"
+  ],
+  "next_contour": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "downstream_blocked": [
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}
