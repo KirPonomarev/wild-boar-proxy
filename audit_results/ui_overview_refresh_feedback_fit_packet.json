@@ -1,0 +1,70 @@
+{
+  "document_type": "UI_OVERVIEW_REFRESH_FEEDBACK_FIT_PACKET",
+  "document_status": "implementation_verified",
+  "contour_id": "UI_OVERVIEW_REFRESH_FEEDBACK_AND_FIT",
+  "created_at": "2026-05-10",
+  "branch": "codex/ui-overview-refresh-feedback-fit",
+  "base_branch": "codex/ui-desktop-html-app-launcher",
+  "goal": "Make Overview refresh visibly update and keep first-screen data visible at 100% monitor scale.",
+  "write_surfaces": [
+    "wild_boar_proxy/desktop_ui/index.html",
+    "wild_boar_proxy/desktop_ui/screens/overview.js",
+    "wild_boar_proxy/desktop_ui/styles/overview.css",
+    "tests/test_desktop_ui_overview_implantation.py",
+    "tests/test_desktop_ui_static.py",
+    "audit_results/ui_overview_refresh_feedback_fit_packet.json",
+    "audit_results/ui_overview_refresh_feedback_fit_closeout.md",
+    "audit_results/ui_overview_refresh_feedback_fit_screenshot.png"
+  ],
+  "changes": {
+    "refresh_feedback": [
+      "added visible refresh-meta field",
+      "shows updating state before transport request",
+      "renders observed_at_utc from live snapshot after refresh"
+    ],
+    "viewport_fit": [
+      "desktop root uses 100vw and 100vh",
+      "window size is constrained by viewport",
+      "cards and gaps use responsive clamp values",
+      "small-height layout compacts brand and navigation",
+      "narrow layout allows main vertical scrolling instead of clipping"
+    ]
+  },
+  "runtime_truth_changes": false,
+  "other_screens_integrated": false,
+  "verification": [
+    {
+      "command": "node --check wild_boar_proxy/desktop_ui/screens/overview.js",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_desktop_ui_app_launcher tests.test_desktop_ui_command_adapter tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_overview_transport tests.test_desktop_ui_static",
+      "result": "passed",
+      "tests_ran": 76
+    },
+    {
+      "command": "python3 -m json.tool audit_results/ui_overview_refresh_feedback_fit_packet.json",
+      "result": "passed"
+    },
+    {
+      "command": "rg forbidden runtime/direct-command patterns in wild_boar_proxy/desktop_ui",
+      "result": "passed",
+      "matches": 0
+    },
+    {
+      "command": "Codex in-app preview screenshot",
+      "result": "passed",
+      "screenshot": "audit_results/ui_overview_refresh_feedback_fit_screenshot.png",
+      "observed": [
+        "refresh-meta present",
+        "show-all affordance present"
+      ]
+    }
+  ],
+  "independent_inspection": {
+    "agent": "Huygens",
+    "result": "confirmed layout clipping risk surfaces and refresh-meta insertion points",
+    "applied_to_patch": true
+  },
+  "next_contour": "UI_DESKTOP_HTML_OVERVIEW_VISUAL_QA_PASS"
+}

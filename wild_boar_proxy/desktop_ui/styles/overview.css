@@ -5,10 +5,11 @@
   align-items: center;
   background: radial-gradient(900px 420px at 78% 8%, rgba(255, 255, 255, .46), transparent 65%), var(--canvas);
   display: flex;
-  height: 1000px;
+  height: 100vh;
   justify-content: center;
   overflow: hidden;
-  width: 1600px;
+  padding: 20px;
+  width: 100vw;
 }
 
 .window {
@@ -16,10 +17,10 @@
   border: 1px solid var(--border);
   border-radius: 24px;
   box-shadow: var(--window-shadow);
-  height: 944px;
+  height: min(944px, calc(100vh - 40px));
   overflow: hidden;
   position: relative;
-  width: 1544px;
+  width: min(1544px, calc(100vw - 40px));
 }
 
 .window[data-bridge-state="transport_unavailable"] .status-line::after {
@@ -78,10 +79,10 @@
   display: flex;
   flex-direction: column;
   left: 0;
-  padding: 66px 24px 28px;
+  padding: 56px 22px 24px;
   position: absolute;
   top: 0;
-  width: 304px;
+  width: clamp(248px, 22vw, 304px);
   z-index: 2;
 }
 
@@ -89,7 +90,7 @@
   align-items: center;
   display: flex;
   flex-direction: column;
-  margin: 8px 0 48px;
+  margin: 4px 0 34px;
   text-align: center;
 }
 
@@ -97,11 +98,11 @@
   display: block;
   height: auto;
   margin-bottom: 16px;
-  width: 112px;
+  width: 96px;
 }
 
 .brand .name {
-  font-size: 28px;
+  font-size: 25px;
   font-weight: 500;
   letter-spacing: .08em;
   line-height: 32px;
@@ -174,9 +175,9 @@
 .main {
   background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, 0) 24%), var(--surface);
   bottom: 0;
-  left: 304px;
+  left: clamp(248px, 22vw, 304px);
   overflow: hidden;
-  padding: 48px 40px 36px;
+  padding: clamp(28px, 4.2vh, 44px) clamp(24px, 3vw, 38px) clamp(22px, 3vh, 34px);
   position: absolute;
   right: 0;
   top: 0;
@@ -188,7 +189,7 @@
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: clamp(16px, 2.2vh, 22px);
 }
 
 h1 {
@@ -205,6 +206,13 @@ h1 {
   line-height: 18px;
   margin: 8px 0 0;
   max-width: 620px;
+}
+
+.refresh-meta {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+  margin: 6px 0 0;
 }
 
 .header-actions {
@@ -260,7 +268,7 @@ h1 {
 
 .grid {
   display: grid;
-  gap: 24px;
+  gap: clamp(14px, 1.8vh, 22px);
 }
 
 .card {
@@ -272,12 +280,12 @@ h1 {
 }
 
 .overview-top {
-  grid-template-columns: 496px 1fr;
+  grid-template-columns: minmax(420px, .92fr) minmax(520px, 1.08fr);
 }
 
 .system-card,
 .mode-card {
-  padding: 24px;
+  padding: clamp(18px, 2.2vh, 24px);
 }
 
 .card-title-row {
@@ -316,7 +324,7 @@ h1 {
 .kv {
   align-items: center;
   display: grid;
-  gap: 13px 24px;
+  gap: 11px 18px;
   grid-template-columns: auto 1fr;
   margin-top: 18px;
 }
@@ -329,6 +337,9 @@ h1 {
   font-weight: 500;
   justify-self: end;
   margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .segmented {
@@ -360,7 +371,7 @@ h1 {
 
 .action-row {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(4, 1fr);
 }
 
@@ -374,7 +385,7 @@ h1 {
   flex-direction: column;
   font-size: 12px;
   gap: 8px;
-  height: 78px;
+  height: clamp(66px, 8vh, 76px);
   justify-content: center;
   line-height: 16px;
   text-align: center;
@@ -388,15 +399,15 @@ h1 {
 
 .overview-kpis {
   grid-template-columns: repeat(4, 1fr);
-  margin-top: 24px;
+  margin-top: clamp(14px, 1.8vh, 22px);
 }
 
 .kpi-card {
   align-items: flex-start;
   display: flex;
-  height: 112px;
+  height: clamp(92px, 11vh, 108px);
   justify-content: space-between;
-  padding: 20px 22px;
+  padding: clamp(14px, 1.8vh, 18px) 18px;
 }
 
 .kpi-head {
@@ -409,12 +420,12 @@ h1 {
 .kpi-line {
   align-items: flex-end;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
 }
 
 .kpi-number {
-  font-size: 32px;
+  font-size: clamp(26px, 3.2vw, 32px);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 32px;
@@ -433,8 +444,8 @@ h1 {
 .kpi-card.red .kpi-number { color: var(--red); }
 
 .log-card {
-  margin-top: 24px;
-  padding: 22px 24px;
+  margin-top: clamp(14px, 1.8vh, 22px);
+  padding: clamp(16px, 2vh, 22px) clamp(18px, 2.2vw, 24px);
 }
 
 .log-head {
@@ -455,8 +466,38 @@ h1 {
   font-size: 13px;
   gap: 12px;
   grid-template-columns: 28px 1fr auto;
-  height: 44px;
+  min-height: 38px;
+  padding: 8px 0;
   line-height: 18px;
+}
+
+@media (max-height: 920px) {
+  .brand img {
+    width: 80px;
+  }
+
+  .brand {
+    margin-bottom: 24px;
+  }
+
+  .nav-item {
+    height: 40px;
+  }
+
+  h1 {
+    font-size: 31px;
+    line-height: 36px;
+  }
+}
+
+@media (max-width: 1380px) {
+  .overview-top {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    overflow-y: auto;
+  }
 }
 
 .log-row time {

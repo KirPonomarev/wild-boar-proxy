@@ -121,6 +121,23 @@ function renderToast(text) {
   toast.hidden = false;
 }
 
+function formatObservedAt(value) {
+  if (!value) return "нет данных о времени";
+  const observed = new Date(value);
+  if (Number.isNaN(observed.getTime())) return value;
+  return observed.toLocaleString("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function renderRefreshMeta(payload, prefix = "Обновлено") {
+  setText("refresh-meta", `${prefix}: ${formatObservedAt(payload?.observed_at_utc)}`);
+}
+
 function renderTransportFailure(message, state = "transport_error") {
   setBridgeState(state);
   setText("truth-source", "transport error");
@@ -139,6 +156,7 @@ function renderIntegrationFailure(message) {
   setText("endpoint", "-");
   setText("last-error", message);
   setText("truth-source", "integration-failure");
+  setText("refresh-meta", "Обновление не удалось");
   setBridgeState("bridge_integration_failure");
   renderEvents([{ tone: "red", icon: "!", message: "Overview integration failure", time: "local preview" }]);
   renderToast(message);
@@ -163,6 +181,7 @@ function renderOverview(payload) {
   setText("truth-source", payload.live_mode ? "live snapshot" : "fixture-only");
   setBridgeState(payload.live_mode ? "live_idle" : "fixture");
   renderEvents(payload.events);
+  renderRefreshMeta(payload, payload.live_mode ? "Обновлено из backend" : "Фикстура");
   renderToast(payload.notice || "");
 }
 
@@ -372,6 +391,7 @@ async function runSimulatedBridgeAction(action) {
 
 async function runTransportBridgeAction(action) {
   setBridgeState("bridge_pending");
+  setText("refresh-meta", "Обновляем данные...");
   const params = new URLSearchParams(window.location.search);
   const endpoint = getConfiguredTransportEndpoint(params);
   if (!endpoint.ok) {
