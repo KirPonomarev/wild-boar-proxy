@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+  "postflight_capture": {
+    "status_packet": "step49_status_postflight.json",
+    "healthcheck_packet": "step49_healthcheck_postflight.json",
+    "accounts_packet": "step49_accounts_postflight.json",
+    "rotation_packet": "step49_rotation_postflight.json",
+    "posture_packet": "step49_posture_postflight.json",
+    "status_recheck_packet": "step49_status_recheck.json",
+    "rotation_recheck_packet": "step49_rotation_recheck.json",
+    "posture_recheck_packet": "step49_posture_recheck.json"
+  },
+  "observations": {
+    "owner_packet_emitted": false,
+    "owner_packet_artifact": "step49_live_packet.json",
+    "status_postflight": {
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "healthcheck_postflight": {
+      "machine_error_code": "OK"
+    },
+    "rotation_postflight": {
+      "machine_error_code": "LOCK_HELD"
+    },
+    "posture_postflight": {
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL"
+    },
+    "status_recheck": {
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "rotation_recheck": {
+      "machine_error_code": "LOCK_HELD"
+    },
+    "posture_recheck": {
+      "machine_error_code": "LOCK_HELD"
+    },
+    "confounding_external_lock_holder": "step49_lock_holder_snapshot.json"
+  }
+}

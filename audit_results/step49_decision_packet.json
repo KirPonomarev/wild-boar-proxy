@@ -1,0 +1,30 @@
+{
+  "status": "stop",
+  "machine_error_code": "CONCURRENT_MUTATION_LOCK_HELD",
+  "contour_id": "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+  "contour_result": "NO_GO_EXTERNAL_CONCURRENT_MUTATION",
+  "primary_verdict": "STOP_AND_DIAGNOSE",
+  "goal_achieved": false,
+  "owner_surface_attempted": "accounts onboard --json --non-interactive",
+  "owner_surface_completed": false,
+  "owner_packet_emitted": false,
+  "primary_blockers": [
+    "OWNER_PACKET_NOT_EMITTED",
+    "EXTERNAL_CONCURRENT_MUTATION_LOCK_HELD",
+    "POSTFLIGHT_TRUTH_ATTRIBUTION_CONFOUNDED"
+  ],
+  "secondary_observation": {
+    "machine_error_code": "AUTH_INPUT_EXTERNALIZED",
+    "reason": "The admitted onboarding surface devolved into cli-proxy-api login-helper wait without an explicit auth ref."
+  },
+  "external_lock_holder": {
+    "snapshot_artifact": "step49_lock_holder_snapshot.json",
+    "holder_command": "python -m wild_boar_proxy rollout stage advance 20 k-gpt-pro --json"
+  },
+  "next_contour": "CONCURRENT_MUTATION_LOCK_ISOLATION_AND_OWNER_TRUTH_RECLEAR",
+  "downstream_blocked": [
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

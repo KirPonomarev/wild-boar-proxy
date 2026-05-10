@@ -1,0 +1,38 @@
+{
+  "contour_id": "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+  "packet_files": [
+    "step49_status_packet.json",
+    "step49_healthcheck_packet.json",
+    "step49_accounts_packet.json",
+    "step49_rotation_packet.json",
+    "step49_posture_packet.json"
+  ],
+  "top_level_truth": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "effective_mode": "stable"
+  },
+  "lane_b_guard": {
+    "machine_error_code": "OK",
+    "participation_status": "available",
+    "evidence_freshness": "fresh"
+  },
+  "reserve_state": {
+    "reserve_count": 1,
+    "reserve_backends": [
+      {
+        "id": "k-gpt-pro",
+        "status": "down",
+        "last_error_class": "quota"
+      }
+    ]
+  },
+  "posture_blocker": {
+    "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+    "classification": "INSUFFICIENT_ELIGIBLE_POOL",
+    "reserve_live_capable_count": 0,
+    "reserve_candidate_id": ""
+  }
+}

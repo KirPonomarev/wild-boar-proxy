@@ -1,0 +1,16 @@
+{
+  "status": "absent",
+  "machine_error_code": "OWNER_PACKET_NOT_EMITTED",
+  "reason": "accounts_onboard_noninteractive_devolved_to_external_login_helper_and_was_stopped_without_owner_packet",
+  "invoked_command": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "accounts",
+    "onboard",
+    "--json",
+    "--non-interactive"
+  ],
+  "child_launcher": "/Users/kirillponomarev/.codex-custom-cli/managed/bin/codex-account-onboard --once --non-interactive",
+  "child_login_helper": "/Users/kirillponomarev/.local/bin/cli-proxy-api -config /Users/kirillponomarev/.cli-proxy-api/config.yaml -codex-login -no-browser"
+}

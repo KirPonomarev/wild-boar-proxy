@@ -1,0 +1,29 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "inspector": "Noether",
+  "surface_legitimacy_audit": {
+    "admitted_owner_surface": "accounts onboard --json",
+    "result": "accepted",
+    "constraints": [
+      "reserve-first onboarding truth only",
+      "explicit auth input/resulting reserve placement must remain machine-verifiable",
+      "no silent active-routing change",
+      "stage-20 stays closed unless posture becomes READY_FOR_STAGE_ADVANCE"
+    ]
+  },
+  "closeout_audit": {
+    "attribution_clean": false,
+    "primary_verdict": "STOP_AND_DIAGNOSE",
+    "reason": "Concurrent external mutation lane holds the runtime lock, so postflight regression cannot be cleanly attributed to step49 alone.",
+    "secondary_observation": "The attempted owner surface devolved into external login-helper wait and emitted no owner packet.",
+    "recommended_next_contour": "CONCURRENT_MUTATION_LOCK_ISOLATION_AND_OWNER_TRUTH_RECLEAR"
+  },
+  "orchestrator_adjudication": {
+    "accepted": true,
+    "notes": [
+      "The inspector's final closeout classification is accepted.",
+      "The contour is not primarily classified as auth-input-required because the lock-held reread is a separate external confounder."
+    ]
+  }
+}
