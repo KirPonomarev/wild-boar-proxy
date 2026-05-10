@@ -1,0 +1,35 @@
+{
+  "document_type": "STABLE_POLICY_DRIFT_AUTHORIZED_INDEPENDENT_INSPECTION",
+  "document_status": "FACTUAL_AGENT_REPORT_SUMMARY",
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED",
+  "agent_id": "019e127f-543f-7bc1-a74d-cb79494afbe2",
+  "agent_nickname": "Hilbert",
+  "agent_role": "inspector",
+  "inspection_scope": [
+    "authorization preconditions",
+    "allowed command surfaces",
+    "expected write surfaces",
+    "rollback and stop rules",
+    "post-run audit requirements"
+  ],
+  "inspector_findings": {
+    "repo_visible_authorization_status": "not_established_from_repo_artifacts_alone",
+    "active_thread_authorization_visibility": "not_available_to_inspector",
+    "allowed_surfaces": [
+      "stable target switch --dry-run/--apply",
+      "stable repair --dry-run/--apply",
+      "launch smoke"
+    ],
+    "declared_write_surface_required": true,
+    "raw_packet_preservation_required": true,
+    "post_run_changed_files_report_required": true
+  },
+  "orchestrator_resolution": {
+    "active_thread_authorization_status": "present",
+    "authorization_kind": "project_scoped_live_contour_approval",
+    "exact_standing_phrase_match": false,
+    "accepted_for_this_contour": true,
+    "resolution_basis": "latest active user message explicitly authorized legal project work and necessary implementation actions under the stated canon"
+  },
+  "private_identifiers_included": false
+}

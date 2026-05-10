@@ -1,0 +1,24 @@
+{
+  "document_type": "STABLE_POLICY_DRIFT_AUTHORIZED_APPLY_PACKET",
+  "document_status": "FACTUAL_SUMMARY_REDACTED",
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED",
+  "raw_packet": "/private/tmp/wbp-policy-normalize-run-raw/phase1/stable_repair_apply.json",
+  "raw_packet_committed": false,
+  "redaction_reason": "raw packet contains approved target inventory auth basenames",
+  "command": "python3 -m wild_boar_proxy stable repair --apply --json",
+  "exit_code": 0,
+  "packet_status": "ok",
+  "machine_error_code": "STABLE_REPAIR_APPLIED",
+  "human_message": "Stable repair apply completed on the approved target inventory.",
+  "would_change_after_apply": false,
+  "changed_files_count": 10,
+  "changed_files_scope": "approved_stable_repair_target_inventory",
+  "target_reconciliation_after_apply": {
+    "target_exactness": "exact_approved_set",
+    "target_inventory_entries": 9,
+    "target_would_add_count": 0,
+    "target_would_prune_count": 0,
+    "target_would_keep_count": 9
+  },
+  "private_identifiers_included": false
+}

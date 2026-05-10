@@ -1,0 +1,28 @@
+{
+  "document_type": "STABLE_POLICY_DRIFT_AUTHORIZED_LAUNCH_SMOKE_PACKET",
+  "document_status": "FACTUAL_SUMMARY_REDACTED",
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED",
+  "raw_packet": "/private/tmp/wbp-policy-normalize-run-raw/phase1/launch_smoke.json",
+  "raw_packet_committed": false,
+  "redaction_reason": "raw packet contains operator-local managed paths",
+  "command": "python3 -m wild_boar_proxy launch smoke --json",
+  "exit_code": 0,
+  "packet_status": "ok",
+  "machine_error_code": "OK",
+  "human_message": "Launcher smoke completed.",
+  "launcher_exit_code": 0,
+  "launch_mode": "smoke",
+  "effective_mode": "stable",
+  "changed_files_count": 4,
+  "changed_file_categories": [
+    "codex_custom_cli_config",
+    "managed_supervisor_state",
+    "runtime_effective_mode",
+    "generated_stable_runtime_config"
+  ],
+  "stable_runtime_consumer": {
+    "effective_source_status": "approved_target_active_by_activation_evidence",
+    "effective_source_kind": "approved_repair_target"
+  },
+  "private_paths_included": false
+}

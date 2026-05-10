@@ -1,0 +1,64 @@
+{
+  "document_type": "STABLE_POLICY_DRIFT_AUTHORIZED_PHASE0_CAPTURE",
+  "document_status": "FACTUAL_SUMMARY_REDACTED",
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED",
+  "raw_packets_location": "/private/tmp/wbp-policy-normalize-run-raw/phase0",
+  "raw_packets_committed": false,
+  "redaction_reason": "raw packets contain local auth inventory basenames and operator-local paths",
+  "commands": {
+    "status_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "policy_drift_status": "detected",
+      "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT"
+    },
+    "healthcheck_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK"
+    },
+    "accounts_list_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK"
+    },
+    "rollout_rotation_inspect_json": {
+      "exit_code": 1,
+      "packet_status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "policy_drift_status": "detected",
+      "policy_drift_observed_status": "detected",
+      "policy_drift_claim_surface_source": "auth-dir",
+      "evidence_status": "participation_evidence_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "participation_status": "contradicted",
+      "final_outcome": "participation_evidence_contradicted"
+    },
+    "rollout_posture_inspect_20_json": {
+      "exit_code": 1,
+      "packet_status": "error",
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL"
+    },
+    "stable_repair_dry_run_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK",
+      "would_change": true,
+      "target_exactness": "exact_approved_set",
+      "target_would_add_count": 9,
+      "target_would_prune_count": 1,
+      "target_would_keep_count": 0,
+      "target_inventory_entries_before": 1
+    }
+  },
+  "apply_admission": {
+    "authorization_status": "present_in_active_thread",
+    "dry_run_valid_json": true,
+    "dry_run_bounded": true,
+    "target_switch_needed": false,
+    "target_switch_decision": "TARGET_SWITCH_SKIPPED_ALREADY_ALIGNED"
+  }
+}

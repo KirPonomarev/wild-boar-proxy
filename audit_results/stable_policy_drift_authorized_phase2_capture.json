@@ -1,0 +1,75 @@
+{
+  "document_type": "STABLE_POLICY_DRIFT_AUTHORIZED_PHASE2_CAPTURE",
+  "document_status": "FACTUAL_SUMMARY_REDACTED",
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED",
+  "raw_packets_location": "/private/tmp/wbp-policy-normalize-run-raw/phase2",
+  "raw_packets_committed": false,
+  "redaction_reason": "raw packets contain local auth inventory basenames and operator-local paths",
+  "commands": {
+    "status_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK",
+      "claim_gate_status": "clear",
+      "claim_gate_machine_error_code": "OK",
+      "claim_gate_next_action": "none",
+      "policy_drift_status": "clear",
+      "policy_drift_machine_error_code": "OK",
+      "policy_drift_next_action": "none",
+      "policy_drift_claim_surface_source": "approved_repair_target",
+      "configured_active_count": 24,
+      "allowed_stable_auth_count": 9,
+      "stable_auth_inventory_count": 9,
+      "observed_policy_drift_status": "detected",
+      "observed_policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+      "observed_policy_drift_source": "auth-dir"
+    },
+    "healthcheck_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK"
+    },
+    "accounts_list_json": {
+      "exit_code": 0,
+      "packet_status": "ok",
+      "machine_error_code": "OK"
+    },
+    "rollout_rotation_inspect_json": {
+      "exit_code": 1,
+      "packet_status": "error",
+      "machine_error_code": "ROTATION_EVIDENCE_STALE",
+      "human_message": "Rotation participation evidence is stale because the selected backend snapshot is outside the freshness window.",
+      "policy_drift_status": "clear",
+      "policy_drift_observed_status": "detected",
+      "policy_drift_claim_surface_source": "approved_repair_target",
+      "evidence_status": "participation_evidence_stale",
+      "evidence_reason": "selected_backend_snapshot_stale",
+      "participation_status": "stale",
+      "final_outcome": "participation_evidence_stale",
+      "selected_backend_snapshot_present": true,
+      "selected_backend_snapshot_validation_status": "valid",
+      "evidence_freshness": "stale",
+      "active_pool_count_observed": 24,
+      "runtime_active_pool_count_observed": 24,
+      "registry_active_pool_count_observed": 24,
+      "active_pool_count_agreement_status": "matched",
+      "active_routing_candidate_ids_observed_count": 9,
+      "selected_backend_ids_count": 9,
+      "selected_backend_ids_observed_count": 9
+    },
+    "rollout_posture_inspect_20_json": {
+      "exit_code": 1,
+      "packet_status": "error",
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+      "final_outcome": "insufficient_source_stage_live_capable_pool",
+      "source_stage": 15
+    }
+  },
+  "normalized_blocker_transition": {
+    "before": "ROTATION_EVIDENCE_CONTRADICTED",
+    "after": "ROTATION_EVIDENCE_STALE",
+    "policy_drift_blocker_cleared": true,
+    "gate_green": false,
+    "remaining_blocker": "selected_backend_snapshot_stale"
+  }
+}
