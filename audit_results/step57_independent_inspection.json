@@ -1,0 +1,18 @@
+{
+  "status": "completed",
+  "inspector": "Socrates",
+  "source_agent_id": "019e13e0-2d25-78b0-b949-7b064a21a162",
+  "accepted_facts": [
+    "sync --json was the canonically legitimate single owner-surface reclear step for stale rotation evidence",
+    "postflight rotation evidence became available and fresh",
+    "postflight top-level runtime truth regressed to effective_mode managed",
+    "postflight claim_gate.status is blocked",
+    "postflight policy_drift.status is detected"
+  ],
+  "rejected_or_narrowed_claims": [
+    "the preflight-only authorization stop was too broad because explicit owner authorization for this bounded live contour is present in the active thread",
+    "rotation success does not convert this contour into GO because regression of top-level runtime truth outranks the cleared stale-evidence lane"
+  ],
+  "primary_verdict": "independent audit converged on NO_GO_RUNTIME_REGRESSION after postflight review",
+  "recommended_next_verdict": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR"
+}
