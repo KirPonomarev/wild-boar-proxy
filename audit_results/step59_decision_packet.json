@@ -1,0 +1,63 @@
+{
+  "status": "stop",
+  "machine_error_code": "ROTATION_EVIDENCE_STALE",
+  "contour_id": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "contour_result": "NO_GO_CONTOUR_PRECONDITION_FAILED",
+  "primary_verdict": "MANDATORY_SNAPSHOT_GATE_BROKEN_BY_STALE_ROTATION_EVIDENCE",
+  "why_now": [
+    "fresh step59 preflight kept top-level runtime truth green",
+    "fresh step59 preflight kept posture classification at `LIVE_POSTURE_DRIFT_ONLY`",
+    "fresh step59 preflight showed `rollout rotation inspect --json -> ROTATION_EVIDENCE_STALE`",
+    "bounded step59 rotation reread reconfirmed `ROTATION_EVIDENCE_STALE` with `selected_backend_snapshot_stale`",
+    "therefore posture normalization is not currently admissible"
+  ],
+  "before_after": {
+    "effective_mode": {
+      "before": "stable",
+      "after": "stable"
+    },
+    "claim_gate_status": {
+      "before": "clear",
+      "after": "clear"
+    },
+    "policy_drift_status": {
+      "before": "clear",
+      "after": "clear"
+    },
+    "rotation_machine_error_code": {
+      "before": "ROTATION_EVIDENCE_STALE",
+      "after": "ROTATION_EVIDENCE_STALE"
+    },
+    "rotation_evidence_freshness": {
+      "before": "stale",
+      "after": "stale"
+    },
+    "posture_machine_error_code": {
+      "before": "LIVE_POSTURE_DRIFT_ONLY",
+      "after": "LIVE_POSTURE_DRIFT_ONLY"
+    }
+  },
+  "mutation_executed": false,
+  "admitted_owner_surface": "",
+  "next_contour": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "secondary_observation": {
+    "reserve_candidate": "",
+    "hold_set": [
+      "k-gpt-pro",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410",
+      "new-new11111",
+      "new-new44444",
+      "new-new55555"
+    ],
+    "protected_active_count": 9,
+    "note": "empty reserve candidate remains a downstream posture-normalization risk, but it is not the primary blocker while rotation evidence is stale"
+  },
+  "downstream_blocked": [
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}
