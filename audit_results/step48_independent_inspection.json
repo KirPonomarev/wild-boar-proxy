@@ -1,0 +1,16 @@
+{
+  "inspector": {
+    "agent_nickname": "Hypatia",
+    "agent_id": "019e1390-9811-7282-88cd-607fb3618663"
+  },
+  "inspection_status": "accepted",
+  "reserve_first_status": "incomplete",
+  "explicit_eligible_reserve_backend_present": false,
+  "live_mutation_admissible_in_this_contour": false,
+  "stage20_may_open_next": false,
+  "key_facts": {
+    "reserve_live_capable_count": 0,
+    "reserve_candidate_id": "",
+    "classifier": "INSUFFICIENT_ELIGIBLE_POOL"
+  }
+}

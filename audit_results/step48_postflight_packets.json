@@ -1,0 +1,15 @@
+{
+  "contour_id": "RESERVE_FIRST_POSTURE_NORMALIZATION",
+  "status": "read_only_closeout_only",
+  "write_step_executed": false,
+  "final_posture_result": {
+    "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+    "classification": "INSUFFICIENT_ELIGIBLE_POOL",
+    "reserve_live_capable_count": 0,
+    "reserve_candidate_id": ""
+  },
+  "regression_guard": {
+    "lane_a_top_level_status": "clear",
+    "lane_b_rotation_status": "OK"
+  }
+}

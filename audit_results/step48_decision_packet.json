@@ -1,0 +1,16 @@
+{
+  "contour_id": "RESERVE_FIRST_POSTURE_NORMALIZATION",
+  "status": "closed_no_go",
+  "machine_error_code": "NO_GO_RESERVE_FIRST_STILL_INCOMPLETE",
+  "decision_class": "INSUFFICIENT_ELIGIBLE_POOL",
+  "write_step_executed": false,
+  "reserve_first_posture_status": "incomplete",
+  "explicit_eligible_reserve_backend_present": false,
+  "stage20_admissible": false,
+  "reason": "Reserve-first posture packet proves there is no explicit live-capable reserve candidate for the next stage-20 contour.",
+  "next_contour": {
+    "id": "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+    "class": "LIVE_PROOF_OR_OWNER_PATH_RECOVERY",
+    "reason": "Reopen only the blocking pool/readiness contour, as required by the canonical INSUFFICIENT_ELIGIBLE_POOL branch."
+  }
+}

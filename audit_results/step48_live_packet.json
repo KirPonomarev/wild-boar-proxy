@@ -1,0 +1,9 @@
+{
+  "contour_id": "RESERVE_FIRST_POSTURE_NORMALIZATION",
+  "status": "not_executed",
+  "machine_error_code": "NO_GO_RESERVE_FIRST_STILL_INCOMPLETE",
+  "attempted": false,
+  "declared_write_step_count": 0,
+  "reason": "Posture owner packet classified the state as INSUFFICIENT_ELIGIBLE_POOL, so no reserve-first normalization mutation was admitted in this contour.",
+  "changed_files": []
+}

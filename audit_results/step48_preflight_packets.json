@@ -1,0 +1,54 @@
+{
+  "contour_id": "RESERVE_FIRST_POSTURE_NORMALIZATION",
+  "packet_files": [
+    "step48_status_packet.json",
+    "step48_healthcheck_packet.json",
+    "step48_accounts_packet.json",
+    "step48_rotation_packet.json",
+    "step48_posture_packet.json"
+  ],
+  "status_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "pool_summary": {
+      "active": 15,
+      "reserve": 1,
+      "retired": 8,
+      "backend_count": 24
+    }
+  },
+  "healthcheck_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "effective_mode": "stable"
+  },
+  "rotation_summary": {
+    "machine_error_code": "OK",
+    "participation_status": "available",
+    "evidence_freshness": "fresh",
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected"
+  },
+  "accounts_summary": {
+    "active_count": 15,
+    "reserve_count": 1,
+    "retired_count": 8,
+    "reserve_backend_ids": [
+      {
+        "id": "k-gpt-pro",
+        "status": "down",
+        "last_error_class": "quota"
+      }
+    ]
+  },
+  "posture_summary": {
+    "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+    "classification": "INSUFFICIENT_ELIGIBLE_POOL",
+    "reserve_live_capable_count": 0,
+    "reserve_candidate_id": "",
+    "active_live_capable_count": 9
+  }
+}
