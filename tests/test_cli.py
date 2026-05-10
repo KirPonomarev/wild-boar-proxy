@@ -15044,6 +15044,22 @@ class CliTests(unittest.TestCase):
         self.assertFalse(launch_result["dispatch_attempted"])
         self.assertEqual(launch_result["final_outcome"], "client_path_missing")
 
+    def test_launch_client_missing_required_flag_still_emits_json_packet(self) -> None:
+        result = self.run_cli(
+            "launch",
+            "client",
+            "--json",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "INVALID_ARGUMENTS")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "user_action")
+        self.assertIn("--client-path", payload["human_message"])
+        self.assertIn("wild-boar-proxy launch client", payload["cli_usage"])
+
     def test_launch_client_rejects_nonabsolute_client_path(self) -> None:
         result = self.run_cli(
             "launch",

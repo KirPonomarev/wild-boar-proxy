@@ -44,9 +44,25 @@ from .runtime import (
 )
 
 
+class CliArgumentParseError(Exception):
+    def __init__(self, message: str, usage: str) -> None:
+        super().__init__(message)
+        self.message = message
+        self.usage = usage
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise CliArgumentParseError(message, self.format_usage().strip())
+
+
 def build_parser() -> argparse.ArgumentParser:
-    root_parser = argparse.ArgumentParser(prog="wild-boar-proxy")
-    subparsers = root_parser.add_subparsers(dest="command", required=True)
+    root_parser = JsonArgumentParser(prog="wild-boar-proxy")
+    subparsers = root_parser.add_subparsers(
+        dest="command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
 
     healthcheck = subparsers.add_parser("healthcheck")
     healthcheck.add_argument("--json", action="store_true", required=True)
@@ -56,7 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--json", action="store_true", required=True)
 
     stable = subparsers.add_parser("stable")
-    stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
+    stable_subparsers = stable.add_subparsers(
+        dest="stable_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     stable_repair = stable_subparsers.add_parser("repair")
     stable_repair_mode = stable_repair.add_mutually_exclusive_group(required=True)
     stable_repair_mode.add_argument("--dry-run", action="store_true")
@@ -64,7 +84,9 @@ def build_parser() -> argparse.ArgumentParser:
     stable_repair.add_argument("--json", action="store_true", required=True)
     stable_target = stable_subparsers.add_parser("target")
     stable_target_subparsers = stable_target.add_subparsers(
-        dest="stable_target_command", required=True
+        dest="stable_target_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     stable_target_switch = stable_target_subparsers.add_parser("switch")
     stable_target_switch_mode = stable_target_switch.add_mutually_exclusive_group(
@@ -79,7 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--model")
 
     launch = subparsers.add_parser("launch")
-    launch_subparsers = launch.add_subparsers(dest="launch_command", required=True)
+    launch_subparsers = launch.add_subparsers(
+        dest="launch_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     launch_smoke = launch_subparsers.add_parser("smoke")
     launch_smoke.add_argument("--json", action="store_true", required=True)
     launch_client = launch_subparsers.add_parser("client")
@@ -87,7 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
     launch_client.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
-    accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
+    accounts_subparsers = accounts.add_subparsers(
+        dest="accounts_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
 
     accounts_list = accounts_subparsers.add_parser("list")
     accounts_list.add_argument("--json", action="store_true", required=True)
@@ -116,27 +146,37 @@ def build_parser() -> argparse.ArgumentParser:
 
     diagnostics = subparsers.add_parser("diagnostics")
     diagnostics_subparsers = diagnostics.add_subparsers(
-        dest="diagnostics_command", required=True
+        dest="diagnostics_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     diagnostics_export = diagnostics_subparsers.add_parser("export")
     diagnostics_export.add_argument("--json", action="store_true", required=True)
 
     installer = subparsers.add_parser("installer")
     installer_subparsers = installer.add_subparsers(
-        dest="installer_command", required=True
+        dest="installer_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     installer_init = installer_subparsers.add_parser("init")
     installer_init.add_argument("--json", action="store_true", required=True)
 
     legacy = subparsers.add_parser("legacy")
-    legacy_subparsers = legacy.add_subparsers(dest="legacy_command", required=True)
+    legacy_subparsers = legacy.add_subparsers(
+        dest="legacy_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     legacy_import = legacy_subparsers.add_parser("import")
     legacy_import.add_argument("--source-dir", required=True)
     legacy_import.add_argument("--json", action="store_true", required=True)
 
     companion = subparsers.add_parser("companion")
     companion_subparsers = companion.add_subparsers(
-        dest="companion_command", required=True
+        dest="companion_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     companion_reset = companion_subparsers.add_parser("reset")
     companion_reset.add_argument("--json", action="store_true", required=True)
@@ -144,7 +184,11 @@ def build_parser() -> argparse.ArgumentParser:
     companion_uninstall.add_argument("--json", action="store_true", required=True)
 
     mode = subparsers.add_parser("mode")
-    mode_subparsers = mode.add_subparsers(dest="mode_command", required=True)
+    mode_subparsers = mode.add_subparsers(
+        dest="mode_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
 
     mode_get_parser = mode_subparsers.add_parser("get")
     mode_get_parser.add_argument("--json", action="store_true", required=True)
@@ -154,40 +198,58 @@ def build_parser() -> argparse.ArgumentParser:
     mode_set.add_argument("--json", action="store_true", required=True)
 
     policy = subparsers.add_parser("policy")
-    policy_subparsers = policy.add_subparsers(dest="policy_command", required=True)
+    policy_subparsers = policy.add_subparsers(
+        dest="policy_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     policy_stage = policy_subparsers.add_parser("stage")
     policy_stage_subparsers = policy_stage.add_subparsers(
-        dest="policy_stage_command", required=True
+        dest="policy_stage_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     policy_stage_set = policy_stage_subparsers.add_parser("set")
     policy_stage_set.add_argument("value")
     policy_stage_set.add_argument("--json", action="store_true", required=True)
 
     rollout = subparsers.add_parser("rollout")
-    rollout_subparsers = rollout.add_subparsers(dest="rollout_command", required=True)
+    rollout_subparsers = rollout.add_subparsers(
+        dest="rollout_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     rollout_rotation = rollout_subparsers.add_parser("rotation")
     rollout_rotation_subparsers = rollout_rotation.add_subparsers(
-        dest="rollout_rotation_command", required=True
+        dest="rollout_rotation_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     rollout_rotation_inspect = rollout_rotation_subparsers.add_parser("inspect")
     rollout_rotation_inspect.add_argument("--json", action="store_true", required=True)
     rollout_posture = rollout_subparsers.add_parser("posture")
     rollout_posture_subparsers = rollout_posture.add_subparsers(
-        dest="rollout_posture_command", required=True
+        dest="rollout_posture_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     rollout_posture_inspect = rollout_posture_subparsers.add_parser("inspect")
     rollout_posture_inspect.add_argument("value", choices=["15", "20"])
     rollout_posture_inspect.add_argument("--json", action="store_true", required=True)
     rollout_evidence = rollout_subparsers.add_parser("evidence")
     rollout_evidence_subparsers = rollout_evidence.add_subparsers(
-        dest="rollout_evidence_command", required=True
+        dest="rollout_evidence_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     rollout_evidence_capture = rollout_evidence_subparsers.add_parser("capture")
     rollout_evidence_capture.add_argument("value")
     rollout_evidence_capture.add_argument("--json", action="store_true", required=True)
     rollout_stage = rollout_subparsers.add_parser("stage")
     rollout_stage_subparsers = rollout_stage.add_subparsers(
-        dest="rollout_stage_command", required=True
+        dest="rollout_stage_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     rollout_stage_prove = rollout_stage_subparsers.add_parser("prove")
     rollout_stage_prove.add_argument("value", choices=["10", "15"])
@@ -198,10 +260,16 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_stage_advance.add_argument("--json", action="store_true", required=True)
 
     package = subparsers.add_parser("package")
-    package_subparsers = package.add_subparsers(dest="package_command", required=True)
+    package_subparsers = package.add_subparsers(
+        dest="package_command",
+        required=True,
+        parser_class=JsonArgumentParser,
+    )
     package_experimental = package_subparsers.add_parser("experimental")
     package_experimental_subparsers = package_experimental.add_subparsers(
-        dest="package_experimental_command", required=True
+        dest="package_experimental_command",
+        required=True,
+        parser_class=JsonArgumentParser,
     )
     package_experimental_build = package_experimental_subparsers.add_parser("build")
     package_experimental_build.add_argument("--output-dir", required=True)
@@ -220,7 +288,25 @@ def emit_json(payload: dict[str, Any]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    try:
+        args = parser.parse_args(raw_argv)
+    except CliArgumentParseError as exc:
+        if "--json" not in raw_argv:
+            parser.exit(2, f"{exc.usage}\n{parser.prog}: error: {exc.message}\n")
+        payload = {
+            "status": "error",
+            "exit_code": 2,
+            "human_message": f"Invalid command arguments: {exc.message}",
+            "machine_error_code": "INVALID_ARGUMENTS",
+            "changed_files": [],
+            "next_action": "user_action",
+            "liveness": "unknown",
+            "severity": "recoverable",
+            "operator_action": "user_action",
+            "cli_usage": exc.usage,
+        }
+        return emit_json(payload)
     paths = RuntimePaths.from_env()
 
     try:

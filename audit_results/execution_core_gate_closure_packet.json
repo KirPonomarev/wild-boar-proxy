@@ -1,0 +1,75 @@
+{
+  "contour_id": "EXECUTION_CORE_REPAIR_GATE_CLOSURE",
+  "contour_status": "completed",
+  "branch": "codex/execution-core-gate-closure",
+  "head_before_commit": "c32b3eb444deac15e4f393748a1516ce9c8ce04a",
+  "gate_status": "RED",
+  "gate_token": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+  "gate_verdict_machine_error_code": "DESIGN_GATE_NOT_EARNED",
+  "gate_verdict_human_message": "Design gate is not earned because rollout rotation evidence remains contradicted, even after hardening the launch-client JSON contract.",
+  "fixes_applied": [
+    {
+      "surface": "wild_boar_proxy/cli.py",
+      "change": "Malformed --json invocations now emit canonical INVALID_ARGUMENTS packets instead of empty stdout."
+    },
+    {
+      "surface": "tests/test_cli.py",
+      "change": "Added regression coverage for launch client missing --client-path under --json."
+    }
+  ],
+  "verification": {
+    "tests": [
+      "python3 -m unittest tests.test_cli.CliTests.test_status_requires_json_flag tests.test_cli.CliTests.test_legacy_import_requires_json_flag tests.test_cli.CliTests.test_launch_client_missing_required_flag_still_emits_json_packet tests.test_ui_shell.JsonCommandRunnerTests tests.test_web_ui.WebUiTests"
+    ],
+    "manual_commands": [
+      "python3 -m wild_boar_proxy launch client --json"
+    ]
+  },
+  "owner_surface_packets": [
+    {
+      "path": "audit_results/execution_core_gate_closure_status_packet.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    {
+      "path": "audit_results/execution_core_gate_closure_mode_packet.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    {
+      "path": "audit_results/execution_core_gate_closure_accounts_packet.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    {
+      "path": "audit_results/execution_core_gate_closure_rotation_packet.json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED"
+    },
+    {
+      "path": "audit_results/execution_core_gate_closure_healthcheck_packet.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    {
+      "path": "audit_results/execution_core_gate_closure_launch_client_missing_flag_packet.json",
+      "status": "error",
+      "exit_code": 2,
+      "machine_error_code": "INVALID_ARGUMENTS"
+    }
+  ],
+  "remaining_blockers": [
+    {
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "owner_surface": "rollout rotation inspect --json",
+      "why_it_blocks": "Gate cannot be truthfully earned while rollout rotation evidence still reports stable policy drift."
+    }
+  ],
+  "next_legal_contour_if_green": "UI_DESKTOP_HTML_ACCOUNTS_SCREEN_READONLY",
+  "next_legal_contour_now": "execution-core repair follow-up on rollout rotation contradiction"
+}
