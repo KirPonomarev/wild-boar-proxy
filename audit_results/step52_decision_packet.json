@@ -1,0 +1,23 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "contour_result": "GO_RESERVE_READINESS_RECOVERY_CONTOUR",
+  "primary_verdict": "TOP_LEVEL_RUNTIME_TRUTH_RESTORED",
+  "goal_achieved": true,
+  "owner_surface": "launch smoke --json",
+  "postflight_truth": {
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "stable_runtime_consumer_matches_desired": true,
+    "activation_readiness": "OK",
+    "rotation_lane_regressed": false
+  },
+  "next_contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "downstream_blocked": [
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

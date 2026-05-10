@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "machine_error_code": "LOCK_HELD",
+  "lock_exists": true,
+  "holder_pid": "60568",
+  "holder_alive": true,
+  "holder_command": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python -m wild_boar_proxy rollout stage advance 20 k-gpt-pro --json"
+}

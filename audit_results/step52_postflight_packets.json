@@ -1,0 +1,39 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "live_packet": "step52_live_packet.json",
+  "postflight_capture": {
+    "status_packet": "step52_status_postflight.json",
+    "healthcheck_packet": "step52_healthcheck_postflight.json",
+    "accounts_packet": "step52_accounts_postflight.json",
+    "rotation_packet": "step52_rotation_postflight.json"
+  },
+  "postflight_summary": {
+    "status": {
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear"
+    },
+    "stable_runtime_consumer": {
+      "desired_source_kind": "approved_repair_target",
+      "effective_source_kind": "approved_repair_target",
+      "matches_desired": true,
+      "activation_evidence_status": "snapshot_present",
+      "consumer_activation_readiness": "OK"
+    },
+    "healthcheck": {
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    },
+    "rotation": {
+      "machine_error_code": "OK",
+      "participation_status": "available",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "inspector": "Noether",
+  "finding": {
+    "launch_smoke_owner_lane": "accepted",
+    "accepted_points": [
+      "`launch smoke --json` is the canon-backed owner lane for the narrow stable-runtime activation seam",
+      "closeout must prove launcher-scoped handoff, explicit activation evidence, distinct desired/observed/effective source reporting, and truthful changed_files"
+    ],
+    "rejected_points": [
+      "The generic statement that blocked `claim_gate` or detected `policy_drift` are stop conditions for this contour was over-broad and not accepted here, because those signals were the selected primary blocker being repaired."
+    ]
+  },
+  "orchestrator_adjudication": {
+    "accepted": true,
+    "notes": [
+      "Owner-lane legitimacy accepted.",
+      "Stop-condition language narrowed to foreign lock, contradiction, unclear rollback, or need for a second external owner surface."
+    ]
+  }
+}

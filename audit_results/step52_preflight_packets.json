@@ -1,0 +1,45 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "preflight_capture": {
+    "status_packet": "step52_status_preflight_clean.json",
+    "healthcheck_packet": "step52_healthcheck_preflight_clean.json",
+    "accounts_packet": "step52_accounts_preflight_clean.json",
+    "rotation_packet": "step52_rotation_preflight_clean.json",
+    "lock_snapshot": "step52_lock_snapshot.json",
+    "lock_recheck": "step52_lock_recheck.json",
+    "status_recheck": "step52_status_recheck.json"
+  },
+  "preflight_summary": {
+    "status": {
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "healthcheck": {
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "managed"
+    },
+    "rotation": {
+      "machine_error_code": "OK",
+      "participation_status": "available",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear"
+    },
+    "stable_runtime_consumer": {
+      "desired_source_kind": "approved_repair_target",
+      "effective_source_kind": "observed_stable_inventory_source",
+      "matches_desired": false,
+      "activation_evidence_status": "snapshot_stale",
+      "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+    },
+    "lock_entry": {
+      "initial_machine_error_code": "LOCK_HELD",
+      "recheck_machine_error_code": "OK"
+    }
+  }
+}
