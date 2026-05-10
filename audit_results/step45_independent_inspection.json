@@ -1,0 +1,26 @@
+{
+  "inspector": {
+    "agent_nickname": "Newton",
+    "agent_id": "019e137f-042a-7121-aebc-7975832f4fe1"
+  },
+  "result": {
+    "admitted_command": "none",
+    "more_than_one_write_step_required": true,
+    "recommended_verdict": "STOP_AND_DIAGNOSE"
+  },
+  "factual_basis": [
+    {
+      "source": "RUNTIME_CONTRACT.md",
+      "claim": "`healthcheck --json` owns deterministic stable recovery / fallback-reconciliation semantics."
+    },
+    {
+      "source": "COMMAND_API.md",
+      "claim": "`launch smoke --json` may materialize approved-target activation evidence but must not pretend to own the deterministic stable recovery lane."
+    },
+    {
+      "source": "STATE_SCHEMA.md",
+      "claim": "`selected_backend_snapshot` may be materialized or refreshed only by `sync --json`."
+    }
+  ],
+  "main_conclusion": "The contour cannot truthfully mutate because its blocker crosses multiple owner lanes and no single contract-backed write command covers the whole blocker."
+}

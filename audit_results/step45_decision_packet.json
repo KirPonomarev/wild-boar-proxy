@@ -1,0 +1,22 @@
+{
+  "contour_id": "STABLE_RUNTIME_CONSUMER_ACTIVATION_GAP_AND_TOP_LEVEL_POLICY_DRIFT_RECLEAR",
+  "status": "closed_no_go",
+  "machine_error_code": "NO_GO_COMMAND_CONTRACT_UNCLEAR",
+  "decision_class": "STOP_AND_DIAGNOSE",
+  "single_write_step_admitted": false,
+  "write_step_executed": false,
+  "reason": "No single owner command is contract-backed for the current blocker; status-lane reclear would require crossing multiple owner lanes.",
+  "current_blocker": {
+    "status_claim_gate_status": "blocked",
+    "status_policy_drift_status": "detected",
+    "status_consumer_activation_readiness_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation_machine_error_code": "OK",
+    "rotation_policy_drift_status": "clear",
+    "rotation_policy_drift_observed_status": "detected"
+  },
+  "next_contour": {
+    "id": "MULTI_LANE_RUNTIME_RECLEAR_SPLIT_ADMISSION",
+    "class": "READ_ONLY_PLANNING_OR_CLASSIFICATION",
+    "reason": "The next legal move is to split the blocker into separate owner lanes instead of forcing a false one-step live contour."
+  }
+}

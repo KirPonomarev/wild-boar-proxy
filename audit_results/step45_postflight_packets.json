@@ -1,0 +1,17 @@
+{
+  "contour_id": "STABLE_RUNTIME_CONSUMER_ACTIVATION_GAP_AND_TOP_LEVEL_POLICY_DRIFT_RECLEAR",
+  "status": "read_only_recheck_only",
+  "write_step_executed": false,
+  "recheck_packets": [
+    "step45_status_recheck_packet.json",
+    "step45_rotation_recheck_packet.json"
+  ],
+  "recheck_result": {
+    "status_claim_gate_status": "blocked",
+    "status_policy_drift_status": "detected",
+    "status_consumer_activation_readiness_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation_machine_error_code": "OK",
+    "rotation_policy_drift_status": "clear",
+    "rotation_evidence_freshness": "fresh"
+  }
+}
