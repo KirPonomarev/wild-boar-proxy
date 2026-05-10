@@ -1,0 +1,27 @@
+{
+  "inspector": {
+    "agent_nickname": "McClintock",
+    "agent_id": "019e138a-dcdb-7ef2-a1e6-7343450e8308"
+  },
+  "inspection_status": "accepted",
+  "admitted_command": "launch smoke --json",
+  "lane_b_guard": "must remain untouched and must not regress from OK/fresh",
+  "expected_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
+  ],
+  "comparison_to_observed_changed_files": {
+    "observed_changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+    ],
+    "assessment": "Observed writes stayed within the declared lane, with the managed pid path covered by the declaration's process-state allowance."
+  },
+  "stop_recommendation": "no-stop"
+}

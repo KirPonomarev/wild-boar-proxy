@@ -1,0 +1,31 @@
+{
+  "contour_id": "STABLE_RUNTIME_CONSUMER_ACTIVATION_LANE_RECLEAR",
+  "status": "closed_successfully",
+  "machine_error_code": "OK",
+  "decision_class": "GO_RESERVE_FIRST_POSTURE_NORMALIZATION",
+  "write_step_executed": true,
+  "write_command": "launch smoke --json",
+  "lane_a_result": {
+    "status": "success",
+    "desired_source_kind": "approved_repair_target",
+    "effective_source_kind": "approved_repair_target",
+    "consumer_activation_readiness_code": "OK",
+    "activation_evidence_status": "snapshot_present",
+    "activation_evidence_freshness": "fresh"
+  },
+  "lane_b_result": {
+    "status": "no_regression",
+    "machine_error_code": "OK",
+    "participation_status": "available",
+    "evidence_freshness": "fresh"
+  },
+  "derived_top_level_result": {
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear"
+  },
+  "next_contour": {
+    "id": "RESERVE_FIRST_POSTURE_NORMALIZATION",
+    "class": "LIVE_PROOF",
+    "reason": "Lane A is now proven and the derived top-level lane also cleared without Lane B regression."
+  }
+}
