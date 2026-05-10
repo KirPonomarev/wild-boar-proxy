@@ -1,0 +1,16 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_status_reports_desired_approved_target_before_effective_activation",
+    "tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target",
+    "tests.test_cli.CliTests.test_rollout_rotation_inspect_uses_approved_target_policy_surface_when_activation_evidence_is_valid"
+  ],
+  "returncode": 0,
+  "tests_run": 3,
+  "summary": "Ran 3 tests in 3.832s",
+  "result": "OK"
+}

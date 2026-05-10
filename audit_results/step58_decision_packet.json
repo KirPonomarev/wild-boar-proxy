@@ -1,0 +1,64 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "contour_id": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "contour_result": "GO_RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "primary_verdict": "TOP_LEVEL_RUNTIME_TRUTH_REPAIRED_AND_POSTURE_ONLY_BLOCKER_RECONFIRMED",
+  "why_now": [
+    "`launch smoke --json` returned a strict JSON owner packet with `machine_error_code=OK`",
+    "postflight status showed `effective_mode=stable`",
+    "postflight status showed `claim_gate.status=clear`",
+    "postflight status showed `policy_drift.status=clear`",
+    "postflight status showed `stable_runtime_consumer.consumer_activation_readiness=OK`",
+    "postflight rotation inspect remained `OK` with fresh participation evidence",
+    "bounded downstream posture observation returned `LIVE_POSTURE_DRIFT_ONLY`"
+  ],
+  "before_after": {
+    "effective_mode": {
+      "before": "managed",
+      "after": "stable"
+    },
+    "claim_gate_status": {
+      "before": "blocked",
+      "after": "clear"
+    },
+    "policy_drift_status": {
+      "before": "detected",
+      "after": "clear"
+    },
+    "consumer_activation_readiness": {
+      "before": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+      "after": "OK"
+    },
+    "rotation_machine_error_code": {
+      "before": "OK",
+      "after": "OK"
+    },
+    "rotation_evidence_freshness": {
+      "before": "fresh",
+      "after": "fresh"
+    }
+  },
+  "mutation_executed": true,
+  "admitted_owner_surface": "launch smoke --json",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+  ],
+  "downstream_observation": {
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "observed_stage": "20",
+    "requested_stage": "20",
+    "active_count": 16,
+    "reserve_count": 0
+  },
+  "next_contour": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "downstream_blocked": [
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

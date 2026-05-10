@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "inspector": "Volta",
+  "source_agent_id": "019e13e6-e1d4-7280-b307-9b1f8bf89114",
+  "accepted_facts": [
+    "deterministic stable recovery entry remains owned by `healthcheck --json`",
+    "`launch smoke --json` must not claim ownership of deterministic stable recovery result surfaces",
+    "`step58_preflight_packets.json` showed `effective_mode=managed`, `claim_gate.status=blocked`, `policy_drift.status=detected`, and `stable_runtime_consumer.consumer_activation_readiness=STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING`",
+    "`step58_preflight_packets.json` showed rotation evidence already `OK` and `fresh`"
+  ],
+  "rejected_or_narrowed_claims": [
+    "the inspector's `admissible=false` verdict was too broad because the current contour targets the narrow stable-runtime activation lane, not ownership of deterministic stable recovery result surfaces",
+    "COMMAND_API's additional stable-runtime consumer contract says the current stable-runtime consumer line exposes a narrow activation path only through `launch smoke --json`",
+    "tests/test_cli.py proves `launch smoke --json` can move effective stable-runtime consumer source to the approved repair target and clear consumer activation readiness to `OK` without claiming ownership of deterministic recovery result surfaces",
+    "the missing `step58_operation_declaration.md` blocker was procedural only and is now resolved"
+  ],
+  "primary_verdict": "independent audit facts were accepted, but the owner-lane conclusion was narrowed: `launch smoke --json` is admitted for bounded activation repair in this contour",
+  "recommended_next_verdict": "postflight truth decides the next downstream contour after the admitted activation step"
+}
