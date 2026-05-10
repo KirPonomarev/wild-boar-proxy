@@ -1,0 +1,51 @@
+{
+  "status": "go",
+  "machine_error_code": "OK",
+  "contour_id": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "contour_result": "GO_ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "primary_verdict": "TOP_LEVEL_RUNTIME_TRUTH_REPAIRED",
+  "why_now": [
+    "launch smoke --json returned strict JSON owner packet with machine_error_code OK",
+    "postflight status --json showed claim_gate.status clear",
+    "postflight status --json showed policy_drift.status clear",
+    "postflight stable_runtime_consumer.consumer_activation_readiness moved to OK",
+    "postflight rotation evidence remained stale and is the remaining downstream blocker"
+  ],
+  "before_after": {
+    "claim_gate_status": {
+      "before": "blocked",
+      "after": "clear"
+    },
+    "policy_drift_status": {
+      "before": "detected",
+      "after": "clear"
+    },
+    "consumer_activation_code": {
+      "before": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+      "after": "OK"
+    },
+    "activation_snapshot_freshness": {
+      "before": "stale",
+      "after": "fresh"
+    },
+    "rotation_machine_error_code": {
+      "before": "ROTATION_EVIDENCE_STALE",
+      "after": "ROTATION_EVIDENCE_STALE"
+    }
+  },
+  "mutation_executed": true,
+  "admitted_owner_surface": "launch smoke --json",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+  ],
+  "next_contour": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "downstream_blocked": [
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

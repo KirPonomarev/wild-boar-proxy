@@ -1,0 +1,18 @@
+{
+  "status": "completed",
+  "inspector": "Galileo",
+  "source_agent_id": "019e13d7-2e1c-7d51-9366-47c1fa7314d8",
+  "accepted_facts": [
+    "launch smoke --json was the canonically legitimate single owner-surface repair step for this contour",
+    "postflight claim_gate.status is clear",
+    "postflight policy_drift.status is clear",
+    "stable_runtime_consumer effective source now matches desired source",
+    "rotation evidence remains stale as the downstream blocker"
+  ],
+  "rejected_or_narrowed_claims": [
+    "the inspector preflight-only stop on launch smoke was too broad because it treated exclusion from the read-only snapshot as exclusion from the admitted live repair lane",
+    "rotation staleness remains a downstream blocker only after the top-level runtime truth repair succeeds; it did not invalidate the launch-smoke lane itself"
+  ],
+  "primary_verdict": "independent audit converged with executed outcome after postflight review",
+  "recommended_next_verdict": "GO_ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR"
+}
