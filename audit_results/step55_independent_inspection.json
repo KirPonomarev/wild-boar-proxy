@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "inspector": "Locke",
+  "source_agent_id": "019e13d0-1cff-75b3-b61f-18b68fe6fa78",
+  "accepted_facts": [
+    "mandatory snapshot rule requires runtime truth to be green enough before live posture work proceeds",
+    "claim_gate.status remains blocked on bounded reread",
+    "policy_drift.status remains detected on bounded reread",
+    "stable_runtime_consumer.consumer_activation_readiness remains STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation evidence remains stale on bounded reread"
+  ],
+  "rejected_or_narrowed_claims": [
+    "status.machine_error_code=OK does not make the runtime lane green enough when nested claim_gate and policy_drift remain blocked/detected",
+    "the inspector list of admitted owner-surface candidates is read-surface-only and must not be treated as mutation admission",
+    "sync --json is rejected here because a more upstream runtime truth blocker reopened, not because sync can never own stale selected-backend snapshot repair"
+  ],
+  "primary_verdict": "useful independent corroboration accepted with narrowed lane semantics",
+  "recommended_next_verdict": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR"
+}

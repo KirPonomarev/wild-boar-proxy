@@ -1,0 +1,41 @@
+{
+  "status": "stop",
+  "machine_error_code": "STABLE_POLICY_DRIFT",
+  "contour_id": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "contour_result": "NO_GO_CONTOUR_PREMISE_INVALIDATED",
+  "primary_verdict": "TOP_LEVEL_RUNTIME_TRUTH_REOPENED",
+  "why_now": [
+    "fresh preflight and bounded status reread both showed claim_gate.status=blocked",
+    "fresh preflight and bounded status reread both showed policy_drift.status=detected",
+    "stable_runtime_consumer.consumer_activation_readiness remained STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation evidence remained stale but is now secondary to the reopened top-level runtime truth blocker",
+    "no admitted owner-surface mutation was selected or executed"
+  ],
+  "blocking_fields": {
+    "status.machine_error_code": "OK",
+    "status.claim_gate.status": "blocked",
+    "status.claim_gate.machine_error_code": "CLAIM_GATE_BLOCKED",
+    "status.policy_drift.status": "detected",
+    "status.policy_drift.machine_error_code": "STABLE_POLICY_DRIFT",
+    "status.stable_runtime_consumer.consumer_activation_readiness.machine_error_code": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation.machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation.rotation_evidence_result.evidence_freshness": "stale",
+    "rotation.rotation_evidence_result.evidence_reason": "selected_backend_snapshot_stale"
+  },
+  "preflight_gate_assessment": {
+    "runtime_truth_green_enough": false,
+    "healthcheck_green": true,
+    "rotation_green": false,
+    "mutation_admitted": false
+  },
+  "mutation_executed": false,
+  "admitted_owner_surface": "",
+  "next_contour": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "downstream_blocked": [
+    "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}
