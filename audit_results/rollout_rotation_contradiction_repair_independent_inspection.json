@@ -1,0 +1,36 @@
+{
+  "inspection_status": "completed",
+  "inspector": "Hegel",
+  "root_cause_recommendation": "real_operational_policy_drift",
+  "secondary_current_state_class": "mixed_source_mismatch",
+  "not_best_fit": [
+    "stale_selected_backend_snapshot",
+    "insufficient_pool_truth",
+    "repo_owned_owner_surface_bug",
+    "unknown_stop_and_diagnose"
+  ],
+  "evidence_summary": [
+    {
+      "path": "COMMAND_API.md",
+      "finding": "rollout rotation inspect is the bounded participation-evidence surface; contradicted evidence covers policy drift or ambiguous registry identity."
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py",
+      "finding": "run_rollout_rotation_inspect emits ROTATION_EVIDENCE_CONTRADICTED when policy_drift_status is not clear."
+    },
+    {
+      "path": "tests/test_cli.py",
+      "finding": "policy-drift contradiction and approved-target policy surface cases are covered."
+    },
+    {
+      "path": "audit_results/step40_owner_surface_capture.json",
+      "finding": "prior capture showed ROTATION_EVIDENCE_CONTRADICTED with policy_drift_detected."
+    }
+  ],
+  "repair_admission_recommendation": "no",
+  "uncertainty": [
+    "older step42 artifacts showed a status-vs-rotation source mismatch after a bounded recheck",
+    "current contour fresh packets show status and rotation both detected policy drift",
+    "no direct evidence was found that snapshot staleness or pool insufficiency caused the current contradicted packet"
+  ]
+}

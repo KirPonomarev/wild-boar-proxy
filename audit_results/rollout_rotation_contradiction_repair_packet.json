@@ -1,0 +1,78 @@
+{
+  "contour_id": "ROLL_OUT_ROTATION_CONTRADICTION_REPAIR",
+  "contour_status": "completed",
+  "branch": "codex/rollout-rotation-contradiction-repair",
+  "head_at_start": "c32b3eb444deac15e4f393748a1516ce9c8ce04a",
+  "phase_0_diagnostic_completed": true,
+  "repair_admitted": false,
+  "root_cause_classification": "real_operational_policy_drift",
+  "secondary_classification": "insufficient_pool_truth",
+  "final_verdict": "RED_OPERATIONAL_POLICY_DRIFT_NO_CODE_REPAIR",
+  "final_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+  "final_human_message": "Fresh owner packets show real policy drift: status and rotation agree that stable policy drift is detected, so no repo-owned owner-surface bug was admitted for repair.",
+  "fresh_owner_packets": {
+    "status": {
+      "path": "audit_results/rollout_rotation_contradiction_repair_raw/status.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "policy_drift_status": "detected",
+      "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+      "policy_drift_observed_status": "detected",
+      "policy_drift_observed_machine_error_code": "STABLE_POLICY_DRIFT"
+    },
+    "healthcheck": {
+      "path": "audit_results/rollout_rotation_contradiction_repair_raw/healthcheck.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK"
+    },
+    "accounts": {
+      "path": "audit_results/rollout_rotation_contradiction_repair_raw/accounts.json",
+      "status": "ok",
+      "exit_code": 0,
+      "machine_error_code": "OK",
+      "registry_identity_status": "clear"
+    },
+    "rotation": {
+      "path": "audit_results/rollout_rotation_contradiction_repair_raw/rotation.json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "policy_drift_status": "detected",
+      "policy_drift_observed_status": "detected",
+      "policy_drift_claim_surface_source": "auth-dir",
+      "evidence_status": "participation_evidence_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "participation_status": "contradicted",
+      "selected_backend_snapshot_validation_status": "valid",
+      "selected_backend_snapshot_present": true,
+      "evidence_freshness": "stale",
+      "blocker_type": "contradicted_state"
+    },
+    "posture20": {
+      "path": "audit_results/rollout_rotation_contradiction_repair_raw/posture20.json",
+      "status": "error",
+      "exit_code": 1,
+      "machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL"
+    }
+  },
+  "code_inspection": {
+    "runtime_rotation_function": "wild_boar_proxy/runtime.py:run_rollout_rotation_inspect",
+    "observed_branch": "policy_drift_status != clear -> ROTATION_EVIDENCE_CONTRADICTED",
+    "test_coverage": "tests/test_cli.py has explicit policy-drift contradiction coverage and approved-target policy surface coverage"
+  },
+  "repair_admission_decision": {
+    "admitted": false,
+    "reason": "Phase 0 did not prove a narrow repo-owned bug. Fresh status and rotation packets agree on detected policy drift from auth-dir; resolving it requires a separate live operational normalization or operator action, not a code patch inside this contour."
+  },
+  "independent_inspection": {
+    "inspector": "Hegel",
+    "primary_recommendation": "real_operational_policy_drift",
+    "repair_admission": "no",
+    "used_for_final_verdict": true
+  },
+  "next_legal_contour": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_PLAN"
+}
