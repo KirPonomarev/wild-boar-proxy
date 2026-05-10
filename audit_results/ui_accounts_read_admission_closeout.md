@@ -33,8 +33,8 @@ contour `UI_DESKTOP_HTML_ACCOUNTS_SCREEN_READONLY`.
 ## Git
 
 - branch: `codex/ui-accounts-gate-read-admission`
-- commit: `pending`
-- pushed: `pending`
+- commit: `1029f3f`
+- pushed: `yes`
 
 ## Scope Check
 
