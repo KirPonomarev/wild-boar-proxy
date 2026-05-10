@@ -1,0 +1,30 @@
+{
+  "status": "error",
+  "exit_code": 1,
+  "human_message": "Accounts read-only admission closes RED because the repo design gate is not truthfully earned and the master plan still places execution-core repair before basic companion UI.",
+  "machine_error_code": "GATE_RED_DESIGN_GATE_NOT_EARNED",
+  "changed_files": [
+    "audit_results/ui_accounts_gate_check.md",
+    "audit_results/ui_accounts_read_surface_passport.json",
+    "audit_results/ui_accounts_gate_decision_packet.json",
+    "audit_results/ui_accounts_gate_independent_inspection.json",
+    "audit_results/ui_accounts_read_admission_closeout.md"
+  ],
+  "next_action": "execution_core_repair_gate_closure",
+  "contour_id": "UI_ACCOUNTS_SCREEN_GATE_CHECK_AND_READ_ADMISSION",
+  "gate_status": "red",
+  "decision_verdict": "NO_GO_ACCOUNTS_READONLY_UI",
+  "current_blockers": [
+    "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY_NOT_EARNED",
+    "MASTER_PLAN_NEXT_PRIMARY_CONTOUR_IS_EXECUTION_CORE_REPAIR",
+    "BASIC_COMPANION_UI_NOT_YET_OPEN"
+  ],
+  "supporting_facts": {
+    "agents_design_gate_rule": "rich UI expansion remains blocked until the gate token is truthfully earned",
+    "master_plan_ordering": "execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI",
+    "ui_readiness_account_truth": "Account Pool screen must read account state from accounts list --json"
+  },
+  "legal_next_contour_if_red": "execution-core repair / gate-closure contour",
+  "legal_next_contour_if_green": "UI_DESKTOP_HTML_ACCOUNTS_SCREEN_READONLY",
+  "accounts_readonly_admissible_now": false
+}

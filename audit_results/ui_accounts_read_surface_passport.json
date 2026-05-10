@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "artifact": "ui_accounts_read_surface_passport",
+  "contour_id": "UI_ACCOUNTS_SCREEN_GATE_CHECK_AND_READ_ADMISSION",
+  "gate_status": "red",
+  "surface_id": "accounts-screen",
+  "public_name": "Accounts",
+  "source_render_id": "04_accounts",
+  "primary_truth_command": "accounts list --json",
+  "secondary_refresh_requirements": [
+    "status --json for active-routing implications only"
+  ],
+  "repo_truth_class": "read_only_candidate",
+  "admission_status": "deferred_pending_gate_green",
+  "allowed_actions_now": [],
+  "deferred_actions": [
+    "accounts onboard --json",
+    "accounts validate <id> --json",
+    "accounts promote <id> --json",
+    "accounts demote <id> --json",
+    "accounts hold <id> --json",
+    "accounts release <id> --json",
+    "accounts retire <id> --json"
+  ],
+  "fallback_state": "integration-failure",
+  "operator_claim_limits": [
+    "active count is not scale proof",
+    "promotion is not pilot-readiness proof",
+    "retired accounts have no implied automatic return path"
+  ],
+  "go_no_go_dependency": "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+  "required_display_fields": [
+    "account id",
+    "label",
+    "lifecycle pool",
+    "manual hold",
+    "status",
+    "fail count",
+    "success count",
+    "last success",
+    "last error",
+    "cooldown until",
+    "notes",
+    "registry identity summary",
+    "active count",
+    "reserve count",
+    "retired count",
+    "capacity target 20"
+  ],
+  "blocking_reasons": [
+    "design gate token not truthfully earned in inspected repo canon",
+    "master plan still places execution-core repair before basic companion UI"
+  ],
+  "legal_next_contour_if_green": "UI_DESKTOP_HTML_ACCOUNTS_SCREEN_READONLY",
+  "legal_next_contour_if_red": "execution-core repair / gate-closure contour"
+}

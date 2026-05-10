@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "artifact": "independent_inspection",
+  "contour_id": "UI_ACCOUNTS_SCREEN_GATE_CHECK_AND_READ_ADMISSION",
+  "inspector": {
+    "agent_nickname": "Huygens",
+    "agent_role": "explorer"
+  },
+  "accepted_findings": {
+    "gate_status": "red",
+    "exact_gate_blockers": [
+      "AGENTS.md requires EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY before rich UI expansion",
+      "MASTER_PLAN.md still places execution-core repair before basic companion UI",
+      "UI_READINESS_SPEC.md is a readiness/spec boundary, not permission to outrun execution-core repair"
+    ],
+    "accounts_read_truth_source": "accounts list --json",
+    "additional_refresh_rule": "any active-routing effect requires accounts list --json and status --json refresh",
+    "supported_next_contour_if_green": "UI_DESKTOP_HTML_ACCOUNTS_SCREEN_READONLY",
+    "supported_next_contour_if_red": "execution-core repair / gate-closure contour"
+  }
+}
