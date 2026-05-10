@@ -1,0 +1,34 @@
+{
+  "document_type": "STEP44_CLASSIFICATION_PACKET",
+  "document_status": "FACTUAL_CLASSIFICATION",
+  "contour_id": "STEP44_OWNER_SURFACE_CONTRADICTION_CLASSIFICATION",
+  "write_actions_performed": false,
+  "classification": "CONTRACTUALLY_SEPARATE_TRUTH_DOMAINS",
+  "reproduced": true,
+  "runtime_evidence": {
+    "status_claim_gate": "blocked",
+    "status_policy_drift": "detected",
+    "status_policy_drift_observed": "detected",
+    "rotation_policy_drift_status": "clear",
+    "rotation_policy_drift_observed_status": "detected",
+    "rotation_participation_status": "available",
+    "rotation_evidence_freshness": "fresh"
+  },
+  "semantic_basis": {
+    "always_match_required": false,
+    "status_path_requires_live_stable_runtime_for_approved_target": true,
+    "rotation_path_requires_live_stable_runtime_for_approved_target": false,
+    "claim_gate_binds_to_status_top_level_policy_drift": true,
+    "rotation_contradiction_binds_to_rotation_selected_policy_drift": true
+  },
+  "rejected_classifications": [
+    {
+      "classification": "REPO_OWNED_STATUS_ROTATION_CONTRADICTION",
+      "reason": "repo code and tests intentionally model different selected-vs-observed policy-drift reporting and different approved-target admission predicates"
+    },
+    {
+      "classification": "UNCLASSIFIED_ENGINE_OR_CONTRACT_ESCALATION_REQUIRED",
+      "reason": "the mismatch is explainable from current contract, code, and tests"
+    }
+  ]
+}

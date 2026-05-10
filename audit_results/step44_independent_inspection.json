@@ -1,0 +1,14 @@
+{
+  "document_type": "STEP44_INDEPENDENT_INSPECTION",
+  "document_status": "FACTUAL_AGENT_REPORT_SUMMARY",
+  "agent_id": "019e1292-fb46-74b2-98e9-08a3afd6dde6",
+  "agent_nickname": "Aquinas",
+  "classification": "CONTRACTUALLY_SEPARATE_TRUTH_DOMAINS",
+  "always_match_required": false,
+  "support_summary": {
+    "status_uses_live_stable_runtime_gate_for_approved_target": true,
+    "rotation_disables_live_stable_runtime_requirement_for_approved_target": true,
+    "equivalence_contract_found": false,
+    "separate_gate_contract_found": true
+  }
+}

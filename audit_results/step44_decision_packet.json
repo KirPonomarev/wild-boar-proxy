@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "human_message": "Step44 closes with a read-only classification: the reproduced status-vs-rotation mismatch is contractually explainable as separate truth domains, not a repo-owned contradiction.",
+  "machine_error_code": "CONTRACTUALLY_SEPARATE_TRUTH_DOMAINS",
+  "contour_id": "STEP44_OWNER_SURFACE_CONTRADICTION_CLASSIFICATION",
+  "write_actions_performed": false,
+  "classification_verdict": "CONTRACTUALLY_SEPARATE_TRUTH_DOMAINS",
+  "repo_repair_admissible": false,
+  "ui_reopen_admissible": false,
+  "reserve_first_posture_normalization_admissible": false,
+  "next_contour_type": "GO_REOPEN_LIVE_ADMISSION_CONTOUR",
+  "recommended_next_contour_focus": "stable_runtime_consumer_activation_gap_and_top_level_policy_drift_reclear",
+  "blocking_truth_remaining": [
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+  ],
+  "notes": {
+    "rotation_truth_is_green_in_its_own_bounded_domain": true,
+    "status_truth_is_not_green": true,
+    "difference_is_explained_by_admission_predicates": true
+  }
+}

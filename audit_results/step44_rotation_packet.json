@@ -1,0 +1,22 @@
+{
+  "document_type": "STEP44_ROTATION_PACKET_REDACTED",
+  "document_status": "FACTUAL_SUMMARY",
+  "raw_packet": "/private/tmp/wbp-step44-raw/phase0/rotation.json",
+  "raw_packet_committed": false,
+  "exit_code": 0,
+  "packet_status": "ok",
+  "machine_error_code": "OK",
+  "human_message": "Bounded local rotation participation evidence is available.",
+  "rotation_evidence_result": {
+    "policy_drift_status": "clear",
+    "policy_drift_observed_status": "detected",
+    "policy_drift_claim_surface_source": "approved_repair_target",
+    "evidence_status": "participation_evidence_present",
+    "evidence_reason": "multi_backend_snapshot",
+    "participation_status": "available",
+    "final_outcome": "participation_evidence_available",
+    "selected_backend_snapshot_present": true,
+    "selected_backend_snapshot_validation_status": "valid",
+    "evidence_freshness": "fresh"
+  }
+}
