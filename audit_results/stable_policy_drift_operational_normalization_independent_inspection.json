@@ -1,0 +1,26 @@
+{
+  "inspection_status": "completed",
+  "inspector": "James",
+  "authorization_finding": {
+    "required": "explicit standing phrase or exact one-off owner marker",
+    "generic_start_is_insufficient": true
+  },
+  "allowed_surfaces": [
+    "stable target switch --dry-run --json",
+    "stable target switch --apply --json",
+    "stable repair --dry-run --json",
+    "stable repair --apply --json",
+    "launch smoke --json"
+  ],
+  "write_surface_findings": [
+    "stable target switch apply may materialize stable-repair-target, approved-repair-target.json, and target-switch-transaction.json",
+    "stable repair apply may mutate only stable-repair-target/codex-*.json plus ephemeral transaction scratch",
+    "launch smoke may write runtime activation evidence and generated stable runtime config surfaces"
+  ],
+  "safety_findings": [
+    "live mutation without explicit authorization is unsafe",
+    "success must be interpreted from JSON packets, not exit code alone",
+    "rotation evidence remains unsafe for stage proof if it is insufficient or contradicted"
+  ],
+  "orchestrator_interpretation": "Inspection supports stopping before live mutation because active-thread authorization was absent."
+}

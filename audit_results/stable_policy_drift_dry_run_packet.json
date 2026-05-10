@@ -1,0 +1,27 @@
+{
+  "redacted": true,
+  "raw_packet_committed": false,
+  "status": "ok",
+  "exit_code": 0,
+  "machine_error_code": "OK",
+  "human_message": "Stable repair dry-run completed.",
+  "changed_files": [],
+  "next_action": "review_transaction_plan",
+  "would_change": true,
+  "transaction_plan_summary": {
+    "mode": "dry_run",
+    "snapshot_required": true,
+    "lock_required": true,
+    "lock_preflight_status": "available",
+    "repair_apply_authority_status": "contract_ready",
+    "target_mutation_write_scope": "approved_target_inventory_only",
+    "target_exactness": "exact_approved_set",
+    "approved_repair_target_reference_status": "materialized_aligned",
+    "target_switch_transaction_metadata_status": "materialized_aligned",
+    "target_would_add_count": 9,
+    "target_would_prune_count": 1,
+    "target_would_keep_count": 0,
+    "source_copy_missing_auth_refs_count": 0,
+    "source_copy_basename_collisions_count": 0
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "contour_id": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION",
+  "contour_status": "completed_precondition_not_met",
+  "branch": "codex/stable-policy-drift-operational-normalization",
+  "final_verdict": "PRECONDITION_NOT_MET_NO_LIVE_MUTATION",
+  "final_machine_error_code": "LIVE_AUTHORIZATION_MISSING",
+  "final_human_message": "Phase 0 read-only preflight completed, but live apply commands were not executed because the active thread did not contain the explicit authorization required by canon.",
+  "authorization": {
+    "required": true,
+    "standing_phrase_required": "разрешаю тебе любые законные действия в рамках разработки проекта",
+    "active_thread_authorization_status": "absent",
+    "generic_begin_work_status": "insufficient_by_canon"
+  },
+  "phase0": {
+    "completed": true,
+    "raw_packets_committed": false,
+    "raw_packets_not_committed_reason": "Private account-identifying fields were present.",
+    "status_policy_drift_status": "detected",
+    "status_claim_gate_status": "blocked",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "posture20_machine_error_code": "INSUFFICIENT_ELIGIBLE_POOL",
+    "dry_run_machine_error_code": "OK",
+    "dry_run_would_change": true,
+    "dry_run_target_would_add_count": 9,
+    "dry_run_target_would_prune_count": 1
+  },
+  "phase1": {
+    "opened": false,
+    "reason": "authorization_missing",
+    "commands_not_executed": [
+      "stable target switch --apply --json",
+      "stable repair --apply --json",
+      "launch smoke --json"
+    ]
+  },
+  "next_legal_contour": "STABLE_POLICY_DRIFT_OPERATIONAL_NORMALIZATION_AUTHORIZED_RUN"
+}
