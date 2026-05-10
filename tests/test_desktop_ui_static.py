@@ -122,6 +122,20 @@ class DesktopUiStaticTests(unittest.TestCase):
         self.assertNotIn("overview_bridge", overview)
         self.assertNotIn("command_adapter", overview)
 
+    def test_overview_layout_uses_viewport_fit_constraints(self) -> None:
+        css = (DESKTOP_UI / "styles" / "overview.css").read_text(encoding="utf-8")
+
+        self.assertIn("height: 100vh", css)
+        self.assertIn("width: 100vw", css)
+        self.assertIn("calc(100vh - 40px)", css)
+        self.assertIn("calc(100vw - 40px)", css)
+        self.assertIn("@media (max-height: 920px)", css)
+        self.assertIn("overflow-y: auto", css)
+        self.assertIn("grid-template-columns: minmax(360px, .9fr) minmax(440px, 1.1fr)", css)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) minmax(66px, auto)", css)
+        self.assertIn("flex-direction: column", css)
+        self.assertIn(".kpi-line .kpi-note", css)
+
     def test_deferred_stage_actions_are_not_present(self) -> None:
         text = "\n".join(
             path.read_text(encoding="utf-8")

@@ -86,6 +86,18 @@ class DesktopUiOverviewLiveBindingTests(unittest.TestCase):
         self.assertNotIn("auth_ref", json.dumps(payload))
         self.assertEqual(payload["accounts_packet"]["capacity_model"]["claim"], "capacity_model_only_not_scale_proof")
 
+    def test_snapshot_does_not_publish_internal_changed_file_paths(self) -> None:
+        packets = default_packets()
+        packets[("status", "--json")] = json.dumps(packet(
+            changed_files=["/Users/example/.codex-custom-cli/managed/supervisor-state.json"],
+        ))
+        payload = collect_live_overview_payload(runner=OverviewRunner(packets))
+
+        rendered = json.dumps(payload)
+        self.assertEqual(payload["status_packet"]["changed_files"], [])
+        self.assertNotIn("supervisor-state", rendered)
+        self.assertNotIn(".codex-custom-cli", rendered)
+
     def test_invalid_status_json_is_integration_failure_not_green(self) -> None:
         packets = default_packets()
         packets[("status", "--json")] = "{bad"

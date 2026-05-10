@@ -45,6 +45,13 @@ const modeLabels = {
   stable: "Стабильный"
 };
 
+const accountNoteLabels = {
+  "active routing inventory, not scale proof": "пул; не proof",
+  "reserve pool count": "резерв",
+  "manual hold or hold pool": "hold",
+  "degraded/down accounts": "down/degraded"
+};
+
 const $ = (selector) => document.querySelector(selector);
 
 function setText(selector, value) {
@@ -90,10 +97,15 @@ function renderCounts(accountsPacket) {
   setText("reserve-count", summary.reserve_count ?? 0);
   setText("hold-count", summary.hold_count ?? 0);
   setText("problem-count", summary.problem_count ?? 0);
-  setText("active-note", summary.active_note || "-");
-  setText("reserve-note", summary.reserve_note || "-");
-  setText("hold-note", summary.hold_note || "-");
-  setText("problem-note", summary.problem_note || "-");
+  setText("active-note", compactAccountNote(summary.active_note));
+  setText("reserve-note", compactAccountNote(summary.reserve_note));
+  setText("hold-note", compactAccountNote(summary.hold_note));
+  setText("problem-note", compactAccountNote(summary.problem_note));
+}
+
+function compactAccountNote(value) {
+  if (!value) return "-";
+  return accountNoteLabels[value] || value;
 }
 
 function renderEvents(events) {
@@ -121,6 +133,23 @@ function renderToast(text) {
   toast.hidden = false;
 }
 
+function formatObservedAt(value) {
+  if (!value) return "нет данных о времени";
+  const observed = new Date(value);
+  if (Number.isNaN(observed.getTime())) return value;
+  return observed.toLocaleString("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function renderRefreshMeta(payload, prefix = "Обновлено") {
+  setText("refresh-meta", `${prefix}: ${formatObservedAt(payload?.observed_at_utc)}`);
+}
+
 function renderTransportFailure(message, state = "transport_error") {
   setBridgeState(state);
   setText("truth-source", "transport error");
@@ -139,6 +168,7 @@ function renderIntegrationFailure(message) {
   setText("endpoint", "-");
   setText("last-error", message);
   setText("truth-source", "integration-failure");
+  setText("refresh-meta", "Обновление не удалось");
   setBridgeState("bridge_integration_failure");
   renderEvents([{ tone: "red", icon: "!", message: "Overview integration failure", time: "local preview" }]);
   renderToast(message);
@@ -163,6 +193,7 @@ function renderOverview(payload) {
   setText("truth-source", payload.live_mode ? "live snapshot" : "fixture-only");
   setBridgeState(payload.live_mode ? "live_idle" : "fixture");
   renderEvents(payload.events);
+  renderRefreshMeta(payload, payload.live_mode ? "Обновлено из backend" : "Фикстура");
   renderToast(payload.notice || "");
 }
 
@@ -372,6 +403,7 @@ async function runSimulatedBridgeAction(action) {
 
 async function runTransportBridgeAction(action) {
   setBridgeState("bridge_pending");
+  setText("refresh-meta", "Обновляем данные...");
   const params = new URLSearchParams(window.location.search);
   const endpoint = getConfiguredTransportEndpoint(params);
   if (!endpoint.ok) {
@@ -401,7 +433,9 @@ async function runTransportBridgeAction(action) {
 }
 
 async function loadLiveSnapshot(source) {
-  const response = await fetch(source, { cache: "no-store" });
+  const resolved = new URL(source, window.location.href);
+  resolved.searchParams.set("_", String(Date.now()));
+  const response = await fetch(resolved.toString(), { cache: "no-store" });
   if (!response.ok) throw new Error(`live snapshot load failed: ${source}`);
   return response.json();
 }

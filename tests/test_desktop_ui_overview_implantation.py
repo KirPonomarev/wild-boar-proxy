@@ -86,6 +86,23 @@ class DesktopUiOverviewImplantationTests(unittest.TestCase):
         self.assertNotIn("healthcheck --json", overview)
         self.assertNotIn("mode set", overview)
 
+    def test_refresh_feedback_is_visible(self) -> None:
+        index = (DESKTOP_UI / "index.html").read_text(encoding="utf-8")
+        overview = OVERVIEW_JS.read_text(encoding="utf-8")
+
+        self.assertIn('data-field="refresh-meta"', index)
+        self.assertIn("Обновляем данные", overview)
+        self.assertIn("Обновлено из backend", overview)
+        self.assertIn("observed_at_utc", overview)
+        self.assertIn('searchParams.set("_"', overview)
+
+    def test_account_notes_are_compacted_for_kpi_cards(self) -> None:
+        overview = OVERVIEW_JS.read_text(encoding="utf-8")
+
+        self.assertIn("compactAccountNote", overview)
+        self.assertIn("пул; не proof", overview)
+        self.assertIn("down/degraded", overview)
+
     def test_simulated_lifecycle_is_labeled_as_fallback(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")
 
