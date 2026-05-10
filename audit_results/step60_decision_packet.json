@@ -1,0 +1,58 @@
+{
+  "status": "stop",
+  "machine_error_code": "STABLE_POLICY_DRIFT",
+  "contour_id": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+  "contour_result": "NO_GO_RUNTIME_REGRESSION",
+  "primary_verdict": "ROTATION_EVIDENCE_CLEARED_BUT_TOP_LEVEL_RUNTIME_TRUTH_REGRESSED",
+  "why_now": [
+    "`sync --json` returned a strict JSON owner packet with `machine_error_code=OK`",
+    "postflight rotation evidence moved from stale to available/fresh",
+    "postflight status showed `effective_mode=managed`",
+    "postflight status showed `claim_gate.status=blocked`",
+    "postflight status showed `policy_drift.status=detected`",
+    "postflight status showed `stable_runtime_consumer.consumer_activation_readiness=STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING`"
+  ],
+  "before_after": {
+    "rotation_machine_error_code": {
+      "before": "ROTATION_EVIDENCE_STALE",
+      "after": "OK"
+    },
+    "rotation_evidence_freshness": {
+      "before": "stale",
+      "after": "fresh"
+    },
+    "effective_mode": {
+      "before": "stable",
+      "after": "managed"
+    },
+    "claim_gate_status": {
+      "before": "clear",
+      "after": "blocked"
+    },
+    "policy_drift_status": {
+      "before": "clear",
+      "after": "detected"
+    },
+    "consumer_activation_readiness": {
+      "before": "OK",
+      "after": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING"
+    }
+  },
+  "mutation_executed": true,
+  "admitted_owner_surface": "sync --json",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-proxy.pid"
+  ],
+  "next_contour": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+  "downstream_blocked": [
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}
