@@ -94,6 +94,14 @@ class DesktopUiOverviewImplantationTests(unittest.TestCase):
         self.assertIn("Обновляем данные", overview)
         self.assertIn("Обновлено из backend", overview)
         self.assertIn("observed_at_utc", overview)
+        self.assertIn('searchParams.set("_"', overview)
+
+    def test_account_notes_are_compacted_for_kpi_cards(self) -> None:
+        overview = OVERVIEW_JS.read_text(encoding="utf-8")
+
+        self.assertIn("compactAccountNote", overview)
+        self.assertIn("пул; не proof", overview)
+        self.assertIn("down/degraded", overview)
 
     def test_simulated_lifecycle_is_labeled_as_fallback(self) -> None:
         overview = OVERVIEW_JS.read_text(encoding="utf-8")

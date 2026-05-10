@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
 import threading
 import unittest
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any, Mapping
 from urllib.parse import parse_qs, urlsplit
 
@@ -124,8 +122,6 @@ class DesktopUiAppLauncherTests(unittest.TestCase):
 
         def snapshot_writer(path: Path) -> dict[str, Any]:
             snapshot_calls.append(path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({"source": "test"}), encoding="utf-8")
             return {"status": "ok"}
 
         packet = launch_app(
@@ -146,8 +142,6 @@ class DesktopUiAppLauncherTests(unittest.TestCase):
         opened: list[str] = []
 
         def snapshot_writer(path: Path) -> dict[str, Any]:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("{}", encoding="utf-8")
             return {"status": "ok"}
 
         default_packet = launch_app(

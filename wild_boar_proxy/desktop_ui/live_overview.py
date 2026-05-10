@@ -187,7 +187,7 @@ def _base_packet(result: AdapterResult) -> dict[str, Any]:
         "exit_code": raw.get("exit_code", 1),
         "human_message": raw.get("human_message") or result.error_message or "Command did not return usable data.",
         "machine_error_code": raw.get("machine_error_code") or result.error_code,
-        "changed_files": raw.get("changed_files", []),
+        "changed_files": [],
         "next_action": raw.get("next_action", "stop"),
         "liveness": raw.get("liveness", "unknown"),
         "severity": raw.get("severity", "recoverable"),

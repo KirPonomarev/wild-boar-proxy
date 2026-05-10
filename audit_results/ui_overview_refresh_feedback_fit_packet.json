@@ -8,26 +8,37 @@
   "goal": "Make Overview refresh visibly update and keep first-screen data visible at 100% monitor scale.",
   "write_surfaces": [
     "wild_boar_proxy/desktop_ui/index.html",
+    "wild_boar_proxy/desktop_ui/live_overview.py",
     "wild_boar_proxy/desktop_ui/screens/overview.js",
     "wild_boar_proxy/desktop_ui/styles/overview.css",
+    "tests/test_desktop_ui_app_launcher.py",
     "tests/test_desktop_ui_overview_implantation.py",
+    "tests/test_desktop_ui_overview_live_binding.py",
     "tests/test_desktop_ui_static.py",
     "audit_results/ui_overview_refresh_feedback_fit_packet.json",
     "audit_results/ui_overview_refresh_feedback_fit_closeout.md",
-    "audit_results/ui_overview_refresh_feedback_fit_screenshot.png"
+    "audit_results/ui_overview_refresh_feedback_fit_screenshot.png",
+    "audit_results/ui_overview_refresh_feedback_fit_hotfix_screenshot.png"
   ],
   "changes": {
     "refresh_feedback": [
       "added visible refresh-meta field",
       "shows updating state before transport request",
-      "renders observed_at_utc from live snapshot after refresh"
+      "renders observed_at_utc from live snapshot after refresh",
+      "live snapshot fetch uses cache-busting so refreshed data is not served from a stale browser cache"
     ],
     "viewport_fit": [
       "desktop root uses 100vw and 100vh",
       "window size is constrained by viewport",
       "cards and gaps use responsive clamp values",
       "small-height layout compacts brand and navigation",
-      "narrow layout allows main vertical scrolling instead of clipping"
+      "narrow layout allows main vertical scrolling instead of clipping",
+      "KPI cards use explicit text/metric grid grouping"
+    ],
+    "truth_boundary_hotfix": [
+      "live overview packet no longer publishes internal changed_files paths",
+      "launcher tests no longer mutate the real live snapshot file",
+      "known backend account notes are compacted for KPI display without changing packet truth"
     ]
   },
   "runtime_truth_changes": false,
@@ -40,7 +51,7 @@
     {
       "command": "python3 -m unittest tests.test_desktop_ui_app_launcher tests.test_desktop_ui_command_adapter tests.test_desktop_ui_overview_actions tests.test_desktop_ui_overview_bridge tests.test_desktop_ui_overview_implantation tests.test_desktop_ui_overview_live_binding tests.test_desktop_ui_overview_transport tests.test_desktop_ui_static",
       "result": "passed",
-      "tests_ran": 76
+      "tests_ran": 78
     },
     {
       "command": "python3 -m json.tool audit_results/ui_overview_refresh_feedback_fit_packet.json",
@@ -58,6 +69,17 @@
       "observed": [
         "refresh-meta present",
         "show-all affordance present"
+      ]
+    },
+    {
+      "command": "Codex in-app preview screenshot after hotfix and launcher restart",
+      "result": "passed",
+      "screenshot": "audit_results/ui_overview_refresh_feedback_fit_hotfix_screenshot.png",
+      "observed": [
+        "active_count 24 visible",
+        "problem_count 16 visible",
+        "compact KPI notes visible",
+        "backend timestamp visible"
       ]
     }
   ],

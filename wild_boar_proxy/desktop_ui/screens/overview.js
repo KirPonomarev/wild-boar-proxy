@@ -45,6 +45,13 @@ const modeLabels = {
   stable: "Стабильный"
 };
 
+const accountNoteLabels = {
+  "active routing inventory, not scale proof": "пул; не proof",
+  "reserve pool count": "резерв",
+  "manual hold or hold pool": "hold",
+  "degraded/down accounts": "down/degraded"
+};
+
 const $ = (selector) => document.querySelector(selector);
 
 function setText(selector, value) {
@@ -90,10 +97,15 @@ function renderCounts(accountsPacket) {
   setText("reserve-count", summary.reserve_count ?? 0);
   setText("hold-count", summary.hold_count ?? 0);
   setText("problem-count", summary.problem_count ?? 0);
-  setText("active-note", summary.active_note || "-");
-  setText("reserve-note", summary.reserve_note || "-");
-  setText("hold-note", summary.hold_note || "-");
-  setText("problem-note", summary.problem_note || "-");
+  setText("active-note", compactAccountNote(summary.active_note));
+  setText("reserve-note", compactAccountNote(summary.reserve_note));
+  setText("hold-note", compactAccountNote(summary.hold_note));
+  setText("problem-note", compactAccountNote(summary.problem_note));
+}
+
+function compactAccountNote(value) {
+  if (!value) return "-";
+  return accountNoteLabels[value] || value;
 }
 
 function renderEvents(events) {
@@ -421,7 +433,9 @@ async function runTransportBridgeAction(action) {
 }
 
 async function loadLiveSnapshot(source) {
-  const response = await fetch(source, { cache: "no-store" });
+  const resolved = new URL(source, window.location.href);
+  resolved.searchParams.set("_", String(Date.now()));
+  const response = await fetch(resolved.toString(), { cache: "no-store" });
   if (!response.ok) throw new Error(`live snapshot load failed: ${source}`);
   return response.json();
 }
