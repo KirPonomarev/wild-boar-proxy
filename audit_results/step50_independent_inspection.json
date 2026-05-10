@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "inspector": "Noether",
+  "findings": {
+    "foreign_lock_still_active_rule": "If a foreign lock holder remains active, close as evidence-only STOP_AND_DIAGNOSE.",
+    "lock_clear_rule": "If the lock clears and a clean owner snapshot is captured, that is sufficient to close the attribution contour as complete.",
+    "guardrails": [
+      "A clean reread proves only current read-surface truth.",
+      "A clean reread does not itself authorize a new write contour.",
+      "rollout posture inspect is read-only and does not prove stage-advance permission by itself.",
+      "status and healthcheck remain separate gates."
+    ]
+  },
+  "orchestrator_adjudication": {
+    "accepted": true,
+    "notes": [
+      "Inspection accepted.",
+      "Step50 is closed as attribution reclassification only, not as write-lane reopening."
+    ]
+  }
+}

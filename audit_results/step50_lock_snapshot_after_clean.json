@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "lock_file": "/Users/kirillponomarev/.codex-custom-cli/managed/wild-boar-proxy.lock",
+  "lock_exists": false,
+  "holder_pid": null,
+  "holder_alive": false,
+  "holder_command": null
+}

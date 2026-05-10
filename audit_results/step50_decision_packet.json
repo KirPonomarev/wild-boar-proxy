@@ -1,0 +1,25 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "CONCURRENT_MUTATION_LOCK_ISOLATION_AND_OWNER_TRUTH_RECLEAR",
+  "contour_result": "GO_CLEAN_OWNER_TRUTH_RECLASSIFICATION_COMPLETE",
+  "primary_verdict": "CLEAN_ATTRIBUTION_RESTORED",
+  "goal_achieved": true,
+  "foreign_lock_confounder_cleared": true,
+  "clean_owner_snapshot_complete": true,
+  "clean_snapshot_primary_observations": [
+    "status --json returned managed mode with claim_gate=blocked and policy_drift=detected",
+    "healthcheck --json returned OK in managed mode",
+    "accounts list --json showed zero visible reserve backends in reserve pool",
+    "rollout rotation inspect --json returned OK",
+    "rollout posture inspect 20 --json returned LOCK_HELD despite no external lock file holder"
+  ],
+  "write_contour_reopened": false,
+  "next_contour": "PRIMARY_BLOCKER_RECLASSIFICATION_FROM_CLEAN_OWNER_SNAPSHOT",
+  "downstream_blocked": [
+    "ELIGIBLE_RESERVE_POOL_READINESS_RECOVERY",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}

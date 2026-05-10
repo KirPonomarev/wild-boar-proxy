@@ -1,0 +1,46 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "CONCURRENT_MUTATION_LOCK_ISOLATION_AND_OWNER_TRUTH_RECLEAR",
+  "lock_packets": {
+    "pre_read": "step50_lock_snapshot.json",
+    "post_read": "step50_lock_snapshot_postread.json",
+    "after_clean": "step50_lock_snapshot_after_clean.json"
+  },
+  "initial_snapshot_set": {
+    "status": "step50_status_packet.json",
+    "healthcheck": "step50_healthcheck_packet.json",
+    "accounts": "step50_accounts_packet.json",
+    "rotation": "step50_rotation_packet.json",
+    "posture": "step50_posture_packet.json"
+  },
+  "clean_snapshot_set": {
+    "status": "step50_status_clean.json",
+    "healthcheck": "step50_healthcheck_clean.json",
+    "accounts": "step50_accounts_clean.json",
+    "rotation": "step50_rotation_clean.json",
+    "posture": "step50_posture_clean.json"
+  },
+  "clean_snapshot_summary": {
+    "status": {
+      "machine_error_code": "OK",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected"
+    },
+    "healthcheck": {
+      "machine_error_code": "OK",
+      "effective_mode": "managed"
+    },
+    "accounts": {
+      "machine_error_code": "OK",
+      "reserve_backends_visible": 0
+    },
+    "rotation": {
+      "machine_error_code": "OK"
+    },
+    "posture": {
+      "machine_error_code": "LOCK_HELD"
+    }
+  }
+}
