@@ -1,0 +1,54 @@
+{
+  "contour_id": "MULTI_LANE_RUNTIME_RECLEAR_SPLIT_ADMISSION",
+  "lanes": [
+    {
+      "lane_id": "A",
+      "lane_name": "stable_runtime_consumer_activation",
+      "owner_surfaces": [
+        "launch smoke --json",
+        "healthcheck --json"
+      ],
+      "status": "LIVE_WRITE_CONTOUR_REQUIRED",
+      "blocking_fields": [
+        "stable_runtime_consumer.consumer_activation_readiness",
+        "stable_runtime_consumer.effective_stable_runtime_consumer_source",
+        "stable_runtime_consumer.activation_evidence_surface"
+      ],
+      "primary_next_owner_surface": "launch smoke --json"
+    },
+    {
+      "lane_id": "B",
+      "lane_name": "selected_backend_snapshot_rotation_evidence",
+      "owner_surfaces": [
+        "sync --json",
+        "rollout rotation inspect --json"
+      ],
+      "status": "GREEN_NO_WRITE",
+      "blocking_fields": [],
+      "primary_next_owner_surface": "none"
+    },
+    {
+      "lane_id": "C",
+      "lane_name": "top_level_status_claim_gate_policy_drift",
+      "owner_surfaces": [
+        "status --json"
+      ],
+      "status": "DERIVED_BLOCKED_BY_UPSTREAM_LANE",
+      "blocking_fields": [
+        "claim_gate",
+        "policy_drift"
+      ],
+      "primary_next_owner_surface": "none",
+      "derived_from": [
+        "A"
+      ]
+    }
+  ],
+  "downstream_blocked": [
+    "RESERVE_FIRST_POSTURE_NORMALIZATION",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ],
+  "no_merge_rule": "NO_CROSS_LANE_MUTATION_WITHOUT_NEW_CONTOUR"
+}

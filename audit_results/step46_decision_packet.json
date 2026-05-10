@@ -1,0 +1,22 @@
+{
+  "contour_id": "MULTI_LANE_RUNTIME_RECLEAR_SPLIT_ADMISSION",
+  "status": "closed_successfully",
+  "machine_error_code": "OK",
+  "lane_a_status": "LIVE_WRITE_CONTOUR_REQUIRED",
+  "lane_b_status": "GREEN_NO_WRITE",
+  "lane_c_status": "DERIVED_BLOCKED_BY_UPSTREAM_LANE",
+  "next_live_contour": {
+    "id": "STABLE_RUNTIME_CONSUMER_ACTIVATION_LANE_RECLEAR",
+    "class": "LIVE_PROOF",
+    "primary_lane": "A",
+    "primary_owner_surface": "launch smoke --json",
+    "reason": "Lane A is the only non-green direct mutation lane; Lane B is already OK/fresh and Lane C is derived from unresolved Lane A."
+  },
+  "downstream_blocked": [
+    "RESERVE_FIRST_POSTURE_NORMALIZATION",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ],
+  "no_merge_rule": "NO_CROSS_LANE_MUTATION_WITHOUT_NEW_CONTOUR"
+}

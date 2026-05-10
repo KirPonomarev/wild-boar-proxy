@@ -1,0 +1,22 @@
+{
+  "inspector": {
+    "agent_nickname": "Huygens",
+    "agent_id": "019e1385-a1fa-75e1-9c26-ce50d1209012"
+  },
+  "inspection_status": "rejected_stale_basis",
+  "reason": "The inspector based its output on stale `step42` artifacts and reported a current Lane B blocker that contradicts fresh `step46` owner packets.",
+  "fresh_packet_conflict": {
+    "step46_rotation_machine_error_code": "OK",
+    "step46_rotation_participation_status": "available",
+    "step46_rotation_evidence_freshness": "fresh",
+    "step46_rotation_policy_drift_status": "clear"
+  },
+  "accepted_portions": [
+    "Lane C is derived rather than a direct mutation lane."
+  ],
+  "rejected_portions": [
+    "Lane B is currently blocked.",
+    "No next live contour is selectable."
+  ],
+  "final_audit_position": "Main rollout classification outranks the stale inspector output because it is grounded in fresh step46 packets plus current repo semantics."
+}
