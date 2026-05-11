@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c4_ui_binding_spec",
+  "date": "2026-05-12",
+  "provenance": {
+    "source": "isolated_real_command_outputs",
+    "derived_from_contours": ["C1", "C2", "C3"],
+    "execution_mode": "isolated_WBP_paths_with_loopback_mock_providers",
+    "redactions_applied": [
+      "timestamps replaced with <UTC_TIMESTAMP>",
+      "temp paths replaced with <TMP_EXTERNAL_MODELS_DIR>",
+      "loopback base URLs replaced with <LOOPBACK_BASE_URL_OK> or <LOOPBACK_BASE_URL_AUTH_FAIL>",
+      "evidence paths replaced with <EVIDENCE_PATH_*>"
+    ]
+  },
+  "fixtures": {
+    "status_stopped": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "foundation_phase": "C3",
+        "adapter_runtime_available": false,
+        "lifecycle_mode": "synthetic",
+        "adapter_state": "stopped",
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "routes_count": 0,
+        "observed_routes_count": 0,
+        "paths": {
+          "routes_file": "<TMP_EXTERNAL_MODELS_DIR>/routes.json",
+          "state_file": "<TMP_EXTERNAL_MODELS_DIR>/state.json",
+          "secrets_file": "<TMP_EXTERNAL_MODELS_DIR>/secrets.env",
+          "evidence_dir": "<TMP_EXTERNAL_MODELS_DIR>/evidence"
+        },
+        "adapter": {
+          "base_url": null,
+          "host": "127.0.0.1",
+          "last_transition": "init",
+          "lifecycle_mode": "synthetic",
+          "listener_proven": false,
+          "port": null,
+          "runtime_claim_blocked": true,
+          "started_at_utc": null,
+          "state": "stopped"
+        },
+        "local_auth": {
+          "token_ref": "managed_local_token",
+          "token_present": false,
+          "token_created_at_utc": null
+        }
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "routes_list": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models routes listed from local registry.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "count": 3,
+        "routes": [
+          {
+            "schema_version": 1,
+            "route_id": "wbp-deepseek-v3",
+            "display_name": "DeepSeek V3",
+            "provider": "openrouter",
+            "base_url": "<LOOPBACK_BASE_URL_OK>",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek/deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+            "cost_class": "paid_or_free_limited",
+            "lane_role": "candidate",
+            "fallback_eligible": false,
+            "enabled": true
+          }
+        ]
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "models": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models route models listed from local registry.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "count": 3,
+        "source": "local_routes_registry",
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "models": [
+          {
+            "route_id": "wbp-deepseek-v3",
+            "display_name": "DeepSeek V3",
+            "provider": "openrouter",
+            "base_url": "<LOOPBACK_BASE_URL_OK>",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "deepseek/deepseek-chat",
+            "compatibility": "openai_chat_completions",
+            "cost_class": "paid_or_free_limited",
+            "enabled": true,
+            "lane_role": "candidate",
+            "fallback_eligible": false,
+            "synthetic_adapter_state": "stopped",
+            "profile_ready": false
+          }
+        ]
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "profile": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Codex Desktop profile contract generated without mutating config.",
+      "machine_error_code": "OK",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "profile_kind": "codex_desktop_openai_compatible",
+        "route_id": "wbp-deepseek-v3",
+        "base_url": null,
+        "model": "wbp-deepseek-v3",
+        "api_key_source": "managed_local_token",
+        "writes_external_config": false,
+        "profile_ready": false,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "synthetic_endpoint_contract": true,
+        "prerequisite": "live_listener_contour_required"
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "evidence_capture": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Local external-models evidence captured from foundation contract.",
+      "machine_error_code": "OK",
+      "changed_files": ["<EVIDENCE_PATH_LOCAL_CAPTURE>"],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "route_id": "wbp-deepseek-v3",
+        "network_dependent_evidence": false,
+        "evidence_path": "<EVIDENCE_PATH_LOCAL_CAPTURE>"
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "validate_success": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models route validation captured provider evidence without claiming runtime readiness.",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "<TMP_EXTERNAL_MODELS_DIR>/state.json",
+        "<EVIDENCE_PATH_VALIDATE_SUCCESS>"
+      ],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "validation_kind": "provider_route_validate",
+        "network_dependent": true,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "verification_scope": "route_provider_only",
+        "route_state": "model_visible",
+        "requested_model": "wbp-deepseek-v3",
+        "effective_model": "deepseek/deepseek-chat",
+        "provider": "openrouter",
+        "evidence_path": "<EVIDENCE_PATH_VALIDATE_SUCCESS>",
+        "available_models_count": 1,
+        "latency_ms": 6
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "validate_auth_failure": {
+      "status": "error",
+      "exit_code": 1,
+      "human_message": "Provider rejected route credentials.",
+      "machine_error_code": "provider_auth_failed",
+      "changed_files": ["<TMP_EXTERNAL_MODELS_DIR>/state.json"],
+      "next_action": "user_action",
+      "liveness": "unknown",
+      "severity": "fatal",
+      "operator_action": "user_action",
+      "data": {
+        "validation_kind": "provider_route_validate",
+        "network_dependent": true,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "verification_scope": "route_provider_only",
+        "route_state": "provider_auth_failed",
+        "requested_model": "wbp-auth-fail",
+        "provider": "openrouter"
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "check_success": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "External-models route smoke check captured provider evidence without claiming runtime readiness.",
+      "machine_error_code": "OK",
+      "changed_files": [
+        "<TMP_EXTERNAL_MODELS_DIR>/state.json",
+        "<EVIDENCE_PATH_CHECK_SUCCESS>"
+      ],
+      "next_action": "none",
+      "liveness": "not_applicable",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "data": {
+        "check_kind": "provider_route_smoke",
+        "network_dependent": true,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "verification_scope": "route_provider_only",
+        "route_state": "verified",
+        "requested_model": "wbp-deepseek-v3",
+        "effective_model": "deepseek/deepseek-chat",
+        "provider": "openrouter",
+        "fallback_used": false,
+        "fallback_chain": ["wbp-deepseek-v3"],
+        "evidence_path": "<EVIDENCE_PATH_CHECK_SUCCESS>",
+        "latency_ms": 5,
+        "request_count": 1
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    },
+    "check_paid_blocked": {
+      "status": "error",
+      "exit_code": 1,
+      "human_message": "Paid route smoke check is blocked by policy.",
+      "machine_error_code": "paid_route_blocked",
+      "changed_files": ["<TMP_EXTERNAL_MODELS_DIR>/state.json"],
+      "next_action": "user_action",
+      "liveness": "unknown",
+      "severity": "fatal",
+      "operator_action": "user_action",
+      "data": {
+        "check_kind": "provider_route_smoke",
+        "network_dependent": true,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "verification_scope": "route_provider_only",
+        "route_state": "blocked",
+        "requested_model": "wbp-paid",
+        "provider": "openrouter",
+        "fallback_used": false,
+        "fallback_chain": ["wbp-paid"]
+      },
+      "timestamp_utc": "<UTC_TIMESTAMP>"
+    }
+  }
+}

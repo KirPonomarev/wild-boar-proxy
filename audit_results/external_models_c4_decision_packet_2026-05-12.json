@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c4_ui_binding_spec",
+  "date": "2026-05-12",
+  "branch": "codex/external-agent-lab-isolated",
+  "mode": "implementation-spec",
+  "scope": {
+    "in": [
+      "UI binding spec for existing external-models packets",
+      "real-output-derived fixture packets",
+      "action matrix and refresh rules",
+      "failure rendering rules"
+    ],
+    "out": [
+      "UI code",
+      "design polish",
+      "new commands",
+      "command-semantic changes",
+      "runtime truth changes",
+      "installer or packaging work"
+    ]
+  },
+  "guardrails": {
+    "status_surface": "synthetic_only",
+    "provider_surface": "route_provider_only",
+    "verified_means": "provider_compatibility_evidence_only",
+    "no_auto_validate_on_page_load": true,
+    "no_background_validate_polling_v1": true,
+    "no_state_log_parsing_as_truth": true
+  },
+  "artifacts": [
+    "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md",
+    "audit_results/external_models_c4_fixture_packets_2026-05-12.json",
+    "audit_results/external_models_c4_contour_2026-05-12.md",
+    "audit_results/external_models_c4_independent_audit_2026-05-12.json",
+    "audit_results/external_models_c4_closeout_2026-05-12.md"
+  ],
+  "verification_plan": {
+    "tests": [
+      "python3 -m unittest -q tests.test_external_models",
+      "python3 -m unittest -q tests.test_cli_external_models",
+      "python3 -m unittest -q tests.test_external_agent_lab"
+    ],
+    "build": "python3 -m compileall -q wild_boar_proxy tests",
+    "manual": [
+      "collect real isolated command outputs",
+      "verify fixture provenance and redactions",
+      "scope-check that no UI code is touched"
+    ]
+  }
+}

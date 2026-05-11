@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c4_ui_binding_spec",
+  "date": "2026-05-12",
+  "auditor": "Kierkegaard",
+  "mode": "read_only_independent_audit",
+  "findings": [
+    {
+      "severity": "info",
+      "topic": "ui_implementation_scope",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:1",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:24",
+        "audit_results/external_models_c4_contour_2026-05-12.md:1"
+      ],
+      "note": "C4 remains a spec/readiness contour and does not introduce UI implementation."
+    },
+    {
+      "severity": "info",
+      "topic": "truth_boundary",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:59",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:173",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:213"
+      ],
+      "note": "The spec preserves the distinction between synthetic status truth and route-provider-only validate/check truth."
+    },
+    {
+      "severity": "info",
+      "topic": "fixture_provenance",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "audit_results/external_models_c4_fixture_packets_2026-05-12.json:1",
+        "audit_results/external_models_c4_fixture_packets_2026-05-12.json:4"
+      ],
+      "note": "Fixture packets document provenance from isolated real command outputs and apply redactions instead of inventing new fields."
+    },
+    {
+      "severity": "info",
+      "topic": "forbidden_truth_shortcuts",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:34",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:283",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:398"
+      ],
+      "note": "The spec does not authorize state/log parsing as truth and forbids auto-validation or background polling in UI v1."
+    },
+    {
+      "severity": "info",
+      "topic": "design_gate",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:13",
+        "EXTERNAL_MODELS_C4_UI_BINDING_SPEC.md:466"
+      ],
+      "note": "C4 explicitly keeps the design gate unearned and does not grant UI implementation permission."
+    },
+    {
+      "severity": "resolved_note",
+      "topic": "artifact_traceability",
+      "status": "resolved_in_closeout",
+      "evidence": [
+        "audit_results/external_models_c4_decision_packet_2026-05-12.json:31",
+        "audit_results/external_models_c4_closeout_2026-05-12.md:29",
+        "audit_results/external_models_c4_independent_audit_2026-05-12.json:1"
+      ],
+      "note": "The initial audit observed that the independent-audit artifact was referenced before being present in the tree; this file resolves that traceability gap."
+    }
+  ]
+}
