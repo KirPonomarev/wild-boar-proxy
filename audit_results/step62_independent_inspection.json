@@ -1,0 +1,21 @@
+{
+  "status": "completed",
+  "inspector": "Lorentz",
+  "source_agent_id": "019e15c3-6fba-74c1-b8ee-79d1fcc1ea21",
+  "raw_verdict": "truthfully_converged_within_declared_bounds",
+  "accepted_findings": [
+    "`sync --json` returned OK and reported the expected managed write surfaces.",
+    "`launch smoke --json` returned OK and the final postflight converged to stable runtime truth plus fresh rotation evidence.",
+    "The downstream posture observation remained `LIVE_POSTURE_DRIFT_ONLY` and is a separate next contour, not a failure of the composite proof.",
+    "No undeclared mutation surface is visible in the emitted owner packets; targeted tests passed 6/6 OK."
+  ],
+  "narrowed_or_rejected_findings": [
+    "Rejected the inspector's phrasing that preflight status was green. Top-level `machine_error_code=OK` was true, but nested runtime truth was not green at preflight: `effective_mode=managed`, `claim_gate.status=blocked`, `policy_drift.status=detected`, `consumer_activation_readiness=STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING`.",
+    "Rejected the inspector's claim that midflight rotation remained stale after `sync`. The saved midflight packet is `machine_error_code=OK`, `evidence_freshness=fresh`, `participation_status=available`."
+  ],
+  "residual_risks": [
+    "Posture lane is still blocked by `LIVE_POSTURE_DRIFT_ONLY` and remains the next lawful contour.",
+    "This inspection can verify packet-level declared bounds and emitted changed-file surfaces, not every possible off-packet filesystem side effect."
+  ],
+  "final_verdict": "accepted_with_narrowing"
+}

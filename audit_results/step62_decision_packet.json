@@ -1,0 +1,54 @@
+{
+  "contour_id": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "step": "step62",
+  "contour_result": "GO_RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "primary_verdict": "COMPOSITE_SEQUENCE_CONVERGED_TO_SIMULTANEOUS_GREEN",
+  "sequence_verdict": {
+    "preflight": {
+      "status_machine_error_code": "OK",
+      "effective_mode": "managed",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+      "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+      "rotation_evidence_freshness": "stale"
+    },
+    "sync_live_packet": {
+      "machine_error_code": "OK"
+    },
+    "midflight_rotation": {
+      "machine_error_code": "OK",
+      "evidence_freshness": "fresh",
+      "participation_status": "available",
+      "selected_backend_snapshot_validation_status": "valid"
+    },
+    "launch_smoke_live_packet": {
+      "machine_error_code": "OK"
+    },
+    "postflight": {
+      "status_machine_error_code": "OK",
+      "effective_mode": "stable",
+      "claim_gate_status": "clear",
+      "policy_drift_status": "clear",
+      "consumer_activation_readiness": "OK",
+      "desired_stable_runtime_source": "approved_repair_target",
+      "effective_stable_runtime_source": "approved_repair_target",
+      "rotation_machine_error_code": "OK",
+      "rotation_evidence_freshness": "fresh",
+      "rotation_participation_status": "available"
+    }
+  },
+  "downstream_observation": {
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY"
+  },
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 6,
+    "result": "OK"
+  },
+  "independent_inspection": {
+    "status": "accepted_with_narrowing",
+    "narrowing_required": true
+  },
+  "next_contour": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR"
+}
