@@ -5,33 +5,122 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def sample_route(route_id: str = "wbp-deepseek-v3") -> dict[str, object]:
+def sample_route(
+    route_id: str = "wbp-deepseek-v3",
+    *,
+    base_url: str = "https://openrouter.ai/api/v1",
+    upstream_model: str = "deepseek/deepseek-chat",
+    cost_class: str = "paid_or_free_limited",
+) -> dict[str, object]:
     return {
         "schema_version": 1,
         "route_id": route_id,
         "display_name": "DeepSeek V3",
         "provider": "openrouter",
-        "base_url": "https://openrouter.ai/api/v1",
+        "base_url": base_url,
         "endpoint_path": "/chat/completions",
-        "upstream_model": "deepseek/deepseek-chat",
+        "upstream_model": upstream_model,
         "compatibility": "openai_chat_completions",
         "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
-        "cost_class": "paid_or_free_limited",
+        "cost_class": cost_class,
         "lane_role": "candidate",
         "fallback_eligible": False,
         "enabled": True,
     }
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+        handle.bind(("127.0.0.1", 0))
+        return int(handle.getsockname()[1])
+
+
+@contextmanager
+def mocked_provider(
+    *,
+    expected_token: str = "test-key",
+    models: list[str] | None = None,
+    malformed_models: bool = False,
+    malformed_smoke: bool = False,
+) -> tuple[str, ThreadingHTTPServer]:
+    class Handler(BaseHTTPRequestHandler):
+        def _send_json(self, status_code: int, payload: dict[str, object]) -> None:
+            raw = json.dumps(payload).encode("utf-8")
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _authorized(self) -> bool:
+            return self.headers.get("Authorization") == f"Bearer {expected_token}"
+
+        def do_GET(self) -> None:  # noqa: N802
+            self.server.request_count += 1
+            if self.path != "/v1/models":
+                self._send_json(404, {"error": "not_found"})
+                return
+            if not self._authorized():
+                self._send_json(401, {"error": "auth_failed"})
+                return
+            if malformed_models:
+                self._send_json(200, {"unexpected": True})
+                return
+            self._send_json(
+                200,
+                {"data": [{"id": model_id} for model_id in (models or ["deepseek/deepseek-chat"])]},
+            )
+
+        def do_POST(self) -> None:  # noqa: N802
+            self.server.request_count += 1
+            if self.path != "/v1/chat/completions":
+                self._send_json(404, {"error": "not_found"})
+                return
+            if not self._authorized():
+                self._send_json(401, {"error": "auth_failed"})
+                return
+            if malformed_smoke:
+                self._send_json(200, {"unexpected": True})
+                return
+            self._send_json(
+                200,
+                {
+                    "id": "chatcmpl-test",
+                    "choices": [
+                        {"index": 0, "message": {"role": "assistant", "content": "pong"}}
+                    ],
+                },
+            )
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+            return
+
+    port = _free_port()
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server.request_count = 0  # type: ignore[attr-defined]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (f"http://127.0.0.1:{port}/v1", server)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 class ExternalModelsCliTests(unittest.TestCase):
@@ -83,6 +172,8 @@ class ExternalModelsCliTests(unittest.TestCase):
         env["WBP_STATE_FILE"] = str(self.managed_dir / "supervisor-state.json")
         env["WBP_MANAGED_CONFIG_FILE"] = str(self.managed_dir / "managed-config.yaml")
         env["WBP_EXTERNAL_MODELS_DIR"] = str(self.external_dir)
+        env["NO_PROXY"] = "*"
+        env["no_proxy"] = "*"
         return env
 
     def run_cli(
@@ -218,6 +309,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertFalse(payload["data"]["writes_external_config"])
         self.assertFalse(payload["data"]["profile_ready"])
         self.assertIsNone(payload["data"]["base_url"])
+        self.assertEqual(payload["data"]["prerequisite"], "live_listener_contour_required")
 
     def test_evidence_capture_writes_local_artifact(self) -> None:
         self.run_cli(
@@ -247,7 +339,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         result = self.run_cli("external-models", "status", "--json")
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["data"]["foundation_phase"], "C2")
+        self.assertEqual(payload["data"]["foundation_phase"], "C3")
         self.assertEqual(payload["data"]["adapter_state"], "stopped")
         self.assertFalse(payload["data"]["listener_proven"])
         self.assertTrue(payload["data"]["runtime_claim_blocked"])
@@ -371,8 +463,199 @@ class ExternalModelsCliTests(unittest.TestCase):
             stat.S_IMODE((self.external_dir / "secrets.env").stat().st_mode), 0o644
         )
 
+    def test_route_validate_success_writes_network_evidence_and_state(self) -> None:
+        with mocked_provider() as (base_url, _server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["validation_kind"], "provider_route_validate")
+        self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
+        self.assertEqual(payload["data"]["route_state"], "model_visible")
+        self.assertFalse(payload["data"]["listener_proven"])
+        self.assertTrue(payload["data"]["runtime_claim_blocked"])
+        self.assertFalse(payload["data"]["profile_ready"])
+        self.assertNotIn("test-key", result.stdout)
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            state_payload["routes"]["wbp-deepseek-v3"]["availability_state"],
+            "model_visible",
+        )
+        evidence_path = Path(payload["data"]["evidence_path"])
+        evidence_payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertTrue(evidence_payload["network_dependent_evidence"])
+        self.assertEqual(evidence_payload["verification_scope"], "route_provider_only")
+
+    def test_route_validate_auth_failure_updates_route_state(self) -> None:
+        with mocked_provider(expected_token="expected-token") as (base_url, _server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "provider_auth_failed")
+        self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
+        self.assertEqual(payload["data"]["route_state"], "provider_auth_failed")
+        self.assertEqual(
+            [str(Path(item).resolve()) for item in payload["changed_files"]],
+            [str((self.external_dir / "state.json").resolve())],
+        )
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            state_payload["routes"]["wbp-deepseek-v3"]["availability_state"],
+            "provider_auth_failed",
+        )
+
+    def test_route_validate_model_unavailable_updates_route_state(self) -> None:
+        with mocked_provider(models=["other/model"]) as (base_url, _server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "model_not_available")
+        self.assertEqual(payload["data"]["route_state"], "model_not_available")
+
+    def test_check_success_writes_verified_state_and_evidence(self) -> None:
+        with mocked_provider() as (base_url, server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["check_kind"], "provider_route_smoke")
+        self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
+        self.assertEqual(payload["data"]["route_state"], "verified")
+        self.assertEqual(payload["data"]["request_count"], 1)
+        self.assertEqual(request_count, 1)
+        self.assertFalse(payload["data"]["listener_proven"])
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            state_payload["routes"]["wbp-deepseek-v3"]["availability_state"], "verified"
+        )
+        self.assertEqual(
+            state_payload["routes"]["wbp-deepseek-v3"]["effective_model"],
+            "deepseek/deepseek-chat",
+        )
+        evidence_payload = json.loads(
+            Path(payload["data"]["evidence_path"]).read_text(encoding="utf-8")
+        )
+        self.assertTrue(evidence_payload["network_dependent_evidence"])
+        self.assertEqual(
+            evidence_payload["result"]["effective_model"], "deepseek/deepseek-chat"
+        )
+
+    def test_check_paid_route_is_blocked_without_provider_call(self) -> None:
+        with mocked_provider() as (base_url, server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(
+                    sample_route(base_url=base_url, route_id="wbp-paid", cost_class="paid_direct")
+                ),
+            )
+            result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                "wbp-paid",
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "paid_route_blocked")
+        self.assertEqual(payload["data"]["route_state"], "blocked")
+        self.assertEqual(request_count, 0)
+
+    def test_check_network_failure_is_route_local_only(self) -> None:
+        route = sample_route(base_url=f"http://127.0.0.1:{_free_port()}/v1")
+        self.run_cli(
+            "external-models",
+            "routes",
+            "add",
+            "--json",
+            "--stdin",
+            stdin_text=json.dumps(route),
+        )
+        result = self.run_cli(
+            "external-models",
+            "check",
+            "--json",
+            "--route",
+            "wbp-deepseek-v3",
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "provider_network_failed")
+        self.assertEqual(payload["data"]["verification_scope"], "route_provider_only")
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            state_payload["routes"]["wbp-deepseek-v3"]["availability_state"],
+            "provider_network_failed",
+        )
+        status_payload = self.parse_payload(self.run_cli("external-models", "status", "--json"))
+        self.assertEqual(status_payload["data"]["adapter_state"], "stopped")
+        self.assertFalse(status_payload["data"]["listener_proven"])
+
 
 class ZeroTestSelectionGuardTests(unittest.TestCase):
     def test_module_contains_real_tests(self) -> None:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(ExternalModelsCliTests)
-        self.assertGreaterEqual(suite.countTestCases(), 6)
+        self.assertGreaterEqual(suite.countTestCases(), 10)

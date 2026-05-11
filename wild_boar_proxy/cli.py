@@ -223,6 +223,9 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_status.add_argument("--json", action="store_true", required=True)
     external_models_models = external_models_subparsers.add_parser("models")
     external_models_models.add_argument("--json", action="store_true", required=True)
+    external_models_check = external_models_subparsers.add_parser("check")
+    external_models_check.add_argument("--route", required=True)
+    external_models_check.add_argument("--json", action="store_true", required=True)
 
     external_models_routes = external_models_subparsers.add_parser("routes")
     external_models_routes_subparsers = external_models_routes.add_subparsers(
@@ -254,6 +257,9 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_routes_disable = external_models_routes_subparsers.add_parser("disable")
     external_models_routes_disable.add_argument("--route", required=True)
     external_models_routes_disable.add_argument("--json", action="store_true", required=True)
+    external_models_routes_validate = external_models_routes_subparsers.add_parser("validate")
+    external_models_routes_validate.add_argument("--route", required=True)
+    external_models_routes_validate.add_argument("--json", action="store_true", required=True)
 
     external_models_profile = external_models_subparsers.add_parser("profile")
     external_models_profile_subparsers = external_models_profile.add_subparsers(

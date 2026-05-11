@@ -131,7 +131,7 @@ def stop_synthetic_adapter(paths: ExternalModelsPaths) -> tuple[dict[str, Any], 
 def synthetic_status_payload(paths: ExternalModelsPaths) -> dict[str, Any]:
     state_payload = load_state_file(paths.state_file)
     return {
-        "foundation_phase": "C2",
+        "foundation_phase": "C3",
         "adapter_runtime_available": False,
         "lifecycle_mode": state_payload["adapter"]["lifecycle_mode"],
         "adapter_state": state_payload["adapter"]["state"],

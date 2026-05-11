@@ -276,7 +276,7 @@ def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
     routes_payload = load_routes_file(paths.routes_file)
     state_payload = load_state_file(paths.state_file)
     return {
-        "foundation_phase": "C2",
+        "foundation_phase": "C3",
         "adapter_runtime_available": False,
         "lifecycle_mode": state_payload["adapter"]["lifecycle_mode"],
         "adapter_state": state_payload["adapter"]["state"],
@@ -321,5 +321,5 @@ def profile_packet(paths: ExternalModelsPaths, route_id: str) -> dict[str, Any]:
         "listener_proven": False,
         "runtime_claim_blocked": True,
         "synthetic_endpoint_contract": True,
-        "prerequisite": "external_models_c3_provider_validation_and_evidence",
+        "prerequisite": "live_listener_contour_required",
     }

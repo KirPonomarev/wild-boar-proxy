@@ -10,6 +10,7 @@ from . import contracts, errors, routes
 from .lifecycle import start_synthetic_adapter, stop_synthetic_adapter, synthetic_status_payload
 from .paths import ExternalModelsPaths
 from .state import capture_local_evidence, ensure_secrets_permissions
+from .validate import check_route_provider, validate_route_provider
 
 
 def run_external_models_command(args: Any) -> dict[str, Any]:
@@ -86,6 +87,15 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                     "runtime_claim_blocked": True,
                 },
             )
+        if args.external_models_command == "check":
+            data, changed_files = check_route_provider(paths, args.route)
+            return contracts.build_external_models_payload(
+                ok=True,
+                human_message="External-models route smoke check captured provider evidence without claiming runtime readiness.",
+                machine_error_code=errors.OK,
+                changed_files=changed_files,
+                data=data,
+            )
         if args.external_models_command == "routes":
             return _run_routes_command(paths, args)
         if args.external_models_command == "profile" and args.profile_command == "codex-desktop":
@@ -123,11 +133,12 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             ok=False,
             human_message=exc.message,
             machine_error_code=exc.machine_error_code,
+            changed_files=getattr(exc, "changed_files", []),
             next_action=exc.operator_action,
             severity=exc.severity,
             liveness="unknown",
             exit_code=exc.exit_code,
-            data={},
+            data=getattr(exc, "data", {}),
         )
 
 
@@ -187,6 +198,15 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
             machine_error_code=errors.OK,
             changed_files=changed_files,
             data={"route_id": args.route, "enabled": False},
+        )
+    if action == "validate":
+        data, changed_files = validate_route_provider(paths, args.route)
+        return contracts.build_external_models_payload(
+            ok=True,
+            human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+            machine_error_code=errors.OK,
+            changed_files=changed_files,
+            data=data,
         )
     raise RuntimeErrorInfo(
         "Unsupported external-models routes command.",

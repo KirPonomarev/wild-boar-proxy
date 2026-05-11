@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c3_provider_validation_and_evidence",
+  "date": "2026-05-12",
+  "branch": "codex/external-agent-lab-isolated",
+  "mode": "implementation",
+  "scope": {
+    "in": [
+      "external-models routes validate --json --route <id>",
+      "external-models check --json --route <id>",
+      "provider auth and network diagnostics",
+      "network-dependent evidence packets",
+      "route-local observed-state transitions"
+    ],
+    "out": [
+      "real local listener",
+      "OpenAI-compatible serving surface",
+      "generic provider routing core",
+      "runtime truth integration",
+      "Codex config mutation",
+      "wild_boar_proxy/runtime.py edits"
+    ]
+  },
+  "guardrails": {
+    "verification_scope": "route_provider_only",
+    "listener_proven": false,
+    "runtime_claim_blocked": true,
+    "profile_ready": false,
+    "status_semantics": "synthetic_lifecycle_only"
+  },
+  "touched_files": [
+    "wild_boar_proxy/cli.py",
+    "wild_boar_proxy/external_models/__init__.py",
+    "wild_boar_proxy/external_models/errors.py",
+    "wild_boar_proxy/external_models/http_client.py",
+    "wild_boar_proxy/external_models/lifecycle.py",
+    "wild_boar_proxy/external_models/routes.py",
+    "wild_boar_proxy/external_models/validate.py",
+    "tests/test_cli_external_models.py"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_external_models",
+        "result": "passed",
+        "count": 8
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli_external_models",
+        "result": "passed",
+        "count": 16
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_external_agent_lab",
+        "result": "passed",
+        "count": 11
+      }
+    ],
+    "build": {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "result": "passed"
+    },
+    "manual_flow": {
+      "kind": "isolated_loopback_provider",
+      "commands": [
+        "external-models routes add --json --stdin",
+        "external-models routes validate --json --route wbp-deepseek-v3",
+        "external-models check --json --route wbp-deepseek-v3"
+      ],
+      "observations": {
+        "validate_route_state": "model_visible",
+        "check_route_state": "verified",
+        "validate_listener_proven": false,
+        "check_listener_proven": false,
+        "validate_runtime_claim_blocked": true,
+        "check_runtime_claim_blocked": true,
+        "validate_profile_ready": false,
+        "check_profile_ready": false,
+        "validate_latency_ms": 5,
+        "check_latency_ms": 6,
+        "check_request_count": 1
+      }
+    }
+  },
+  "known_out_of_scope_dirty_files": [
+    "wild_boar_proxy/runtime.py",
+    "external_agent_lab/legacy/agent_eval.py",
+    "external_agent_lab/legacy/proxy_server.py",
+    "external_agent_lab/legacy/run_lab.py",
+    "external_agent_lab/model_registry_seed.json",
+    "tests/test_external_agent_lab.py"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c3_provider_validation_and_evidence",
+  "date": "2026-05-12",
+  "auditor": "Goodall",
+  "mode": "read_only_independent_audit",
+  "findings": [
+    {
+      "severity": "info",
+      "topic": "engine_duplication",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "wild_boar_proxy/external_models/http_client.py:27",
+        "wild_boar_proxy/external_models/validate.py:176",
+        "wild_boar_proxy/external_models/validate.py:297"
+      ],
+      "note": "The provider helper remains a bounded command-scoped HTTP wrapper and does not start a local server or implement routing/fallback execution."
+    },
+    {
+      "severity": "info",
+      "topic": "runtime_claim_drift",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "wild_boar_proxy/external_models/validate.py:241",
+        "wild_boar_proxy/external_models/validate.py:396"
+      ],
+      "note": "Validate/check packets keep verification_scope route_provider_only and preserve listener_proven=false, runtime_claim_blocked=true, profile_ready=false."
+    },
+    {
+      "severity": "info",
+      "topic": "status_surface",
+      "status": "no_blocking_issue",
+      "evidence": [
+        "wild_boar_proxy/external_models/__init__.py:69",
+        "wild_boar_proxy/external_models/lifecycle.py:131"
+      ],
+      "note": "external-models status remains synthetic lifecycle truth and does not absorb provider validation truth."
+    },
+    {
+      "severity": "note",
+      "topic": "runtime_py_scope",
+      "status": "out_of_scope_dirty_file_present",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:428",
+        "wild_boar_proxy/runtime.py:11521"
+      ],
+      "note": "runtime.py is dirty in the working tree but not required by the C3 implementation and must stay out of staging."
+    },
+    {
+      "severity": "info",
+      "topic": "test_reality",
+      "status": "verified",
+      "evidence": [
+        "tests/test_external_models.py:147",
+        "tests/test_cli_external_models.py:657"
+      ],
+      "note": "External-models test modules have non-zero guards and current runs executed 8 and 16 tests respectively."
+    }
+  ],
+  "inspected_commands": [
+    "git status --short --branch",
+    "git diff --name-only",
+    "git diff --cached --name-only",
+    "git diff -- wild_boar_proxy/external_models wild_boar_proxy/runtime.py tests/test_external_models.py tests/test_cli_external_models.py tests/test_cli.py tests/test_external_agent_lab.py",
+    "python3 -m unittest -q tests.test_external_models",
+    "python3 -m unittest -q tests.test_cli_external_models"
+  ]
+}
