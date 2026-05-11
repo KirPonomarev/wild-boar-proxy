@@ -1,0 +1,54 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "step": "step66",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "contour_result": "STOP_AND_DIAGNOSE_RESERVE_RECOVERY_PATH_UNAVAILABLE",
+  "primary_verdict": "NO_LAWFUL_ONE_SURFACE_RESERVE_RECOVERY_PATH_FROM_FRESH_TRUTH",
+  "mutation_executed": false,
+  "preflight_verdict": {
+    "runtime_truth_green_enough": true,
+    "rotation_truth_green_enough": true,
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0
+  },
+  "reserve_gap_verdict": {
+    "explicit_reserve_candidate_already_present": false,
+    "accounts_onboard_admissible": false,
+    "accounts_demote_admissible": false,
+    "accounts_release_admissible": false
+  },
+  "why_now": [
+    "execution-core truth is green again, so Branch C was read lawfully from fresh live packets",
+    "fresh reserve-gap truth still names no explicit eligible reserve candidate",
+    "all auth JSON files are already registered, so `accounts onboard --json` has no lawful explicit input",
+    "no held backend exists for `accounts release <id> --json`",
+    "no lawful demotion target exists outside the protected working active subset"
+  ],
+  "selected_next_contour": "",
+  "next_lawful_action": "no further live mutation contour is admissible until fresh truth adds a lawful reserve-recovery path or proves a real canon/code contradiction",
+  "rejected_alternatives": [
+    {
+      "contour": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+      "reason": "would blindly reopen normalization while the fresh packet still has `reserve_candidate=\"\"`"
+    },
+    {
+      "contour": "STAGE_20_OWNER_PATH_REENTRY",
+      "reason": "stage-20 remains blocked until an explicit eligible reserve backend exists"
+    },
+    {
+      "contour": "UI_*",
+      "reason": "UI remains downstream of unresolved Branch C rollout truth"
+    }
+  ],
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 6,
+    "result": "OK"
+  },
+  "independent_inspection": {
+    "status": "accepted",
+    "narrowing_required": false
+  }
+}

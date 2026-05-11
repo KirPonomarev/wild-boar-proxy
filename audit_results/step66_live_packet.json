@@ -1,0 +1,10 @@
+{
+  "status": "not_executed",
+  "step": "step66",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "attempted": false,
+  "reason": "no_lawful_one_surface_reserve_recovery_path_from_fresh_truth",
+  "admitted_owner_surface": "",
+  "write_surfaces": [],
+  "rollback_required": false
+}

@@ -1,0 +1,37 @@
+{
+  "status": "completed",
+  "step": "step66",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "packets": {
+    "status": "step66_status_pre.json",
+    "healthcheck": "step66_healthcheck_pre.json",
+    "accounts": "step66_accounts_pre.json",
+    "rotation": "step66_rotation_pre.json",
+    "posture": "step66_posture_pre.json"
+  },
+  "summary": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "consumer_activation_readiness": "OK",
+    "healthcheck_machine_error_code": "OK",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_freshness": "fresh",
+    "rotation_participation_status": "available",
+    "active_count": 16,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0
+  },
+  "precondition_verdict": {
+    "runtime_truth_green_enough": true,
+    "rotation_truth_green_enough": true,
+    "reserve_recovery_contour_admissible_for_read_only_gap_analysis": true
+  }
+}

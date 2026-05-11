@@ -1,0 +1,59 @@
+{
+  "status": "completed",
+  "step": "step66",
+  "execution_core_preconditions_green": true,
+  "top_level_posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+  "narrower_blocking_fact": "no_explicit_eligible_reserve_candidate",
+  "fresh_truth": {
+    "active_count": 16,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0,
+    "active_overflow_live_capable_ids": [],
+    "protected_active": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "hold_set": [
+      "k-gpt-pro",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410",
+      "new-new11111",
+      "new-new44444",
+      "new-new55555"
+    ],
+    "manual_hold_count": 0,
+    "reserve_ids": []
+  },
+  "supplemental_onboarding_scan": {
+    "registered_count": 24,
+    "auth_json_file_count": 24,
+    "extra_auth_files": [],
+    "missing_registered_files": []
+  },
+  "owner_surface_admissibility": {
+    "accounts_onboard": {
+      "admissible": false,
+      "reason": "no_lawful_unregistered_auth_input_present"
+    },
+    "accounts_demote": {
+      "admissible": false,
+      "reason": "no_active_overflow_live_capable_backend_and_do_not_touch_set_covers_working_active_subset"
+    },
+    "accounts_release": {
+      "admissible": false,
+      "reason": "no_backend_is_on_manual_hold"
+    }
+  },
+  "lawful_owner_surface": "",
+  "mutation_admissible": false
+}
