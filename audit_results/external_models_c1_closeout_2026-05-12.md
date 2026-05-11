@@ -42,9 +42,9 @@ integration, real sidecar lifecycle, or engine duplication.
 - branch:
   - `codex/external-agent-lab-isolated`
 - commit:
-  - pending
+  - `5f264be`
 - pushed:
-  - pending
+  - yes
 
 ## Scope Check
 

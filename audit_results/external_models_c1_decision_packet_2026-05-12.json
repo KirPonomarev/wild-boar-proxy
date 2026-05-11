@@ -99,4 +99,10 @@
     ]
   },
   "next_contour": "external_models_c2_lifecycle_and_mocked_status"
+  ,
+  "git": {
+    "branch": "codex/external-agent-lab-isolated",
+    "commit": "5f264be",
+    "pushed": true
+  }
 }
