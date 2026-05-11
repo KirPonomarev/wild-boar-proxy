@@ -92,6 +92,6 @@
   "git": {
     "branch": "codex/external-agent-lab-isolated",
     "commit_set_recording_mode": "see_branch_history",
-    "pushed": false
+    "pushed": true
   }
 }

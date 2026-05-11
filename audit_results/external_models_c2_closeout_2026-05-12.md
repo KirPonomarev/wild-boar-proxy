@@ -44,7 +44,7 @@ real listener, provider traffic, or live runtime truth claims.
   - logical commit set present on branch history
   - inspect with `git log --oneline origin/codex/external-agent-lab-isolated`
 - pushed:
-  - pending
+  - yes
 
 ## Scope Check
 
