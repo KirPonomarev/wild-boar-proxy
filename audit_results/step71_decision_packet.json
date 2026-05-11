@@ -1,0 +1,54 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "status": "completed",
+  "verdict": "GO_OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR",
+  "primary_verdict": "NEW_ACTIVE_BACKEND_MATERIALIZED_OUTSIDE_RESERVE_FIRST_OWNER_PATH",
+  "mutation_executed": false,
+  "new_live_fact": {
+    "reported_account": "kp8750410@gmail.com",
+    "material_change_detected": true,
+    "new_backend_id": "kp8750410-team",
+    "new_backend_pool": "active",
+    "new_backend_status": "healthy",
+    "new_backend_auth_ref": "/Users/kirillponomarev/.cli-proxy-api/codex-e5c048fc-kp8750410@gmail.com-team.json"
+  },
+  "preflight_summary": {
+    "effective_mode": "managed",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "consumer_activation_readiness": "OK",
+    "desired_source": "observed_stable_inventory_source",
+    "effective_source": "observed_stable_inventory_source",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_freshness": "stale",
+    "rotation_participation_status": "contradicted",
+    "accounts": {
+      "active": 17,
+      "reserve": 0,
+      "retired": 8,
+      "healthy_active": 11,
+      "held": 0
+    }
+  },
+  "contradiction_basis": {
+    "observed_runtime_truth": [
+      "new healthy backend kp8750410-team materialized directly in active pool",
+      "stable policy drift detected against auth-dir inventory",
+      "rotation evidence contradicted because selected backend snapshot still reflects the prior 9-backend set while active routing candidates are now 11"
+    ],
+    "canon_and_test_basis": [
+      "accounts onboard --json is the reserve-first onboarding owner surface",
+      "targeted tests prove onboarding imports explicit auth to reserve first",
+      "targeted tests block selected-backend active routing changes",
+      "targeted tests block promotion of an existing reserve backend directly to active"
+    ],
+    "conclusion": "fresh account materialization changed active routing state outside the admitted reserve-first onboarding owner path"
+  },
+  "branch_c_reopen_status": {
+    "lawful_now": false,
+    "reason": "upstream contradiction state present before reserve-recovery reopening"
+  },
+  "independent_inspection_status": "narrowed_but_consistent",
+  "selected_next_contour": "OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR"
+}

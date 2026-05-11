@@ -1,0 +1,56 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "inspector": {
+    "agent_id": "019e17a6-b9a8-7c81-8223-3a95d65eadfb",
+    "nickname": "Descartes",
+    "model": "gpt-5.4-mini",
+    "mode": "read_only"
+  },
+  "raw_report": {
+    "step": "71",
+    "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+    "runtime_green_enough": true,
+    "rotation_green_enough": false,
+    "upstream_blocker_present": true,
+    "new_account_material_change": true,
+    "branch_c_reopen_lawful_now": false,
+    "recommended_next_contour": "OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR",
+    "claimed_mismatches": [
+      "`step71_status_pre.json` and `step71_healthcheck_pre.json` are green/OK, but `step71_rotation_pre.json` returns `ROTATION_EVIDENCE_CONTRADICTED` with `next_action=user_action`.",
+      "`step71_accounts_pre.json` adds new healthy active backend `kp8750410-team`, but the rotation evidence snapshot still does not reflect it in the selected backend set.",
+      "`step71_status_pre.json` / healthcheck evidence shows claim-gate blocking and stable policy drift, so the fresh account fact does not create a lawful reopen path yet."
+    ],
+    "final_verdict": "BLOCKED_BY_ROTATION_EVIDENCE_CONTRADICTION"
+  },
+  "assessment": {
+    "accepted_fields": [
+      "rotation_green_enough",
+      "upstream_blocker_present",
+      "new_account_material_change",
+      "branch_c_reopen_lawful_now",
+      "recommended_next_contour"
+    ],
+    "narrowed_fields": [
+      {
+        "field": "runtime_green_enough",
+        "raw_value": true,
+        "narrowed_value": false,
+        "reason": "For Branch C reopening, runtime is not green enough while effective_mode is managed, claim_gate is blocked, and policy_drift is detected."
+      },
+      {
+        "field": "final_verdict",
+        "raw_value": "BLOCKED_BY_ROTATION_EVIDENCE_CONTRADICTION",
+        "narrowed_value": "GO_OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR",
+        "reason": "The contradicted rotation state is tied to a new healthy backend materializing directly into the active pool outside the reserve-first onboarding owner path."
+      }
+    ]
+  },
+  "final_independent_verdict": {
+    "runtime_green_enough_for_branch_c_reopen": false,
+    "rotation_green_enough": false,
+    "new_account_material_change": true,
+    "branch_c_reopen_lawful_now": false,
+    "recommended_next_contour": "OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR"
+  }
+}

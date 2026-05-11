@@ -1,0 +1,32 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "new_account_material_change": true,
+  "new_ids": [
+    "kp8750410-team"
+  ],
+  "new_entries": [
+    {
+      "id": "kp8750410-team",
+      "pool": "active",
+      "status": "healthy",
+      "last_error_class": "",
+      "manual_hold": false,
+      "enabled": true,
+      "auth_ref": "/Users/kirillponomarev/.cli-proxy-api/codex-e5c048fc-kp8750410@gmail.com-team.json"
+    }
+  ],
+  "runtime_green_enough": false,
+  "rotation_green_enough": false,
+  "upstream_blocker": {
+    "present": true,
+    "effective_mode": "managed",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_participation_status": "contradicted",
+    "rotation_evidence_reason": "policy_drift_detected"
+  },
+  "branch_c_reopen_lawful_now": false,
+  "reason_branch_c_not_evaluated_fully": "upstream_blocker_detected_before_branch_c_reopen_logic"
+}

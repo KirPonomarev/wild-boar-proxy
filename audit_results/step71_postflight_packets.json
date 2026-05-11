@@ -1,0 +1,26 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "status": "not_applicable",
+  "mutation_executed": false,
+  "reason": "read_only_recheck_closed_before_branch_c_reopen",
+  "preflight_summary": {
+    "status_top": "ok",
+    "effective_mode": "managed",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "consumer_activation_readiness": "OK",
+    "desired_source": "observed_stable_inventory_source",
+    "effective_source": "observed_stable_inventory_source",
+    "healthcheck_top": "ok",
+    "launch_readiness": "ready",
+    "runtime_guardrails": "clear",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_freshness": "stale",
+    "rotation_participation_status": "contradicted",
+    "active_count": 17,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "held_count": 0
+  }
+}

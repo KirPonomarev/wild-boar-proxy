@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_status_reports_stable_policy_drift_without_greenwash",
+    "tests.test_cli.CliTests.test_status_uses_stable_auth_dir_for_policy_drift_inventory",
+    "tests.test_cli.CliTests.test_rollout_rotation_inspect_reports_contradicted_for_policy_drift",
+    "tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync",
+    "tests.test_cli.CliTests.test_accounts_onboard_blocks_selected_backend_active_routing_change",
+    "tests.test_cli.CliTests.test_accounts_onboard_blocks_existing_backend_promotion_to_active"
+  ],
+  "returncode": 0,
+  "tests_run": 6,
+  "summary": "Ran 6 tests in 5.656s",
+  "result": "OK"
+}

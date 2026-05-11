@@ -1,0 +1,23 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "runtime_green_enough": false,
+  "rotation_green_enough": false,
+  "branch_c_reopen_lawful_now": false,
+  "new_account_material_change": true,
+  "new_account_id": "kp8750410-team",
+  "owner_surfaces": {
+    "accounts onboard --json": {
+      "admitted": false,
+      "reason": "upstream_blocker_present_and_new_auth_already_materialized_as_active_backend"
+    },
+    "accounts demote <id> --json": {
+      "admitted": false,
+      "reason": "branch_c_reopen_forbidden_until_upstream_contradiction_is_repaired"
+    },
+    "accounts release <id> --json": {
+      "admitted": false,
+      "reason": "branch_c_reopen_forbidden_until_upstream_contradiction_is_repaired"
+    }
+  }
+}

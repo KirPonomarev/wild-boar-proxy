@@ -1,0 +1,7 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "status": "not_captured",
+  "reason": "upstream_blocker_detected_before_branch_c_recheck",
+  "machine_error_code": "NOT_CAPTURED_DUE_TO_UPSTREAM_BLOCKER"
+}

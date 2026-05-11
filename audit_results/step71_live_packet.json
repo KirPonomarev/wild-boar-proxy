@@ -1,0 +1,7 @@
+{
+  "step": "step71",
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "mutation_executed": false,
+  "status": "not_applicable",
+  "reason": "read_only_recheck_closed_before_branch_c_reopen"
+}
