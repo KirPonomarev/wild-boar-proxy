@@ -1,0 +1,30 @@
+{
+  "step": "step70",
+  "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "status": "not_applicable",
+  "mutation_executed": false,
+  "reason": "no_mutation_no_postflight_reread",
+  "preflight_summary": {
+    "status_top": "ok",
+    "effective_mode": "stable",
+    "claim_gate": "clear",
+    "policy_drift": "clear",
+    "consumer_activation_readiness": "OK",
+    "desired_source": "approved_repair_target",
+    "effective_source": "approved_repair_target",
+    "healthcheck_top": "ok",
+    "launch_readiness": "ready",
+    "runtime_guardrails": "clear",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_freshness": "fresh",
+    "rotation_participation_status": "available",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0,
+    "active_count": 16,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "held_count": 0
+  }
+}

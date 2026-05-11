@@ -1,0 +1,56 @@
+{
+  "step": "step70",
+  "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "inspector": {
+    "agent_id": "019e1610-141d-7af2-877a-162245ca0dfe",
+    "nickname": "Nietzsche",
+    "model": "gpt-5.4-mini",
+    "mode": "read_only"
+  },
+  "raw_report": {
+    "step": "step70",
+    "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+    "runtime_green_enough": true,
+    "rotation_green_enough": true,
+    "explicit_reserve_candidate_present": false,
+    "onboard_admissible": false,
+    "release_admissible": false,
+    "demote_admissible": false,
+    "any_owner_surface_lawfully_admitted": false,
+    "recommended_verdict": "STOP_AND_DIAGNOSE_RESERVE_RECOVERY_PATH_UNAVAILABLE",
+    "claimed_mismatches": [],
+    "final_verdict": "STOP_AND_DIAGNOSE_RESERVE_RECOVERY_PATH_UNAVAILABLE"
+  },
+  "assessment": {
+    "reserve_recovery_admission_denied": true,
+    "accepted_fields": [
+      "runtime_green_enough",
+      "rotation_green_enough",
+      "explicit_reserve_candidate_present",
+      "onboard_admissible",
+      "release_admissible",
+      "demote_admissible",
+      "any_owner_surface_lawfully_admitted"
+    ],
+    "narrowed_fields": [
+      {
+        "field": "recommended_verdict",
+        "raw_value": "STOP_AND_DIAGNOSE_RESERVE_RECOVERY_PATH_UNAVAILABLE",
+        "narrowed_value": "STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE",
+        "reason": "step67 already proved that this Branch C stop is live-state-owned and consistent with canon/code/tests, so step70 does not reopen a new diagnosis contour."
+      },
+      {
+        "field": "final_verdict",
+        "raw_value": "STOP_AND_DIAGNOSE_RESERVE_RECOVERY_PATH_UNAVAILABLE",
+        "narrowed_value": "STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE",
+        "reason": "Fresh step70 truth reproduces the same no-path state without new contradiction evidence."
+      }
+    ]
+  },
+  "final_independent_verdict": {
+    "runtime_green_enough": true,
+    "rotation_green_enough": true,
+    "lawful_owner_surface_present": false,
+    "next_state": "wait_for_fresh_reserve_input_or_pool_change"
+  }
+}

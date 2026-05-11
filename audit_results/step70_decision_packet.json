@@ -1,0 +1,57 @@
+{
+  "step": "step70",
+  "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "status": "completed",
+  "verdict": "STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE",
+  "primary_verdict": "NO_LAWFUL_ONE_SURFACE_RESERVE_RECOVERY_PATH_FROM_FRESH_TRUTH",
+  "mutation_executed": false,
+  "preflight_summary": {
+    "effective_mode": "stable",
+    "claim_gate": "clear",
+    "policy_drift": "clear",
+    "consumer_activation_readiness": "OK",
+    "desired_source": "approved_repair_target",
+    "effective_source": "approved_repair_target",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_freshness": "fresh",
+    "rotation_participation_status": "available",
+    "accounts": {
+      "active": 16,
+      "reserve": 0,
+      "retired": 8,
+      "held": 0
+    },
+    "posture": {
+      "outer_label": "LIVE_POSTURE_DRIFT_ONLY",
+      "reserve_candidate": "",
+      "reserve_live_capable_count": 0
+    }
+  },
+  "owner_surface_admission": {
+    "accounts onboard --json": {
+      "admitted": false,
+      "reason": "no_new_lawful_unregistered_auth_input"
+    },
+    "accounts release <id> --json": {
+      "admitted": false,
+      "reason": "no_held_backend_present"
+    },
+    "accounts demote <id> --json": {
+      "admitted": false,
+      "reason": "no_lawful_active_overflow_target_outside_protected_active"
+    }
+  },
+  "reserve_gap_summary": {
+    "explicit_reserve_candidate_present": false,
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0,
+    "active_live_capable_count": 9,
+    "extra_auth_file_count": 0,
+    "manual_hold_count": 0,
+    "active_overflow_live_capable_ids": []
+  },
+  "independent_inspection_status": "narrowed_but_consistent",
+  "basis_for_narrowing": "step67 already proved this Branch C stop is live-state-owned and contradiction-free, so step70 does not reopen a fresh diagnosis contour.",
+  "selected_next_state": "wait",
+  "selected_next_contour_when_fresh_truth_changes": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR"
+}

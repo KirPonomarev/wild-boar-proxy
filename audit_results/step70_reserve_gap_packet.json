@@ -1,0 +1,43 @@
+{
+  "step": "step70",
+  "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "runtime_green_enough": true,
+  "rotation_green_enough": true,
+  "posture_outer_label": "LIVE_POSTURE_DRIFT_ONLY",
+  "narrower_blocker": "EXPLICIT_RESERVE_CANDIDATE_MISSING",
+  "explicit_reserve_candidate_present": false,
+  "reserve_candidate": "",
+  "reserve_live_capable_count": 0,
+  "active_live_capable_count": 9,
+  "active_overflow_live_capable_ids": [],
+  "protected_active": [
+    "beep-outlook-team",
+    "gpt2026bis-team",
+    "k-gpt-pro-2",
+    "k-gpt-pro-3k",
+    "k-ponomarev-photo",
+    "kip85905-team",
+    "new-gpt-bis",
+    "new-new22222",
+    "pig-outlook-team"
+  ],
+  "manual_hold_count": 0,
+  "manual_hold_ids": [],
+  "extra_auth_file_count": 0,
+  "extra_auth_files": [],
+  "onboard_admissible": false,
+  "release_admissible": false,
+  "demote_admissible": false,
+  "accounts_summary": {
+    "active": 16,
+    "reserve": 0,
+    "retired": 8
+  },
+  "healthcheck": {
+    "status": "ok",
+    "launch_readiness": "ready",
+    "runtime_guardrails": "clear"
+  },
+  "selected_candidate_owner_surface": null,
+  "selected_candidate_reason": "no_lawful_one_surface_path"
+}

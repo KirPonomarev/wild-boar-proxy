@@ -1,0 +1,9 @@
+{
+  "step": "step70",
+  "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "mutation_executed": false,
+  "admitted_owner_surface": null,
+  "reason": "NO_LAWFUL_ONE_SURFACE_RESERVE_RECOVERY_PATH_FROM_FRESH_TRUTH",
+  "runtime_green_enough": true,
+  "rotation_green_enough": true
+}
