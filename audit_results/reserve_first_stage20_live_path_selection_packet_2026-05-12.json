@@ -1,0 +1,231 @@
+{
+  "contour_id": "reserve_first_stage20_live_path_selection_and_precondition_contour",
+  "date": "2026-05-12",
+  "status": "completed",
+  "machine_error_code": "NO_GO_STAY_ON_HOLD",
+  "admissibility_verdict": "NO_GO_STAY_ON_HOLD",
+  "final_verdict": "reserve_first_live_stage20_path_not_reopenable",
+  "governing_hold_source": "audit_results/hold_with_exact_blockers_packet_2026-05-12.json",
+  "write_actions_performed": false,
+  "same_day_validation_started": false,
+  "operator_write_authorization_consumed": false,
+  "human_reason": "Fresh read-only owner-surface replay shows that the live path remains blocked. Rotation evidence is now contradicted rather than merely insufficient, explicit reserve posture is still absent, target-stage posture still needs normalization, and current status truth again reports both CLAIM_GATE_BLOCKED and STABLE_POLICY_DRIFT.",
+  "reopen_check_inputs": {
+    "status_packet": "audit_results/reserve_first_stage20_status_raw_2026-05-12.json",
+    "healthcheck_packet": "audit_results/reserve_first_stage20_healthcheck_raw_2026-05-12.json",
+    "rotation_packet": "audit_results/reserve_first_stage20_rotation_inspect_raw_2026-05-12.json",
+    "accounts_packet": "audit_results/reserve_first_stage20_accounts_list_raw_2026-05-12.json",
+    "posture20_packet": "audit_results/reserve_first_stage20_posture20_raw_2026-05-12.json"
+  },
+  "observed_runtime_truth": {
+    "status": {
+      "machine_error_code": "OK",
+      "liveness": "healthy",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "claim_gate_status": "blocked",
+      "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "policy_drift_status": "detected",
+      "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+      "pool_summary": {
+        "active": 17,
+        "reserve": 0,
+        "retired": 8,
+        "backend_count": 25
+      }
+    },
+    "healthcheck": {
+      "machine_error_code": "OK",
+      "liveness": "healthy",
+      "launch_readiness_status": "ready",
+      "launch_capable_backend_count": 11,
+      "runtime_guardrails_status": "clear"
+    },
+    "rotation_inspect": {
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "evidence_status": "participation_evidence_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "participation_status": "contradicted",
+      "policy_drift_status": "detected",
+      "active_pool_count_observed": 17
+    },
+    "accounts_list": {
+      "machine_error_code": "OK",
+      "pool_policy": {
+        "active_target": 20,
+        "active_min": 20,
+        "reserve_target": 0
+      },
+      "accounts_summary": {
+        "total": 25,
+        "active": 17,
+        "reserve": 0,
+        "retired": 8,
+        "active_live_capable": 11
+      }
+    },
+    "posture20": {
+      "machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+      "classification": "LIVE_POSTURE_DRIFT_ONLY",
+      "final_outcome": "target_stage_posture_needs_normalization",
+      "pool_count_summary": {
+        "active_count": 17,
+        "reserve_count": 0,
+        "retired_count": 8,
+        "managed_pool_count": 25,
+        "source_active_target": 15,
+        "source_reserve_target": 0,
+        "target_active_target": 20,
+        "target_reserve_target": 0
+      },
+      "candidate_summary": {
+        "active_live_capable_count": 11,
+        "reserve_live_capable_count": 0,
+        "reserve_candidate_id": ""
+      },
+      "rotation_summary": {
+        "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+        "participation_status": "contradicted",
+        "evidence_status": "participation_evidence_contradicted",
+        "evidence_reason": "policy_drift_detected"
+      },
+      "policy_stage_summary": {
+        "status": "matched",
+        "machine_error_code": "OK"
+      }
+    }
+  },
+  "frozen_reopen_conditions_evaluation": [
+    {
+      "blocker": "OWNER_SURFACE_CONTRADICTION",
+      "frozen_hold_state": "active_current",
+      "current_source": "audit_results/step42_normalization_decision_packet.json",
+      "current_field": "owner_surface_truth_status",
+      "current_value": "contradiction_persistent_after_bounded_recheck",
+      "cleared": false,
+      "reason": "No successor contradiction packet clears the persistent contradiction."
+    },
+    {
+      "blocker": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "frozen_hold_state": "active_current",
+      "current_source": "audit_results/reserve_first_stage20_rotation_inspect_raw_2026-05-12.json",
+      "current_field": "machine_error_code",
+      "current_value": "ROTATION_EVIDENCE_CONTRADICTED",
+      "cleared": false,
+      "reason": "The blocker did not improve; it worsened from insufficient to contradicted."
+    },
+    {
+      "blocker": "NO_EXPLICIT_RESERVE_POSTURE",
+      "frozen_hold_state": "active_current",
+      "current_source": "audit_results/reserve_first_stage20_accounts_list_raw_2026-05-12.json",
+      "current_field": "accounts_summary.reserve",
+      "current_value": 0,
+      "cleared": false,
+      "reason": "Reserve count remains zero, reserve_target remains zero, and reserve_candidate_id remains empty."
+    },
+    {
+      "blocker": "INSUFFICIENT_ELIGIBLE_POOL",
+      "frozen_hold_state": "stage20_posture_blocker_still_relevant",
+      "current_source": "audit_results/reserve_first_stage20_posture20_raw_2026-05-12.json",
+      "current_field": "rollout_posture_result.final_outcome",
+      "current_value": "target_stage_posture_needs_normalization",
+      "cleared": false,
+      "reason": "Target-stage posture remains non-green, active count remains 17, and active_live_capable_count remains 11."
+    },
+    {
+      "blocker": "CLAIM_GATE_BLOCKED",
+      "frozen_hold_state": "historical_related_label_now_clear",
+      "current_source": "audit_results/reserve_first_stage20_status_raw_2026-05-12.json",
+      "current_field": "claim_gate.status",
+      "current_value": "blocked",
+      "cleared": false,
+      "reason": "This inherited-now-clear label has reappeared as active current truth."
+    },
+    {
+      "blocker": "STABLE_POLICY_DRIFT",
+      "frozen_hold_state": "historical_related_label_now_clear",
+      "current_source": "audit_results/reserve_first_stage20_status_raw_2026-05-12.json",
+      "current_field": "policy_drift.status",
+      "current_value": "detected",
+      "cleared": false,
+      "reason": "This inherited-now-clear label has reappeared as active current truth."
+    }
+  ],
+  "current_active_blockers": [
+    "OWNER_SURFACE_CONTRADICTION",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_CONTRADICTED",
+    "NO_EXPLICIT_RESERVE_POSTURE",
+    "LIVE_POSTURE_DRIFT_ONLY"
+  ],
+  "insufficient_positive_signals": [
+    {
+      "signal": "healthcheck_green",
+      "observed_value": "healthcheck --json returned machine_error_code=OK and launch_readiness.status=ready",
+      "not_sufficient_because": "status, rotation inspect, and posture inspect remain blocking surfaces for reserve-first live admissibility."
+    },
+    {
+      "signal": "status_liveness_healthy",
+      "observed_value": "status --json returned liveness=healthy and effective_mode=stable",
+      "not_sufficient_because": "the same packet also reports claim_gate.status=blocked and policy_drift.status=detected."
+    }
+  ],
+  "hold_packet_consistency_note": {
+    "status": "fresh_preflight_detected_reactivated_labels",
+    "detail": "The earlier hold packet correctly froze the then-current blocker set, but fresh live-preflight replay shows that CLAIM_GATE_BLOCKED and STABLE_POLICY_DRIFT are active again in current owner-surface truth. This contour records the new read-only state without rewriting historical artifacts."
+  },
+  "forbidden_actions_confirmed_not_run": [
+    "rollout stage advance 20",
+    "same-day live validation",
+    "any write-capable rollout mutation",
+    "any runtime/package/UI change"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k claim_gate",
+        "observed_result": "Ran 2 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "observed_result": "Ran 15 tests ... OK"
+      }
+    ],
+    "build": [
+      {
+        "command": "python3 -m compileall -q wild_boar_proxy tests",
+        "status": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed"
+      }
+    ],
+    "manual": [
+      {
+        "action": "read_only_owner_surface_replay",
+        "status": "completed"
+      },
+      {
+        "action": "field_level_blocker_comparison_against_frozen_hold_packet",
+        "status": "completed"
+      }
+    ]
+  },
+  "next_action": {
+    "status": "hold",
+    "allowed_when_truth_changes": "reserve_first_stage20_same_day_live_validation_contour",
+    "forbidden_now": [
+      "live_stage20_reentry",
+      "pilot_ready_claim",
+      "release_claim",
+      "reserve_first_stage20_same_day_live_validation_contour"
+    ]
+  }
+}
