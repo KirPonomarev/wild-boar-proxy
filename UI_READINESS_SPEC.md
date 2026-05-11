@@ -453,6 +453,10 @@ Invalid JSON handling:
 
 ## Forbidden UI Claims
 
+The UI may reference the accepted ADR-0002 development scale proof as project
+context, but it must not present that proof as current full-scale live
+availability.
+
 The UI must not claim:
 
 - `PILOT_READY`
@@ -471,6 +475,8 @@ The UI must not claim:
 - diagnostics export means runtime health
 - 16-account field evidence means 20-account proof
 - capacity 20 means active 20-account operation is proved
+- accepted scale proof means the current account set is ready for another
+  full-scale run
 
 ## No Direct Runtime File Reads As Truth
 
@@ -528,6 +534,6 @@ A future UI implementation contour must prove:
 - live evidence capture
 - live auth import
 - live proxy/config mutation
-- scale-to-20 proof
+- new scale-to-20 proof
 - legacy import implementation
 - new command surfaces

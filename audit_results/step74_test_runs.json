@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "step": 74,
+  "runs": [
+    {
+      "command": "rg stale UI/runtime blocker scan over CANON.md MASTER_PLAN.md NEXT_CONTOUR_CANON_PLAN.md README.md UI_READINESS_SPEC.md ADR-0002-scale-evidence-finalization.md",
+      "result": "passed",
+      "notes": "remaining matches are overclaim guards or out-of-scope boundaries, not blockers to basic UI"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "command": "python3 JSON validation over audit_results/step74_*.json",
+      "result": "passed"
+    }
+  ]
+}

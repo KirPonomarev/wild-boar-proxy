@@ -295,7 +295,9 @@ Blocker rules:
 
 Runtime contract, state contract, state transitions, failure model, and command API are one execution core.
 No new truth surface may be added unless it reduces ambiguity or removes a real blocker.
-The execution core must freeze before UI, installer, or package work becomes active.
+The execution core is frozen enough for basic companion UI through ADR-0002.
+Installer, package, release, pilot, and rich UI work still require their own
+later gates.
 
 ## Git Closeout Discipline
 
@@ -1165,8 +1167,10 @@ It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
 ## Estimate
 
 Pilot readiness depends on tight scope control and clean closure of the remaining development contours.
-The active scale milestone is a same-day 20-account live validation with machine-carried evidence.
-The observed 16-account contour lowers scale uncertainty but does not remove the need for formal live 20-account proof.
+The development scale milestone is accepted through the C20 same-day
+20-account live validation evidence.
+Fresh release-facing or repeated full-scale live claims still require current
+live evidence.
 
 ## Final Verdict
 
