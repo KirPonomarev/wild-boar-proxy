@@ -1,0 +1,42 @@
+{
+  "accounts_onboard": {
+    "owner_surface": true,
+    "reserve_first": true,
+    "required_success_proof": [
+      "unique resulting backend identity",
+      "placement in reserve",
+      "no silent active-routing change",
+      "post-onboard validate outcome",
+      "post-onboard sync outcome unless skipped",
+      "post-onboard status proof summary"
+    ],
+    "fresh_step66_admissible": false,
+    "fresh_step66_reason": "all auth JSON files are already registered; no lawful explicit onboarding input exists"
+  },
+  "accounts_demote": {
+    "owner_surface": true,
+    "demote_only": true,
+    "precondition_requirements": [
+      "unique backend identity",
+      "explicit active -> reserve demote truth",
+      "reject held backend",
+      "reject retired backend"
+    ],
+    "fresh_step66_admissible": false,
+    "fresh_step66_reason": "no lawful target outside protected active subset; no active overflow live-capable ids"
+  },
+  "accounts_release": {
+    "owner_surface": true,
+    "release_only": true,
+    "precondition_requirements": [
+      "backend must be on hold",
+      "release returns to reserve, not active"
+    ],
+    "fresh_step66_admissible": false,
+    "fresh_step66_reason": "no backend is on manual_hold"
+  },
+  "conclusion": {
+    "any_live_owner_surface_admissible": false,
+    "explanation": "current stop is explained by fresh live-state truth rather than by missing owner-surface implementation"
+  }
+}

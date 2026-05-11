@@ -1,0 +1,21 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_insufficient_eligible_pool_for_step41_shape",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_reserve_candidate_not_identified",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_live_posture_drift_only",
+    "tests.test_cli.CliTests.test_accounts_onboard_ambiguous_new_auth_detection_stops_honestly",
+    "tests.test_cli.CliTests.test_accounts_onboard_exit_zero_without_new_backend_is_not_success",
+    "tests.test_cli.CliTests.test_accounts_release_rejects_not_on_hold_precondition",
+    "tests.test_cli.CliTests.test_accounts_demote_rejects_held_backend_precondition",
+    "tests.test_cli.CliTests.test_accounts_demote_rejects_retired_backend_precondition"
+  ],
+  "returncode": 0,
+  "tests_run": 8,
+  "summary": "Ran 8 tests in 5.267s",
+  "result": "OK"
+}

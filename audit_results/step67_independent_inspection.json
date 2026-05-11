@@ -1,0 +1,16 @@
+{
+  "status": "accepted_with_narrowing",
+  "step": "step67",
+  "inspector": "Copernicus",
+  "agent_verdict": "consistent_under_different_preconditions; Branch C stop is live-state-owned, and no repo/code contradiction is proven",
+  "accepted_core_facts": [
+    "step65 restored execution-core green while downstream posture still carried Branch C signal",
+    "step66 fresh reserve-gap truth made all three owner surfaces inadmissible",
+    "runtime branch order allows `LIVE_POSTURE_DRIFT_ONLY` and `RESERVE_CANDIDATE_NOT_IDENTIFIED` under different preconditions",
+    "no repo contradiction is proven from the current packet/test set"
+  ],
+  "narrowing": [
+    "the live packet does directly emit `LIVE_POSTURE_DRIFT_ONLY` with empty reserve candidate under earlier branch conditions, so the risk is not that the packet is fabricated but that one must not misread it as equivalent to the later `RESERVE_CANDIDATE_NOT_IDENTIFIED` branch"
+  ],
+  "final_verdict": "Branch C stop is live-state-owned and consistent with canon/code/tests"
+}

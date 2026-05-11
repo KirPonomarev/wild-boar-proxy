@@ -1,0 +1,41 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "step": "step67",
+  "contour_id": "RESERVE_RECOVERY_PATH_UNAVAILABLE_DIAGNOSIS_CONTOUR",
+  "contour_result": "STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE",
+  "primary_verdict": "BRANCH_C_STOP_IS_LIVE_STATE_OWNED_AND_CONSISTENT_WITH_CANON_CODE_TESTS",
+  "mutation_executed": false,
+  "why_now": [
+    "step66 already proved that no live owner surface is lawful on fresh truth",
+    "Branch C canon requires stopping when no explicit eligible reserve candidate can be named",
+    "code branch order and targeted tests show that `LIVE_POSTURE_DRIFT_ONLY` and `RESERVE_CANDIDATE_NOT_IDENTIFIED` are compatible outputs under different live-state shapes",
+    "no real contradiction was proven between canon, command contracts, runtime behavior, and targeted tests"
+  ],
+  "selected_verdict": "STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE",
+  "repo_contradiction_proven": false,
+  "canon_clarification_required": false,
+  "rejected_alternatives": [
+    {
+      "verdict": "GO_CANON_CLARIFICATION_CONTOUR",
+      "reason": "current packet/code/test set does not expose a canon ambiguity that must be clarified to explain the stop"
+    },
+    {
+      "verdict": "GO_REPO_CONTRADICTION_REPAIR_CONTOUR",
+      "reason": "no contradictory behavior is proven; the stop is explained by fresh live-state conditions"
+    },
+    {
+      "verdict": "reopen live reserve recovery",
+      "reason": "step66 already proved there is no lawful one-surface owner path on current truth"
+    }
+  ],
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 8,
+    "result": "OK"
+  },
+  "independent_inspection": {
+    "status": "accepted_with_narrowing",
+    "narrowing_required": true
+  }
+}

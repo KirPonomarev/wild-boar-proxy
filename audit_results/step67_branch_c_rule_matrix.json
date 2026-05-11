@@ -1,0 +1,38 @@
+{
+  "branch_c_canon": {
+    "source": "/Volumes/Work/wild-boar-proxy/NEXT_CONTOUR_CANON_PLAN.md",
+    "trigger_conditions": [
+      "there is no explicit eligible reserve candidate",
+      "or the live pool does not have enough healthy/valid accounts for safe stage-20 progression"
+    ],
+    "required_action": [
+      "stop",
+      "do not run rollout stage advance 20 <id> --json",
+      "reopen only the blocking pool/readiness contour"
+    ],
+    "guardrails": [
+      "do not proceed if no explicit reserve candidate can be named",
+      "do not hide the stop behind UI work",
+      "24 active / 0 reserve is not a substitute for reserve-first proof"
+    ]
+  },
+  "step65_alignment": {
+    "execution_core_green": true,
+    "downstream_posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0,
+    "branch_c_trigger": true
+  },
+  "step66_alignment": {
+    "execution_core_preconditions_green": true,
+    "top_level_posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "explicit_reserve_candidate_already_present": false,
+    "accounts_onboard_admissible": false,
+    "accounts_demote_admissible": false,
+    "accounts_release_admissible": false
+  },
+  "diagnosis": {
+    "branch_c_stop_matches_canon": true,
+    "repo_contradiction_required_to_explain_stop": false
+  }
+}
