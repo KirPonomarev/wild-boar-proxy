@@ -215,6 +215,10 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_subparsers = external_models.add_subparsers(
         dest="external_models_command", required=True
     )
+    external_models_start = external_models_subparsers.add_parser("start")
+    external_models_start.add_argument("--json", action="store_true", required=True)
+    external_models_stop = external_models_subparsers.add_parser("stop")
+    external_models_stop.add_argument("--json", action="store_true", required=True)
     external_models_status = external_models_subparsers.add_parser("status")
     external_models_status.add_argument("--json", action="store_true", required=True)
     external_models_models = external_models_subparsers.add_parser("models")

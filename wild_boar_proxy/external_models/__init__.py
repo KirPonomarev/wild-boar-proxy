@@ -1,4 +1,4 @@
-"""Bounded external-models foundation commands."""
+"""Bounded external-models synthetic lifecycle commands."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
+from .lifecycle import start_synthetic_adapter, stop_synthetic_adapter, synthetic_status_payload
 from .paths import ExternalModelsPaths
 from .state import capture_local_evidence, ensure_secrets_permissions
 
@@ -14,12 +15,62 @@ from .state import capture_local_evidence, ensure_secrets_permissions
 def run_external_models_command(args: Any) -> dict[str, Any]:
     try:
         paths = ExternalModelsPaths.from_env()
+        if args.external_models_command == "start":
+            state_payload, changed_files, token_created = start_synthetic_adapter(paths)
+            if not changed_files:
+                return contracts.build_external_models_payload(
+                    ok=True,
+                    human_message="External-models synthetic adapter already started.",
+                    machine_error_code=errors.ALREADY_RUNNING,
+                    data={
+                        "adapter": dict(state_payload["adapter"]),
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "token_created": False,
+                    },
+                )
+            return contracts.build_external_models_payload(
+                ok=True,
+                human_message="External-models synthetic adapter started without claiming listener truth.",
+                machine_error_code=errors.OK,
+                changed_files=changed_files,
+                data={
+                    "adapter": dict(state_payload["adapter"]),
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "token_created": token_created,
+                },
+            )
+        if args.external_models_command == "stop":
+            state_payload, changed_files = stop_synthetic_adapter(paths)
+            if not changed_files:
+                return contracts.build_external_models_payload(
+                    ok=True,
+                    human_message="External-models synthetic adapter already stopped.",
+                    machine_error_code=errors.OK,
+                    data={
+                        "adapter": dict(state_payload["adapter"]),
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                    },
+                )
+            return contracts.build_external_models_payload(
+                ok=True,
+                human_message="External-models synthetic adapter stopped without touching any live listener.",
+                machine_error_code=errors.OK,
+                changed_files=changed_files,
+                data={
+                    "adapter": dict(state_payload["adapter"]),
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                },
+            )
         if args.external_models_command == "status":
             return contracts.build_external_models_payload(
                 ok=True,
-                human_message="External-models foundation status collected.",
+                human_message="External-models synthetic lifecycle status collected without live runtime claims.",
                 machine_error_code=errors.OK,
-                data=routes.foundation_status(paths),
+                data=synthetic_status_payload(paths),
             )
         if args.external_models_command == "models":
             models = routes.models_listing(paths)
@@ -31,6 +82,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
                     "models": models,
                     "count": len(models),
                     "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
                 },
             )
         if args.external_models_command == "routes":

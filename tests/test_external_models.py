@@ -7,9 +7,11 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from wild_boar_proxy.external_models import contracts, routes
+from wild_boar_proxy.external_models import lifecycle
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
 from wild_boar_proxy.external_models.state import capture_local_evidence, load_state_file
 from wild_boar_proxy.runtime import RuntimeErrorInfo
@@ -36,7 +38,7 @@ def sample_route() -> dict[str, object]:
 class ExternalModelContractTests(unittest.TestCase):
     def test_default_state_payload_keeps_policy_separate(self) -> None:
         payload = contracts.default_state_payload()
-        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["schema_version"], 2)
         self.assertEqual(
             payload["policy"],
             {
@@ -45,6 +47,8 @@ class ExternalModelContractTests(unittest.TestCase):
                 "paid_route_default": "blocked",
             },
         )
+        self.assertEqual(payload["adapter"]["state"], "stopped")
+        self.assertFalse(payload["local_auth"]["token_present"])
         self.assertEqual(payload["routes"], {})
 
     def test_validate_route_schema_rejects_observed_state_field(self) -> None:
@@ -95,6 +99,49 @@ class ExternalModelContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             state = load_state_file(Path(temp_dir) / "missing.json")
             self.assertEqual(state["policy"]["paid_route_default"], "blocked")
+
+    def test_load_state_file_migrates_v1_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = Path(temp_dir) / "state.json"
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "policy": {
+                            "paid_routes_enabled": True,
+                            "paid_route_allowlist": ["wbp-paid"],
+                            "paid_route_default": "allow",
+                        },
+                        "routes": {"wbp-a": {"availability_state": "unverified"}},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state = load_state_file(state_path)
+            self.assertEqual(state["schema_version"], 2)
+            self.assertEqual(state["adapter"]["state"], "stopped")
+            self.assertTrue(state["policy"]["paid_routes_enabled"])
+            self.assertIn("wbp-a", state["routes"])
+
+    def test_allocate_synthetic_port_skips_reserved_ports(self) -> None:
+        ports = [8318, 8320, 45678]
+
+        class FakeSocket:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def bind(self, addr):
+                return None
+
+            def getsockname(self):
+                return ("127.0.0.1", ports.pop(0))
+
+        with mock.patch("wild_boar_proxy.external_models.lifecycle.socket.socket", return_value=FakeSocket()):
+            self.assertEqual(lifecycle.allocate_synthetic_port(), 45678)
 
 
 class ZeroTestSelectionGuardTests(unittest.TestCase):

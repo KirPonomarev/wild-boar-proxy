@@ -1,0 +1,97 @@
+{
+  "contour": "external_models_c2_lifecycle_and_mocked_status",
+  "date": "2026-05-12",
+  "status": "implemented_and_verified_locally",
+  "mode": "implementation",
+  "scope": {
+    "in_scope_completed": [
+      "synthetic start command",
+      "synthetic stop command",
+      "synthetic lifecycle status packet",
+      "synthetic profile packet with non-live base_url contract",
+      "local token lifecycle without token leakage",
+      "reserved port blocking for 8318 and 8320",
+      "state schema migration from v1 to v2",
+      "real tests for migration, reserved ports, synthetic lifecycle flow"
+    ],
+    "out_of_scope_preserved": [
+      "real listener",
+      "provider traffic",
+      "live validate/check",
+      "runtime attestation",
+      "Codex config mutation",
+      "runtime.py changes"
+    ]
+  },
+  "files_touched": [
+    "wild_boar_proxy/cli.py",
+    "wild_boar_proxy/external_models/__init__.py",
+    "wild_boar_proxy/external_models/contracts.py",
+    "wild_boar_proxy/external_models/errors.py",
+    "wild_boar_proxy/external_models/lifecycle.py",
+    "wild_boar_proxy/external_models/routes.py",
+    "wild_boar_proxy/external_models/state.py",
+    "tests/test_external_models.py",
+    "tests/test_cli_external_models.py",
+    "audit_results/external_models_c2_contour_2026-05-12.md"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_external_models",
+        "result": "passed",
+        "observed": "Ran 8 tests OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli_external_models",
+        "result": "passed",
+        "observed": "Ran 10 tests OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_external_agent_lab",
+        "result": "passed",
+        "observed": "Ran 11 tests OK"
+      }
+    ],
+    "build": {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "result": "passed"
+    },
+    "manual": {
+      "command": "isolated routes add -> start -> status -> profile -> stop",
+      "result": "passed",
+      "observed": [
+        "listener_proven remained false",
+        "runtime_claim_blocked remained true",
+        "profile_ready remained false",
+        "synthetic base_url resolved only after start",
+        "no provider traffic",
+        "no real ~/.wild-boar-proxy writes"
+      ]
+    }
+  },
+  "independent_audit": {
+    "status": "completed",
+    "finding_count": 1,
+    "findings_outside_contour": [
+      {
+        "severity": "medium",
+        "file": "wild_boar_proxy/runtime.py",
+        "summary": "pre-existing dirty runtime-path changes exist in working tree but are not staged for C2"
+      }
+    ],
+    "contour_findings": []
+  },
+  "scope_check": {
+    "runtime_engine_changes_in_contour": false,
+    "real_path_mutation_required": false,
+    "provider_traffic_in_acceptance": false,
+    "zero_test_false_green_possible": false
+  },
+  "next_contour": "external_models_c3_provider_validation_and_evidence",
+  "git": {
+    "branch": "codex/external-agent-lab-isolated",
+    "commit_set_recording_mode": "see_branch_history",
+    "pushed": false
+  }
+}

@@ -1,4 +1,4 @@
-"""Contracts for the external-models C1 foundation slice."""
+"""Contracts for the external-models C2 synthetic lifecycle slice."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 from wild_boar_proxy.runtime import build_command_payload
 
 ROUTE_SCHEMA_VERSION = 1
-STATE_SCHEMA_VERSION = 1
+STATE_SCHEMA_VERSION = 2
 EVIDENCE_SCHEMA_VERSION = 1
 
 ROUTES_TOP_LEVEL_FIELDS = frozenset({"schema_version", "routes"})
@@ -47,9 +47,27 @@ ROUTE_REQUIRED_FIELDS = frozenset(
     }
 )
 
-STATE_TOP_LEVEL_FIELDS = frozenset({"schema_version", "policy", "routes"})
+STATE_TOP_LEVEL_FIELDS = frozenset(
+    {"schema_version", "policy", "adapter", "local_auth", "routes"}
+)
 STATE_POLICY_FIELDS = frozenset(
     {"paid_routes_enabled", "paid_route_allowlist", "paid_route_default"}
+)
+STATE_ADAPTER_FIELDS = frozenset(
+    {
+        "lifecycle_mode",
+        "state",
+        "host",
+        "port",
+        "base_url",
+        "listener_proven",
+        "runtime_claim_blocked",
+        "started_at_utc",
+        "last_transition",
+    }
+)
+STATE_LOCAL_AUTH_FIELDS = frozenset(
+    {"token_ref", "token_present", "token_created_at_utc"}
 )
 OBSERVED_ROUTE_ALLOWED_FIELDS = frozenset(
     {
@@ -82,6 +100,22 @@ def default_state_payload() -> dict[str, Any]:
             "paid_routes_enabled": False,
             "paid_route_allowlist": [],
             "paid_route_default": "blocked",
+        },
+        "adapter": {
+            "lifecycle_mode": "synthetic",
+            "state": "stopped",
+            "host": "127.0.0.1",
+            "port": None,
+            "base_url": None,
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "started_at_utc": None,
+            "last_transition": "init",
+        },
+        "local_auth": {
+            "token_ref": "managed_local_token",
+            "token_present": False,
+            "token_created_at_utc": None,
         },
         "routes": {},
     }

@@ -247,11 +247,104 @@ class ExternalModelsCliTests(unittest.TestCase):
         result = self.run_cli("external-models", "status", "--json")
         payload = self.parse_payload(result)
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["data"]["foundation_phase"], "C1")
+        self.assertEqual(payload["data"]["foundation_phase"], "C2")
+        self.assertEqual(payload["data"]["adapter_state"], "stopped")
+        self.assertFalse(payload["data"]["listener_proven"])
+        self.assertTrue(payload["data"]["runtime_claim_blocked"])
         self.assertEqual(
             Path(payload["data"]["paths"]["routes_file"]).resolve(),
             (self.external_dir / "routes.json").resolve(),
         )
+
+    def test_start_status_models_profile_stop_synthetic_lifecycle(self) -> None:
+        self.run_cli(
+            "external-models",
+            "routes",
+            "add",
+            "--json",
+            "--stdin",
+            stdin_text=json.dumps(sample_route()),
+        )
+
+        start_result = self.run_cli("external-models", "start", "--json")
+        start_payload = self.parse_payload(start_result)
+        self.assertEqual(start_payload["status"], "ok")
+        self.assertEqual(start_payload["machine_error_code"], "OK")
+        self.assertFalse(start_payload["data"]["listener_proven"])
+        self.assertTrue(start_payload["data"]["runtime_claim_blocked"])
+        self.assertNotIn("test-key", start_result.stdout)
+        secrets_text = (self.external_dir / "secrets.env").read_text(encoding="utf-8")
+        self.assertIn("WBP_EXTERNAL_MODELS_LOCAL_TOKEN=", secrets_text)
+        local_token = [
+            line.split("=", 1)[1]
+            for line in secrets_text.splitlines()
+            if line.startswith("WBP_EXTERNAL_MODELS_LOCAL_TOKEN=")
+        ][0]
+        self.assertNotIn(local_token, start_result.stdout)
+        state_payload = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state_payload["adapter"]["state"], "started")
+        self.assertNotIn(state_payload["adapter"]["port"], (8318, 8320))
+        self.assertTrue(state_payload["local_auth"]["token_present"])
+
+        second_start = self.run_cli("external-models", "start", "--json")
+        second_payload = self.parse_payload(second_start)
+        self.assertEqual(second_payload["machine_error_code"], "already_running")
+
+        status_result = self.run_cli("external-models", "status", "--json")
+        status_payload = self.parse_payload(status_result)
+        self.assertEqual(status_payload["data"]["adapter_state"], "started")
+        self.assertFalse(status_payload["data"]["listener_proven"])
+        self.assertTrue(status_payload["data"]["runtime_claim_blocked"])
+        self.assertIn("base_url", status_payload["data"]["adapter"])
+
+        models_result = self.run_cli("external-models", "models", "--json")
+        models_payload = self.parse_payload(models_result)
+        self.assertEqual(models_payload["data"]["models"][0]["synthetic_adapter_state"], "started")
+        self.assertFalse(models_payload["data"]["models"][0]["profile_ready"])
+
+        profile_result = self.run_cli(
+            "external-models",
+            "profile",
+            "codex-desktop",
+            "--json",
+            "--route",
+            "wbp-deepseek-v3",
+        )
+        profile_payload = self.parse_payload(profile_result)
+        self.assertFalse(profile_payload["data"]["profile_ready"])
+        self.assertFalse(profile_payload["data"]["listener_proven"])
+        self.assertTrue(profile_payload["data"]["runtime_claim_blocked"])
+        self.assertIsNotNone(profile_payload["data"]["base_url"])
+
+        stop_result = self.run_cli("external-models", "stop", "--json")
+        stop_payload = self.parse_payload(stop_result)
+        self.assertEqual(stop_payload["status"], "ok")
+        self.assertFalse(stop_payload["data"]["listener_proven"])
+        stopped_state = json.loads((self.external_dir / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(stopped_state["adapter"]["state"], "stopped")
+        self.assertIsNone(stopped_state["adapter"]["base_url"])
+        self.assertTrue(stopped_state["local_auth"]["token_present"])
+
+    def test_v1_state_is_migrated_by_status(self) -> None:
+        (self.external_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "routes": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = self.run_cli("external-models", "status", "--json")
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["adapter"]["state"], "stopped")
 
     def test_secrets_permissions_are_enforced(self) -> None:
         self.run_cli(

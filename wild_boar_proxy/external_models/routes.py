@@ -1,4 +1,4 @@
-"""Route lifecycle helpers for the external-models C1 foundation slice."""
+"""Route lifecycle helpers for the external-models C2 synthetic lifecycle slice."""
 
 from __future__ import annotations
 
@@ -11,14 +11,7 @@ from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors
 from .paths import ExternalModelsPaths
-from .state import (
-    atomic_write_json,
-    dual_lock,
-    ensure_secrets_permissions,
-    load_state_file,
-    serialized_lock,
-    write_state_file,
-)
+from .state import atomic_write_json, dual_lock, ensure_secrets_permissions, load_state_file, serialized_lock, write_state_file
 
 
 def _load_json_from_file(path: Path) -> Any:
@@ -283,8 +276,13 @@ def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
     routes_payload = load_routes_file(paths.routes_file)
     state_payload = load_state_file(paths.state_file)
     return {
-        "foundation_phase": "C1",
+        "foundation_phase": "C2",
         "adapter_runtime_available": False,
+        "lifecycle_mode": state_payload["adapter"]["lifecycle_mode"],
+        "adapter_state": state_payload["adapter"]["state"],
+        "listener_proven": False,
+        "runtime_claim_blocked": True,
+        "profile_ready": False,
         "routes_count": len(routes_payload["routes"]),
         "observed_routes_count": len(state_payload["routes"]),
         "paths": {
@@ -297,19 +295,31 @@ def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
 
 
 def models_listing(paths: ExternalModelsPaths) -> list[dict[str, Any]]:
-    return [route_models_projection(route) for route in list_routes(paths)]
+    state_payload = load_state_file(paths.state_file)
+    return [
+        route_models_projection(route)
+        | {
+            "synthetic_adapter_state": state_payload["adapter"]["state"],
+            "profile_ready": False,
+        }
+        for route in list_routes(paths)
+    ]
 
 
 def profile_packet(paths: ExternalModelsPaths, route_id: str) -> dict[str, Any]:
     route = find_route(load_routes_file(paths.routes_file), route_id)
     ensure_secrets_permissions(paths.secrets_file)
+    state_payload = load_state_file(paths.state_file)
     return {
         "profile_kind": "codex_desktop_openai_compatible",
         "route_id": route["route_id"],
-        "base_url": None,
+        "base_url": state_payload["adapter"]["base_url"],
         "model": route["route_id"],
         "api_key_source": "managed_local_token",
         "writes_external_config": False,
         "profile_ready": False,
-        "prerequisite": "external_models_c2_lifecycle_and_mocked_status",
+        "listener_proven": False,
+        "runtime_claim_blocked": True,
+        "synthetic_endpoint_contract": True,
+        "prerequisite": "external_models_c3_provider_validation_and_evidence",
     }

@@ -113,6 +113,11 @@ def load_state_file(state_file: Path) -> dict[str, Any]:
             operator_action="stop",
         )
     schema_version = payload.get("schema_version")
+    if schema_version == 1:
+        migrated = contracts.default_state_payload()
+        migrated["policy"] = dict(payload.get("policy", migrated["policy"]))
+        migrated["routes"] = dict(payload.get("routes", {}))
+        return migrated
     if schema_version != contracts.STATE_SCHEMA_VERSION:
         raise RuntimeErrorInfo(
             "Unsupported external-models state schema version.",
