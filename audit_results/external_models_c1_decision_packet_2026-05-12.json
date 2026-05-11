@@ -102,7 +102,10 @@
   ,
   "git": {
     "branch": "codex/external-agent-lab-isolated",
-    "commit": "5f264be",
+    "commit_set": [
+      "5f264be",
+      "05841c8"
+    ],
     "pushed": true
   }
 }

@@ -43,6 +43,7 @@ integration, real sidecar lifecycle, or engine duplication.
   - `codex/external-agent-lab-isolated`
 - commit:
   - `5f264be`
+  - `05841c8`
 - pushed:
   - yes
 
