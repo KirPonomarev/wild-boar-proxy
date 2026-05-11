@@ -4997,6 +4997,14 @@ def summarize_status(
             **recovery_result,
             "delegated_from_status": True,
         }
+    delegated_machine_error_code = str(health_payload["machine_error_code"])
+    if (
+        isinstance(recovery_result, dict)
+        and delegated_machine_error_code == "LISTENER_DOWN"
+        and str(recovery_result.get("entry_lane", "")) == "stable_service_disabled"
+        and str(health_payload.get("liveness", "")) == "down"
+    ):
+        delegated_machine_error_code = "STABLE_SERVICE_DISABLED"
     registry_identity = get_registry_identity(registry)
     current_proxy_url = str(
         health_payload.get("current_proxy_url", state.get("current_proxy_url", ""))
@@ -5064,7 +5072,7 @@ def summarize_status(
             if health_payload["status"] == "ok"
             else "Runtime status summary reflects live attestation failure."
         ),
-        machine_error_code=str(health_payload["machine_error_code"]),
+        machine_error_code=delegated_machine_error_code,
         liveness=str(health_payload["liveness"]),
         severity=str(health_payload["severity"]),
         operator_action=str(health_payload["operator_action"]),
@@ -5403,6 +5411,16 @@ def run_healthcheck(
             host, port, attestation_endpoint = get_endpoint(paths, effective_mode)
             configured_base_url = read_toml_string(paths.config_toml, "base_url")
             listener_ok = socket_is_listening(host, port)
+            if reported_effective_mode == "stable" and not listener_ok:
+                # The launcher may exit before a background stable listener is
+                # fully reachable. Give the bounded recovery lane a short live
+                # observation window before classifying it as failed.
+                deadline = time.monotonic() + 1.25
+                while time.monotonic() < deadline:
+                    time.sleep(0.05)
+                    listener_ok = socket_is_listening(host, port)
+                    if listener_ok:
+                        break
             reported_effective_mode = reconcile_effective_mode_for_reporting(
                 effective_mode, listener_ok=listener_ok
             )

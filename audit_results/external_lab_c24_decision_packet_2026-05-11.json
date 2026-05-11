@@ -1,0 +1,53 @@
+{
+  "contour": "external_lab_c24",
+  "date": "2026-05-11",
+  "decision": "HOLD_WITH_EXACT_BLOCKERS",
+  "gate": "gate_a_runtime_integration",
+  "gate_b_status": "out_of_scope_or_not_closed",
+  "mandatory_summary": {
+    "total": 6,
+    "closed_by_evidence": 5,
+    "unresolved": 1
+  },
+  "basis": [
+    "C24 closed the declared B1-B4 remediation target: focused runtime-contract recheck passed, full tests.test_cli passed, and UI-facing regression suites passed.",
+    "Postflight runtime attestation and account snapshot are healthy enough to preserve the non-blocking quota rule: healthcheck is OK, accounts_total=25, launch_capable_backend_count=11, and quota_exhausted_backend_count=6 is treated as non-blocking by declared contour policy.",
+    "Postflight owner surfaces still emit contradictory readiness truth: status reports claim_gate.status=blocked and rollout rotation inspect reports ROTATION_EVIDENCE_CONTRADICTED because policy drift is detected.",
+    "C22 integration preflight states that only contradictory machine signals should reopen Gate A closure; that condition is met in C24 postflight, so readiness cannot be upgraded to READY_FOR_GATE_A_INTEGRATION."
+  ],
+  "blockers": [
+    {
+      "id": "B5_CLAIM_GATE_BLOCKED_POLICY_DRIFT",
+      "status": "open",
+      "description": "status --json postflight reports claim_gate.status=blocked with CLAIM_GATE_BLOCKED and blocked_claims from policy_drift."
+    },
+    {
+      "id": "B6_ROTATION_EVIDENCE_CONTRADICTED_POLICY_DRIFT",
+      "status": "open",
+      "description": "rollout rotation inspect --json postflight reports ROTATION_EVIDENCE_CONTRADICTED with evidence_reason=policy_drift_detected."
+    }
+  ],
+  "monitoring": [
+    {
+      "id": "M1_QUOTA_EXHAUSTION_WITH_WORKING_SUBSET",
+      "status": "watch_non_blocking",
+      "machine_error_code": "OK",
+      "blocking": false,
+      "details": {
+        "launch_capable_backend_count": 11,
+        "quota_exhausted_backend_count": 6
+      }
+    }
+  ],
+  "next_contour_contract": {
+    "required": [
+      "adjudicate or repair claim-gate and rotation contradiction surfaces without relying on quota exhaustion as a blocker",
+      "preserve gate_b_status as out_of_scope_or_not_closed",
+      "do not execute main-app integration until contradictory readiness surfaces are cleared or explicitly reclassified by canon-backed evidence"
+    ],
+    "allowed_outcomes": [
+      "READY_FOR_GATE_A_INTEGRATION",
+      "HOLD_WITH_EXACT_BLOCKERS"
+    ]
+  }
+}

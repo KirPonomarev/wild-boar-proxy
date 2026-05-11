@@ -1,0 +1,101 @@
+{
+  "contour": "external_lab_c24",
+  "date": "2026-05-11",
+  "stage": "runtime_remediation_execution",
+  "scope": "pre_integration_runtime_remediation_only",
+  "code_change": {
+    "file": "wild_boar_proxy/runtime.py",
+    "contour_owned_hunks": [
+      {
+        "function": "summarize_status",
+        "summary": "Status now remaps delegated LISTENER_DOWN to STABLE_SERVICE_DISABLED only when delegated recovery truth proves entry_lane=stable_service_disabled and final live runtime remains down."
+      },
+      {
+        "function": "run_healthcheck",
+        "summary": "Stable recovery owner path now waits for a short bounded listener window after launcher attempt before classifying recovery as failed."
+      }
+    ],
+    "preserved_non_c24_worktree_hunks": [
+      {
+        "function": "dispatch_external_client",
+        "summary": "Detached launch settle-window hunk pre-existed in the worktree and is preserved without C24 attribution."
+      },
+      {
+        "function": "run_promote",
+        "summary": "Lock-acquired selected-backend verification relaxation pre-existed in the worktree and is preserved without C24 attribution."
+      }
+    ],
+    "tests_changed_in_c24": false
+  },
+  "focused_runtime_contract_recheck": {
+    "command": "python3 -m unittest tests.test_cli.CliTests.test_status_reports_listener_down_when_stable_port_is_absent tests.test_cli.CliTests.test_healthcheck_owner_path_emits_stable_service_disabled_lane_on_successful_stable_reenable tests.test_cli.CliTests.test_healthcheck_stable_service_disabled_lane_does_not_clobber_attestation_failure tests.test_cli.CliTests.test_status_delegates_stable_service_disabled_lane_without_becoming_owner tests.test_cli.CliTests.test_sync_returns_single_json_object tests.test_cli.CliTests.test_launch_client_dispatches_bounded_executable_with_sanitized_env tests.test_cli.CliTests.test_healthcheck_owner_path_reports_observed_source_fallback_recovery tests.test_cli.CliTests.test_healthcheck_owner_path_reports_failed_recovery_without_greenwashing_state",
+    "status": "ok",
+    "tests_ran": 8,
+    "result": "OK"
+  },
+  "hard_verification": [
+    {
+      "command": "python3 -m unittest tests.test_cli",
+      "status": "ok",
+      "tests_ran": 342,
+      "result": "OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_ui_shell",
+      "status": "ok",
+      "tests_ran": 90,
+      "result": "OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_web_ui",
+      "status": "ok",
+      "tests_ran": 4,
+      "result": "OK"
+    }
+  ],
+  "evidence_inputs": [
+    "/tmp/c24_status_pre.json",
+    "/tmp/c24_health_pre.json",
+    "/tmp/c24_accounts_pre.json",
+    "/tmp/c24_rotation_pre.json",
+    "/tmp/c24_status_post.json",
+    "/tmp/c24_health_post.json",
+    "/tmp/c24_accounts_post.json",
+    "/tmp/c24_rotation_post.json"
+  ],
+  "pre_state": {
+    "status_machine_error_code": "LOCK_HELD",
+    "health_machine_error_code": "LOCK_HELD",
+    "accounts_machine_error_code": "OK",
+    "accounts_total": 25,
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_policy_drift_status": "detected"
+  },
+  "post_state": {
+    "status_machine_error_code": "OK",
+    "status_liveness": "healthy",
+    "health_machine_error_code": "OK",
+    "health_liveness": "healthy",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "accounts_machine_error_code": "OK",
+    "accounts_total": 25,
+    "active_count": 17,
+    "reserve_count": 0,
+    "retired_count": 8,
+    "launch_capable_backend_count": 11,
+    "quota_exhausted_backend_count": 6,
+    "candidate_universe_backend_count": 17,
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_reason": "policy_drift_detected",
+    "rotation_selected_backend_count": 9,
+    "rotation_active_routing_candidate_count": 11
+  },
+  "result": {
+    "status": "remediation_completed",
+    "b1_b4_status": "closed_by_evidence",
+    "hard_suite_status": "passed",
+    "live_owner_surface_contradiction_status": "preserved_for_decision_packet"
+  }
+}
