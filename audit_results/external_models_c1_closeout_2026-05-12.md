@@ -44,6 +44,7 @@ integration, real sidecar lifecycle, or engine duplication.
 - commit:
   - `5f264be`
   - `05841c8`
+  - `57e0398`
 - pushed:
   - yes
 
