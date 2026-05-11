@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.45
-PLAN_DATE: 2026-05-08
+PLAN_VERSION: 1.46
+PLAN_DATE: 2026-05-11
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; prior blocked evidence-lane artifacts remain preserved as history; direct same-day 20-account re-entry closed `NO_GO` on 2026-05-08 because the canonical stage-20 owner path lacked an explicit eligible reserve backend; fixed long-window metrics gating remains removed from the active plan; next primary contour is execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI
+PLAN_STATUS: Execution wave 1 active; Gate A scale architecture proof is accepted for continued application development; C16/C17/C20/C22/C24 live evidence closed the 24/25-account managed-pool, stage-20, same-day validation, no-storm, and audit requirements for development; later quota exhaustion and stable-policy drift do not revoke that accepted proof, but they block fresh full-scale live availability claims until revalidated; next primary contour is basic companion UI / application-development work
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -17,8 +17,11 @@ We do not fork the host client.
 We do not build a second proxy engine.
 We build the managing layer: modes, policy, onboarding, diagnostics, recovery, and staged scaling.
 Architecture is designed for 20 accounts from day one.
-The current contour has operational evidence of correct 16-account work.
-Formal scale proof remains staged and must be backed by runtime attestation, rotation evidence, and rollback readiness before any 20-account claim.
+The C16/C17/C20/C22/C24 contour family is now accepted as the development
+scale proof for the 24/25-account managed-pool architecture.
+Formal release-facing or repeated-load claims still require fresh current-live
+truth, but the architecture proof no longer blocks basic companion UI or
+application-development work.
 
 ## Managed Companion Positioning
 
@@ -37,31 +40,46 @@ User-facing product copy may use companion-oriented wording only when it preserv
 
 ## Field Evidence Status
 
-The project has field evidence that the current local contour works correctly with 16 accounts.
-This is above the formal stage-15 contour and materially lowers uncertainty for the 20-account architecture.
-It is not, by itself, a `STABLE_20_PROVED`, `SCALE_COMPLETE`, or `PILOT_READY` claim.
+The project has accepted field evidence that the current local contour exercised
+the 24/25-account managed-pool architecture, including stage-20 owner-path
+evidence, same-day live validation, no-storm evidence, and independent audit
+evidence.
+
+This evidence closes the scale architecture proof for continued development.
+It is not, by itself, a `PILOT_READY`, release-ready, or always-current live
+capacity claim.
 
 The correct interpretation is:
 
-- 16-account operational evidence exists.
-- The formal proof contour must still capture machine-carried evidence.
-- Stage-20 remains a controlled rollout target, not an inferred outcome.
-- Fallback, rollback, and strict runtime truth rules remain mandatory.
+- 24/25-account managed-pool architecture evidence is accepted for development.
+- Stage-20 and same-day validation evidence are accepted as completed for this
+  development gate.
+- Later quota exhaustion does not revoke accepted evidence.
+- Fresh full-scale live availability claims require fresh live truth.
+- Fallback, rollback, and strict runtime truth rules remain mandatory for new
+  live contours.
 
 ## Same-Day Scale Validation Rule
 
-The active plan accepts a same-day high-load validation contour for 20 accounts.
-We do not require a fixed long-window metrics rule as an active gating requirement in this revision.
+The active plan accepts the C20 same-day high-load validation contour as closed
+development evidence for the 20-account architecture.
+We do not require a fixed long-window metrics rule as an active gating
+requirement in this revision.
 
 The accepted interpretation is:
 
-- 20-account proof may be established through one approved live validation contour on the real environment.
-- The contour must still produce machine-carried evidence.
+- 20-account proof was established for development through the accepted
+  same-day live validation contour on the real environment.
+- The accepted contour produced machine-carried evidence.
 - Stress duration is operator-defined and should be long enough to exercise routing, rotation, recovery, and truthful status.
 - Architecture claims do not replace live evidence; they only justify the contour design.
-- same-day validation may begin only after the reserve-first stage-20 owner path is canonical and available
-- a working managed pool alone does not waive the explicit eligible reserve backend requirement for `rollout stage advance 20 <id> --json`
-- `managed pool` and `active window` remain distinct truths; a wider managed inventory is not itself proof of staged active-routing progression
+- later same-day validation reruns may begin only when their own current-live
+  preconditions are true
+- a working managed pool alone does not waive explicit owner-path requirements
+  for future stage-advance claims
+- `managed pool` and `active window` remain distinct truths; a wider managed
+  inventory is not itself proof that the same account set is currently available
+  for another full-scale run
 
 Required evidence for same-day 20-account validation:
 
@@ -81,14 +99,13 @@ It must not silently imply `pilot_ready` or `production_ready`.
 
 Current implication:
 
-- the same-day scale lane remains accepted
-- the direct re-entry attempt is not currently open
-- repair of proof posture and lifecycle truth comes first
-- if a later scale re-entry closes with a non-repo-owned `NO_GO` while
-  execution-core truth remains green and unambiguous, that scale blocker does
-  not by itself force more execution-core repair before `basic companion UI`
-  begins; the unresolved scale blocker must instead remain explicit as a
-  separate later contour
+- the same-day scale lane is accepted as closed for the development gate
+- current quota exhaustion or policy drift after validation is not a product
+  architecture failure
+- current quota exhaustion or policy drift may block fresh current-live scale
+  claims, release-facing readiness, or another full-scale validation rerun
+- current quota exhaustion or policy drift does not block basic companion UI or
+  application-development work when no new full-scale live claim is being made
 
 ## Managed Pool Operating Contour
 
@@ -101,8 +118,10 @@ Accounts outside the current active window may remain managed, validated, and el
 
 Observed `401`, `429`, quota exhaustion, or other account-level failures inside the wider managed pool do not, by themselves, invalidate the runtime architecture claim, provided that runtime truth remains correct, fallback remains available, and the system continues selecting a healthy working subset without stale-green behavior.
 
-Current evidence indicates 25-account managed-pool readiness for this experimental contour.
-Canonical closeout for this claim still requires committed-and-pushed evidence and governing-document closeout.
+Current evidence accepts 25-account managed-pool readiness for this experimental
+development contour.
+Canonical closeout for this claim is this governing-document closeout plus the
+preserved contour evidence.
 It does not claim that all 25 accounts will remain simultaneously healthy under all upstream conditions.
 The canonical default operating contour remains the active window, while the wider managed pool provides resilience, replacement depth, and controlled scale headroom.
 
@@ -984,11 +1003,13 @@ Implement runtime hardening.
 Implement runtime attestation.
 Implement truthful status.
 Implement fallback.
-Do not start installer, packaging, or rich UI work before these are stable.
+The development gate for basic companion UI is now open through ADR-0002.
+Do not start installer, packaging, release polish, or rich UI expansion before
+their own later gates are stable.
 
 Explicitly out of scope:
 
-- No polished UI.
+- No polished or rich UI expansion before the basic companion UI contour closes.
 - No installer.
 - No public package polish.
 - No live staged scale execution beyond the current stable pool.
@@ -1096,7 +1117,8 @@ Without this path, neither `PILOT_READY` nor `STABLE_10_PROVED` may be claimed.
 7. Reserve-first onboarding.
 8. Manual hold for suspicious accounts.
 9. Separate proof stages for 10, 15, and 20.
-10. No UI growth before execution core freeze.
+10. No rich UI growth before execution core freeze; basic companion UI may
+    proceed after the ADR-0002 development gate.
 11. Bounded reprobe of live proxy candidates plus last-known-good proxy persistence.
 12. No scale claim without an evidence packet, runtime attestation, rotation evidence, and rollback readiness.
 
@@ -1130,11 +1152,11 @@ It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
 5. Capture the 16-account evidence packet.
 6. Upgrade registry and probing architecture for 20-account capacity.
 7. Finish runtime hardening.
-8. Run same-day live validation for 20 accounts.
-9. Capture and redact the 20-account machine evidence packet.
+8. Accept the C20 same-day live validation evidence for the development gate.
+9. Preserve the 20-account machine evidence packet boundary.
 10. Close remaining control-layer development questions.
-11. Productize onboarding where needed for release flow.
-12. Build basic companion UI.
+11. Build basic companion UI.
+12. Productize onboarding where needed for release flow.
 13. Add diagnostics export.
 14. Add installer and legacy import.
 15. Prepare experimental package.

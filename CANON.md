@@ -42,6 +42,26 @@ low-level routing.
 - architecture is designed for 20 accounts from day one
 - scaling proof is staged: 10, then 15, then 20
 
+## Accepted scale evidence rule
+
+The live 24/25-account managed-pool evidence, stage-20 owner-path evidence,
+same-day validation evidence, no-storm evidence, and independent audit evidence
+captured through the C16, C17, C20, C22, and C24 contour family are accepted as
+closed architectural scale proof for continued application development.
+
+Subsequent quota exhaustion, account depletion, or stable-policy drift observed
+after accepted live validation does not invalidate the accepted scale proof,
+Gate A development closure, or permission to continue application development.
+
+Those later conditions only block fresh claims that the same live account set is
+currently available for another full-scale run. They also remain relevant to
+any contour that needs current live capacity, current routing participation, or
+release-facing readiness.
+
+In plain terms: limits consumed by validation are evidence that the validation
+really exercised the system. They are not, by themselves, a reason to cancel the
+accepted validation result.
+
 ## Owner authorization rule
 
 The project owner may grant project-scoped standing approval in the current

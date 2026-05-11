@@ -4,11 +4,11 @@
 # Next Contour Canon Plan
 
 PLAN_NAME: Next Contour Canon Plan
-PLAN_VERSION: 1.8
-PLAN_DATE: 2026-05-08
+PLAN_VERSION: 1.9
+PLAN_DATE: 2026-05-11
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Active; direct same-day 20-account re-entry closed `NO_GO` in `step37`; `step38` scope-freeze classification closed `NO_GO` on current runtime-truth blockers; `step39` read-only truth reproof closed `NO_GO` because bounded `sync --json` refresh is required but not yet owner-authorized in the active thread; `step40` is the current authorized single-sync runtime-truth reclear contour and is presently parked at its precondition gate until explicit owner authorization appears in the active thread; this document governs a bounded repair program composed of multiple small contours; once `step40` reopens and closes, the next lanes are reserve-first posture normalization, stage-20 re-entry, post-advance same-day validation, and canonical stop before design
-PLAN_SCOPE: Repair proof posture and lifecycle truth through a bounded sequence of control-layer contours so the real working contour becomes canonically provable before basic companion UI work resumes
+PLAN_STATUS: Superseded for development gating; C16/C17/C20/C22/C24 are accepted as the scale architecture proof for continued application development; later quota exhaustion, stable-policy drift, or reserve depletion may block fresh full-scale live claims but do not reopen this repair loop as a prerequisite for basic companion UI
+PLAN_SCOPE: Historical repair program retained for runtime/release contours; current next development contour is basic companion UI / application-development work
 
 ## Canon Priority
 
@@ -22,12 +22,46 @@ When sources conflict, decisions must follow this order:
 6. `DELIVERY_RULES.md`
 7. `README.md`
 
-This plan controls the next repair program and its small-contour sequence.
+This plan is now historical for the development gate. It remains useful for
+future runtime/release contours that need current live scale capacity, but it no
+longer blocks basic companion UI or application-development work.
 It does not override the governing product/runtime canon above.
+
+## Supersession Decision
+
+The C16/C17/C20/C22/C24 evidence family is accepted as the closed scale
+architecture proof for development. The project does not need another
+`INSPECT_STABLE_POLICY_DRIFT_CONTOUR`, reserve-readiness recovery loop, or
+stage-20 re-entry loop before basic companion UI begins.
+
+Later quota exhaustion, stable-policy drift, reserve depletion, or account
+pool changes after accepted validation are expected possible results of the
+validation campaign. They do not invalidate the accepted proof.
+
+They do block fresh statements that the same live account set is currently ready
+for another full-scale validation, release-facing readiness, or production-like
+load run.
+
+Next development contour:
+
+- `BASIC_COMPANION_UI_CONTOUR`
+
+Allowed before another runtime-scale contour:
+
+- UI and application work that consumes existing JSON surfaces
+- docs/spec work for the companion app
+- non-live tests for UI/application behavior
+
+Not allowed without fresh live truth:
+
+- claiming the current live pool is ready for another full-scale run
+- claiming release or pilot readiness from stale capacity
+- hiding current quota or policy-drift state in runtime status
 
 ## Trigger For This Plan
 
-The previous direct re-entry attempt is closed `NO_GO`.
+The previous direct re-entry history is preserved, but it no longer controls the
+development gate.
 
 Observed facts from `step37`:
 
@@ -61,15 +95,14 @@ Supporting sources:
 
 ## Purpose
 
-Repair the gap between:
+Historical purpose preserved for runtime/release rechecks:
 
 - real working runtime truth
 - live registry lifecycle posture
 - stage-20 canonical proof path
 
-This contour exists to make the real contour canonically provable again.
-It is not a rich UI contour, not an installer contour, and not a generic
-runtime-expansion contour.
+This historical contour made the real contour canonically provable for runtime
+scale claims. It no longer blocks the next development contour.
 
 ## Core Finding
 
@@ -79,22 +112,23 @@ The current blocker is a mismatch between:
 - the canonical reserve-first stage-20 owner path
 - the live registry posture currently showing `24 active / 0 reserve`
 
-The next contour must determine which of these is true:
+That historical contour needed to determine which of these was true:
 
 - `LIVE_POSTURE_DRIFT_ONLY`
 - `PROOF_MODEL_CONFLATES_MANAGED_POOL_WITH_ACTIVE_WINDOW`
 - `INSUFFICIENT_ELIGIBLE_POOL`
 
-No stage-20 proof or UI re-entry may proceed before that classification is
-closed.
+This classification requirement is historical for the development gate. It may
+still apply to future runtime/release claims that need current live scale
+capacity.
 
 ## Program Shape
 
-This document is not one single write contour.
-It is a bounded repair program that must be executed as a sequence of small
-contours with closeout between them.
+This document was not one single write contour.
+It defined a bounded repair program executed as a sequence of small contours
+with closeout between them.
 
-Default contour decomposition:
+Historical contour decomposition:
 
 1. closed: `step38` scope freeze plus read-only classification
 2. closed: `step39` read-only truth reproof plus authorization gate check
@@ -135,8 +169,8 @@ In scope:
 
 Out of scope:
 
-1. Rich UI expansion.
-2. Design polish.
+1. Release/pilot claims based on stale current-live capacity.
+2. Fresh full-scale availability claims without fresh live truth.
 3. Installer or packaging.
 4. Engine-layer refactor without proven blocker.
 5. Hidden best-reserve logic.
@@ -464,61 +498,51 @@ private runtime dumps, or unredacted logs.
 
 ## Canonical Stop Before Design
 
-The contour may transition toward UI only after this stop token is truthfully
-earned:
+For development gating, this token is now truthfully earned by ADR-0002 and the
+C16/C17/C20/C22/C24 accepted-evidence family:
 
 `EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`
 
-This token may be set only if all conditions are true:
+For future runtime/release claims, stricter current-live checks may still be
+required. For basic companion UI, the token means:
 
-1. runtime truth is green:
-   - `status --json`
-   - `healthcheck --json`
-   - `launch smoke --json` when required by the contour
-   - `rollout rotation inspect --json`
-2. reserve-first lifecycle posture is canonical or explicitly clarified without
-   contradicting command truth
-3. stage-20 owner-path is either:
-   - passed and followed by successful same-day validation, or
-   - closed with a non-repo-owned `NO_GO` that does not leave execution-core
-     truth ambiguous
-4. no repo-owned execution-core blocker remains open
-5. no live-runtime mutation remains undocumented
-6. UI/design changes are not mixed into execution-core closeout
-7. branch state is committed and pushed
-8. final closeout names verification commands, commit hash, branch, and next
-   contour
+1. the scale architecture proof is accepted for development
+2. subsequent quota exhaustion does not revoke that proof
+3. current live drift is not hidden or greenwashed
+4. basic UI work does not claim current full-scale live availability
+5. release-facing or repeated full-scale claims remain gated by fresh live truth
 
-Until this token is earned:
+Until a later release/pilot gate is earned:
 
-- no rich UI expansion
-- no design polish contour
-- no masking execution-core blockers behind UI progress
+- no release-ready claim
+- no production-ready claim
+- no fresh full-scale availability claim without current live evidence
 
-If the stop token is earned through the second path above
-(`non-repo-owned NO_GO` with clear execution-core truth), only `basic companion
-UI` may reopen.
-That reopening:
+The basic companion UI contour may reopen now. That reopening:
 
-- must not claim scale closure
-- must not imply `scale-to-20 validated`
-- must not hide the unresolved scale blocker
+- may rely on accepted scale architecture proof
+- must not claim current-live `scale-to-20` availability without fresh live
+  truth
+- must not claim that all 24/25 accounts are currently available
+- must not hide current quota exhaustion, reserve depletion, or policy drift in
+  runtime status
 - must keep the scale contour open as a separate later contour
 
 ## Success Criteria
 
-This plan succeeds when:
+For development gating, this plan has succeeded when:
 
-1. the `step37` blocker is honestly classified
-2. the necessary branch is executed without mixing repo and live lanes
-3. reserve-first stage-20 owner-path becomes available and truthful again
-4. same-day 20-account validation is either completed with evidence or closed
-   by an explicit truthful `NO_GO`
-5. the repo reaches a canonical stop before design
+1. the accepted scale architecture proof is named explicitly
+2. subsequent quota exhaustion is classified as non-invalidating for
+   development
+3. current-live capacity remains gated for future fresh full-scale claims
+4. the basic companion UI contour is allowed without hiding current runtime
+   truth
 
 ## Final Discipline
 
-This repair contour is intentionally narrower than a general product plan.
+This historical repair contour is intentionally narrower than a general product
+plan.
 
 Choose:
 
@@ -526,4 +550,4 @@ Choose:
 - reserve-first lifecycle truth over active-only drift
 - explicit owner surfaces over hidden mutation
 - repo/live separation over convenience
-- design gate discipline over premature UI expansion
+- current-live honesty over release or scale overclaiming

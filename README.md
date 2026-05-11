@@ -27,12 +27,17 @@ The project does not replace the proxy engine. It owns the control layer:
 
 This repository is the bootstrap for the public experimental project.
 
-Current next contour is execution-core repair for reserve-first stage-20
-re-entry.
-The runtime can be live and useful while the formal stage-20 owner path remains
-blocked by proof-posture drift.
-Basic companion UI work stays gated behind
-`EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`.
+The 24/25-account managed-pool capacity, stage-20 owner path, same-day
+validation, no-storm behavior, and independent audit evidence are accepted as
+closed scale architecture proof for continued application development.
+
+Basic companion UI / application-development work is now the next development
+lane.
+
+Current quota exhaustion, reserve depletion, or stable-policy drift after the
+validation campaign does not mean the product architecture failed. It means the
+same live account set must be freshly revalidated before another full-scale
+runtime claim.
 
 ## Managed pool capacity
 
@@ -47,14 +52,19 @@ Instead, it selects a healthy working subset and can pull in additional managed 
 Account-level failures such as `401`, `429`, or quota exhaustion do not, by themselves, mean that the runtime architecture has failed.
 They mean the system has identified a problem with a specific account and should continue operating through the remaining healthy pool.
 
-This currently indicates 25-account managed-pool readiness for the experimental control contour.
-Canonical release-facing claims remain bound to committed evidence and closeout.
+This confirms 25-account managed-pool capacity for the experimental control
+contour. Later quota exhaustion is an expected possible result of validation,
+not a product failure.
+Canonical release-facing or repeated full-scale live claims remain bound to
+fresh current-live evidence and closeout.
 
 In short:
 
 - `25 accounts` is the tested managed-pool capacity
 - `10 accounts` is the default active window
 - the remaining managed accounts provide replacement depth, resilience, and controlled scale headroom
+- later quota exhaustion blocks fresh capacity claims, not application
+  development
 
 ## Core rule
 
