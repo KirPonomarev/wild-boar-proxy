@@ -102,11 +102,7 @@
   ,
   "git": {
     "branch": "codex/external-agent-lab-isolated",
-    "commit_set": [
-      "5f264be",
-      "05841c8",
-      "57e0398"
-    ],
+    "commit_set_recording_mode": "see_branch_history",
     "pushed": true
   }
 }

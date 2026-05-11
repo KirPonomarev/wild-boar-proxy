@@ -42,9 +42,8 @@ integration, real sidecar lifecycle, or engine duplication.
 - branch:
   - `codex/external-agent-lab-isolated`
 - commit:
-  - `5f264be`
-  - `05841c8`
-  - `57e0398`
+  - logical commit set present on branch history
+  - inspect with `git log --oneline origin/codex/external-agent-lab-isolated`
 - pushed:
   - yes
 
