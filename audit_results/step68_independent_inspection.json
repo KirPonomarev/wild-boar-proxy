@@ -1,0 +1,16 @@
+{
+  "status": "accepted_with_narrowing",
+  "step": "step68",
+  "inspector": "Aquinas",
+  "agent_verdict": "Branch C stays closed; no reopen",
+  "accepted_core_facts": [
+    "material change from step66 baseline is present",
+    "the change is upstream regression, not reserve-gap improvement",
+    "execution-core is no longer green enough for Branch C reopening",
+    "no owner surface is admissible while the upstream blocker remains active"
+  ],
+  "narrowing": [
+    "the inspector's `STOP_AND_WAIT_FOR_FRESH_RESERVE_INPUT_OR_POOL_CHANGE` remains true at the Branch C lane itself, but the fresh material change is an upstream blocker, so contour selection must return to upstream blocker repair rather than remain only in passive wait-state"
+  ],
+  "final_verdict": "Branch C may not reopen because fresh truth selected an upstream blocker first"
+}

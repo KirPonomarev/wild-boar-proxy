@@ -1,0 +1,14 @@
+{
+  "status": "aborted_before_branch_c_reopen_analysis",
+  "step": "step68",
+  "reason": "execution_core_no_longer_green_enough",
+  "blocking_facts": {
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "posture_machine_error_code": "LOCK_HELD"
+  },
+  "admissibility_matrix_not_built": true
+}

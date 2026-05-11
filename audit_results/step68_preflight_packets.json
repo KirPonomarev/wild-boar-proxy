@@ -1,0 +1,36 @@
+{
+  "status": "completed",
+  "step": "step68",
+  "contour_id": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "packets": {
+    "status": "step68_status_pre.json",
+    "healthcheck": "step68_healthcheck_pre.json",
+    "accounts": "step68_accounts_pre.json",
+    "rotation": "step68_rotation_pre.json",
+    "posture": "step68_posture_pre.json"
+  },
+  "summary": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "desired_stable_runtime_source": "approved_repair_target",
+    "effective_stable_runtime_source": "observed_stable_inventory_source",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "healthcheck_machine_error_code": "OK",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_freshness": "stale",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "accounts_active_count": 16,
+    "accounts_reserve_count": 0,
+    "accounts_retired_count": 8,
+    "posture_machine_error_code": "LOCK_HELD"
+  },
+  "recheck_verdict": {
+    "material_change_detected": true,
+    "branch_c_reopen_may_continue": false,
+    "reason": "upstream_execution_core_regressed_before_branch_c_recheck_completed"
+  }
+}

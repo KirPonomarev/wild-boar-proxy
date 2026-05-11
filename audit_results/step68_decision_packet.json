@@ -1,0 +1,40 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "step": "step68",
+  "contour_id": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "contour_result": "NO_GO_UPSTREAM_BLOCKER_RECHECK",
+  "primary_verdict": "EXECUTION_CORE_REGRESSED_BEFORE_BRANCH_C_COULD_REOPEN",
+  "mutation_executed": false,
+  "material_change_detected": true,
+  "why_now": [
+    "step67 left Branch C in wait-state only while execution-core remained green enough",
+    "fresh step68 truth no longer matches that baseline because claim-gate, policy-drift, activation-readiness, and rotation freshness all regressed upstream",
+    "therefore this contour may not continue Branch C reopening logic"
+  ],
+  "selected_next_contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "next_contour_reason": [
+    "the fresh blocker pattern matches the admitted split execution-core state previously reconciled by the bounded composite sequence",
+    "blind single-lane retries remain forbidden",
+    "Branch C remains closed until execution-core truth is green enough again"
+  ],
+  "rejected_alternatives": [
+    {
+      "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+      "reason": "Branch C may not reopen while execution-core truth is regressed upstream"
+    },
+    {
+      "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+      "reason": "a second immediate recheck would ignore the fresh upstream blocker and provide no new lawful truth"
+    }
+  ],
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 6,
+    "result": "OK"
+  },
+  "independent_inspection": {
+    "status": "accepted",
+    "narrowing_required": false
+  }
+}

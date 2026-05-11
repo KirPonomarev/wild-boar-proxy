@@ -1,0 +1,8 @@
+{
+  "status": "not_applicable",
+  "step": "step68",
+  "reason": "Branch C reopening logic did not run because upstream execution-core truth regressed first",
+  "accounts_onboard": null,
+  "accounts_demote": null,
+  "accounts_release": null
+}

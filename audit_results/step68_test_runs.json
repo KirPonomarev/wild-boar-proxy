@@ -1,0 +1,19 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_status_reports_desired_approved_target_before_effective_activation",
+    "tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target",
+    "tests.test_cli.CliTests.test_rollout_rotation_inspect_uses_approved_target_policy_surface_when_activation_evidence_is_valid",
+    "tests.test_cli.CliTests.test_sync_materializes_selected_backend_snapshot_on_success",
+    "tests.test_cli.CliTests.test_rollout_rotation_inspect_reports_stale_nested_snapshot",
+    "tests.test_cli.CliTests.test_accounts_onboard_blocks_held_lock_without_mutation"
+  ],
+  "returncode": 0,
+  "tests_run": 6,
+  "summary": "Ran 6 tests in 8.539s",
+  "result": "OK"
+}
