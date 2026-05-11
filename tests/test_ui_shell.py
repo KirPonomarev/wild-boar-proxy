@@ -33,6 +33,7 @@ from wild_boar_proxy.ui_shell import (
     load_external_models_snapshot,
     load_runtime_snapshot,
     main,
+    mark_external_action_stale,
     parse_exact_json_object,
     run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
@@ -597,6 +598,8 @@ class ExternalActionResultTests(unittest.TestCase):
         self.assertFalse(result.profile_ready)
         self.assertTrue(result.network_dependent)
         self.assertEqual(result.changed_files, ("/tmp/state.json", "/tmp/evidence-validate.json"))
+        self.assertFalse(result.is_stale)
+        self.assertEqual(result.stale_reason, "")
 
     def test_build_external_action_result_uses_network_dependent_evidence_fallback(self) -> None:
         payload = external_validate_payload(
@@ -628,6 +631,19 @@ class ExternalActionResultTests(unittest.TestCase):
                 action="external_validate",
                 action_payload=external_validate_payload(changed_files="/tmp/state.json"),
             )
+
+    def test_mark_external_action_stale_sets_stale_metadata(self) -> None:
+        result = build_external_action_result(
+            action="external_validate",
+            action_payload=external_validate_payload(),
+        )
+
+        stale_result = mark_external_action_stale(result, reason="cached_history")
+
+        assert stale_result is not None
+        self.assertTrue(stale_result.is_stale)
+        self.assertEqual(stale_result.stale_reason, "cached_history")
+        self.assertEqual(stale_result.route_id, result.route_id)
 
 
 class ModeControlTests(unittest.TestCase):

@@ -8,7 +8,8 @@ import os
 import subprocess
 import sys
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from tkinter import StringVar, Tk, messagebox
 from tkinter import ttk
 from typing import Any
@@ -417,6 +418,9 @@ class ExternalActionResult:
     prerequisite: str
     base_url: str
     changed_files: tuple[str, ...]
+    observed_at_utc: str
+    is_stale: bool
+    stale_reason: str
 
 
 @dataclass(frozen=True)
@@ -798,7 +802,20 @@ def build_external_action_result(
         prerequisite=str(data.get("prerequisite", "")),
         base_url=str(data.get("base_url", "")),
         changed_files=tuple(str(item) for item in changed_files),
+        observed_at_utc=datetime.now(timezone.utc).isoformat(),
+        is_stale=False,
+        stale_reason="",
     )
+
+
+def mark_external_action_stale(
+    action: ExternalActionResult | None,
+    *,
+    reason: str,
+) -> ExternalActionResult | None:
+    if action is None:
+        return None
+    return replace(action, is_stale=True, stale_reason=reason)
 
 
 def ensure_capacity_data_consistency(

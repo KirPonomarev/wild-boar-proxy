@@ -6,15 +6,19 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import subprocess
+import sys
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 from urllib.parse import parse_qs
 
+from .external_models.paths import ExternalModelsPaths
 from .ui_shell import (
     AccountPoolSnapshot,
     ExternalActionResult,
@@ -26,6 +30,7 @@ from .ui_shell import (
     load_account_pool_snapshot,
     load_external_models_snapshot,
     load_runtime_snapshot,
+    mark_external_action_stale,
     run_account_mutation_and_refresh,
     run_account_onboard_and_refresh,
     run_account_validate_and_refresh,
@@ -55,12 +60,27 @@ class UiEvent:
     outcome: str
 
 
-def _integration_state(message: str, *, flash: str) -> DashboardState:
+@dataclass(frozen=True)
+class ExternalSupportTarget:
+    action: str
+    label: str
+    path: str
+    kind: str
+    available: bool
+
+
+def _integration_state(
+    message: str,
+    *,
+    flash: str,
+    external_action: ExternalActionResult | None = None,
+) -> DashboardState:
     return DashboardState(
         runtime=RuntimeSnapshot.integration_failure(message),
         accounts=AccountPoolSnapshot.integration_failure(message),
         external_models=ExternalModelsSnapshot.integration_failure(message),
         flash=flash,
+        external_action=external_action,
     )
 
 
@@ -84,9 +104,22 @@ def load_dashboard_state(
     try:
         runtime = load_runtime_snapshot(runner)
         accounts = load_account_pool_snapshot(runner)
+    except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+        return _integration_state(
+            str(exc),
+            flash=flash or "Не удалось обновить панель управления.",
+            external_action=external_action,
+        )
+    try:
         external_models = load_external_models_snapshot(runner)
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
-        return _integration_state(str(exc), flash=flash or "Не удалось обновить панель управления.")
+        external_models = ExternalModelsSnapshot.integration_failure(str(exc))
+        external_action = mark_external_action_stale(
+            external_action,
+            reason="refresh_failed",
+        )
+        if not flash:
+            flash = "External-models section refresh failed."
     return DashboardState(
         runtime=runtime,
         accounts=accounts,
@@ -94,6 +127,84 @@ def load_dashboard_state(
         flash=flash or runtime.human_message,
         external_action=external_action,
     )
+
+
+def _default_support_opener(target: Path) -> None:
+    if sys.platform == "darwin":
+        command = ["open", str(target)]
+        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
+    if os.name == "nt":
+        os.startfile(str(target))  # type: ignore[attr-defined]
+        return
+    command = ["xdg-open", str(target)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _support_targets(
+    external_action: ExternalActionResult | None,
+) -> tuple[ExternalSupportTarget, ...]:
+    paths = ExternalModelsPaths.from_env()
+    targets = [
+        ExternalSupportTarget(
+            action="external_open_root_dir",
+            label="Open data dir",
+            path=str(paths.root_dir),
+            kind="dir",
+            available=True,
+        ),
+        ExternalSupportTarget(
+            action="external_open_routes_file",
+            label="Open routes.json",
+            path=str(paths.routes_file),
+            kind="file",
+            available=paths.routes_file.exists(),
+        ),
+        ExternalSupportTarget(
+            action="external_open_state_file",
+            label="Open state.json",
+            path=str(paths.state_file),
+            kind="file",
+            available=paths.state_file.exists(),
+        ),
+        ExternalSupportTarget(
+            action="external_open_evidence_dir",
+            label="Open evidence dir",
+            path=str(paths.evidence_dir),
+            kind="dir",
+            available=True,
+        ),
+    ]
+    if external_action and external_action.evidence_path:
+        evidence_path = Path(external_action.evidence_path)
+        targets.append(
+            ExternalSupportTarget(
+                action="external_open_latest_evidence",
+                label="Open evidence from result",
+                path=str(evidence_path),
+                kind="file",
+                available=evidence_path.exists(),
+            )
+        )
+    return tuple(targets)
+
+
+def _open_support_target(
+    target_action: str,
+    *,
+    external_action: ExternalActionResult | None,
+    support_opener: Callable[[Path], None] | None,
+) -> str:
+    target_map = {item.action: item for item in _support_targets(external_action)}
+    target = target_map.get(target_action)
+    if target is None:
+        raise UiShellError("Unknown external-models support action.")
+    opener = support_opener or _default_support_opener
+    path = Path(target.path)
+    if not target.available and target.kind == "file":
+        raise UiShellError(f"Support target is not available yet: {path}")
+    opener(path)
+    return f"Opened support target: {path}"
 
 
 def _action_flash(payload: dict[str, Any]) -> str:
@@ -109,11 +220,30 @@ def apply_action(
     fields: dict[str, str],
     *,
     current_external_action: ExternalActionResult | None = None,
+    support_opener: Callable[[Path], None] | None = None,
 ) -> DashboardState:
     action = fields.get("action", "").strip()
     if not action:
         return load_dashboard_state(runner, flash="Действие не указано.")
+    stale_external_action = mark_external_action_stale(
+        current_external_action,
+        reason="cached_history",
+    )
     try:
+        if action.startswith("external_open_"):
+            flash = _open_support_target(
+                action,
+                external_action=current_external_action,
+                support_opener=support_opener,
+            )
+            return load_dashboard_state(
+                runner,
+                flash=flash,
+                external_action=mark_external_action_stale(
+                    current_external_action,
+                    reason="support_action",
+                ),
+            )
         if action == "mode_stable":
             payload, runtime = run_mode_control_and_refresh(
                 runner, ("mode", "set", "stable", "--json")
@@ -125,7 +255,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "mode_managed":
             payload, runtime = run_mode_control_and_refresh(
@@ -138,7 +268,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "sync":
             payload, runtime, accounts = run_sync_and_refresh(runner)
@@ -148,7 +278,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "smoke":
             payload, runtime = run_smoke_and_refresh(runner)
@@ -159,7 +289,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "stable_repair":
             payload, runtime, accounts = run_stable_repair_and_refresh(runner)
@@ -169,7 +299,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "diagnostics":
             payload, runtime, accounts = run_diagnostics_export_and_refresh(runner)
@@ -179,7 +309,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "launch_client":
             client_path = fields.get("client_path", "").strip()
@@ -187,7 +317,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен абсолютный путь к клиенту.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload, runtime = run_launch_client_and_refresh(
                 runner,
@@ -200,7 +330,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "onboard":
             auth_ref = fields.get("auth_ref", "").strip()
@@ -208,7 +338,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен явный путь к auth-файлу.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload, runtime, accounts = run_account_onboard_and_refresh(
                 runner,
@@ -220,7 +350,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         route_id = fields.get("route_id", "").strip()
         if action == "external_route_enable":
@@ -228,7 +358,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models", "routes", "enable", "--json", "--route", route_id
@@ -249,7 +379,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models", "routes", "disable", "--json", "--route", route_id
@@ -270,7 +400,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models", "routes", "validate", "--json", "--route", route_id
@@ -291,7 +421,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models", "check", "--json", "--route", route_id
@@ -312,7 +442,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models",
@@ -338,7 +468,7 @@ def apply_action(
                 return load_dashboard_state(
                     runner,
                     flash="Нужен route_id для external-models.",
-                    external_action=current_external_action,
+                    external_action=stale_external_action,
                 )
             payload = runner.run(
                 "external-models", "evidence", "capture", "--json", "--route", route_id
@@ -360,7 +490,7 @@ def apply_action(
             return load_dashboard_state(
                 runner,
                 flash="Нужен идентификатор backend-а.",
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action in {"validate", "recheck"}:
             payload, accounts = run_account_validate_and_refresh(runner, backend_id)
@@ -371,7 +501,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "promote":
             payload, runtime, accounts = run_account_mutation_and_refresh(
@@ -383,7 +513,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "demote":
             payload, runtime, accounts = run_account_mutation_and_refresh(
@@ -395,7 +525,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "hold":
             payload, runtime, accounts = run_account_mutation_and_refresh(
@@ -407,7 +537,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "release":
             payload, runtime, accounts = run_account_mutation_and_refresh(
@@ -419,7 +549,7 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
         if action == "retire":
             payload, runtime, accounts = run_account_mutation_and_refresh(
@@ -431,14 +561,21 @@ def apply_action(
                 accounts=accounts,
                 external_models=external_models,
                 flash=_action_flash(payload),
-                external_action=current_external_action,
+                external_action=stale_external_action,
             )
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
-        return _integration_state(str(exc), flash=f"Действие завершилось с ошибкой: {exc}")
+        return _integration_state(
+            str(exc),
+            flash=f"Действие завершилось с ошибкой: {exc}",
+            external_action=mark_external_action_stale(
+                current_external_action,
+                reason="refresh_failed",
+            ),
+        )
     return load_dashboard_state(
         runner,
         flash=f"Неподдерживаемое действие: {action}",
-        external_action=current_external_action,
+        external_action=stale_external_action,
     )
 
 
@@ -606,6 +743,9 @@ def _external_action_rows(action: ExternalActionResult | None) -> str:
     if action is None:
         return "<tr><td colspan='2'><em>Пока нет route-level action packet.</em></td></tr>"
     rows = [
+        ("Observed at", action.observed_at_utc),
+        ("Freshness", "stale" if action.is_stale else "fresh"),
+        ("Stale reason", action.stale_reason),
         ("Action", action.action),
         ("Status", action.status),
         ("Machine error", action.machine_error_code),
@@ -633,6 +773,27 @@ def _external_action_rows(action: ExternalActionResult | None) -> str:
     return "".join(
         f"<tr><th>{_esc(label)}</th><td>{_esc(value)}</td></tr>" for label, value in rows
     )
+
+
+def _external_support_rows(action: ExternalActionResult | None) -> str:
+    rows: list[str] = []
+    for target in _support_targets(action):
+        button = (
+            f"<form method='post' action='/action' class='inline'>"
+            f"<input type='hidden' name='action' value='{_esc(target.action)}'>"
+            f"<button type='submit'>{_esc(target.label)}</button>"
+            "</form>"
+        )
+        availability = "available" if target.available else "missing"
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(target.label)}</td>"
+            f"<td>{_esc(target.path)}</td>"
+            f"<td>{_esc(availability)}</td>"
+            f"<td>{button}</td>"
+            "</tr>"
+        )
+    return "".join(rows)
 
 
 def render_dashboard(state: DashboardState) -> str:
@@ -802,6 +963,21 @@ def render_dashboard(state: DashboardState) -> str:
       <table>{_external_action_rows(state.external_action)}</table>
     </section>
     <section class="panel" style="margin-top: 18px;">
+      <h2>External Models Support</h2>
+      <p class="caption">
+        Support-only inspection actions. They may open files or folders for operator review, but they are not truth inputs
+        and never upgrade readiness claims.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th><th>Path</th><th>Availability</th><th>Open</th>
+          </tr>
+        </thead>
+        <tbody>{_external_support_rows(state.external_action)}</tbody>
+      </table>
+    </section>
+    <section class="panel" style="margin-top: 18px;">
       <h2>Последние действия</h2>
       <table>
         <thead>
@@ -819,8 +995,14 @@ def render_dashboard(state: DashboardState) -> str:
 
 
 class WildBoarWebUi:
-    def __init__(self, runner: JsonCommandRunner | None = None) -> None:
+    def __init__(
+        self,
+        runner: JsonCommandRunner | None = None,
+        *,
+        support_opener: Callable[[Path], None] | None = None,
+    ) -> None:
         self.runner = runner or JsonCommandRunner()
+        self.support_opener = support_opener
         self._events: deque[UiEvent] = deque(maxlen=24)
         self._external_action: ExternalActionResult | None = None
 
@@ -834,7 +1016,13 @@ class WildBoarWebUi:
         )
 
     def get_dashboard(self, *, path: str = "/") -> DashboardState:
-        state = load_dashboard_state(self.runner, external_action=self._external_action)
+        state = load_dashboard_state(
+            self.runner,
+            external_action=mark_external_action_stale(
+                self._external_action,
+                reason="cached_history",
+            ),
+        )
         self._record_event(
             f"GET {path}",
             f"{state.runtime.overall_state} / {state.runtime.effective_mode}",
@@ -846,6 +1034,7 @@ class WildBoarWebUi:
             self.runner,
             fields,
             current_external_action=self._external_action,
+            support_opener=self.support_opener,
         )
         self._external_action = state.external_action
         action = fields.get("action", "").strip() or "unknown"

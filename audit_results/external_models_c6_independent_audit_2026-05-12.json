@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c6_ui_hardening_and_operator_support",
+  "date": "2026-05-12",
+  "auditor": "019e192d-137f-7483-9311-dd7a9c0a3ad9",
+  "scope_files": [
+    "wild_boar_proxy/web_ui.py",
+    "wild_boar_proxy/ui_shell.py",
+    "tests/test_web_ui.py",
+    "tests/test_ui_shell.py"
+  ],
+  "findings": [],
+  "facts": [
+    "wild_boar_proxy/web_ui.py:28-33,63-129,132-207,218-579,742-796,799-1042 contain the C6 stale/support changes.",
+    "wild_boar_proxy/ui_shell.py:8-9,418-423,802-818 adds stale metadata and helper logic for external action results.",
+    "tests/test_web_ui.py:10-30,178-183,569-570,612-666 add support/stale UI assertions.",
+    "tests/test_ui_shell.py:33-36,601-602,635-646 add stale metadata helper coverage.",
+    "Support/open-file actions are implemented in wild_boar_proxy/web_ui.py:132-207 and rendered in a dedicated support section at wild_boar_proxy/web_ui.py:966-979.",
+    "Support/open-file actions do not parse files and are not used as truth inputs.",
+    "wild_boar_proxy/web_ui.py:1018-1024 marks cached external actions stale on GET.",
+    "wild_boar_proxy/web_ui.py:116-128 downgrades only the external-models section to integration_failure on external refresh failure while keeping runtime/accounts truth intact.",
+    "No new primary command semantics or runtime.py changes were introduced in the scoped files."
+  ],
+  "residual_risks": [
+    "_default_support_opener() is platform-specific and not directly exercised in tests.",
+    "Directory targets are intentionally always treated as available by design."
+  ],
+  "verdict": {
+    "status": "pass",
+    "blocking_findings": 0
+  }
+}

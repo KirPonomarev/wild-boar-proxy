@@ -7,6 +7,7 @@ import http.client
 import socket
 import threading
 import unittest
+from pathlib import Path
 
 from wild_boar_proxy.ui_shell import (
     AccountPoolSnapshot,
@@ -17,6 +18,7 @@ from wild_boar_proxy.ui_shell import (
     ExternalModelsSnapshot,
     ExternalRouteRecord,
     RuntimeSnapshot,
+    UiShellError,
 )
 from wild_boar_proxy.web_ui import (
     DashboardState,
@@ -24,6 +26,7 @@ from wild_boar_proxy.web_ui import (
     WildBoarWebUi,
     apply_action,
     build_handler,
+    load_dashboard_state,
     render_dashboard,
 )
 from http.server import ThreadingHTTPServer
@@ -175,6 +178,9 @@ def external_action() -> ExternalActionResult:
         prerequisite="live_listener_contour_required",
         base_url="",
         changed_files=("/tmp/state.json",),
+        observed_at_utc="2026-05-12T00:00:00+00:00",
+        is_stale=False,
+        stale_reason="",
     )
 
 
@@ -560,6 +566,8 @@ class WebUiTests(unittest.TestCase):
         self.assertIn("external_profile", html)
         self.assertIn("external_evidence", html)
         self.assertIn("Disable route wbp-deepseek-v3?", html)
+        self.assertIn("External Models Support", html)
+        self.assertIn("Open data dir", html)
 
     def test_apply_action_requires_explicit_auth_ref(self) -> None:
         state = apply_action(FakeRunner(), {"action": "onboard", "auth_ref": "   "})
@@ -601,6 +609,61 @@ class WebUiTests(unittest.TestCase):
             state.external_action.prerequisite,
             "live_listener_contour_required",
         )
+        self.assertFalse(state.external_action.is_stale)
+
+    def test_apply_action_support_open_keeps_result_support_only_and_stale(self) -> None:
+        opened: list[Path] = []
+
+        state = apply_action(
+            FakeRunner(),
+            {"action": "external_open_root_dir"},
+            current_external_action=external_action(),
+            support_opener=opened.append,
+        )
+
+        self.assertEqual(len(opened), 1)
+        self.assertIn("Opened support target:", state.flash)
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "support_action")
+
+    def test_load_dashboard_state_preserves_stale_external_action_on_integration_failure(self) -> None:
+        class BrokenRunner(FakeRunner):
+            def run(self, *args: str) -> CommandResult:
+                if args == ("external-models", "status", "--json"):
+                    raise UiShellError("boom")
+                return super().run(*args)
+
+        stale_action = external_action()
+        stale_action = ExternalActionResult(
+            **{**stale_action.__dict__, "is_stale": True, "stale_reason": "cached_history"}
+        )
+
+        state = load_dashboard_state(
+            BrokenRunner(),
+            flash="refresh failed",
+            external_action=stale_action,
+        )
+
+        self.assertEqual(state.runtime.overall_state, "ok")
+        self.assertEqual(state.external_models.integration_error, "boom")
+        self.assertEqual(state.flash, "refresh failed")
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "refresh_failed")
+
+    def test_get_dashboard_marks_previous_external_action_stale(self) -> None:
+        app = WildBoarWebUi(runner=FakeRunner())
+        app._external_action = external_action()  # noqa: SLF001 - targeted state test
+
+        state = app.get_dashboard()
+
+        self.assertIsNotNone(state.external_action)
+        assert state.external_action is not None
+        self.assertTrue(state.external_action.is_stale)
+        self.assertEqual(state.external_action.stale_reason, "cached_history")
 
     def test_http_handler_serves_dashboard_and_posts_actions(self) -> None:
         state = DashboardState(
