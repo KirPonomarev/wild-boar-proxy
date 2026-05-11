@@ -17,10 +17,14 @@ from urllib.parse import parse_qs
 
 from .ui_shell import (
     AccountPoolSnapshot,
+    ExternalActionResult,
+    ExternalModelsSnapshot,
     JsonCommandRunner,
     RuntimeSnapshot,
     UiShellError,
+    build_external_action_result,
     load_account_pool_snapshot,
+    load_external_models_snapshot,
     load_runtime_snapshot,
     run_account_mutation_and_refresh,
     run_account_onboard_and_refresh,
@@ -38,7 +42,9 @@ from .ui_shell import (
 class DashboardState:
     runtime: RuntimeSnapshot
     accounts: AccountPoolSnapshot
+    external_models: ExternalModelsSnapshot
     flash: str = ""
+    external_action: ExternalActionResult | None = None
     events: tuple["UiEvent", ...] = ()
 
 
@@ -53,6 +59,7 @@ def _integration_state(message: str, *, flash: str) -> DashboardState:
     return DashboardState(
         runtime=RuntimeSnapshot.integration_failure(message),
         accounts=AccountPoolSnapshot.integration_failure(message),
+        external_models=ExternalModelsSnapshot.integration_failure(message),
         flash=flash,
     )
 
@@ -61,18 +68,32 @@ def _with_events(state: DashboardState, events: tuple[UiEvent, ...]) -> Dashboar
     return DashboardState(
         runtime=state.runtime,
         accounts=state.accounts,
+        external_models=state.external_models,
         flash=state.flash,
+        external_action=state.external_action,
         events=events,
     )
 
 
-def load_dashboard_state(runner: JsonCommandRunner, *, flash: str = "") -> DashboardState:
+def load_dashboard_state(
+    runner: JsonCommandRunner,
+    *,
+    flash: str = "",
+    external_action: ExternalActionResult | None = None,
+) -> DashboardState:
     try:
         runtime = load_runtime_snapshot(runner)
         accounts = load_account_pool_snapshot(runner)
+        external_models = load_external_models_snapshot(runner)
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(str(exc), flash=flash or "Не удалось обновить панель управления.")
-    return DashboardState(runtime=runtime, accounts=accounts, flash=flash or runtime.human_message)
+    return DashboardState(
+        runtime=runtime,
+        accounts=accounts,
+        external_models=external_models,
+        flash=flash or runtime.human_message,
+        external_action=external_action,
+    )
 
 
 def _action_flash(payload: dict[str, Any]) -> str:
@@ -86,6 +107,8 @@ def _action_flash(payload: dict[str, Any]) -> str:
 def apply_action(
     runner: JsonCommandRunner,
     fields: dict[str, str],
+    *,
+    current_external_action: ExternalActionResult | None = None,
 ) -> DashboardState:
     action = fields.get("action", "").strip()
     if not action:
@@ -96,81 +119,327 @@ def apply_action(
                 runner, ("mode", "set", "stable", "--json")
             )
             accounts = load_account_pool_snapshot(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "mode_managed":
             payload, runtime = run_mode_control_and_refresh(
                 runner, ("mode", "set", "managed", "--json")
             )
             accounts = load_account_pool_snapshot(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "sync":
             payload, runtime, accounts = run_sync_and_refresh(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "smoke":
             payload, runtime = run_smoke_and_refresh(runner)
             accounts = load_account_pool_snapshot(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "stable_repair":
             payload, runtime, accounts = run_stable_repair_and_refresh(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "diagnostics":
             payload, runtime, accounts = run_diagnostics_export_and_refresh(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "launch_client":
             client_path = fields.get("client_path", "").strip()
             if not client_path:
-                return load_dashboard_state(runner, flash="Нужен абсолютный путь к клиенту.")
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен абсолютный путь к клиенту.",
+                    external_action=current_external_action,
+                )
             payload, runtime = run_launch_client_and_refresh(
                 runner,
                 ("launch", "client", "--client-path", client_path, "--json"),
             )
             accounts = load_account_pool_snapshot(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "onboard":
             auth_ref = fields.get("auth_ref", "").strip()
             if not auth_ref:
-                return load_dashboard_state(runner, flash="Нужен явный путь к auth-файлу.")
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен явный путь к auth-файлу.",
+                    external_action=current_external_action,
+                )
             payload, runtime, accounts = run_account_onboard_and_refresh(
                 runner,
                 ("accounts", "onboard", "--json", "--auth-ref", auth_ref, "--non-interactive"),
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
+        route_id = fields.get("route_id", "").strip()
+        if action == "external_route_enable":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models", "routes", "enable", "--json", "--route", route_id
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_route_enable",
+                    action_payload=payload,
+                ),
+            )
+        if action == "external_route_disable":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models", "routes", "disable", "--json", "--route", route_id
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_route_disable",
+                    action_payload=payload,
+                ),
+            )
+        if action == "external_validate":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models", "routes", "validate", "--json", "--route", route_id
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_validate",
+                    action_payload=payload,
+                ),
+            )
+        if action == "external_check":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models", "check", "--json", "--route", route_id
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_check",
+                    action_payload=payload,
+                ),
+            )
+        if action == "external_profile":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models",
+                "profile",
+                "codex-desktop",
+                "--json",
+                "--route",
+                route_id,
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_profile",
+                    action_payload=payload,
+                ),
+            )
+        if action == "external_evidence":
+            if not route_id:
+                return load_dashboard_state(
+                    runner,
+                    flash="Нужен route_id для external-models.",
+                    external_action=current_external_action,
+                )
+            payload = runner.run(
+                "external-models", "evidence", "capture", "--json", "--route", route_id
+            ).payload
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=load_runtime_snapshot(runner),
+                accounts=load_account_pool_snapshot(runner),
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=build_external_action_result(
+                    action="external_evidence",
+                    action_payload=payload,
+                ),
+            )
 
         backend_id = fields.get("backend_id", "").strip()
         if not backend_id:
-            return load_dashboard_state(runner, flash="Нужен идентификатор backend-а.")
+            return load_dashboard_state(
+                runner,
+                flash="Нужен идентификатор backend-а.",
+                external_action=current_external_action,
+            )
         if action in {"validate", "recheck"}:
             payload, accounts = run_account_validate_and_refresh(runner, backend_id)
             runtime = load_runtime_snapshot(runner)
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "promote":
             payload, runtime, accounts = run_account_mutation_and_refresh(
                 runner, ("accounts", "promote", backend_id, "--json")
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "demote":
             payload, runtime, accounts = run_account_mutation_and_refresh(
                 runner, ("accounts", "demote", backend_id, "--json")
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "hold":
             payload, runtime, accounts = run_account_mutation_and_refresh(
                 runner, ("accounts", "hold", backend_id, "--json")
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "release":
             payload, runtime, accounts = run_account_mutation_and_refresh(
                 runner, ("accounts", "release", backend_id, "--json")
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
         if action == "retire":
             payload, runtime, accounts = run_account_mutation_and_refresh(
                 runner, ("accounts", "retire", backend_id, "--json")
             )
-            return DashboardState(runtime=runtime, accounts=accounts, flash=_action_flash(payload))
+            external_models = load_external_models_snapshot(runner)
+            return DashboardState(
+                runtime=runtime,
+                accounts=accounts,
+                external_models=external_models,
+                flash=_action_flash(payload),
+                external_action=current_external_action,
+            )
     except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
         return _integration_state(str(exc), flash=f"Действие завершилось с ошибкой: {exc}")
-    return load_dashboard_state(runner, flash=f"Неподдерживаемое действие: {action}")
+    return load_dashboard_state(
+        runner,
+        flash=f"Неподдерживаемое действие: {action}",
+        external_action=current_external_action,
+    )
 
 
 def _esc(value: Any) -> str:
@@ -247,6 +516,122 @@ def _account_action_form(action: str, backend_id: str, label: str) -> str:
         f"<input type='hidden' name='backend_id' value='{_esc(backend_id)}'>"
         f"<button type='submit'>{_esc(label)}</button>"
         "</form>"
+    )
+
+
+def _external_overview_rows(external: ExternalModelsSnapshot) -> str:
+    rows = [
+        ("Фаза", external.foundation_phase),
+        ("Adapter state", external.adapter_state),
+        ("Lifecycle mode", external.lifecycle_mode),
+        ("Route count", external.routes_count),
+        ("Observed route count", external.observed_routes_count),
+        ("Listener proven", "да" if external.listener_proven else "нет"),
+        ("Runtime claim blocked", "да" if external.runtime_claim_blocked else "нет"),
+        ("Profile ready", "да" if external.profile_ready else "нет"),
+        ("Local token present", "да" if external.local_token_present else "нет"),
+        ("Models source", external.models_source),
+        ("Интеграция", external.integration_error),
+    ]
+    return "".join(
+        f"<tr><th>{_esc(label)}</th><td>{_esc(value)}</td></tr>" for label, value in rows
+    )
+
+
+def _external_route_action_form(
+    action: str,
+    route_id: str,
+    label: str,
+    *,
+    confirm_message: str | None = None,
+) -> str:
+    confirm_attr = ""
+    if confirm_message:
+        confirm_attr = f" onsubmit=\"return confirm('{_esc(confirm_message)}')\""
+    return (
+        f"<form method='post' action='/action' class='inline'{confirm_attr}>"
+        f"<input type='hidden' name='action' value='{_esc(action)}'>"
+        f"<input type='hidden' name='route_id' value='{_esc(route_id)}'>"
+        f"<button type='submit'>{_esc(label)}</button>"
+        "</form>"
+    )
+
+
+def _external_route_rows(external: ExternalModelsSnapshot) -> str:
+    projections = {record.route_id: record for record in external.models}
+    rows: list[str] = []
+    for route in external.routes:
+        projection = projections.get(route.route_id)
+        enabled_label = "enabled" if route.enabled else "disabled"
+        adapter_state = projection.synthetic_adapter_state if projection else "unknown"
+        action_toggle = (
+            _external_route_action_form(
+                "external_route_disable",
+                route.route_id,
+                "Disable",
+                confirm_message=f"Disable route {route.route_id}?",
+            )
+            if route.enabled
+            else _external_route_action_form(
+                "external_route_enable",
+                route.route_id,
+                "Enable",
+                confirm_message=f"Enable route {route.route_id}?",
+            )
+        )
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(route.route_id)}</td>"
+            f"<td>{_esc(route.provider)}</td>"
+            f"<td>{_esc(route.upstream_model)}</td>"
+            f"<td>{_esc(route.compatibility)}</td>"
+            f"<td>{_esc(route.cost_class)}</td>"
+            f"<td>{_esc(enabled_label)}</td>"
+            f"<td>{_esc(adapter_state)}</td>"
+            "<td>"
+            f"{_external_route_action_form('external_validate', route.route_id, 'Validate')}"
+            f"{_external_route_action_form('external_check', route.route_id, 'Check')}"
+            f"{_external_route_action_form('external_profile', route.route_id, 'Profile')}"
+            f"{_external_route_action_form('external_evidence', route.route_id, 'Evidence')}"
+            f"{action_toggle}"
+            "</td>"
+            "</tr>"
+        )
+    return "".join(rows) or (
+        "<tr><td colspan='8'><em>External-models routes not found.</em></td></tr>"
+    )
+
+
+def _external_action_rows(action: ExternalActionResult | None) -> str:
+    if action is None:
+        return "<tr><td colspan='2'><em>Пока нет route-level action packet.</em></td></tr>"
+    rows = [
+        ("Action", action.action),
+        ("Status", action.status),
+        ("Machine error", action.machine_error_code),
+        ("Message", action.human_message),
+        ("Next action", action.next_action),
+        ("Verification scope", action.verification_scope),
+        ("Route state", action.route_state),
+        ("Route / requested model", action.route_id),
+        ("Provider", action.provider),
+        ("Effective model", action.effective_model),
+        ("Listener proven", "да" if action.listener_proven else "нет"),
+        ("Runtime claim blocked", "да" if action.runtime_claim_blocked else "нет"),
+        ("Profile ready", "да" if action.profile_ready else "нет"),
+        ("Network dependent", "да" if action.network_dependent else "нет"),
+        ("Fallback used", action.fallback_used),
+        ("Fallback chain", action.fallback_chain),
+        ("Latency ms", action.latency_ms),
+        ("Request count", action.request_count),
+        ("Base URL", action.base_url),
+        ("Writes external config", action.writes_external_config),
+        ("Prerequisite", action.prerequisite),
+        ("Evidence path", action.evidence_path),
+        ("Changed files", ", ".join(action.changed_files)),
+    ]
+    return "".join(
+        f"<tr><th>{_esc(label)}</th><td>{_esc(value)}</td></tr>" for label, value in rows
     )
 
 
@@ -388,6 +773,35 @@ def render_dashboard(state: DashboardState) -> str:
       </table>
     </section>
     <section class="panel" style="margin-top: 18px;">
+      <h2>External Models Overview</h2>
+      <p class="caption">
+        Synthetic lifecycle truth only. Route validation and check results below remain provider-route evidence only
+        and do not prove runtime, listener, profile, or Codex readiness.
+      </p>
+      <table>{_external_overview_rows(state.external_models)}</table>
+    </section>
+    <section class="panel" style="margin-top: 18px;">
+      <h2>External Models Routes</h2>
+      <p class="caption">
+        Packet-driven registry view. No state-file shortcuts, no background provider polling, no readiness inference.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Route</th><th>Provider</th><th>Upstream model</th><th>Compatibility</th><th>Cost</th><th>Enabled</th><th>Adapter</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>{_external_route_rows(state.external_models)}</tbody>
+      </table>
+    </section>
+    <section class="panel" style="margin-top: 18px;">
+      <h2>External Models Action Result</h2>
+      <p class="caption">
+        Provider-route evidence only. Even `verified` here is not runtime-ready, listener-ready, profile-ready, or Codex-ready.
+      </p>
+      <table>{_external_action_rows(state.external_action)}</table>
+    </section>
+    <section class="panel" style="margin-top: 18px;">
       <h2>Последние действия</h2>
       <table>
         <thead>
@@ -408,6 +822,7 @@ class WildBoarWebUi:
     def __init__(self, runner: JsonCommandRunner | None = None) -> None:
         self.runner = runner or JsonCommandRunner()
         self._events: deque[UiEvent] = deque(maxlen=24)
+        self._external_action: ExternalActionResult | None = None
 
     def _record_event(self, request: str, outcome: str) -> None:
         self._events.appendleft(
@@ -419,7 +834,7 @@ class WildBoarWebUi:
         )
 
     def get_dashboard(self, *, path: str = "/") -> DashboardState:
-        state = load_dashboard_state(self.runner)
+        state = load_dashboard_state(self.runner, external_action=self._external_action)
         self._record_event(
             f"GET {path}",
             f"{state.runtime.overall_state} / {state.runtime.effective_mode}",
@@ -427,7 +842,12 @@ class WildBoarWebUi:
         return _with_events(state, tuple(self._events))
 
     def post_action(self, fields: dict[str, str], *, path: str = "/action") -> DashboardState:
-        state = apply_action(self.runner, fields)
+        state = apply_action(
+            self.runner,
+            fields,
+            current_external_action=self._external_action,
+        )
+        self._external_action = state.external_action
         action = fields.get("action", "").strip() or "unknown"
         self._record_event(f"POST {path} [{action}]", state.flash or state.runtime.human_message)
         return _with_events(state, tuple(self._events))

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "contour_id": "external_models_c5_ui_read_only_control_lite",
+  "date": "2026-05-12",
+  "auditor": "019e191d-74e2-7bc1-93dd-dd32b3c13f91",
+  "scope_files": [
+    "wild_boar_proxy/web_ui.py",
+    "wild_boar_proxy/ui_shell.py",
+    "tests/test_web_ui.py",
+    "tests/test_ui_shell.py"
+  ],
+  "findings": [],
+  "facts": [
+    "wild_boar_proxy/web_ui.py:18-38,41-96,107-356,522-803 adds the external-models dashboard state, packet-backed action dispatch, and overview/routes/action-result panels.",
+    "wild_boar_proxy/ui_shell.py:51-114,358-430,604-787 adds external-models packet schema, snapshot builders, and action-result normalization.",
+    "tests/test_web_ui.py:189-319,534-603 adds fake packet coverage and non-readiness assertions.",
+    "tests/test_ui_shell.py:189-319,512-623 adds packet fixture coverage for snapshot/action normalization.",
+    "wild_boar_proxy/ui_shell.py:730-735 loads external-models state via runner.run(...) packet calls only.",
+    "wild_boar_proxy/web_ui.py:225-356 dispatches existing external-models CLI commands only with no local state/log reads.",
+    "wild_boar_proxy/web_ui.py:776-800 labels the UI surface as evidence-only and does not promote it to runtime/listener/profile/Codex readiness.",
+    "No scoped-file change touches wild_boar_proxy/runtime.py or changes runtime command semantics."
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/web_ui.py exposes control-lite route enable/disable actions; if the contour is later re-scoped to strictly read-only, that policy boundary would need a fresh decision."
+  ],
+  "verdict": {
+    "status": "pass",
+    "blocking_findings": 0
+  }
+}

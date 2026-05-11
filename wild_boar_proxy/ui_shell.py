@@ -48,6 +48,70 @@ REGISTRY_IDENTITY_FIELDS = (
     "machine_error_code",
     "next_action",
 )
+EXTERNAL_STATUS_FIELDS = (
+    "foundation_phase",
+    "adapter_runtime_available",
+    "lifecycle_mode",
+    "adapter_state",
+    "listener_proven",
+    "runtime_claim_blocked",
+    "profile_ready",
+    "routes_count",
+    "observed_routes_count",
+    "adapter",
+    "local_auth",
+)
+EXTERNAL_MODELS_FIELDS = (
+    "models",
+    "count",
+    "source",
+    "listener_proven",
+    "runtime_claim_blocked",
+)
+EXTERNAL_MODEL_FIELDS = (
+    "route_id",
+    "display_name",
+    "provider",
+    "base_url",
+    "endpoint_path",
+    "upstream_model",
+    "compatibility",
+    "cost_class",
+    "enabled",
+    "lane_role",
+    "fallback_eligible",
+    "synthetic_adapter_state",
+    "profile_ready",
+)
+EXTERNAL_ROUTES_LIST_FIELDS = ("routes", "count")
+EXTERNAL_ROUTE_FIELDS = (
+    "schema_version",
+    "route_id",
+    "display_name",
+    "provider",
+    "base_url",
+    "endpoint_path",
+    "upstream_model",
+    "compatibility",
+    "auth",
+    "cost_class",
+    "lane_role",
+    "fallback_eligible",
+    "enabled",
+)
+EXTERNAL_PROFILE_FIELDS = (
+    "profile_kind",
+    "route_id",
+    "base_url",
+    "model",
+    "api_key_source",
+    "writes_external_config",
+    "profile_ready",
+    "listener_proven",
+    "runtime_claim_blocked",
+    "synthetic_endpoint_contract",
+    "prerequisite",
+)
 ONBOARDING_RESULT_FIELDS = (
     "input_mode",
     "explicit_auth_ref",
@@ -291,6 +355,107 @@ class AccountPoolSnapshot:
         )
 
 
+@dataclass(frozen=True)
+class ExternalModelRecord:
+    route_id: str
+    display_name: str
+    provider: str
+    base_url: str
+    endpoint_path: str
+    upstream_model: str
+    compatibility: str
+    cost_class: str
+    enabled: bool
+    lane_role: str
+    fallback_eligible: bool
+    synthetic_adapter_state: str
+    profile_ready: bool
+
+
+@dataclass(frozen=True)
+class ExternalRouteRecord:
+    route_id: str
+    display_name: str
+    provider: str
+    base_url: str
+    endpoint_path: str
+    upstream_model: str
+    compatibility: str
+    cost_class: str
+    enabled: bool
+    lane_role: str
+    fallback_eligible: bool
+    auth_type: str
+    secret_ref: str
+
+
+@dataclass(frozen=True)
+class ExternalActionResult:
+    action: str
+    status: str
+    human_message: str
+    machine_error_code: str
+    next_action: str
+    liveness: str
+    severity: str
+    operator_action: str
+    route_id: str
+    verification_scope: str
+    route_state: str
+    listener_proven: bool
+    runtime_claim_blocked: bool
+    profile_ready: bool
+    network_dependent: bool
+    evidence_path: str
+    effective_model: str
+    provider: str
+    fallback_used: str
+    fallback_chain: str
+    latency_ms: str
+    request_count: str
+    writes_external_config: str
+    prerequisite: str
+    base_url: str
+    changed_files: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExternalModelsSnapshot:
+    foundation_phase: str
+    adapter_runtime_available: bool
+    lifecycle_mode: str
+    adapter_state: str
+    listener_proven: bool
+    runtime_claim_blocked: bool
+    profile_ready: bool
+    routes_count: int
+    observed_routes_count: int
+    local_token_present: bool
+    models_source: str
+    models: tuple[ExternalModelRecord, ...]
+    routes: tuple[ExternalRouteRecord, ...]
+    integration_error: str
+
+    @classmethod
+    def integration_failure(cls, message: str) -> "ExternalModelsSnapshot":
+        return cls(
+            foundation_phase="unknown",
+            adapter_runtime_available=False,
+            lifecycle_mode="unknown",
+            adapter_state="unknown",
+            listener_proven=False,
+            runtime_claim_blocked=True,
+            profile_ready=False,
+            routes_count=0,
+            observed_routes_count=0,
+            local_token_present=False,
+            models_source="integration_failure",
+            models=(),
+            routes=(),
+            integration_error=message,
+        )
+
+
 def build_runtime_snapshot(
     *,
     status_payload: dict[str, Any],
@@ -433,6 +598,206 @@ def build_account_pool_snapshot(accounts_payload: dict[str, Any]) -> AccountPool
         capacity_target=ACCOUNT_CAPACITY_TARGET,
         accounts=accounts,
         integration_error="",
+    )
+
+
+def _normalize_external_model_record(raw: dict[str, Any]) -> ExternalModelRecord:
+    require_fields(raw, EXTERNAL_MODEL_FIELDS, "external model record")
+    return ExternalModelRecord(
+        route_id=str(raw["route_id"]),
+        display_name=str(raw["display_name"]),
+        provider=str(raw["provider"]),
+        base_url=str(raw["base_url"]),
+        endpoint_path=str(raw["endpoint_path"]),
+        upstream_model=str(raw["upstream_model"]),
+        compatibility=str(raw["compatibility"]),
+        cost_class=str(raw["cost_class"]),
+        enabled=require_bool(raw["enabled"], "external model enabled"),
+        lane_role=str(raw["lane_role"]),
+        fallback_eligible=require_bool(
+            raw["fallback_eligible"], "external model fallback_eligible"
+        ),
+        synthetic_adapter_state=str(raw["synthetic_adapter_state"]),
+        profile_ready=require_bool(raw["profile_ready"], "external model profile_ready"),
+    )
+
+
+def _normalize_external_route_record(raw: dict[str, Any]) -> ExternalRouteRecord:
+    require_fields(raw, EXTERNAL_ROUTE_FIELDS, "external route record")
+    auth = raw["auth"]
+    if not isinstance(auth, dict):
+        raise UiShellError("external route auth must be an object")
+    return ExternalRouteRecord(
+        route_id=str(raw["route_id"]),
+        display_name=str(raw["display_name"]),
+        provider=str(raw["provider"]),
+        base_url=str(raw["base_url"]),
+        endpoint_path=str(raw["endpoint_path"]),
+        upstream_model=str(raw["upstream_model"]),
+        compatibility=str(raw["compatibility"]),
+        cost_class=str(raw["cost_class"]),
+        enabled=require_bool(raw["enabled"], "external route enabled"),
+        lane_role=str(raw["lane_role"]),
+        fallback_eligible=require_bool(
+            raw["fallback_eligible"], "external route fallback_eligible"
+        ),
+        auth_type=str(auth.get("type", "")),
+        secret_ref=str(auth.get("secret_ref", "")),
+    )
+
+
+def build_external_models_snapshot(
+    *,
+    status_payload: dict[str, Any],
+    models_payload: dict[str, Any],
+    routes_payload: dict[str, Any],
+) -> ExternalModelsSnapshot:
+    require_fields(status_payload, ("data",), "external-models status payload")
+    require_fields(models_payload, ("data",), "external-models models payload")
+    require_fields(routes_payload, ("data",), "external-models routes list payload")
+
+    status_data = status_payload["data"]
+    models_data = models_payload["data"]
+    routes_data = routes_payload["data"]
+    if not isinstance(status_data, dict):
+        raise UiShellError("external-models status data must be an object")
+    if not isinstance(models_data, dict):
+        raise UiShellError("external-models models data must be an object")
+    if not isinstance(routes_data, dict):
+        raise UiShellError("external-models routes list data must be an object")
+
+    require_fields(status_data, EXTERNAL_STATUS_FIELDS, "external-models status data")
+    require_fields(models_data, EXTERNAL_MODELS_FIELDS, "external-models models data")
+    require_fields(routes_data, EXTERNAL_ROUTES_LIST_FIELDS, "external-models routes data")
+
+    models_raw = models_data["models"]
+    if not isinstance(models_raw, list):
+        raise UiShellError("external-models models must be a list")
+    models = tuple(
+        _normalize_external_model_record(item) for item in models_raw if isinstance(item, dict)
+    )
+    if len(models) != len(models_raw):
+        raise UiShellError("external-models models must contain only objects")
+
+    routes_raw = routes_data["routes"]
+    if not isinstance(routes_raw, list):
+        raise UiShellError("external-models routes must be a list")
+    routes = tuple(
+        _normalize_external_route_record(item) for item in routes_raw if isinstance(item, dict)
+    )
+    if len(routes) != len(routes_raw):
+        raise UiShellError("external-models routes must contain only objects")
+
+    local_auth = status_data["local_auth"]
+    if not isinstance(local_auth, dict):
+        raise UiShellError("external-models status local_auth must be an object")
+
+    return ExternalModelsSnapshot(
+        foundation_phase=str(status_data["foundation_phase"]),
+        adapter_runtime_available=require_bool(
+            status_data["adapter_runtime_available"],
+            "external-models adapter_runtime_available",
+        ),
+        lifecycle_mode=str(status_data["lifecycle_mode"]),
+        adapter_state=str(status_data["adapter_state"]),
+        listener_proven=require_bool(
+            status_data["listener_proven"], "external-models listener_proven"
+        ),
+        runtime_claim_blocked=require_bool(
+            status_data["runtime_claim_blocked"],
+            "external-models runtime_claim_blocked",
+        ),
+        profile_ready=require_bool(
+            status_data["profile_ready"], "external-models profile_ready"
+        ),
+        routes_count=require_nonnegative_int(
+            status_data["routes_count"], "external-models routes_count"
+        ),
+        observed_routes_count=require_nonnegative_int(
+            status_data["observed_routes_count"],
+            "external-models observed_routes_count",
+        ),
+        local_token_present=require_bool(
+            local_auth.get("token_present", False), "external-models local token present"
+        ),
+        models_source=str(models_data["source"]),
+        models=models,
+        routes=routes,
+        integration_error="",
+    )
+
+
+def load_external_models_snapshot(runner: JsonCommandRunner) -> ExternalModelsSnapshot:
+    return build_external_models_snapshot(
+        status_payload=runner.run("external-models", "status", "--json").payload,
+        models_payload=runner.run("external-models", "models", "--json").payload,
+        routes_payload=runner.run("external-models", "routes", "list", "--json").payload,
+    )
+
+
+def build_external_action_result(
+    *, action: str, action_payload: dict[str, Any]
+) -> ExternalActionResult:
+    require_fields(
+        action_payload,
+        (
+            "status",
+            "human_message",
+            "machine_error_code",
+            "changed_files",
+            "next_action",
+            "liveness",
+            "severity",
+            "operator_action",
+            "data",
+        ),
+        "external action payload",
+    )
+    data = action_payload["data"]
+    if not isinstance(data, dict):
+        raise UiShellError("external action payload data must be an object")
+    changed_files = action_payload["changed_files"]
+    if not isinstance(changed_files, list):
+        raise UiShellError("external action changed_files must be a list")
+    return ExternalActionResult(
+        action=action,
+        status=str(action_payload["status"]),
+        human_message=str(action_payload["human_message"]),
+        machine_error_code=str(action_payload["machine_error_code"]),
+        next_action=str(action_payload["next_action"]),
+        liveness=str(action_payload["liveness"]),
+        severity=str(action_payload["severity"]),
+        operator_action=str(action_payload["operator_action"]),
+        route_id=str(data.get("route_id", data.get("requested_model", ""))),
+        verification_scope=str(data.get("verification_scope", "")),
+        route_state=str(data.get("route_state", "")),
+        listener_proven=require_bool(
+            data.get("listener_proven", False), "external action listener_proven"
+        ),
+        runtime_claim_blocked=require_bool(
+            data.get("runtime_claim_blocked", False),
+            "external action runtime_claim_blocked",
+        ),
+        profile_ready=require_bool(
+            data.get("profile_ready", False), "external action profile_ready"
+        ),
+        network_dependent=require_bool(
+            data.get("network_dependent", data.get("network_dependent_evidence", False)),
+            "external action network_dependent",
+        ),
+        evidence_path=str(data.get("evidence_path", "")),
+        effective_model=str(data.get("effective_model", "")),
+        provider=str(data.get("provider", "")),
+        fallback_used=format_onboarding_value(data.get("fallback_used", "")),
+        fallback_chain=format_onboarding_value(data.get("fallback_chain", "")),
+        latency_ms=format_onboarding_value(data.get("latency_ms", "")),
+        request_count=format_onboarding_value(data.get("request_count", "")),
+        writes_external_config=format_onboarding_value(
+            data.get("writes_external_config", "")
+        ),
+        prerequisite=str(data.get("prerequisite", "")),
+        base_url=str(data.get("base_url", "")),
+        changed_files=tuple(str(item) for item in changed_files),
     )
 
 

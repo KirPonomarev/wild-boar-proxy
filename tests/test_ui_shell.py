@@ -13,10 +13,14 @@ from wild_boar_proxy.ui_shell import (
     ONBOARDING_RESULT_FIELDS,
     SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
+    ExternalActionResult,
+    ExternalModelsSnapshot,
     JsonCommandRunner,
     MinimalCompanionShell,
     UiShellError,
     build_account_pool_snapshot,
+    build_external_action_result,
+    build_external_models_snapshot,
     build_client_launch_field_values,
     build_diagnostics_field_values,
     build_smoke_field_values,
@@ -26,6 +30,7 @@ from wild_boar_proxy.ui_shell import (
     build_runtime_snapshot,
     format_onboarding_value,
     load_account_pool_snapshot,
+    load_external_models_snapshot,
     load_runtime_snapshot,
     main,
     parse_exact_json_object,
@@ -176,6 +181,139 @@ def accounts_payload(**overrides: object) -> dict[str, object]:
         },
         pool_policy={"active_min": 1, "active_target": 2, "reserve_target": 0},
         stable_default_backend_id="backend-a",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_status_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="External-models synthetic lifecycle status collected without live runtime claims.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        data={
+            "foundation_phase": "C3",
+            "adapter_runtime_available": False,
+            "lifecycle_mode": "synthetic",
+            "adapter_state": "stopped",
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "profile_ready": False,
+            "routes_count": 1,
+            "observed_routes_count": 0,
+            "adapter": {
+                "state": "stopped",
+                "lifecycle_mode": "synthetic",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "base_url": None,
+                "host": "127.0.0.1",
+                "port": None,
+                "started_at_utc": None,
+                "last_transition": "init",
+            },
+            "local_auth": {
+                "token_ref": "managed_local_token",
+                "token_present": False,
+                "token_created_at_utc": None,
+            },
+        },
+        timestamp_utc="2026-05-12T00:00:00Z",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_models_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="External-models route models listed from local registry.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        data={
+            "count": 1,
+            "source": "local_routes_registry",
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "models": [
+                {
+                    "route_id": "wbp-deepseek-v3",
+                    "display_name": "DeepSeek V3",
+                    "provider": "openrouter",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek/deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "cost_class": "paid_or_free_limited",
+                    "enabled": True,
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "synthetic_adapter_state": "stopped",
+                    "profile_ready": False,
+                }
+            ],
+        },
+        timestamp_utc="2026-05-12T00:00:00Z",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_routes_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="External-models routes listed from local registry.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        data={
+            "count": 1,
+            "routes": [
+                {
+                    "schema_version": 1,
+                    "route_id": "wbp-deepseek-v3",
+                    "display_name": "DeepSeek V3",
+                    "provider": "openrouter",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek/deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": True,
+                }
+            ],
+        },
+        timestamp_utc="2026-05-12T00:00:00Z",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_validate_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=["/tmp/state.json", "/tmp/evidence-validate.json"],
+        data={
+            "validation_kind": "provider_route_validate",
+            "network_dependent": True,
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "profile_ready": False,
+            "verification_scope": "route_provider_only",
+            "route_state": "model_visible",
+            "requested_model": "wbp-deepseek-v3",
+            "effective_model": "deepseek/deepseek-chat",
+            "provider": "openrouter",
+            "evidence_path": "/tmp/evidence-validate.json",
+            "latency_ms": 6,
+        },
+        timestamp_utc="2026-05-12T00:00:00Z",
     )
     payload.update(overrides)
     return payload
@@ -369,6 +507,127 @@ class AccountPoolSnapshotTests(unittest.TestCase):
 
         self.assertEqual(snapshot.accounts[0].label, "Backend A")
         self.assertEqual(runner.calls, [("accounts", "list", "--json")])
+
+
+class ExternalModelsSnapshotTests(unittest.TestCase):
+    def test_build_external_models_snapshot_maps_packet_truth(self) -> None:
+        snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+
+        self.assertIsInstance(snapshot, ExternalModelsSnapshot)
+        self.assertEqual(snapshot.foundation_phase, "C3")
+        self.assertEqual(snapshot.lifecycle_mode, "synthetic")
+        self.assertFalse(snapshot.listener_proven)
+        self.assertTrue(snapshot.runtime_claim_blocked)
+        self.assertFalse(snapshot.profile_ready)
+        self.assertEqual(snapshot.models_source, "local_routes_registry")
+        self.assertEqual(snapshot.models[0].route_id, "wbp-deepseek-v3")
+        self.assertEqual(snapshot.routes[0].secret_ref, "OPENROUTER_API_KEY")
+
+    def test_build_external_models_snapshot_rejects_non_object_auth(self) -> None:
+        broken_routes = external_routes_payload(
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "openrouter",
+                        "base_url": "http://127.0.0.1:54321/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek/deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "auth": "broken",
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                    }
+                ],
+            }
+        )
+
+        with self.assertRaisesRegex(UiShellError, "external route auth must be an object"):
+            build_external_models_snapshot(
+                status_payload=external_status_payload(),
+                models_payload=external_models_payload(),
+                routes_payload=broken_routes,
+            )
+
+    def test_load_external_models_snapshot_reads_only_external_packets(self) -> None:
+        runner = FakeRunner(
+            {
+                ("external-models", "status", "--json"): external_status_payload(),
+                ("external-models", "models", "--json"): external_models_payload(),
+                ("external-models", "routes", "list", "--json"): external_routes_payload(),
+            }
+        )
+
+        snapshot = load_external_models_snapshot(runner)
+
+        self.assertEqual(snapshot.routes_count, 1)
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+
+
+class ExternalActionResultTests(unittest.TestCase):
+    def test_build_external_action_result_preserves_provider_only_scope(self) -> None:
+        result = build_external_action_result(
+            action="external_validate",
+            action_payload=external_validate_payload(),
+        )
+
+        self.assertIsInstance(result, ExternalActionResult)
+        self.assertEqual(result.action, "external_validate")
+        self.assertEqual(result.route_id, "wbp-deepseek-v3")
+        self.assertEqual(result.verification_scope, "route_provider_only")
+        self.assertEqual(result.route_state, "model_visible")
+        self.assertFalse(result.listener_proven)
+        self.assertTrue(result.runtime_claim_blocked)
+        self.assertFalse(result.profile_ready)
+        self.assertTrue(result.network_dependent)
+        self.assertEqual(result.changed_files, ("/tmp/state.json", "/tmp/evidence-validate.json"))
+
+    def test_build_external_action_result_uses_network_dependent_evidence_fallback(self) -> None:
+        payload = external_validate_payload(
+            data={
+                "route_id": "wbp-deepseek-v3",
+                "network_dependent_evidence": False,
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "verification_scope": "route_provider_only",
+                "route_state": "verified",
+                "provider": "openrouter",
+                "evidence_path": "/tmp/evidence-local.json",
+            }
+        )
+
+        result = build_external_action_result(
+            action="external_evidence",
+            action_payload=payload,
+        )
+
+        self.assertFalse(result.network_dependent)
+        self.assertEqual(result.route_state, "verified")
+        self.assertEqual(result.evidence_path, "/tmp/evidence-local.json")
+
+    def test_build_external_action_result_rejects_non_list_changed_files(self) -> None:
+        with self.assertRaisesRegex(UiShellError, "changed_files must be a list"):
+            build_external_action_result(
+                action="external_validate",
+                action_payload=external_validate_payload(changed_files="/tmp/state.json"),
+            )
 
 
 class ModeControlTests(unittest.TestCase):
