@@ -1,0 +1,36 @@
+{
+  "status": "completed",
+  "step": "step64",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "packets": {
+    "status": "step64_status_pre.json",
+    "healthcheck": "step64_healthcheck_pre.json",
+    "accounts": "step64_accounts_pre.json",
+    "rotation": "step64_rotation_pre.json",
+    "posture": "step64_posture_pre.json"
+  },
+  "summary": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "desired_stable_runtime_source": "approved_repair_target",
+    "effective_stable_runtime_source": "observed_stable_inventory_source",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "healthcheck_machine_error_code": "OK",
+    "launch_readiness_status": "ready",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_freshness": "stale",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "active_count": 16,
+    "reserve_count": 0,
+    "reserve_candidate": ""
+  },
+  "precondition_verdict": {
+    "runtime_truth_green_enough": false,
+    "rotation_truth_green_enough": false,
+    "reserve_recovery_mutation_admissible": false
+  }
+}

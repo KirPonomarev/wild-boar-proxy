@@ -1,0 +1,69 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "step": "step64",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "contour_result": "NO_GO_CONTOUR_PRECONDITION_FAILED",
+  "primary_verdict": "RUNTIME_AND_ROTATION_PRECONDITIONS_REGRESSED_BEFORE_RESERVE_RECOVERY",
+  "mutation_executed": false,
+  "preflight_verdict": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_freshness": "stale",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": ""
+  },
+  "why_now": [
+    "the current contour required runtime truth and rotation evidence to remain green enough at preflight",
+    "fresh preflight showed `claim_gate.status=blocked`, `policy_drift.status=detected`, and `consumer_activation_readiness=STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING`",
+    "fresh preflight also showed `ROTATION_EVIDENCE_STALE` with `selected_backend_snapshot_stale`",
+    "therefore Branch C reserve-gap recovery was not admissible before any owner-surface selection"
+  ],
+  "pattern_comparison": {
+    "step62_preflight_status_effective_mode": "managed",
+    "step62_preflight_claim_gate_status": "blocked",
+    "step62_preflight_policy_drift_status": "detected",
+    "step62_preflight_consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "step62_preflight_rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "step64_preflight_status_effective_mode": "stable",
+    "step64_preflight_claim_gate_status": "blocked",
+    "step64_preflight_policy_drift_status": "detected",
+    "step64_preflight_consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "step64_preflight_rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "interpretation": "step64 recreated the same split execution-core blocker pattern already resolved by the admitted composite sequence in step62"
+  },
+  "selected_next_contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "next_contour_reason": [
+    "`step61` already admitted the explicit composite sequence to avoid blind single-lane loops",
+    "`step62` already proved that `sync --json -> launch smoke --json` converges from this split runtime/rotation state",
+    "reserve-readiness recovery must remain blocked until execution-core truth is green enough again"
+  ],
+  "rejected_alternatives": [
+    {
+      "contour": "RESERVE_READINESS_RECOVERY_CONTOUR",
+      "reason": "current preflight failed its own green runtime/rotation gates before owner-surface selection"
+    },
+    {
+      "contour": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+      "reason": "would reopen a known blind single-lane retry while rotation evidence is stale again"
+    },
+    {
+      "contour": "ROTATION_EVIDENCE_STALE_RECLEAR_CONTOUR",
+      "reason": "would reopen a known blind single-lane retry while claim-gate and policy-drift blockers remain active"
+    }
+  ],
+  "independent_inspection": {
+    "status": "accepted_with_narrowing",
+    "narrowing_required": true
+  },
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 10,
+    "result": "OK"
+  }
+}

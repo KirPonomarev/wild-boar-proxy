@@ -1,0 +1,10 @@
+{
+  "status": "not_executed",
+  "step": "step64",
+  "contour_id": "RESERVE_READINESS_RECOVERY_CONTOUR",
+  "attempted": false,
+  "reason": "preflight_runtime_and_rotation_not_green_enough",
+  "admitted_owner_surface": "",
+  "write_surfaces": [],
+  "rollback_required": false
+}
