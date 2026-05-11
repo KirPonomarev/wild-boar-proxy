@@ -8,6 +8,7 @@ import json
 import sys
 from typing import Any
 
+from .external_models import run_external_models_command
 from .runtime import (
     RuntimeErrorInfo,
     RuntimePaths,
@@ -210,6 +211,66 @@ def build_parser() -> argparse.ArgumentParser:
     package_experimental_verify.add_argument("--manifest", required=True)
     package_experimental_verify.add_argument("--json", action="store_true", required=True)
 
+    external_models = subparsers.add_parser("external-models")
+    external_models_subparsers = external_models.add_subparsers(
+        dest="external_models_command", required=True
+    )
+    external_models_status = external_models_subparsers.add_parser("status")
+    external_models_status.add_argument("--json", action="store_true", required=True)
+    external_models_models = external_models_subparsers.add_parser("models")
+    external_models_models.add_argument("--json", action="store_true", required=True)
+
+    external_models_routes = external_models_subparsers.add_parser("routes")
+    external_models_routes_subparsers = external_models_routes.add_subparsers(
+        dest="routes_command", required=True
+    )
+    external_models_routes_add = external_models_routes_subparsers.add_parser("add")
+    external_models_routes_add_source = external_models_routes_add.add_mutually_exclusive_group(
+        required=True
+    )
+    external_models_routes_add_source.add_argument("--file")
+    external_models_routes_add_source.add_argument("--stdin", action="store_true")
+    external_models_routes_add.add_argument("--json", action="store_true", required=True)
+    external_models_routes_update = external_models_routes_subparsers.add_parser("update")
+    external_models_routes_update.add_argument("--route", required=True)
+    external_models_routes_update_source = (
+        external_models_routes_update.add_mutually_exclusive_group(required=True)
+    )
+    external_models_routes_update_source.add_argument("--file")
+    external_models_routes_update_source.add_argument("--stdin", action="store_true")
+    external_models_routes_update.add_argument("--json", action="store_true", required=True)
+    external_models_routes_remove = external_models_routes_subparsers.add_parser("remove")
+    external_models_routes_remove.add_argument("--route", required=True)
+    external_models_routes_remove.add_argument("--json", action="store_true", required=True)
+    external_models_routes_list = external_models_routes_subparsers.add_parser("list")
+    external_models_routes_list.add_argument("--json", action="store_true", required=True)
+    external_models_routes_enable = external_models_routes_subparsers.add_parser("enable")
+    external_models_routes_enable.add_argument("--route", required=True)
+    external_models_routes_enable.add_argument("--json", action="store_true", required=True)
+    external_models_routes_disable = external_models_routes_subparsers.add_parser("disable")
+    external_models_routes_disable.add_argument("--route", required=True)
+    external_models_routes_disable.add_argument("--json", action="store_true", required=True)
+
+    external_models_profile = external_models_subparsers.add_parser("profile")
+    external_models_profile_subparsers = external_models_profile.add_subparsers(
+        dest="profile_command", required=True
+    )
+    external_models_profile_codex = external_models_profile_subparsers.add_parser(
+        "codex-desktop"
+    )
+    external_models_profile_codex.add_argument("--route", required=True)
+    external_models_profile_codex.add_argument("--json", action="store_true", required=True)
+
+    external_models_evidence = external_models_subparsers.add_parser("evidence")
+    external_models_evidence_subparsers = external_models_evidence.add_subparsers(
+        dest="evidence_command", required=True
+    )
+    external_models_evidence_capture = external_models_evidence_subparsers.add_parser(
+        "capture"
+    )
+    external_models_evidence_capture.add_argument("--route", required=True)
+    external_models_evidence_capture.add_argument("--json", action="store_true", required=True)
+
     return root_parser
 
 
@@ -340,6 +401,8 @@ def main(argv: list[str] | None = None) -> int:
             and args.package_experimental_command == "verify"
         ):
             return emit_json(run_package_experimental_verify(paths, args.manifest))
+        if args.command == "external-models":
+            return emit_json(run_external_models_command(args))
         raise RuntimeErrorInfo(
             "Unsupported command",
             machine_error_code="UNSUPPORTED_COMMAND",

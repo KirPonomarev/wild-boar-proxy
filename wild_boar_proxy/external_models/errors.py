@@ -1,0 +1,20 @@
+"""Error codes for the external-models C1 foundation slice."""
+
+from __future__ import annotations
+
+OK = "OK"
+INVALID_REQUEST = "invalid_request"
+SCHEMA_INVALID = "schema_invalid"
+DUPLICATE_ROUTE = "duplicate_route"
+ROUTE_NOT_FOUND = "route_not_found"
+ROUTE_NOT_DISABLED = "route_not_disabled"
+UNSUPPORTED_SCHEMA_VERSION = "unsupported_schema_version"
+LOCK_TIMEOUT = "lock_timeout"
+STATE_CORRUPT = "state_corrupt"
+STALE_STATE_DETECTED = "stale_state_detected"
+MISSING_SECRET = "missing_secret"
+UNSAFE_SECRET_PERMISSIONS = "unsafe_secret_permissions"
+PAID_ROUTE_BLOCKED = "paid_route_blocked"
+ZERO_TESTS_SELECTED = "zero_tests_selected"
+ADAPTER_NOT_RUNNING = "adapter_not_running"
+ALREADY_RUNNING = "already_running"

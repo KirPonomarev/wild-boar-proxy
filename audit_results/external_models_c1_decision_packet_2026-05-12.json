@@ -1,0 +1,102 @@
+{
+  "contour": "external_models_c1_foundation_contract",
+  "date": "2026-05-12",
+  "status": "implemented_and_verified_locally",
+  "mode": "implementation",
+  "scope": {
+    "in_scope_completed": [
+      "ADR boundary for bounded compatibility adapter",
+      "canonical external-models command payload extension",
+      "external-models CLI namespace scaffold",
+      "route schema v1 and declarative routes registry",
+      "observed state split into state.json",
+      "isolated WBP_EXTERNAL_MODELS_* path overrides",
+      "file-only route lifecycle commands",
+      "foundation status/models/profile/evidence commands",
+      "zero-test guard via real module-backed tests"
+    ],
+    "out_of_scope_preserved": [
+      "real proxy server",
+      "provider protocol translation",
+      "live validate/check",
+      "start/stop lifecycle",
+      "Codex config mutation",
+      "UI",
+      "installer automation"
+    ]
+  },
+  "files_touched": [
+    "wild_boar_proxy/cli.py",
+    "wild_boar_proxy/external_models/__init__.py",
+    "wild_boar_proxy/external_models/contracts.py",
+    "wild_boar_proxy/external_models/errors.py",
+    "wild_boar_proxy/external_models/paths.py",
+    "wild_boar_proxy/external_models/routes.py",
+    "wild_boar_proxy/external_models/state.py",
+    "tests/test_external_models.py",
+    "tests/test_cli_external_models.py",
+    "ADR-0002-external-models-bounded-compatibility-adapter.md",
+    "EXTERNAL_MODELS_C1_FOUNDATION_SPEC.md",
+    "audit_results/external_models_c1_contour_2026-05-12.md"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_external_models",
+        "result": "passed",
+        "observed": "Ran 6 tests OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli_external_models",
+        "result": "passed",
+        "observed": "Ran 8 tests OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_external_agent_lab",
+        "result": "passed",
+        "observed": "Ran 11 tests OK"
+      }
+    ],
+    "build": {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "result": "passed"
+    },
+    "manual": {
+      "command": "python3 -m wild_boar_proxy external-models routes add --json --stdin && status --json using isolated WBP_* temp paths",
+      "result": "passed",
+      "observed": [
+        "canonical fields present",
+        "isolated /tmp-backed external-models paths used",
+        "foundation_phase=C1",
+        "adapter_runtime_available=false"
+      ]
+    }
+  },
+  "independent_audit": {
+    "status": "completed",
+    "finding_count": 2,
+    "findings_outside_contour": [
+      {
+        "severity": "high",
+        "file": "wild_boar_proxy/runtime.py",
+        "summary": "pre-existing dirty promote-path behavior drift outside C1"
+      },
+      {
+        "severity": "medium",
+        "file": "wild_boar_proxy/runtime.py",
+        "summary": "pre-existing dirty dispatch polling drift outside C1"
+      }
+    ],
+    "contour_findings": []
+  },
+  "scope_check": {
+    "runtime_engine_changes_in_contour": false,
+    "real_path_mutation_required": false,
+    "zero_test_false_green_possible": false,
+    "notes": [
+      "runtime.py remained outside staged contour scope",
+      "existing dirty runtime.py changes require separate owner handling"
+    ]
+  },
+  "next_contour": "external_models_c2_lifecycle_and_mocked_status"
+}
