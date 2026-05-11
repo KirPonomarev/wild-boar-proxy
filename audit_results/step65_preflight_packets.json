@@ -1,0 +1,38 @@
+{
+  "status": "completed",
+  "step": "step65",
+  "contour_id": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "packets": {
+    "status": "step65_status_pre.json",
+    "healthcheck": "step65_healthcheck_pre.json",
+    "accounts": "step65_accounts_pre.json",
+    "rotation": "step65_rotation_pre.json",
+    "posture": "step65_posture_pre.json"
+  },
+  "summary": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "desired_stable_runtime_source": "approved_repair_target",
+    "effective_stable_runtime_source": "observed_stable_inventory_source",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "healthcheck_machine_error_code": "OK",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "accounts_active_count": 16,
+    "accounts_reserve_count": 0,
+    "accounts_retired_count": 8,
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_freshness": "stale",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_reserve_candidate": ""
+  },
+  "pattern_match_verdict": {
+    "matches_step62_decisive_nested_split_pattern": true,
+    "material_difference": "top-level effective_mode is stable rather than managed",
+    "admissibility_impact": "no hidden third mutation surface implied; admitted composite sequence remains lawful"
+  }
+}

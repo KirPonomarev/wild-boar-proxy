@@ -1,0 +1,37 @@
+{
+  "status": "completed",
+  "step": "step65",
+  "contour_id": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "sequence": {
+    "sync_live_packet": "step65_sync_live_packet.json",
+    "midflight_rotation_packet": "step65_midflight_rotation_packet.json",
+    "launch_smoke_live_packet": "step65_launch_smoke_live_packet.json",
+    "status_post": "step65_status_post.json",
+    "healthcheck_post": "step65_healthcheck_post.json",
+    "accounts_post": "step65_accounts_post.json",
+    "rotation_post": "step65_rotation_post.json",
+    "posture_observation": "step65_posture_observation.json"
+  },
+  "summary": {
+    "sync_machine_error_code": "OK",
+    "midflight_rotation_machine_error_code": "OK",
+    "midflight_rotation_evidence_freshness": "fresh",
+    "launch_smoke_machine_error_code": "OK",
+    "status_post_machine_error_code": "OK",
+    "status_post_effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "consumer_activation_readiness": "OK",
+    "desired_stable_runtime_source": "approved_repair_target",
+    "effective_stable_runtime_source": "approved_repair_target",
+    "healthcheck_post_machine_error_code": "OK",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "rotation_post_machine_error_code": "OK",
+    "rotation_post_evidence_freshness": "fresh",
+    "rotation_post_participation_status": "available",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "posture_reserve_candidate": "",
+    "posture_reserve_live_capable_count": 0
+  }
+}
