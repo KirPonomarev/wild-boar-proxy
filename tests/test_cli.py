@@ -1070,6 +1070,51 @@ class CliTests(unittest.TestCase):
         path.chmod(0o755)
         return path
 
+    def write_registry_and_state_patch_sync_script(
+        self,
+        path: Path,
+        *,
+        backend_updates: list[dict[str, object]] | None = None,
+        state_patch: dict[str, object] | None = None,
+        stderr_text: str = "sync-ran",
+        exit_code: int = 0,
+    ) -> Path:
+        path.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "from pathlib import Path\n"
+            "registry_path = Path(r'"
+            + str(self.managed_dir / "backend-registry.json")
+            + "')\n"
+            "state_path = Path(r'"
+            + str(self.managed_dir / "supervisor-state.json")
+            + "')\n"
+            "registry = json.loads(registry_path.read_text())\n"
+            "state = json.loads(state_path.read_text())\n"
+            "backend_updates = "
+            + repr(json.dumps(backend_updates or []))
+            + "\n"
+            "state_patch = "
+            + repr(json.dumps(state_patch or {}))
+            + "\n"
+            "for update in json.loads(backend_updates):\n"
+            "    backend_id = str(update.get('id', ''))\n"
+            "    for backend in registry.get('backends', []):\n"
+            "        if str(backend.get('id', '')) == backend_id:\n"
+            "            backend.update(update)\n"
+            "            break\n"
+            "registry_path.write_text(json.dumps(registry) + '\\n')\n"
+            "state.update(json.loads(state_patch))\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "PY\n"
+            f"echo {shlex.quote(stderr_text)} >&2\n"
+            f"exit {int(exit_code)}\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
     def write_recording_stable_launcher(
         self, path: Path, *, exit_code: int = 0, start_server: bool = False
     ) -> Path:
@@ -7360,6 +7405,70 @@ class CliTests(unittest.TestCase):
         onboarding = payload["onboarding_result"]
         self.assertTrue(onboarding["active_routing_changed"])
         self.assertFalse(onboarding["validate_attempted"])
+
+    def test_accounts_onboard_fails_when_sync_promotes_selected_backend_into_active(
+        self,
+    ) -> None:
+        sync_script = self.write_registry_and_state_patch_sync_script(
+            self.profile_dir / "sync-onboard-promotes-selected.sh",
+            backend_updates=[
+                {
+                    "id": "backend-detected-promoted",
+                    "pool": "active",
+                    "status": "healthy",
+                }
+            ],
+            state_patch={
+                "selected_backend_ids": ["backend-detected-promoted"],
+                "active_count": 2,
+                "reserve_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "last_error": "",
+            },
+            stderr_text="sync-onboard-promotes-selected",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(9999)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_SYNC_SCRIPT": str(sync_script),
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-promoted",
+                                auth_ref="/tmp/codex-detected-promoted.json",
+                                pool="reserve",
+                            )
+                        ]
+                    ),
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "ONBOARD_ACTIVE_ROUTING_CHANGED")
+        onboarding = payload["onboarding_result"]
+        self.assertTrue(onboarding["validate_attempted"])
+        self.assertTrue(onboarding["sync_attempted"])
+        self.assertEqual(onboarding["validate_outcome"], "ok")
+        self.assertEqual(onboarding["sync_outcome"], "ok")
+        self.assertEqual(
+            onboarding["final_outcome"], "active_routing_changed_after_sync"
+        )
+        self.assertTrue(onboarding["post_sync_active_routing_changed"])
+        self.assertFalse(onboarding["post_sync_reserve_first_enforced"])
+        self.assertEqual(onboarding["post_sync_selected_backend_pool"], "active")
 
     def test_accounts_hold_holds_active_backend_with_verified_routing_isolation(
         self,

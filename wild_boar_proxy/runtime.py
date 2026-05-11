@@ -11821,6 +11821,9 @@ def run_onboard(
         "validate_outcome": "not_attempted",
         "sync_attempted": False,
         "sync_outcome": "not_attempted",
+        "post_sync_active_routing_changed": False,
+        "post_sync_reserve_first_enforced": False,
+        "post_sync_selected_backend_pool": "",
         "status_observed": None,
         "external_command_exit_code": int(result.returncode),
         "external_command_status": "ok" if result.returncode == 0 else "nonzero",
@@ -11982,6 +11985,67 @@ def run_onboard(
             operator_action="retry",
             exit_code=exc.exit_code,
         )
+
+    if sync_payload is not None:
+        verified_registry = read_json(paths.registry_file)
+        verified_state = read_json(paths.state_file, required=False)
+        verified_matches = get_registry_backends_by_id(
+            verified_registry, selected_backend_id
+        )
+        verified_backend = verified_matches[0] if len(verified_matches) == 1 else None
+        verified_selected_backend_ids = sorted(
+            str(item) for item in verified_state.get("selected_backend_ids", []) or []
+        )
+        verified_active_backend_ids = routing_eligible_active_backend_ids(
+            verified_registry
+        )
+        verified_backend_pool = (
+            str(verified_backend.get("pool", ""))
+            if isinstance(verified_backend, dict)
+            else ""
+        )
+        post_sync_active_routing_changed = (
+            before_active_backend_ids != verified_active_backend_ids
+            or verified_backend_pool == "active"
+            or before_selected_backend_ids != verified_selected_backend_ids
+            or (
+                selected_backend_id
+                and selected_backend_id in set(verified_selected_backend_ids)
+                and selected_backend_id not in set(before_selected_backend_ids)
+            )
+        )
+        post_sync_reserve_first_enforced = bool(verified_backend) and (
+            verified_backend_pool == "reserve"
+        )
+        onboarding_result["post_sync_active_routing_changed"] = (
+            post_sync_active_routing_changed
+        )
+        onboarding_result["post_sync_reserve_first_enforced"] = (
+            post_sync_reserve_first_enforced
+        )
+        onboarding_result["post_sync_selected_backend_pool"] = verified_backend_pool
+        if post_sync_active_routing_changed:
+            onboarding_result["final_outcome"] = "active_routing_changed_after_sync"
+            return build_onboard_payload(
+                ok=False,
+                human_message=(
+                    "Onboarding status proof showed the selected backend entered active routing after sync, which is forbidden in the reserve-first lane."
+                ),
+                machine_error_code="ONBOARD_ACTIVE_ROUTING_CHANGED",
+                severity="fatal",
+                operator_action="stop",
+            )
+        if not post_sync_reserve_first_enforced:
+            onboarding_result["final_outcome"] = "reserve_first_violated_after_sync"
+            return build_onboard_payload(
+                ok=False,
+                human_message=(
+                    "Onboarding status proof showed the selected backend no longer remained in reserve after sync."
+                ),
+                machine_error_code="ONBOARD_RESERVE_FIRST_VIOLATION",
+                severity="fatal",
+                operator_action="stop",
+            )
 
     onboarding_result["final_outcome"] = (
         "explicit_auth_imported_to_reserve"

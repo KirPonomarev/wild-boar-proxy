@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "step": 72,
+  "contour": "OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR",
+  "verdict": "GO_FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "final_outcome": "repo_contradiction_repaired",
+  "mutation_mode": "repo_only",
+  "live_mutation_executed": false,
+  "primary_fix": {
+    "type": "post_sync_owner_path_verification_gate",
+    "runtime_file": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/wild_boar_proxy/runtime.py",
+    "runtime_anchor_line": 11989,
+    "regression_file": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/tests/test_cli.py",
+    "regression_anchor_line": 7409
+  },
+  "facts": {
+    "pre_sync_onboard_guard_already_existed": true,
+    "post_sync_owner_path_gap_closed": true,
+    "selected_backend_cannot_silently_bypass_reserve_first_after_sync": true,
+    "targeted_regressions_green": true,
+    "independent_inspection_status": "approve_with_monitoring"
+  },
+  "next_contour_reason": "Repo now truthfully blocks the reproduced contradiction at the onboarding owner surface, so the next lawful step is a fresh live recheck of whether Branch C can reopen under new truth."
+}

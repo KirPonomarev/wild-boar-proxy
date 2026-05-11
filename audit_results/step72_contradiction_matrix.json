@@ -1,0 +1,26 @@
+{
+  "status": "ok",
+  "step": 72,
+  "primary_contradiction_chain": {
+    "id": "reserve_first_success_claim_after_sync_promotion",
+    "live_evidence": {
+      "step71_new_backend_id": "kp8750410-team",
+      "step71_observed_pool": "active",
+      "step71_rotation_status": "ROTATION_EVIDENCE_CONTRADICTED",
+      "step71_claim_gate_status": "blocked",
+      "step71_policy_drift_status": "detected"
+    },
+    "contract_truth": {
+      "owner_surface": "accounts onboard --json",
+      "reserve_first_required": true,
+      "active_routing_change_forbidden": true
+    },
+    "repo_localization": {
+      "runtime_onboard_pre_sync_guard": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/wild_boar_proxy/runtime.py:11893",
+      "runtime_onboard_post_sync_guard": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/wild_boar_proxy/runtime.py:11989",
+      "test_regression": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/tests/test_cli.py:7409"
+    },
+    "root_cause_classification": "post_sync_owner_path_verification_gap",
+    "truthful_summary": "Repo already blocked direct-active onboarding before sync, but it did not re-verify reserve-first truth after sync/status. A sync-driven reserve->active mutation could therefore bypass the owner-path success claim."
+  }
+}

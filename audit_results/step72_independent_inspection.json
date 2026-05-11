@@ -1,0 +1,32 @@
+{
+  "status": "ok",
+  "step": 72,
+  "inspector": {
+    "agent_id": "019e17b1-5de1-7a71-ba0e-14277c35f0af",
+    "nickname": "Hubble",
+    "model_class": "gpt-5.4-mini"
+  },
+  "verdict": "approve_with_monitoring",
+  "primary_chain": "New backend admitted to reserve -> sync mutates it into active / changes selected routing -> repo previously could still reach the success tail and emit a reserve-first success claim; the patch adds a post-sync verification gate that re-reads registry/state and blocks that success path.",
+  "findings": [
+    {
+      "severity": "info",
+      "file": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/wild_boar_proxy/runtime.py:11989",
+      "fact": "Post-sync verification now re-reads registry and state and fails before the reserve-first success tail when routing or pool truth contradicts reserve-first onboarding."
+    },
+    {
+      "severity": "info",
+      "file": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/tests/test_cli.py:7409",
+      "fact": "New regression simulates sync promoting the selected onboarded backend to active and expects a fatal ONBOARD_ACTIVE_ROUTING_CHANGED result."
+    },
+    {
+      "severity": "info",
+      "file": "/private/tmp/wbp-step72-owner-surface-contradiction-repair/tests/test_cli.py:1073",
+      "fact": "Test harness now supports registry+state sync mutation, matching the live contradiction chain instead of only the initial onboard result."
+    }
+  ],
+  "residual_risks": [
+    "External onboarding/sync binaries may still attempt the mutation; this repair prevents the repo owner surface from overclaiming success afterward.",
+    "If a future sync path mutates backend identity shape instead of only pool/routing truth, another regression may be needed."
+  ]
+}

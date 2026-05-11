@@ -1,0 +1,24 @@
+{
+  "status": "ok",
+  "step": 72,
+  "runs": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/runtime.py tests/test_cli.py",
+      "result": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof tests.test_cli.CliTests.test_accounts_onboard_blocks_selected_backend_active_routing_change tests.test_cli.CliTests.test_accounts_onboard_blocks_existing_backend_promotion_to_active tests.test_cli.CliTests.test_accounts_onboard_fails_when_sync_promotes_selected_backend_into_active",
+      "result": "passed",
+      "tests_run": 4
+    },
+    {
+      "command": "python3 - <<'PY' ... run all CliTests names starting with test_accounts_onboard_ ... PY",
+      "result": "passed",
+      "tests_run": 19
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ]
+}
