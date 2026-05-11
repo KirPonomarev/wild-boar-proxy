@@ -1,0 +1,54 @@
+{
+  "date": "2026-05-12",
+  "status": "blocked",
+  "machine_error_code": "PILOT_ENTRY_NOT_EARNED",
+  "preconditions": [
+    {
+      "name": "execution_core_repair_closed_and_design_gate_ready",
+      "status": "earned",
+      "source": "audit_results/stage20_c6_verification_packet.json",
+      "notes": "Earned through non-repo-owned NO_GO path only."
+    },
+    {
+      "name": "basic_companion_ui_completed",
+      "status": "partially_supported",
+      "source": "repo-local UI tests and external-models UI closeouts",
+      "notes": "UI owner surfaces exist, but this does not by itself satisfy historical pilot-gate closure."
+    },
+    {
+      "name": "installer_and_legacy_import_owner_surfaces_present",
+      "status": "earned",
+      "source": "wild_boar_proxy/cli.py and wild_boar_proxy/runtime.py owner surfaces plus isolated replay",
+      "notes": "Control-layer owner surfaces are present and replay successfully in isolated paths."
+    },
+    {
+      "name": "experimental_package_owner_surfaces_present",
+      "status": "earned",
+      "source": "wild_boar_proxy/cli.py and wild_boar_proxy/runtime.py package surfaces plus isolated replay",
+      "notes": "This is package-owner evidence, not release proof."
+    },
+    {
+      "name": "machine_carried_14_day_metrics_window",
+      "status": "blocked",
+      "source": "audit_results/step20b_metrics_window_report.md",
+      "notes": "Historical pilot-entry lane remains blocked without complete 14-day metrics proof."
+    },
+    {
+      "name": "scale_validation_live_pool_truth",
+      "status": "blocked",
+      "source": "audit_results/stage20_c6_verification_packet.json",
+      "notes": "CLAIM_GATE_BLOCKED, STABLE_POLICY_DRIFT, ROTATION_EVIDENCE_INSUFFICIENT, and INSUFFICIENT_ELIGIBLE_POOL remain active."
+    }
+  ],
+  "forbidden_inferences": [
+    "package owner surface present => release ready",
+    "external-models verified route => pilot ready",
+    "UI implemented => pilot gate closed",
+    "historical closeout note => current forward plan"
+  ],
+  "net_result": {
+    "pilot_entry_ready": false,
+    "release_gate_closed": false,
+    "reason": "historical pilot blockers remain explicit and current forward plan selection is unreconciled"
+  }
+}

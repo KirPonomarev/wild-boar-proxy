@@ -1,0 +1,171 @@
+{
+  "contour_id": "release_gate_alignment_and_pilot_entry_prep",
+  "date": "2026-05-12",
+  "status": "stopped",
+  "machine_error_code": "STOP_AND_DIAGNOSE",
+  "final_verdict": "not_openable_as_current_forward_contour",
+  "reason": "master-plan active narrative and later historical step-closeout notes diverge, while historical release-gate and pilot artifacts remain blocked",
+  "canon_basis": {
+    "canon_order_source": "AGENTS.md",
+    "primary_docs": [
+      "CANON.md",
+      "MASTER_PLAN.md",
+      "RUNTIME_CONTRACT.md",
+      "COMMAND_API.md"
+    ]
+  },
+  "drift_points": [
+    {
+      "kind": "active_vs_historical_plan_line",
+      "source": "MASTER_PLAN.md:10",
+      "detail": "Active PLAN_STATUS still points to execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI."
+    },
+    {
+      "kind": "historical_step_closeout_line",
+      "source": "MASTER_PLAN.md:899-900",
+      "detail": "Implementation-order step 16 historical closeout says the next primary contour is release-gate alignment for scale decision and pilot-entry prep."
+    },
+    {
+      "kind": "historical_release_gate_blocked",
+      "source": "audit_results/step17_release_gate_alignment_report.md",
+      "detail": "Historical release-gate alignment artifacts still record blocked pilot-gate conditions."
+    },
+    {
+      "kind": "historical_pilot_blocked",
+      "source": "audit_results/step20b_decision_packet.json",
+      "detail": "Historical pilot-entry decision remains blocked with missing 14-day metrics-window proof."
+    }
+  ],
+  "earned_claims": [
+    {
+      "claim": "execution_core_design_gate_earned",
+      "source": "audit_results/stage20_c6_closeout_report.md:15,111-115",
+      "status": "earned",
+      "scope": "non-repo-owned NO_GO path only"
+    },
+    {
+      "claim": "installer_owner_surface_present",
+      "source": "wild_boar_proxy/cli.py:354-361, wild_boar_proxy/runtime.py:12135-12325",
+      "status": "earned",
+      "scope": "control-layer owner surface"
+    },
+    {
+      "claim": "package_owner_surface_present",
+      "source": "wild_boar_proxy/cli.py:201-212, wild_boar_proxy/runtime.py:3756-3835,3838-3864",
+      "status": "earned",
+      "scope": "experimental package owner surface"
+    },
+    {
+      "claim": "basic_companion_ui_lane_exists",
+      "source": "tests.test_ui_shell + tests.test_web_ui replay on 2026-05-12",
+      "status": "earned",
+      "scope": "repo-local UI owner surfaces only"
+    }
+  ],
+  "blocked_claims": [
+    {
+      "claim": "pilot_ready",
+      "source": "audit_results/step20b_metrics_window_report.md",
+      "status": "blocked",
+      "blockers": [
+        "PILOT_GATE_INSTALLER_AND_2W_METRICS_MISSING",
+        "missing complete 14-day machine metrics window"
+      ]
+    },
+    {
+      "claim": "release_gate_closed",
+      "source": "audit_results/step17_release_gate_alignment_report.md, audit_results/step20_closeout_report.md",
+      "status": "blocked",
+      "blockers": [
+        "historical release-gate artifacts remain blocked",
+        "current active plan line does not point to a now-earned release gate"
+      ]
+    },
+    {
+      "claim": "scale_complete",
+      "source": "audit_results/stage20_c6_verification_packet.json",
+      "status": "blocked",
+      "blockers": [
+        "CLAIM_GATE_BLOCKED",
+        "STABLE_POLICY_DRIFT",
+        "ROTATION_EVIDENCE_INSUFFICIENT",
+        "INSUFFICIENT_ELIGIBLE_POOL"
+      ]
+    }
+  ],
+  "unknown_claims": [
+    {
+      "claim": "release_alignment_current_forward_priority",
+      "status": "unknown_without_reconciliation",
+      "detail": "MASTER_PLAN active top-level line and later historical step-closeout notes diverge."
+    }
+  ],
+  "owner_surface_replay": {
+    "mode": "isolated_paths_only",
+    "commands": [
+      {
+        "command": "installer init --json",
+        "machine_error_code": "OK",
+        "final_outcome": "baseline_initialized"
+      },
+      {
+        "command": "legacy import --source-dir <temp> --json",
+        "machine_error_code": "OK",
+        "final_outcome": "import_completed"
+      },
+      {
+        "command": "package experimental build --output-dir <temp> --json",
+        "machine_error_code": "OK",
+        "final_outcome": "built"
+      },
+      {
+        "command": "package experimental verify --manifest <temp> --json",
+        "machine_error_code": "OK",
+        "final_outcome": "verified"
+      },
+      {
+        "command": "companion reset --json",
+        "machine_error_code": "OK",
+        "final_outcome": "companion_data_removed"
+      },
+      {
+        "command": "companion uninstall --json",
+        "machine_error_code": "OK",
+        "final_outcome": "companion_data_removed"
+      }
+    ]
+  },
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_ui_shell tests.test_web_ui",
+        "observed_result": "Ran 107 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q selected tests.test_cli.CliTests owner-surface methods",
+        "observed_result": "Ran 12 tests ... OK"
+      }
+    ],
+    "build": [
+      {
+        "command": "python3 -m compileall -q wild_boar_proxy tests",
+        "status": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed"
+      }
+    ]
+  },
+  "non_blocking_doc_drift": [
+    {
+      "source": "audit_results/external_models_c5_closeout_2026-05-12.md:11-13,45-48",
+      "detail": "C5 closeout still says in_verification / pending commit / pending push even though later contours cite C5 as committed and pushed."
+    }
+  ],
+  "recommended_next_action": {
+    "verdict": "do_not_open_release_gate_alignment_as_current_forward_contour",
+    "prefer": "master_plan_active_path_reconciliation_or_live_path_selection",
+    "explanation": "A narrow reconciliation contour should decide whether to follow the active reserve-first stage-20 path or explicitly supersede it before any pilot-entry alignment claim is reopened."
+  }
+}
