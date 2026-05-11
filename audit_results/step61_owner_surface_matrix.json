@@ -1,0 +1,91 @@
+{
+  "status_json": {
+    "surface_kind": "read_only_reporting_surface",
+    "owns": [
+      "reports top-level runtime truth",
+      "reports stable_runtime_consumer effective truth"
+    ],
+    "does_not_own": [
+      "deterministic stable recovery mutation",
+      "rotation evidence mutation"
+    ],
+    "key_evidence": [
+      "COMMAND_API.md:1124-1143",
+      "COMMAND_API.md:1163-1164",
+      "runtime.py:3033-3095"
+    ]
+  },
+  "healthcheck_json": {
+    "surface_kind": "live_owner_path_for_deterministic_stable_recovery",
+    "owns": [
+      "deterministic stable recovery entry",
+      "live attestation and fallback reconciliation"
+    ],
+    "does_not_own": [
+      "selected_backend_snapshot materialization truth for rotation evidence"
+    ],
+    "key_evidence": [
+      "RUNTIME_CONTRACT.md:39-43",
+      "COMMAND_API.md:1161-1164",
+      "COMMAND_API.md:1176-1185"
+    ]
+  },
+  "sync_json": {
+    "surface_kind": "mutation_owner_surface",
+    "owns": [
+      "serialized runtime-state owner path for selected_backend_snapshot materialization",
+      "managed sync restart path"
+    ],
+    "does_not_own": [
+      "deterministic stable recovery result surfaces",
+      "approved-target stable activation truth"
+    ],
+    "key_evidence": [
+      "COMMAND_API.md:340-345",
+      "COMMAND_API.md:1198",
+      "runtime.py:6529-6618",
+      "supervisor-sync.sh:1049-1051",
+      "supervisor-healthcheck.sh:349-352"
+    ]
+  },
+  "launch_smoke_json": {
+    "surface_kind": "bounded_activation_owner_surface",
+    "owns": [
+      "narrow stable-runtime activation path",
+      "stable_runtime_consumer snapshot refresh through activation outcome"
+    ],
+    "does_not_own": [
+      "deterministic stable recovery result surfaces",
+      "rotation selected_backend_snapshot materialization"
+    ],
+    "key_evidence": [
+      "COMMAND_API.md:1112-1113",
+      "COMMAND_API.md:1166-1173",
+      "COMMAND_API.md:1196-1198",
+      "tests/test_cli.py:5786-5855"
+    ]
+  },
+  "rollout_rotation_inspect_json": {
+    "surface_kind": "read_only_validation_surface",
+    "owns": [
+      "bounded participation evidence validation"
+    ],
+    "does_not_own": [
+      "selected_backend_snapshot creation",
+      "stable runtime activation truth"
+    ],
+    "key_evidence": [
+      "COMMAND_API.md:343-346",
+      "runtime.py:6707-6722",
+      "tests/test_cli.py:8891-8915"
+    ]
+  },
+  "cross_surface_asymmetry": {
+    "summary": "status requires live stable runtime plus fresh activation evidence for approved-target effective truth, while rotation inspect may consume approved-target policy drift without requiring live stable runtime",
+    "key_evidence": [
+      "runtime.py:3033-3060",
+      "runtime.py:3091-3095",
+      "runtime.py:6707-6718"
+    ]
+  }
+}

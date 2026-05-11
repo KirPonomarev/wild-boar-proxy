@@ -1,0 +1,33 @@
+{
+  "status": "completed",
+  "machine_error_code": "OK",
+  "contour_id": "OWNER_SURFACE_SEQUENCE_ADMISSION_DIAGNOSIS_CONTOUR",
+  "contour_result": "GO_COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "primary_verdict": "EXPLICITLY_ADMITTED_COMPOSITE_PROOF_REQUIRED_TO_AVOID_BLIND_SINGLE_LANE_LOOP",
+  "why_now": [
+    "`step58` proved `launch smoke --json` can restore top-level runtime truth",
+    "`step60` proved `sync --json` can restore rotation freshness while regressing runtime truth",
+    "code and tests prove `sync` and `launch smoke` own different truth lanes",
+    "canon forbids silent merge, but permits explicit bounded sequencing when the split cannot be kept safely",
+    "no repo-owned contradiction is proven yet because the composite sequence has not been executed and relevant test semantics remain internally consistent"
+  ],
+  "selected_next_contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "rejected_alternatives": [
+    {
+      "contour": "TOP_LEVEL_RUNTIME_TRUTH_REPAIR_CONTOUR",
+      "reason": "would reopen a known blind single-lane retry without resolving whether rotation freshness survives the sequence"
+    },
+    {
+      "contour": "OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR",
+      "reason": "repo-owned contradiction is not yet proven strongly enough because a bounded composite proof has not been attempted"
+    }
+  ],
+  "stop_rule_for_next_contour": "If the explicitly admitted composite proof sequence fails to produce simultaneous green runtime truth and green rotation evidence, the next lawful contour becomes OWNER_SURFACE_CONTRADICTION_REPAIR_CONTOUR rather than another blind retry.",
+  "mutation_executed": false,
+  "downstream_blocked": [
+    "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+    "STAGE_20_OWNER_PATH_REENTRY",
+    "SAME_DAY_20_ACCOUNT_VALIDATION",
+    "UI_*"
+  ]
+}
