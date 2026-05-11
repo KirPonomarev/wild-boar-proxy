@@ -1,0 +1,23 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_status_reports_desired_approved_target_before_effective_activation",
+    "tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target",
+    "tests.test_cli.CliTests.test_rollout_rotation_inspect_uses_approved_target_policy_surface_when_activation_evidence_is_valid",
+    "tests.test_cli.CliTests.test_sync_materializes_selected_backend_snapshot_on_success",
+    "tests.test_cli.CliTests.test_sync_refreshes_selected_backend_snapshot_observed_at_on_success",
+    "tests.test_cli.CliTests.test_reconcile_stable_recovery_success_preserves_selected_backend_snapshot_surfaces",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_live_posture_drift_only",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_reserve_candidate_not_identified",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_rotation_evidence_insufficiency",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_ready_for_stage_advance"
+  ],
+  "returncode": 0,
+  "tests_run": 10,
+  "summary": "Ran 10 tests in 9.200s",
+  "result": "OK"
+}

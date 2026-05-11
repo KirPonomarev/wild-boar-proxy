@@ -1,0 +1,69 @@
+{
+  "step": "step69",
+  "contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "inspector": {
+    "agent_id": "019e1607-6d77-7f72-9ae3-c0812905f1f5",
+    "nickname": "Averroes",
+    "model": "gpt-5.4-mini",
+    "mode": "read_only"
+  },
+  "raw_report": {
+    "step": "step69",
+    "contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+    "preflight_pattern_matches_admitted_split": true,
+    "midflight_rotation_green_enough": true,
+    "postflight_runtime_green": true,
+    "postflight_rotation_green": true,
+    "downstream_primary_blocker": "LIVE_POSTURE_DRIFT_ONLY",
+    "recommended_next_contour": "TARGET_STAGE_POSTURE_NORMALIZATION_CONTOUR",
+    "claimed_mismatches": [
+      {
+        "field": "rollout_posture_result.source_stage",
+        "expected": "20",
+        "observed": "15",
+        "severity": "high"
+      }
+    ],
+    "final_verdict": "runtime_and_rotation_green_but_downstream_open_due_to_live_posture_drift_only"
+  },
+  "assessment": {
+    "runtime_and_rotation_convergence_confirmed": true,
+    "accepted_fields": [
+      "preflight_pattern_matches_admitted_split",
+      "midflight_rotation_green_enough",
+      "postflight_runtime_green",
+      "postflight_rotation_green",
+      "final_verdict"
+    ],
+    "narrowed_fields": [
+      {
+        "field": "recommended_next_contour",
+        "raw_value": "TARGET_STAGE_POSTURE_NORMALIZATION_CONTOUR",
+        "narrowed_value": "RESERVE_READINESS_RECOVERY_CONTOUR",
+        "reason": "Fresh downstream observation still carries the narrower Branch C blocker inside LIVE_POSTURE_DRIFT_ONLY: reserve_candidate is empty and reserve_live_capable_count is zero."
+      },
+      {
+        "field": "claimed_mismatches[0]",
+        "raw_value": {
+          "field": "rollout_posture_result.source_stage",
+          "expected": "20",
+          "observed": "15",
+          "severity": "high"
+        },
+        "narrowed_value": {
+          "field": "rollout_posture_result.source_stage",
+          "expected": "15",
+          "observed": "15",
+          "severity": "none"
+        },
+        "reason": "For rollout posture inspect 20 the source stage truth is canonically 15; this is not a mismatch and does not authorize stage-20 or posture normalization ahead of reserve-candidate recovery."
+      }
+    ]
+  },
+  "final_independent_verdict": {
+    "runtime_and_rotation_green": true,
+    "downstream_top_level_label": "LIVE_POSTURE_DRIFT_ONLY",
+    "downstream_narrower_blocker": "EXPLICIT_RESERVE_CANDIDATE_MISSING",
+    "recommended_next_contour": "RESERVE_READINESS_RECOVERY_CONTOUR"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "step": "step69",
+  "contour": "COMPOSITE_RUNTIME_RECONCILIATION_PROOF_CONTOUR",
+  "status": "completed",
+  "verdict": "GO_RESERVE_READINESS_RECOVERY_CONTOUR",
+  "primary_verdict": "COMPOSITE_RUNTIME_RECONCILIATION_REPROVED",
+  "mutation_executed": true,
+  "owner_surfaces": [
+    "sync --json",
+    "launch smoke --json"
+  ],
+  "sequence": [
+    {
+      "command": "python3 -m wild_boar_proxy sync --json",
+      "result": "OK"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "phase": "midflight",
+      "result": "OK",
+      "machine_error_code": "OK",
+      "evidence_freshness": "fresh",
+      "participation_status": "available"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy launch smoke --json",
+      "result": "OK"
+    }
+  ],
+  "preflight_summary": {
+    "effective_mode": "stable",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "consumer_activation_readiness": "STABLE_RUNTIME_CONSUMER_ACTIVATION_PENDING",
+    "desired_source": "approved_repair_target",
+    "effective_source": "observed_stable_inventory_source",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_freshness": "stale",
+    "accounts": {
+      "active": 16,
+      "reserve": 0,
+      "retired": 8,
+      "held": 0
+    }
+  },
+  "postflight_summary": {
+    "effective_mode": "stable",
+    "claim_gate": "clear",
+    "policy_drift": "clear",
+    "consumer_activation_readiness": "OK",
+    "desired_source": "approved_repair_target",
+    "effective_source": "approved_repair_target",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_freshness": "fresh",
+    "rotation_participation_status": "available",
+    "accounts": {
+      "active": 16,
+      "reserve": 0,
+      "retired": 8,
+      "held": 0
+    }
+  },
+  "downstream_observation": {
+    "machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "classification": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate": "",
+    "reserve_live_capable_count": 0,
+    "protected_active_count": 9,
+    "next_blocker": "EXPLICIT_RESERVE_CANDIDATE_MISSING"
+  },
+  "independent_inspection_status": "narrowed_but_consistent",
+  "selected_next_contour": "RESERVE_READINESS_RECOVERY_CONTOUR"
+}
