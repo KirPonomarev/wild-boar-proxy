@@ -1,0 +1,124 @@
+{
+  "contour_id": "master_plan_active_path_reconciliation_or_live_path_selection",
+  "date": "2026-05-12",
+  "status": "completed",
+  "machine_error_code": "OK",
+  "decision_status": "path_selected",
+  "selected_path": "Path C",
+  "selected_path_label": "truthful_hold_with_exact_blockers",
+  "final_verdict": "keep_hold_do_not_open_path_a_or_b",
+  "human_reason": "Path A remains the intended active direction but is blocked by live pool truth; Path B is only historically adjacent and lacks a formal supersedure packet; Path C is the only canon-safe current governing verdict.",
+  "path_matrix": [
+    {
+      "path": "Path A",
+      "label": "reserve_first_live_stage20_lane_remains_active_direction",
+      "sources": [
+        "MASTER_PLAN.md:10",
+        "MASTER_PLAN.md:917-924",
+        "MASTER_PLAN.md:1027-1029"
+      ],
+      "source_classification": "active_plan_direction",
+      "machine_backed": false,
+      "status": "blocked",
+      "blocked_by": [
+        "CLAIM_GATE_BLOCKED",
+        "ROTATION_EVIDENCE_INSUFFICIENT",
+        "INSUFFICIENT_ELIGIBLE_POOL",
+        "NO_EXPLICIT_RESERVE_POSTURE",
+        "OWNER_SURFACE_CONTRADICTION"
+      ],
+      "detail": "This remains the intended active direction, but current owner-surface truth does not allow reopening it as a live current contour."
+    },
+    {
+      "path": "Path B",
+      "label": "active_top_line_formally_superseded",
+      "sources": [
+        "MASTER_PLAN.md:899-900",
+        "MASTER_PLAN.md:913-926",
+        "audit_results/release_gate_alignment_closeout_2026-05-12.md:17"
+      ],
+      "source_classification": "historical_closeout_plus_later_alignment_drift",
+      "machine_backed": false,
+      "status": "not_selected",
+      "blocked_by": [
+        "no_explicit_supersedure_packet",
+        "release_gate_alignment_was_itself_stopped"
+      ],
+      "detail": "Historical step-closeout notes and later alignment artifacts are not enough to fabricate a formal supersedure of the active line."
+    },
+    {
+      "path": "Path C",
+      "label": "truthful_hold_with_exact_blockers",
+      "sources": [
+        "audit_results/stage20_c6_verification_packet.json:66-109",
+        "audit_results/step42_decision_packet.json:2-48",
+        "audit_results/step42_normalization_decision_packet.json:6-31",
+        "audit_results/latest_status_raw.json:1",
+        "audit_results/latest_rotation_inspect_raw.json:1",
+        "audit_results/latest_accounts_list_raw.json:1"
+      ],
+      "source_classification": "machine_backed_current_truth",
+      "machine_backed": true,
+      "status": "selected",
+      "detail": "Current owner-surface truth supports a hold with exact blockers and rejects live normalization or claim escalation."
+    }
+  ],
+  "exact_blockers": [
+    "OWNER_SURFACE_CONTRADICTION",
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "INSUFFICIENT_ELIGIBLE_POOL",
+    "NO_EXPLICIT_RESERVE_POSTURE"
+  ],
+  "active_vs_historical_classification": {
+    "MASTER_PLAN.md:10": "active_direction_but_not_current_live_admissibility",
+    "MASTER_PLAN.md:899-900": "historical_step16_closeout_note",
+    "MASTER_PLAN.md:913-926": "active_forward_policy_text",
+    "audit_results/stage20_c6_verification_packet.json": "machine_backed_gate_truth",
+    "audit_results/release_gate_alignment_packet_2026-05-12.json": "bounded_stop_and_diagnose_artifact",
+    "audit_results/step42_decision_packet.json": "machine_backed_hold_artifact"
+  },
+  "forbidden_claims": [
+    "pilot_ready",
+    "release_gate_closed",
+    "scale_complete",
+    "stable_20_proved",
+    "production_ready"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "observed_result": "Ran 15 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_ui_shell tests.test_web_ui",
+        "observed_result": "Ran 107 tests ... OK"
+      }
+    ],
+    "build": [
+      {
+        "command": "python3 -m compileall -q wild_boar_proxy tests",
+        "status": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed"
+      }
+    ]
+  },
+  "doc_correction_packet": {
+    "required": false,
+    "reason": "Path C keeps the contradiction bounded without forcing a supersedure edit. A narrow doc-correction becomes required only if the project wants to escalate toward Path A or B."
+  },
+  "recommended_next_action": {
+    "verdict": "hold_with_exact_blockers_packet",
+    "allowed_when_truth_changes": "reserve_first_stage20_live_path_selection_and_precondition_contour",
+    "forbidden_now": [
+      "release_gate_alignment_and_pilot_entry_prep",
+      "pilot_ready_claim",
+      "release_claim"
+    ]
+  }
+}
