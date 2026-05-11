@@ -1,0 +1,46 @@
+{
+  "protected_active": [
+    "beep-outlook-team",
+    "gpt2026bis-team",
+    "k-gpt-pro-2",
+    "k-gpt-pro-3k",
+    "k-ponomarev-photo",
+    "kip85905-team",
+    "new-gpt-bis",
+    "new-new22222",
+    "pig-outlook-team"
+  ],
+  "reserve_candidate": "",
+  "reserve_set": [],
+  "hold_set": [
+    "k-gpt-pro",
+    "k-ponomarev-pro",
+    "kabanui7070",
+    "kp8750410",
+    "new-new11111",
+    "new-new44444",
+    "new-new55555"
+  ],
+  "retire_set": [],
+  "do_not_touch": [
+    "beep-outlook-team",
+    "gpt2026bis-team",
+    "k-gpt-pro-2",
+    "k-gpt-pro-3k",
+    "k-ponomarev-photo",
+    "kip85905-team",
+    "new-gpt-bis",
+    "new-new22222",
+    "pig-outlook-team"
+  ],
+  "expected_source_posture_after_normalization": {
+    "active_window_target": 15,
+    "reserve_target": 0,
+    "explicit_reserve_candidate_required": true
+  },
+  "expected_target_posture_after_stage_advance": {
+    "active_window_target": 20,
+    "reserve_target": 0,
+    "stage_advance_candidate": ""
+  }
+}

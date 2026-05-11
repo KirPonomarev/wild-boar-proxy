@@ -1,0 +1,67 @@
+{
+  "contour_id": "RESERVE_FIRST_LIVE_POSTURE_NORMALIZATION_CONTOUR",
+  "step": "step63",
+  "contour_result": "STOP_AND_DIAGNOSE_MULTI_SURFACE_POSTURE_NORMALIZATION_REQUIRED",
+  "primary_verdict": "EXPLICIT_RESERVE_CANDIDATE_MISSING_NO_ADMITTED_ONE_SURFACE_NORMALIZATION_PATH",
+  "preflight_summary": {
+    "status_machine_error_code": "OK",
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "consumer_activation_readiness": "OK",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_freshness": "fresh",
+    "posture_initial_machine_error_code": "LOCK_HELD",
+    "posture_reread_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY"
+  },
+  "normalization_decision_packet": {
+    "protected_active_count": 9,
+    "protected_active": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ],
+    "reserve_candidate": "",
+    "reserve_set": [],
+    "hold_set": [
+      "k-gpt-pro",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410",
+      "new-new11111",
+      "new-new44444",
+      "new-new55555"
+    ],
+    "retire_set": [],
+    "expected_source_posture_after_normalization": {
+      "active_window_target": 15,
+      "reserve_target": 0,
+      "explicit_reserve_candidate_required": true
+    }
+  },
+  "admission_decision": {
+    "one_surface_path_admissible": false,
+    "admitted_owner_surface": "",
+    "reason": "reserve_candidate_missing"
+  },
+  "live_mutation": {
+    "executed": false,
+    "reason": "no_admitted_owner_surface"
+  },
+  "tests": {
+    "runner": "python3 -m unittest",
+    "tests_run": 4,
+    "result": "OK"
+  },
+  "independent_inspection": {
+    "status": "accepted_with_narrowing",
+    "narrowing_required": true
+  },
+  "next_contour": "BRANCH_C_EXPLICIT_RESERVE_CANDIDATE_RECOVERY_OR_CANON_CLARIFICATION_REQUIRED"
+}

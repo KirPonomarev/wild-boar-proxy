@@ -1,0 +1,17 @@
+{
+  "status": "completed",
+  "runner": "python3 -m unittest",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_live_posture_drift_only",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_reserve_candidate_not_identified",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_rotation_evidence_insufficiency",
+    "tests.test_cli.CliTests.test_rollout_posture_inspect_20_reports_ready_for_stage_advance"
+  ],
+  "returncode": 0,
+  "tests_run": 4,
+  "summary": "Ran 4 tests in 0.542s",
+  "result": "OK"
+}

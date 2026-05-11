@@ -1,0 +1,1 @@
+{"status": "error", "exit_code": 1, "human_message": "Mutation lock is held by pid 86911.", "machine_error_code": "LOCK_HELD", "changed_files": [], "next_action": "retry", "liveness": "unknown", "severity": "recoverable", "operator_action": "retry"}

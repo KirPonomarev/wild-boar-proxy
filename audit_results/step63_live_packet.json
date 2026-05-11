@@ -1,0 +1,8 @@
+{
+  "status": "not_executed",
+  "machine_error_code": "NOT_EXECUTED",
+  "reason": "no_admitted_owner_surface",
+  "changed_files": [],
+  "next_action": "diagnose",
+  "operator_action": "none"
+}
