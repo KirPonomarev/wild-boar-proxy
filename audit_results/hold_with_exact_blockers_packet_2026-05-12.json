@@ -1,0 +1,164 @@
+{
+  "contour_id": "hold_with_exact_blockers_packet",
+  "date": "2026-05-12",
+  "status": "completed",
+  "machine_error_code": "OK",
+  "final_verdict": "hold_frozen_with_exact_blockers",
+  "governing_path_source": "audit_results/master_plan_active_path_selection_packet_2026-05-12.json",
+  "governing_path": "Path C",
+  "hold_status": "active",
+  "current_hold_blockers": [
+    "OWNER_SURFACE_CONTRADICTION",
+    "ROTATION_EVIDENCE_INSUFFICIENT",
+    "NO_EXPLICIT_RESERVE_POSTURE",
+    "INSUFFICIENT_ELIGIBLE_POOL"
+  ],
+  "historical_or_inherited_related_labels_now_clear": [
+    "CLAIM_GATE_BLOCKED",
+    "STABLE_POLICY_DRIFT"
+  ],
+  "normalized_blocker_inventory": [
+    {
+      "name": "OWNER_SURFACE_CONTRADICTION",
+      "current_evidence": {
+        "source": "audit_results/step42_normalization_decision_packet.json",
+        "field": "owner_surface_truth_status",
+        "observed_value": "contradiction_persistent_after_bounded_recheck"
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "owner_surface_truth_status no longer equals contradiction_persistent_after_bounded_recheck and normalization_contour_admissible becomes true or equivalent non-contradictory owner-surface packet appears",
+        "proving_surface": "step42-style bounded recheck decision packet or successor owner-surface contradiction packet",
+        "ownership_classification": "machine_backed_mixed_repo_and_operational_truth",
+        "full_live_contour_required": false
+      },
+      "blocker_state": "active_current"
+    },
+    {
+      "name": "CLAIM_GATE_BLOCKED",
+      "current_evidence": {
+        "source": "audit_results/stage20_c6_verification_packet.json",
+        "field": "live_truth_closure.status.claim_gate_status",
+        "observed_value": "blocked_in_stage20_c6_but_clear_in_latest_status_raw"
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "already clear in latest_status_raw; do not treat this label as an active current blocker unless a future status packet reintroduces claim_gate.status=blocked",
+        "proving_surface": "status --json",
+        "ownership_classification": "owner_surface_runtime_truth",
+        "full_live_contour_required": false
+      },
+      "blocker_state": "historical_related_label_now_clear"
+    },
+    {
+      "name": "STABLE_POLICY_DRIFT",
+      "current_evidence": {
+        "source": "audit_results/stage20_c6_verification_packet.json",
+        "field": "live_truth_closure.status.policy_drift_status",
+        "observed_value": "detected_in_stage20_c6_but_clear_in_latest_status_raw"
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "already clear in latest_status_raw; do not treat this label as an active current blocker unless a future status packet reintroduces policy_drift.status=detected",
+        "proving_surface": "status --json",
+        "ownership_classification": "owner_surface_runtime_truth",
+        "full_live_contour_required": false
+      },
+      "blocker_state": "historical_related_label_now_clear"
+    },
+    {
+      "name": "ROTATION_EVIDENCE_INSUFFICIENT",
+      "current_evidence": {
+        "source": "audit_results/latest_rotation_inspect_raw.json",
+        "field": "machine_error_code",
+        "observed_value": "ROTATION_EVIDENCE_INSUFFICIENT"
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "rollout rotation inspect --json no longer reports ROTATION_EVIDENCE_INSUFFICIENT and participation/rotation evidence becomes sufficient",
+        "proving_surface": "rollout rotation inspect --json",
+        "ownership_classification": "operational_live_truth",
+        "full_live_contour_required": true
+      },
+      "blocker_state": "active_current"
+    },
+    {
+      "name": "INSUFFICIENT_ELIGIBLE_POOL",
+      "current_evidence": {
+        "source": "audit_results/stage20_c6_verification_packet.json",
+        "field": "live_truth_closure.posture20.machine_error_code",
+        "observed_value": "INSUFFICIENT_ELIGIBLE_POOL"
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "rollout posture inspect 20 --json no longer reports INSUFFICIENT_ELIGIBLE_POOL and the source-stage live-capable pool is sufficient",
+        "proving_surface": "rollout posture inspect 20 --json",
+        "ownership_classification": "operational_live_truth",
+        "full_live_contour_required": true
+      },
+      "blocker_state": "stage20_posture_blocker_still_relevant"
+    },
+    {
+      "name": "NO_EXPLICIT_RESERVE_POSTURE",
+      "current_evidence": {
+        "source": "audit_results/latest_accounts_list_raw.json",
+        "field": "reserve_count_from_accounts_snapshot",
+        "observed_value": 0
+      },
+      "reopen_condition": {
+        "kind": "future_packet_change",
+        "required_change": "accounts list --json or rollout posture inspect 20 --json shows explicit reserve posture such as reserve_pool_count > 0 and/or reserve_candidate_present=true",
+        "proving_surface": "accounts list --json and/or rollout posture inspect 20 --json",
+        "ownership_classification": "operational_live_truth",
+        "full_live_contour_required": true
+      },
+      "blocker_state": "active_current"
+    }
+  ],
+  "forbidden_claims": [
+    "pilot_ready",
+    "release_gate_closed",
+    "scale_complete",
+    "stable_20_proved",
+    "production_ready"
+  ],
+  "forbidden_inferences": [
+    "green healthcheck implies hold is reopenable",
+    "green status alone implies hold is reopenable",
+    "package/installer owner surfaces imply pilot readiness",
+    "basic companion UI existence implies release gate progress",
+    "historical closeout adjacency implies supersedure"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k claim_gate",
+        "observed_result": "Ran 2 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k stage_advance_20",
+        "observed_result": "Ran 15 tests ... OK"
+      }
+    ],
+    "build": [
+      {
+        "command": "python3 -m compileall -q wild_boar_proxy tests",
+        "status": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "status": "passed"
+      }
+    ]
+  },
+  "next_action": {
+    "status": "hold",
+    "allowed_when_truth_changes": "reserve_first_stage20_live_path_selection_and_precondition_contour",
+    "forbidden_now": [
+      "release_gate_alignment_and_pilot_entry_prep",
+      "pilot_ready_claim",
+      "release_claim",
+      "live_stage20_reentry_without_reopen_conditions"
+    ]
+  }
+}
