@@ -1,0 +1,66 @@
+{
+  "status": "ok",
+  "step": 73,
+  "execution_core_green_enough": false,
+  "upstream_blocker_present": true,
+  "upstream_blockers": {
+    "claim_gate_status": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "rotation_status": "ROTATION_EVIDENCE_CONTRADICTED"
+  },
+  "pool_counts": {
+    "active": 17,
+    "reserve": 0,
+    "retired": 8
+  },
+  "candidate_summary": {
+    "active_live_capable": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro",
+      "k-gpt-pro-2",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "kp8750410-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "new-new55555",
+      "pig-outlook-team"
+    ],
+    "reserve_live_capable": [],
+    "active_quota_exhausted": [
+      "k-gpt-pro-3k",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410",
+      "new-new11111",
+      "new-new44444"
+    ],
+    "reserve_quota_exhausted": [],
+    "active_auth_invalid": [],
+    "reserve_auth_invalid": [],
+    "active_cooldown_only": [],
+    "reserve_cooldown_only": [],
+    "active_unknown_unverified": [],
+    "reserve_unknown_unverified": [],
+    "active_excluded": [],
+    "reserve_excluded": [],
+    "active_live_capable_count": 11,
+    "reserve_live_capable_count": 0,
+    "active_overflow_live_capable_ids": [],
+    "selected_backend_ids": [],
+    "reserve_candidate_id": ""
+  },
+  "kp8750410_team": [
+    {
+      "id": "kp8750410-team",
+      "pool": "active",
+      "status": "healthy",
+      "last_error_class": "",
+      "manual_hold": false
+    }
+  ],
+  "truthful_summary": "Branch C cannot reopen because execution-core is blocked upstream: policy drift is detected, claim gate is blocked, rotation evidence is contradicted, and no reserve candidate exists."
+}

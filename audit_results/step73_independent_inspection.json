@@ -1,0 +1,21 @@
+{
+  "status": "ok",
+  "step": 73,
+  "inspector": {
+    "agent_id": "019e187c-c033-7982-8a93-137f0af0dd19",
+    "nickname": "Mendel",
+    "model_class": "gpt-5.4-mini"
+  },
+  "verdict": "BLOCKED_BY_STABLE_POLICY_DRIFT_AND_ROTATION_CONTRADICTION",
+  "branch_c_reopen_admissible": false,
+  "upstream_blocker_present": true,
+  "facts": [
+    "step73 status is top-level OK but claim gate is blocked.",
+    "stable policy drift is detected with configured_active_count=17 vs allowed_stable_auth_count=11.",
+    "rotation inspect returns ROTATION_EVIDENCE_CONTRADICTED with evidence_reason=policy_drift_detected.",
+    "posture inspect still reports LIVE_POSTURE_DRIFT_ONLY and reserve_candidate remains empty.",
+    "fresh packets do not establish a lawful Branch C reopen path."
+  ],
+  "recommended_next_contour": "INSPECT_STABLE_POLICY_DRIFT_CONTOUR",
+  "rationale": "The truthful next move is to inspect and repair the stable policy drift surface rather than reopen Branch C or assume the earlier stale-snapshot composite retry lane still applies."
+}

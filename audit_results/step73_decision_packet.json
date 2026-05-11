@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "step": 73,
+  "contour": "FRESH_RESERVE_INPUT_OR_POOL_CHANGE_RECHECK_CONTOUR",
+  "verdict": "NO_GO_UPSTREAM_BLOCKER_RECHECK",
+  "final_outcome": "execution_core_blocked_before_branch_c_reopen",
+  "branch_c_reopen_admissible": false,
+  "upstream_blocker_present": true,
+  "facts": {
+    "effective_mode": "stable",
+    "claim_gate_status": "blocked",
+    "policy_drift_status": "detected",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "posture_machine_error_code": "LIVE_POSTURE_DRIFT_ONLY",
+    "reserve_candidate_id": "",
+    "reserve_live_capable_count": 0,
+    "active_pool_count": 17,
+    "reserve_pool_count": 0
+  },
+  "next_contour": "INSPECT_STABLE_POLICY_DRIFT_CONTOUR",
+  "next_contour_reason": "Execution-core truth is blocked upstream by stable policy drift itself. Canon requires runtime-truth repair first, and this blocker is narrower than the earlier stale-snapshot composite-runtime retry lane."
+}

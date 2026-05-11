@@ -1,0 +1,20 @@
+{
+  "status": "ok",
+  "step": 73,
+  "branch_c_reopen_admissible": false,
+  "reason": "upstream_blocker_present",
+  "owner_surfaces": {
+    "accounts_onboard_json": {
+      "admissible": false,
+      "reason": "branch_c_recheck_stops_before_owner_surface_selection_when_execution_core_truth_is_blocked"
+    },
+    "accounts_demote_json": {
+      "admissible": false,
+      "reason": "branch_c_recheck_stops_before_owner_surface_selection_when_execution_core_truth_is_blocked"
+    },
+    "accounts_release_json": {
+      "admissible": false,
+      "reason": "branch_c_recheck_stops_before_owner_surface_selection_when_execution_core_truth_is_blocked"
+    }
+  }
+}
