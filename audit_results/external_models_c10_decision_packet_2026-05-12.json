@@ -1,0 +1,72 @@
+{
+  "contour_id": "external_models_c10_sandbox_and_tool_execution_admission_boundary",
+  "date_utc": "2026-05-12T00:00:00Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head_before_c10": "e11d0a8",
+  "status": "completed",
+  "machine_verdict": "NOT_ADMISSIBLE",
+  "decision_basis": {
+    "bounded_adapter_contract": {
+      "source": "ADR-0002-external-models-bounded-compatibility-adapter.md:26-35",
+      "status": "binding",
+      "effect": "external-models remains bounded compatibility adapter only"
+    },
+    "engine_ownership": {
+      "source": "MASTER_PLAN.md:225-273",
+      "status": "binding",
+      "effect": "upstream execution behavior remains engine-owned"
+    },
+    "hard_blocker_exception_found": false,
+    "existing_execution_surface_found": false
+  },
+  "capability_matrix": {
+    "permanently_forbidden_now": [
+      "shell_execution",
+      "filesystem_write_execution_lane",
+      "git_operations",
+      "browser_automation",
+      "generic_tool_execution",
+      "dynamic_code_loading",
+      "adapter_local_task_runner"
+    ],
+    "not_admitted_even_later_by_this_contour": [
+      "sandbox_api_shape",
+      "helper_execution_protocol",
+      "allowlisted_execution_helpers_without_new_adr"
+    ]
+  },
+  "reasons": [
+    "current canon already binds external-models to bounded adapter behavior and warns against creating a second hidden engine",
+    "upstream execution behavior remains engine-owned in the master plan",
+    "no concrete blocker or explicit exception was found that requires widening external-models into execution capability",
+    "convenience alone is not a valid blocker basis for engine-duplication drift"
+  ],
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_external_models",
+        "result": "Ran 11 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli_external_models",
+        "result": "Ran 17 tests ... OK"
+      }
+    ],
+    "build": {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "result": "passed"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  },
+  "next_contour": {
+    "status": "none_required_for_tool_execution_lane",
+    "reason": "tool execution remains forbidden unless canon changes through a separate future decision path"
+  },
+  "closeout_rule": {
+    "commit": "pending_git_closeout",
+    "push": "pending_git_closeout"
+  }
+}
