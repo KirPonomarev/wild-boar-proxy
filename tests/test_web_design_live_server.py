@@ -12,6 +12,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from wild_boar_proxy.ui_shell import CommandResult
+from wild_boar_proxy.web_design_command_adapter import ALLOWLIST
 from wild_boar_proxy.web_design_live_server import (
     ACCOUNTS_READONLY_COMMAND_IDS,
     READONLY_COMMAND_IDS,
@@ -137,6 +138,25 @@ class MappingRunner:
 
 
 class WebDesignLiveServerTests(unittest.TestCase):
+    def test_promote_demote_adapter_specs_use_exact_argv_templates(self) -> None:
+        promote = ALLOWLIST["accounts_promote"]
+        demote = ALLOWLIST["accounts_demote"]
+
+        self.assertEqual(
+            promote.argv_template,
+            ("accounts", "promote", "{account_id}", "--json"),
+        )
+        self.assertTrue(promote.confirmation_required)
+        self.assertEqual(promote.required_args, ("account_id",))
+        self.assertEqual(promote.allowed_args, ("account_id",))
+        self.assertEqual(
+            demote.argv_template,
+            ("accounts", "demote", "{account_id}", "--json"),
+        )
+        self.assertTrue(demote.confirmation_required)
+        self.assertEqual(demote.required_args, ("account_id",))
+        self.assertEqual(demote.allowed_args, ("account_id",))
+
     def test_live_snapshot_calls_only_readonly_commands_and_maps_shape(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -352,6 +372,24 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["validate_account"]["affects_primary_truth"])
         self.assertEqual(metadata["actions"]["validate_account"]["action_role"], "account_verification")
         self.assertTrue(metadata["actions"]["validate_account"]["post_action_refresh_required"])
+        self.assertIn("promote_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["promote_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["promote_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["promote_account"]["affects_primary_truth"])
+        self.assertEqual(
+            metadata["actions"]["promote_account"]["action_role"],
+            "account_lifecycle_promotion",
+        )
+        self.assertTrue(metadata["actions"]["promote_account"]["post_action_refresh_required"])
+        self.assertIn("demote_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["demote_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["demote_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["demote_account"]["affects_primary_truth"])
+        self.assertEqual(
+            metadata["actions"]["demote_account"]["action_role"],
+            "account_lifecycle_demotion",
+        )
+        self.assertTrue(metadata["actions"]["demote_account"]["post_action_refresh_required"])
         self.assertIn("hold_account", metadata["actions"])
         self.assertTrue(metadata["actions"]["hold_account"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["hold_account"]["mutates_runtime"])
@@ -538,6 +576,133 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertNotIn(("accounts", "hold", "acct-hold", "--json"), calls)
             self.assertNotIn(("accounts", "release", "acct-active", "--json"), calls)
 
+    def test_promote_demote_actions_preflight_eligibility_and_execute_exact_commands(self) -> None:
+        promote_runner = MappingRunner(live_payloads())
+        demote_runner = MappingRunner(live_payloads())
+
+        promote = run_ui_action(
+            promote_runner,
+            {"ui_action": "promote_account", "account_id": "acct-reserve"},
+        )
+        demote = run_ui_action(
+            demote_runner,
+            {"ui_action": "demote_account", "account_id": "acct-active"},
+        )
+
+        self.assertEqual(promote["status"], "ok")
+        self.assertEqual(promote["action_role"], "account_lifecycle_promotion")
+        self.assertFalse(promote["mutates_runtime"])
+        self.assertFalse(promote["affects_primary_truth"])
+        self.assertTrue(promote["confirmation_required"])
+        self.assertTrue(promote["post_action_refresh_required"])
+        self.assertEqual(promote["account_id"], "acct-reserve")
+        self.assertEqual(
+            promote_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "promote", "acct-reserve", "--json"),
+            ],
+        )
+        self.assertEqual(demote["status"], "ok")
+        self.assertEqual(demote["action_role"], "account_lifecycle_demotion")
+        self.assertFalse(demote["mutates_runtime"])
+        self.assertFalse(demote["affects_primary_truth"])
+        self.assertTrue(demote["confirmation_required"])
+        self.assertTrue(demote["post_action_refresh_required"])
+        self.assertEqual(demote["account_id"], "acct-active")
+        self.assertEqual(
+            demote_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "demote", "acct-active", "--json"),
+            ],
+        )
+
+    def test_promote_demote_reject_ineligible_targets_without_lifecycle_execution(self) -> None:
+        promote_active_runner = MappingRunner(live_payloads())
+        promote_hold_runner = MappingRunner(live_payloads())
+        promote_retired_runner = MappingRunner(live_payloads())
+        demote_reserve_runner = MappingRunner(live_payloads())
+        demote_hold_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "list", "--json"): accounts_packet(
+                    accounts=[
+                        account("acct-active-hold", "active", "healthy", manual_hold=True),
+                    ],
+                ),
+            }
+        )
+        demote_retired_runner = MappingRunner(live_payloads())
+        extra_runner = MappingRunner(live_payloads())
+
+        promote_active = run_ui_action(
+            promote_active_runner,
+            {"ui_action": "promote_account", "account_id": "acct-active"},
+        )
+        promote_hold = run_ui_action(
+            promote_hold_runner,
+            {"ui_action": "promote_account", "account_id": "acct-hold"},
+        )
+        promote_retired = run_ui_action(
+            promote_retired_runner,
+            {"ui_action": "promote_account", "account_id": "acct-problem"},
+        )
+        demote_reserve = run_ui_action(
+            demote_reserve_runner,
+            {"ui_action": "demote_account", "account_id": "acct-reserve"},
+        )
+        demote_hold = run_ui_action(
+            demote_hold_runner,
+            {"ui_action": "demote_account", "account_id": "acct-active-hold"},
+        )
+        demote_retired = run_ui_action(
+            demote_retired_runner,
+            {"ui_action": "demote_account", "account_id": "acct-problem"},
+        )
+        extra = run_ui_action(
+            extra_runner,
+            {"ui_action": "promote_account", "account_id": "acct-reserve", "argv": "accounts retire"},
+        )
+
+        self.assertEqual(
+            promote_active["result"]["machine_error_code"],
+            "UI_ACCOUNT_PROMOTE_INELIGIBLE",
+        )
+        self.assertEqual(
+            promote_hold["result"]["machine_error_code"],
+            "UI_ACCOUNT_PROMOTE_INELIGIBLE",
+        )
+        self.assertEqual(
+            promote_retired["result"]["machine_error_code"],
+            "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+        self.assertEqual(
+            demote_reserve["result"]["machine_error_code"],
+            "UI_ACCOUNT_DEMOTE_INELIGIBLE",
+        )
+        self.assertEqual(
+            demote_hold["result"]["machine_error_code"],
+            "UI_ACCOUNT_DEMOTE_INELIGIBLE",
+        )
+        self.assertEqual(
+            demote_retired["result"]["machine_error_code"],
+            "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(extra_runner.calls, [])
+        for calls in [
+            promote_active_runner.calls,
+            promote_hold_runner.calls,
+            promote_retired_runner.calls,
+            demote_reserve_runner.calls,
+            demote_hold_runner.calls,
+            demote_retired_runner.calls,
+        ]:
+            self.assertEqual(calls, [("accounts", "list", "--json")])
+            self.assertNotIn(("accounts", "promote", "acct-reserve", "--json"), calls)
+            self.assertNotIn(("accounts", "demote", "acct-active", "--json"), calls)
+
     def test_launch_client_dispatch_uses_server_owned_bounded_path_only(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -681,6 +846,12 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("accounts", "list", "--json"): accounts_packet(),
         ("accounts", "validate", "acct-active", "--json"): command_packet(
             human_message="Account validation completed."
+        ),
+        ("accounts", "promote", "acct-reserve", "--json"): command_packet(
+            human_message="Account promotion requested."
+        ),
+        ("accounts", "demote", "acct-active", "--json"): command_packet(
+            human_message="Account demotion requested."
         ),
         ("accounts", "hold", "acct-active", "--json"): command_packet(
             human_message="Account hold completed."

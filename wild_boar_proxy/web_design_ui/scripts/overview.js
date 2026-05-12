@@ -390,7 +390,7 @@ function setSourceCopy(source) {
   document.getElementById("subtitleText").textContent = source === "live"
     ? (
       screen === "accounts"
-        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия отложены."
+        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия идут через bounded action gate."
         : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
     )
     : (
@@ -622,7 +622,7 @@ function renderAccountsSnapshot(snapshot) {
   const banner = document.getElementById("accountsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; hold/release are bounded action requests."
+    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; promote/demote/hold/release are bounded action requests."
     : "Accounts fixture preview only. Account actions are disabled.";
 
   const summary = safeSnapshot.summary;
@@ -714,6 +714,12 @@ function accountActionButtons(account) {
     if (account.manual_hold) {
       group.append(accountActionButton(account, "release_account", "Снять hold"));
     } else {
+      if (account.pool === "reserve") {
+        group.append(accountActionButton(account, "promote_account", "В актив"));
+      }
+      if (account.pool === "active") {
+        group.append(accountActionButton(account, "demote_account", "В резерв"));
+      }
       group.append(accountActionButton(account, "hold_account", "Удержать"));
     }
   }

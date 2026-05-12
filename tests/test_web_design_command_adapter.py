@@ -60,6 +60,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "mode_get",
             "accounts_list",
             "accounts_validate",
+            "accounts_promote",
+            "accounts_demote",
             "accounts_hold",
             "accounts_release",
             "rollout_rotation_inspect",
@@ -110,6 +112,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 "required_args": ["account_id"],
                 "allowed_args": ["account_id"],
                 "argv": ["accounts", "validate", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_promote",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "promote", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_demote",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "demote", "{account_id}", "--json"],
             },
             allowlist_metadata(),
         )

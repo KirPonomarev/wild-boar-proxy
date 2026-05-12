@@ -201,9 +201,12 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("accountsFixtureFromOverview", js)
         self.assertIn("Bulk lifecycle actions are deferred", js)
         self.assertIn("validate_account", js)
+        self.assertIn("promote_account", js)
+        self.assertIn("demote_account", js)
         self.assertIn("hold_account", js)
         self.assertIn("release_account", js)
         self.assertIn("account_id", js)
+        self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
         self.assertIn("accountActionButtons", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
@@ -214,6 +217,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("accounts release", html + js)
         self.assertNotIn("accounts retire", html + js)
         self.assertNotIn("accounts onboard", html + js)
+        self.assertNotIn("pilot", html + js)
+        self.assertNotIn("scale proof", html + js)
 
     def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

@@ -1,0 +1,76 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_PROMOTE_DEMOTE_ACTION_GATE",
+  "date": "2026-05-12",
+  "auditor_type": "read_only_independent_inspection",
+  "verdict": "pass_for_ui_account_gate_with_dirty_worktree_scope_note",
+  "verified_ok": [
+    {
+      "claim": "browser payload is constrained to ui_action plus structured account_id",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py rejects unsupported fields before command execution",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js account action click sends account_id through maybeConfirmAndRun"
+      ]
+    },
+    {
+      "claim": "promote and demote lifecycle actions preflight accounts list before execution",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py runs accounts list --json before account action args are admitted",
+        "tests/test_web_design_live_server.py asserts accounts list precedes accounts promote",
+        "tests/test_web_design_live_server.py asserts accounts list precedes accounts demote"
+      ]
+    },
+    {
+      "claim": "promote eligibility is reserve, not manual hold, not retired",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py checks retired pool before lifecycle execution",
+        "wild_boar_proxy/web_design_live_server.py checks promote target pool equals reserve",
+        "wild_boar_proxy/web_design_live_server.py rejects promote when manual_hold is true"
+      ]
+    },
+    {
+      "claim": "demote eligibility is active, not manual hold, not retired",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py checks retired pool before lifecycle execution",
+        "wild_boar_proxy/web_design_live_server.py checks demote target pool equals active",
+        "wild_boar_proxy/web_design_live_server.py rejects demote when manual_hold is true"
+      ]
+    },
+    {
+      "claim": "post-action truth is refreshed from canonical accounts JSON rather than optimistic local state",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js refreshes live readonly source after post_action_refresh_required"
+      ]
+    },
+    {
+      "claim": "adapter allowlist uses exact argv templates",
+      "evidence": [
+        "wild_boar_proxy/web_design_command_adapter.py defines accounts_promote as accounts promote {account_id} --json",
+        "wild_boar_proxy/web_design_command_adapter.py defines accounts_demote as accounts demote {account_id} --json",
+        "tests/test_web_design_command_adapter.py asserts allowlist metadata"
+      ]
+    }
+  ],
+  "findings_adjudicated": [
+    {
+      "severity": "high_if_committed_with_this_contour",
+      "finding": "dirty worktree contains runtime.py changes outside the UI contour",
+      "adjudication": "not introduced by this contour and not staged for this contour; remains explicitly excluded and deferred to WORKTREE_TAIL_ADJUDICATION"
+    }
+  ],
+  "gaps": [
+    {
+      "item": "no real-browser E2E run for promote/demote",
+      "adjudication": "accepted for this bounded gate because unit/static/HTTP harness tests prove command boundaries; full browser operator flow is scheduled for UI_WEB_END_TO_END_OPERATOR_FLOW"
+    },
+    {
+      "item": "unrelated external lab dirty files remain in worktree",
+      "adjudication": "excluded from this contour and not staged"
+    }
+  ],
+  "verification": {
+    "targeted_suite": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+    "targeted_result": "52 tests passed",
+    "full_suite": "python3 -m unittest discover -s tests -p 'test*.py'",
+    "full_result": "546 tests passed"
+  }
+}

@@ -41,7 +41,15 @@ ACCOUNT_ID_SAFE_CHARS = frozenset(
     "0123456789"
     "._-:@"
 )
-ACCOUNT_ID_UI_ACTIONS = frozenset({"validate_account", "hold_account", "release_account"})
+ACCOUNT_ID_UI_ACTIONS = frozenset(
+    {
+        "validate_account",
+        "promote_account",
+        "demote_account",
+        "hold_account",
+        "release_account",
+    }
+)
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -86,6 +94,28 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "account verification request only; refreshed accounts list remains truth",
         "display_name": "Validate account",
         "human_meaning": "Run account verification for the selected account, then refresh accounts truth.",
+    },
+    "promote_account": {
+        "adapter_command_id": "accounts_promote",
+        "action_role": "account_lifecycle_promotion",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account promotion request only; refreshed accounts list remains truth",
+        "display_name": "Promote account",
+        "human_meaning": "Request reserve-to-active promotion for the selected account, then refresh accounts truth.",
+    },
+    "demote_account": {
+        "adapter_command_id": "accounts_demote",
+        "action_role": "account_lifecycle_demotion",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account demotion request only; refreshed accounts list remains truth",
+        "display_name": "Demote account",
+        "human_meaning": "Request active-to-reserve demotion for the selected account, then refresh accounts truth.",
     },
     "hold_account": {
         "adapter_command_id": "accounts_hold",
@@ -559,11 +589,40 @@ def _account_action_args(
             f"{ui_action} target is not present in accounts list.",
             "UI_ACCOUNT_ID_NOT_FOUND",
         )
-    if ui_action in {"hold_account", "release_account"} and target_account.pool == "retired":
+    if ui_action in {
+        "promote_account",
+        "demote_account",
+        "hold_account",
+        "release_account",
+    } and target_account.pool == "retired":
         return None, _unavailable_action(
             ui_action,
             f"{ui_action} target is retired; retire/reactivation semantics are out of scope.",
             "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+    if ui_action == "promote_account" and target_account.pool != "reserve":
+        return None, _unavailable_action(
+            ui_action,
+            "promote_account target is not in reserve.",
+            "UI_ACCOUNT_PROMOTE_INELIGIBLE",
+        )
+    if ui_action == "promote_account" and target_account.manual_hold:
+        return None, _unavailable_action(
+            ui_action,
+            "promote_account target is on manual hold.",
+            "UI_ACCOUNT_PROMOTE_INELIGIBLE",
+        )
+    if ui_action == "demote_account" and target_account.pool != "active":
+        return None, _unavailable_action(
+            ui_action,
+            "demote_account target is not active.",
+            "UI_ACCOUNT_DEMOTE_INELIGIBLE",
+        )
+    if ui_action == "demote_account" and target_account.manual_hold:
+        return None, _unavailable_action(
+            ui_action,
+            "demote_account target is on manual hold.",
+            "UI_ACCOUNT_DEMOTE_INELIGIBLE",
         )
     if ui_action == "hold_account" and target_account.manual_hold:
         return None, _unavailable_action(
