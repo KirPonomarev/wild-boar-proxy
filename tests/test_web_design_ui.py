@@ -199,6 +199,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("renderAccountsSnapshot", js)
         self.assertIn("accountsFixtureFromOverview", js)
         self.assertIn("Lifecycle actions are deferred", js)
+        self.assertIn("validate_account", js)
+        self.assertIn("account_id", js)
+        self.assertIn("validateButton", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
@@ -223,7 +226,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn('data-ui-action="launch_client"', html)
         self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertIn('fetch("api/action"', js)
-        self.assertIn("JSON.stringify({ ui_action: uiAction })", js)
+        self.assertIn("JSON.stringify({ ui_action: uiAction, ...extraPayload })", js)
         self.assertNotIn("JSON.stringify({ command_id", js)
         self.assertNotIn("client_path", html + js)
         self.assertNotIn("sync --json", html + js)
@@ -241,7 +244,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("maybeConfirmAndRun", js)
         self.assertIn("metadata.confirmation_required", js)
         self.assertIn("closeConfirmation();", js)
-        self.assertIn("runUiAction(uiAction);", js)
+        self.assertIn("runUiAction(pending.uiAction, pending.extraPayload);", js)
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
 
@@ -256,6 +259,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("metadata.available !== false", js)
         self.assertIn("metadata.unavailable_reason", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
+        self.assertIn(".live-action, .account-action", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"

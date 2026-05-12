@@ -59,6 +59,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "healthcheck",
             "mode_get",
             "accounts_list",
+            "accounts_validate",
             "rollout_rotation_inspect",
             "mode_stable",
             "mode_managed",
@@ -74,6 +75,18 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
+        self.assertIn(
+            {
+                "command_id": "accounts_validate",
+                "category": "verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "validate", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
         self.assertIn(
             {
                 "command_id": "launch_client",
@@ -96,6 +109,41 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["ui_state"], "success")
         self.assertEqual(result["machine_error_code"], "OK")
+
+    def test_accounts_validate_runs_exact_argv_with_structured_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": "acct-active"},
+        )
+
+        self.assertEqual(runner.calls, [("accounts", "validate", "acct-active", "--json")])
+        self.assertEqual(result["status"], "ok")
+
+    def test_accounts_validate_requires_only_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "accounts_validate")
+        extra = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": "acct-active", "argv": "accounts retire"},
+        )
+        non_string = execute_command(
+            runner,
+            "accounts_validate",
+            structured_args={"account_id": 123},  # type: ignore[dict-item]
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(non_string["status"], "integration_failure")
+        self.assertIn("non-string args", non_string["human_message"])
 
     def test_forbidden_command_is_rejected_without_runner_call(self) -> None:
         runner = RecordingRunner()

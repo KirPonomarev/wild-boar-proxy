@@ -345,6 +345,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
         self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+        self.assertIn("validate_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["validate_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["validate_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["validate_account"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["validate_account"]["action_role"], "account_verification")
+        self.assertTrue(metadata["actions"]["validate_account"]["post_action_refresh_required"])
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
@@ -391,6 +397,58 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
         )
 
+    def test_validate_account_action_preflights_account_id_and_executes_exact_command(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "validate_account", "account_id": "acct-active"},
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "account_verification")
+        self.assertFalse(result["mutates_runtime"])
+        self.assertFalse(result["affects_primary_truth"])
+        self.assertTrue(result["confirmation_required"])
+        self.assertTrue(result["post_action_refresh_required"])
+        self.assertEqual(result["account_id"], "acct-active")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "validate", "acct-active", "--json"),
+            ],
+        )
+
+    def test_validate_account_rejects_bad_payloads_without_validate_execution(self) -> None:
+        unsafe_runner = MappingRunner(live_payloads())
+        unknown_runner = MappingRunner(live_payloads())
+        extra_runner = MappingRunner(live_payloads())
+
+        missing = run_ui_action(unsafe_runner, {"ui_action": "validate_account"})
+        unsafe = run_ui_action(
+            unsafe_runner,
+            {"ui_action": "validate_account", "account_id": "../acct-active"},
+        )
+        unknown = run_ui_action(
+            unknown_runner,
+            {"ui_action": "validate_account", "account_id": "acct-missing"},
+        )
+        extra = run_ui_action(
+            extra_runner,
+            {"ui_action": "validate_account", "account_id": "acct-active", "argv": "accounts retire"},
+        )
+
+        self.assertEqual(missing["result"]["machine_error_code"], "UI_ACCOUNT_ID_REQUIRED")
+        self.assertEqual(unsafe["result"]["machine_error_code"], "UI_ACCOUNT_ID_INVALID")
+        self.assertEqual(unknown["result"]["machine_error_code"], "UI_ACCOUNT_ID_NOT_FOUND")
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(unsafe_runner.calls, [])
+        self.assertEqual(unknown_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(extra_runner.calls, [])
+        for calls in [unsafe_runner.calls, unknown_runner.calls, extra_runner.calls]:
+            self.assertNotIn(("accounts", "validate", "acct-active", "--json"), calls)
+
     def test_launch_client_dispatch_uses_server_owned_bounded_path_only(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -432,13 +490,21 @@ class WebDesignLiveServerTests(unittest.TestCase):
         command_id_payload = run_ui_action(runner, {"command_id": "diagnostics_export"})
         stable_repair_apply = run_ui_action(runner, {"ui_action": "stable_repair_apply"})
         launch_client = run_ui_action(runner, {"ui_action": "launch_client"})
+        account_lifecycle = run_ui_action(runner, {"ui_action": "accounts_promote", "account_id": "acct-active"})
         client_path_payload = run_ui_action(
             runner,
             {"ui_action": "export_diagnostics", "client_path": "/Applications/Codex.app"},
         )
         unknown = run_ui_action(runner, {"ui_action": "policy_stage_set"})
 
-        for payload in [command_id_payload, stable_repair_apply, launch_client, client_path_payload, unknown]:
+        for payload in [
+            command_id_payload,
+            stable_repair_apply,
+            launch_client,
+            account_lifecycle,
+            client_path_payload,
+            unknown,
+        ]:
             self.assertEqual(payload["status"], "integration_failure")
             self.assertEqual(payload["action_role"], "blocked")
             self.assertFalse(payload["mutates_runtime"])
@@ -477,6 +543,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
             launch = json.loads(
                 post_json(f"{base_url}/api/action", {"ui_action": "launch_client_dispatch"})
             )
+            validate = json.loads(
+                post_json(
+                    f"{base_url}/api/action",
+                    {"ui_action": "validate_account", "account_id": "acct-active"},
+                )
+            )
         finally:
             server.shutdown()
             server.server_close()
@@ -488,11 +560,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
         self.assertNotIn("/Applications/Codex.app", json.dumps(metadata))
         self.assertEqual(launch["status"], "ok")
+        self.assertEqual(validate["status"], "ok")
+        self.assertEqual(validate["action_role"], "account_verification")
         self.assertEqual(
             runner.calls,
             [
                 ("diagnostics", "export", "--json"),
                 ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+                ("accounts", "list", "--json"),
+                ("accounts", "validate", "acct-active", "--json"),
             ],
         )
 
@@ -514,6 +590,9 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("healthcheck", "--json"): command_packet(human_message="Healthcheck passed."),
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
+        ("accounts", "validate", "acct-active", "--json"): command_packet(
+            human_message="Account validation completed."
+        ),
         ("diagnostics", "export", "--json"): command_packet(
             human_message="Diagnostics exported.",
             data={"bundle_path": "/tmp/wbp-diagnostics.zip"},

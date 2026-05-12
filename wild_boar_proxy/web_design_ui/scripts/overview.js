@@ -228,11 +228,12 @@ function metadataFor(uiAction) {
   };
 }
 
-async function runUiAction(uiAction) {
+async function runUiAction(uiAction, extraPayload = {}) {
   setActionsBusy(true);
   setActionPanel({
     ui_action: uiAction,
     action_role: "running",
+    account_id: extraPayload.account_id || "",
     post_action_refresh_required: false,
     result: {
       status: "running",
@@ -247,7 +248,7 @@ async function runUiAction(uiAction) {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ui_action: uiAction })
+      body: JSON.stringify({ ui_action: uiAction, ...extraPayload })
     });
     if (!response.ok) {
       throw new Error(`action http ${response.status}`);
@@ -255,7 +256,8 @@ async function runUiAction(uiAction) {
     const payload = await response.json();
     setActionPanel(payload);
     if (payload.post_action_refresh_required) {
-      text("actionRefreshStatus", "refreshing live overview");
+      const refreshTarget = currentScreen() === "accounts" ? "accounts" : "overview";
+      text("actionRefreshStatus", `refreshing live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       text("actionRefreshStatus", refreshed.status === "ok" ? "live refresh ok" : "live refresh failed");
     }
@@ -263,6 +265,7 @@ async function runUiAction(uiAction) {
     setActionPanel({
       ui_action: uiAction,
       action_role: "integration_failure",
+      account_id: extraPayload.account_id || "",
       post_action_refresh_required: false,
       result: {
         status: "integration_failure",
@@ -278,12 +281,16 @@ async function runUiAction(uiAction) {
 }
 
 function applyActionAvailability() {
-  for (const button of document.querySelectorAll(".live-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const available = metadata.available !== false;
+    const requiresLive = button.classList.contains("account-action");
+    const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
+    const available = metadata.available !== false && (!requiresLive || isLiveSource);
     button.disabled = !available;
     button.dataset.available = available ? "true" : "false";
-    button.title = available ? "" : (metadata.unavailable_reason || "Action unavailable");
+    button.title = available
+      ? ""
+      : (requiresLive && !isLiveSource ? "Switch Accounts to live source before validation." : (metadata.unavailable_reason || "Action unavailable"));
   }
 }
 
@@ -397,6 +404,7 @@ function setActionPanel(payload) {
   const result = payload.result || {};
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
+  text("actionAccountId", payload.account_id || "-");
   text("actionStatus", result.status || payload.status || "unknown");
   text("actionMachineCode", result.machine_error_code || "-");
   text("actionMessage", result.human_message || "-");
@@ -409,19 +417,22 @@ function setActionPanel(payload) {
 }
 
 function setActionsBusy(isBusy) {
-  for (const button of document.querySelectorAll(".live-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const available = metadata.available !== false;
+    const requiresLive = button.classList.contains("account-action");
+    const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
+    const available = metadata.available !== false && (!requiresLive || isLiveSource);
     button.disabled = isBusy || !available;
   }
 }
 
-function maybeConfirmAndRun(uiAction) {
+function maybeConfirmAndRun(uiAction, extraPayload = {}) {
   const metadata = metadataFor(uiAction);
   if (metadata.available === false) {
     setActionPanel({
       ui_action: uiAction,
       action_role: "blocked",
+      account_id: extraPayload.account_id || "",
       post_action_refresh_required: false,
       result: {
         status: "integration_failure",
@@ -434,17 +445,18 @@ function maybeConfirmAndRun(uiAction) {
     return;
   }
   if (metadata.confirmation_required) {
-    openConfirmation(uiAction, metadata);
+    openConfirmation(uiAction, metadata, extraPayload);
     return;
   }
-  runUiAction(uiAction);
+  runUiAction(uiAction, extraPayload);
 }
 
-function openConfirmation(uiAction, metadata) {
-  pendingConfirmedAction = uiAction;
+function openConfirmation(uiAction, metadata, extraPayload = {}) {
+  pendingConfirmedAction = { uiAction, extraPayload };
   text("confirmTitle", metadata.display_name || uiAction);
   text("confirmMeaning", metadata.human_meaning || "Confirm this action.");
   text("confirmUiAction", uiAction);
+  text("confirmAccountId", extraPayload.account_id || "-");
   text("confirmMutation", metadata.mutates_runtime ? "true" : "false");
   text("confirmRefresh", metadata.post_action_refresh_required ? "required" : "not required");
   text("confirmScope", metadata.action_claim_scope || "unknown");
@@ -458,10 +470,10 @@ function closeConfirmation() {
 }
 
 function confirmPendingAction() {
-  const uiAction = pendingConfirmedAction;
+  const pending = pendingConfirmedAction;
   closeConfirmation();
-  if (uiAction) {
-    runUiAction(uiAction);
+  if (pending) {
+    runUiAction(pending.uiAction, pending.extraPayload);
   }
 }
 
@@ -643,10 +655,11 @@ function renderAccountRows(accounts) {
       td("", statusChip(account)),
       td(account.last_error_summary ? "" : "dash", account.last_error_summary || "—"),
       td("right mono-value", account.last_success || account.cooldown_until || "—"),
-      td("", dots())
+      td("", validateButton(account))
     );
     body.append(row);
   }
+  applyActionAvailability();
 }
 
 function td(className, child) {
@@ -693,12 +706,18 @@ function statusChip(account) {
   return chip;
 }
 
-function dots() {
-  const node = document.createElement("div");
-  node.className = "dots";
-  node.textContent = "···";
-  node.title = "Account lifecycle actions are disabled in this contour.";
-  return node;
+function validateButton(account) {
+  const button = document.createElement("button");
+  button.className = "button small account-action";
+  button.type = "button";
+  button.dataset.uiAction = "validate_account";
+  button.dataset.accountId = account.id || "";
+  button.textContent = "Проверить";
+  button.title = "Verify this account through an allowlisted UI action. Lifecycle actions stay disabled.";
+  button.addEventListener("click", () => {
+    maybeConfirmAndRun("validate_account", { account_id: button.dataset.accountId });
+  });
+  return button;
 }
 
 function poolLabel(pool) {

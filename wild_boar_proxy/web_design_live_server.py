@@ -35,6 +35,12 @@ READONLY_COMMAND_IDS = (
 PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
+ACCOUNT_ID_SAFE_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789"
+    "._-:@"
+)
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -68,6 +74,17 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "dry-run recovery planning only",
         "display_name": "Stable repair dry-run",
         "human_meaning": "Preview stable repair work without applying changes.",
+    },
+    "validate_account": {
+        "adapter_command_id": "accounts_validate",
+        "action_role": "account_verification",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account verification request only; refreshed accounts list remains truth",
+        "display_name": "Validate account",
+        "human_meaning": "Run account verification for the selected account, then refresh accounts truth.",
     },
     "sync_runtime": {
         "adapter_command_id": "sync",
@@ -259,9 +276,6 @@ def run_ui_action(
         return _blocked_action("unknown", "UI action payload must be an object.")
     if "command_id" in payload:
         return _blocked_action("unknown", "Browser must submit ui_action, not command_id.")
-    unsupported_keys = sorted(set(payload) - {"ui_action"})
-    if unsupported_keys:
-        return _blocked_action("unknown", f"Unsupported UI action fields: {', '.join(unsupported_keys)}.")
 
     ui_action = payload.get("ui_action")
     if not isinstance(ui_action, str):
@@ -271,8 +285,19 @@ def run_ui_action(
     if action_spec is None:
         return _blocked_action(ui_action, "UI action is not allowlisted.")
 
+    allowed_payload_keys = {"ui_action"}
+    if ui_action == "validate_account":
+        allowed_payload_keys.add("account_id")
+    unsupported_keys = sorted(set(payload) - allowed_payload_keys)
+    if unsupported_keys:
+        return _blocked_action(ui_action, f"Unsupported UI action fields: {', '.join(unsupported_keys)}.")
+
     structured_args: dict[str, str] | None = None
     allow_disabled = False
+    if ui_action == "validate_account":
+        structured_args, blocked = _validate_account_action_args(runner, payload)
+        if blocked is not None:
+            return blocked
     if ui_action == "launch_client_dispatch":
         if not launch_client_path:
             return _unavailable_action(
@@ -300,6 +325,7 @@ def run_ui_action(
         "confirmation_required": action_spec["confirmation_required"],
         "post_action_refresh_required": action_spec["post_action_refresh_required"],
         "action_claim_scope": action_spec["action_claim_scope"],
+        "account_id": structured_args.get("account_id") if structured_args else "",
         "result": _action_result(result),
     }
 
@@ -457,6 +483,55 @@ def _unavailable_action(ui_action: str, human_message: str, machine_error_code: 
             "data": {},
         },
     }
+
+
+def _validate_account_action_args(
+    runner: CommandRunner,
+    payload: dict[str, Any],
+) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
+    account_id = payload.get("account_id")
+    if not isinstance(account_id, str):
+        return None, _unavailable_action(
+            "validate_account",
+            "validate_account requires account_id.",
+            "UI_ACCOUNT_ID_REQUIRED",
+        )
+    account_id = account_id.strip()
+    if (
+        not account_id
+        or account_id in {".", ".."}
+        or len(account_id) > 96
+        or any(char not in ACCOUNT_ID_SAFE_CHARS for char in account_id)
+    ):
+        return None, _unavailable_action(
+            "validate_account",
+            "validate_account got an unsafe account_id.",
+            "UI_ACCOUNT_ID_INVALID",
+        )
+
+    result = execute_command(runner, "accounts_list")
+    if result["status"] != "ok":
+        return None, _unavailable_action(
+            "validate_account",
+            "Accounts list is unavailable; validation target cannot be verified.",
+            "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_UNAVAILABLE",
+        )
+    try:
+        accounts = build_account_pool_snapshot(result["packet"])
+    except UiShellError:
+        return None, _unavailable_action(
+            "validate_account",
+            "Accounts packet is invalid; validation target cannot be verified.",
+            "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_INVALID",
+        )
+    known_ids = {account.backend_id for account in accounts.accounts}
+    if account_id not in known_ids:
+        return None, _unavailable_action(
+            "validate_account",
+            "validate_account target is not present in accounts list.",
+            "UI_ACCOUNT_ID_NOT_FOUND",
+        )
+    return {"account_id": account_id}, None
 
 
 def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool:

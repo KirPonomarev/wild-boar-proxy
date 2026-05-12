@@ -65,6 +65,14 @@ ALLOWLIST: dict[str, CommandSpec] = {
         argv_template=("accounts", "list", "--json"),
         category="truth",
     ),
+    "accounts_validate": CommandSpec(
+        command_id="accounts_validate",
+        argv_template=("accounts", "validate", "{account_id}", "--json"),
+        category="verification",
+        confirmation_required=True,
+        required_args=("account_id",),
+        allowed_args=("account_id",),
+    ),
     "rollout_rotation_inspect": CommandSpec(
         command_id="rollout_rotation_inspect",
         argv_template=("rollout", "rotation", "inspect", "--json"),
