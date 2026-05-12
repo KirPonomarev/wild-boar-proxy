@@ -30,10 +30,10 @@
 html,
 body {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   background: var(--canvas);
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 body {
@@ -54,10 +54,10 @@ select {
   align-items: center;
   background: radial-gradient(900px 420px at 78% 8%, rgba(255, 255, 255, .46), transparent 65%), var(--canvas);
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
   justify-content: center;
-  overflow: hidden;
-  padding: 28px;
+  overflow-x: hidden;
+  padding: clamp(18px, 2.5vw, 28px);
   width: 100vw;
 }
 
@@ -66,12 +66,11 @@ select {
   border: 1px solid var(--border);
   border-radius: 24px;
   box-shadow: var(--window-shadow);
-  height: 944px;
+  height: min(944px, calc(100vh - 56px));
+  min-height: 720px;
   overflow: hidden;
   position: relative;
-  transform: scale(var(--preview-scale, 1));
-  transform-origin: center;
-  width: 1544px;
+  width: min(1544px, calc(100vw - 56px));
 }
 
 .window::after {
@@ -118,10 +117,10 @@ select {
   display: flex;
   flex-direction: column;
   left: 0;
-  padding: 66px 24px 28px;
+  padding: 66px clamp(18px, 1.8vw, 24px) 28px;
   position: absolute;
   top: 0;
-  width: 304px;
+  width: var(--sidebar-width, 304px);
   z-index: 2;
 }
 
@@ -138,7 +137,7 @@ select {
   display: block;
   height: auto;
   margin-bottom: 16px;
-  width: 112px;
+  width: clamp(104px, 8vw, 132px);
 }
 
 .brand .name {
@@ -251,9 +250,10 @@ select {
 .main {
   background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, 0) 24%), var(--surface);
   bottom: 0;
-  left: 304px;
-  overflow: hidden;
-  padding: 48px 40px 36px;
+  left: var(--sidebar-width, 304px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(34px, 3.4vw, 48px) clamp(28px, 3vw, 40px) 36px;
   position: absolute;
   right: 0;
   top: 0;
@@ -288,6 +288,9 @@ h1 {
   align-items: center;
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: min(100%, 760px);
   white-space: nowrap;
 }
 
@@ -361,7 +364,7 @@ button:disabled {
 
 .state-picker {
   justify-content: space-between;
-  width: 278px;
+  width: min(278px, 100%);
 }
 
 .state-picker select {
@@ -431,7 +434,7 @@ button:disabled {
 }
 
 .overview-top {
-  grid-template-columns: 496px 1fr;
+  grid-template-columns: minmax(390px, 496px) minmax(520px, 1fr);
 }
 
 .system-card,
@@ -544,7 +547,7 @@ button:disabled {
 .action-row {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(118px, 1fr));
 }
 
 .action-tile {
@@ -568,7 +571,7 @@ button:disabled {
 }
 
 .overview-kpis {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 24px;
 }
 
@@ -606,6 +609,80 @@ button:disabled {
   font-size: 12px;
   line-height: 16px;
   text-align: right;
+}
+
+@media (max-width: 1420px) {
+  :root {
+    --sidebar-width: 276px;
+  }
+
+  .brand {
+    margin-bottom: 36px;
+  }
+
+  .brand .name {
+    font-size: 24px;
+    line-height: 29px;
+  }
+
+  .main-header {
+    align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .overview-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .action-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .overview-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .window {
+    min-height: 760px;
+  }
+}
+
+@media (max-width: 1120px) {
+  :root {
+    --sidebar-width: 236px;
+  }
+
+  .desktop {
+    align-items: flex-start;
+  }
+
+  .window {
+    border-radius: 20px;
+    height: calc(100vh - 36px);
+    min-height: 680px;
+    width: calc(100vw - 36px);
+  }
+
+  .brand img {
+    width: 96px;
+  }
+
+  .brand .name {
+    font-size: 20px;
+    line-height: 24px;
+  }
+
+  .nav-item {
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .action-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .kpi-card.green .kpi-number {

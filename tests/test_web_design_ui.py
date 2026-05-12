@@ -160,17 +160,19 @@ class WebDesignUiTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
-    def test_preview_scales_to_viewport_and_uses_svg_icons(self) -> None:
+    def test_preview_uses_desktop_containment_and_svg_icons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
+        self.assertIn('content="width=device-width, initial-scale=1"', html)
         self.assertIn('class="ui-icon nav-icon"', html)
         self.assertIn('class="ui-icon tile-icon"', html)
-        self.assertIn("--preview-scale", css)
-        self.assertIn("fitPreviewToViewport", js)
-        self.assertIn("window.innerWidth", js)
-        self.assertIn("window.innerHeight", js)
+        self.assertIn("width: min(1544px, calc(100vw - 56px));", css)
+        self.assertIn("overflow-x: hidden;", css)
+        self.assertIn("@media (max-width: 1420px)", css)
+        self.assertNotIn("--preview-scale", css)
+        self.assertNotIn("fitPreviewToViewport", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"
