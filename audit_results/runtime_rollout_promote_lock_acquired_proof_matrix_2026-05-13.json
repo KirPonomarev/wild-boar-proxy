@@ -1,0 +1,204 @@
+{
+  "contour_id": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_PROOF_GATE",
+  "created_at": "2026-05-13",
+  "head_before_artifacts": "3c29948",
+  "mode": "decision_only_proof_gate",
+  "final_state": "RUNTIME_ROLLOUT_PROMOTE_LOCK_ACQUIRED_PROOF_READY_FOR_OWNER_DECISION",
+  "recommendation": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+  "recommendation_reason": "The dirty run_promote hunk bypasses the direct selected-backend membership predicate when lock_acquired=True, while the stage-advance postflight path does not explicitly prove that requested_backend_id is present in selected_backend_ids. Canon fail-closed posture therefore favors a separate owner-approved revert contour unless a later accept contour adds explicit proof and tests.",
+  "scope": {
+    "allowed_writes": [
+      "audit_results/runtime_rollout_promote_lock_acquired_proof_matrix_2026-05-13.json",
+      "audit_results/runtime_rollout_promote_lock_acquired_proof_closeout_2026-05-13.md"
+    ],
+    "forbidden_writes": [
+      "wild_boar_proxy/runtime.py",
+      "tests/",
+      "wild_boar_proxy/web_design_live_server.py",
+      "wild_boar_proxy/web_design_ui/",
+      "wild_boar_proxy/web_ui.py",
+      "wild_boar_proxy/ui_shell.py",
+      "desktop UI files",
+      "generated external evidence tail"
+    ],
+    "runtime_behavior_accepted": false,
+    "runtime_behavior_reverted": false,
+    "live_runtime_mutation_performed": false
+  },
+  "canon_basis": [
+    {
+      "source": "MASTER_PLAN.md",
+      "line_refs": [
+        "MASTER_PLAN.md:63",
+        "MASTER_PLAN.md:540-551",
+        "MASTER_PLAN.md:872-895"
+      ],
+      "finding": "Stage advance must preserve explicit eligible reserve backend and serialized owner-path proof expectations."
+    },
+    {
+      "source": "COMMAND_API.md",
+      "line_refs": [
+        "COMMAND_API.md:695-709",
+        "COMMAND_API.md:711-717",
+        "COMMAND_API.md:764-780"
+      ],
+      "finding": "Stage-advance success must be machine-proved and promotion success must show explicit verified active-routing consequence."
+    },
+    {
+      "source": "COMMAND_API.md",
+      "line_refs": [
+        "COMMAND_API.md:376-389"
+      ],
+      "finding": "Selected backend ids must come from runtime/supervisor/engine/external owner observation and cannot be synthesized from registry active ids or counts."
+    }
+  ],
+  "dirty_hunk_under_review": {
+    "file": "wild_boar_proxy/runtime.py",
+    "function": "run_promote",
+    "line_refs": [
+      "wild_boar_proxy/runtime.py:11591-11605"
+    ],
+    "summary": "Adds selected_backend_requirement_met. For lock_acquired=True it sets the requirement to true, bypassing the previous local backend_id in verified_selected_backend_ids predicate."
+  },
+  "required_questions": [
+    {
+      "question": "Where is run_promote defined?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:11154-11159"
+      ],
+      "answer": "run_promote is defined with lock_acquired defaulting to false."
+    },
+    {
+      "question": "Where is run_promote called?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/cli.py:332",
+        "wild_boar_proxy/runtime.py:9319-9321"
+      ],
+      "answer": "Direct CLI accounts promote calls run_promote without lock_acquired=True. Stage advance calls run_promote with lock_acquired=True."
+    },
+    {
+      "question": "Is lock_acquired=True bounded to rollout stage advance?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:8869",
+        "wild_boar_proxy/runtime.py:9191",
+        "wild_boar_proxy/runtime.py:9239",
+        "wild_boar_proxy/runtime.py:9289",
+        "wild_boar_proxy/runtime.py:9320",
+        "wild_boar_proxy/runtime.py:9393"
+      ],
+      "answer": "The inspected lock_acquired=True owner-path calls are inside run_rollout_stage_advance."
+    },
+    {
+      "question": "Does direct accounts promote still require selected-backend verification?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:11591-11598",
+        "wild_boar_proxy/runtime.py:11599-11613",
+        "tests/test_cli.py:12480-12542"
+      ],
+      "answer": "When lock_acquired is false, selected_backend_requirement_met is tied to selected_backend_verified and missing selected-backend proof rolls back in existing direct promote coverage."
+    },
+    {
+      "question": "Where is selected-backend postflight proof enforced after run_promote in stage advance?",
+      "status": "FAIL",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:8727-8830",
+        "wild_boar_proxy/runtime.py:9387-9416"
+      ],
+      "answer": "The stage-advance postflight helper checks policy, promoted backend pool state, attestation, rotation status, and readiness. It does not explicitly test requested_backend_id membership in selected_backend_ids."
+    },
+    {
+      "question": "Is selected-backend proof top-level command truth?",
+      "status": "FAIL",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:9396-9407",
+        "wild_boar_proxy/runtime.py:7108-7116"
+      ],
+      "answer": "Stage advance exposes postflight_attestation_status, postflight_rotation_status, and rollback_readiness_status as top-level stage result fields. selected_backend_ids can appear nested in rotation evidence/delegated evidence, but no dedicated top-level selected-backend membership result is surfaced for requested_backend_id."
+    },
+    {
+      "question": "What happens if postflight proof fails?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:8925-8945",
+        "wild_boar_proxy/runtime.py:9408-9416",
+        "tests/test_cli.py:10963-11069",
+        "tests/test_cli.py:11949-12051"
+      ],
+      "answer": "Stage advance calls rollback_after_failed_step when postflight checks fail. Existing contradiction tests verify rollback on postflight rotation contradiction."
+    },
+    {
+      "question": "Do existing tests execute the real run_promote lock_acquired=True path end-to-end?",
+      "status": "UNKNOWN",
+      "evidence": [
+        "tests/test_cli.py:11678-11810",
+        "tests/test_cli.py:10182-10225",
+        "tests/test_cli.py:10492-10525"
+      ],
+      "answer": "Stage-advance tests cover successful paths and lock propagation, but the inspection found no dedicated negative test for missing requested_backend_id selected-backend membership in postflight after real run_promote lock_acquired=True."
+    }
+  ],
+  "rotation_evidence_observation": {
+    "line_refs": [
+      "wild_boar_proxy/runtime.py:6807-6850",
+      "wild_boar_proxy/runtime.py:7048-7086"
+    ],
+    "finding": "Rotation inspect requires selected backend ids to be present, fresh enough, subset of active routing candidates, and at least two ids before returning participation_status=available.",
+    "gap": "This proves a multi-backend selected set is available, but the inspected postflight code does not bind that set to requested_backend_id as an explicit stage-advance postflight condition."
+  },
+  "existing_test_evidence": {
+    "tests_run_in_this_contour": [
+      {
+        "command": "python3 -m unittest -q tests.test_cli.CliTests.test_accounts_promote_status_verification_failure_rolls_back tests.test_cli.CliTests.test_accounts_promote_policy_verification_failure_rolls_back tests.test_cli.CliTests.test_rollout_stage_advance_15_fails_on_postflight_contradiction_after_promotion tests.test_cli.CliTests.test_rollout_stage_advance_20_fails_on_postflight_contradiction_after_promotion",
+        "result": "PASS",
+        "tests_ran": 4
+      }
+    ],
+    "coverage_candidates": [
+      "tests/test_cli.py:7738 accounts promote happy path with verified active routing",
+      "tests/test_cli.py:12431 accounts promote sync failure rollback",
+      "tests/test_cli.py:12480 accounts promote status verification rollback",
+      "tests/test_cli.py:12544 accounts promote policy verification rollback",
+      "tests/test_cli.py:10963 stage-advance 20 postflight contradiction rollback",
+      "tests/test_cli.py:11949 stage-advance 15 postflight contradiction rollback",
+      "tests/test_cli.py:11678 stage-advance outer serialization lock propagation",
+      "tests/test_cli.py:12226 stage-advance postflight reserve posture failure"
+    ],
+    "gaps": [
+      "No dedicated test proves that stage-advance postflight fails when requested_backend_id is active but absent from selected_backend_ids.",
+      "No dedicated test proves that run_promote(..., lock_acquired=True) can only be accepted when later postflight selected-backend membership is explicit.",
+      "No dedicated top-level or stage result field records requested_backend_selected_status."
+    ]
+  },
+  "inspector_report_summary": {
+    "performed": true,
+    "result": "MIXED",
+    "passes": [
+      "run_promote definition found",
+      "caller set found",
+      "lock_acquired=True bounded to stage-advance owner path",
+      "rollback paths found",
+      "existing relevant tests found"
+    ],
+    "failures": [
+      "no explicit selected-backend postflight proof after run_promote in stage advance",
+      "no top-level selected-backend proof for requested_backend_id"
+    ]
+  },
+  "decision": {
+    "selected_output": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+    "why_not_accept_now": [
+      "Current contour is decision-only.",
+      "Tests do not authorize weaker runtime proof.",
+      "The dirty hunk delegates selected-backend proof but the inspected stage-advance postflight does not explicitly enforce requested_backend_id membership in selected_backend_ids."
+    ],
+    "owner_options": [
+      "approve a separate revert contour for only this run_promote hunk",
+      "approve a separate accept/fix contour that adds explicit selected-backend postflight proof and tests",
+      "stop and diagnose if owner believes rotation_status=available is sufficient canon proof"
+    ]
+  }
+}
