@@ -41,6 +41,7 @@ ACCOUNT_ID_SAFE_CHARS = frozenset(
     "0123456789"
     "._-:@"
 )
+ACCOUNT_ID_UI_ACTIONS = frozenset({"validate_account", "hold_account", "release_account"})
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -85,6 +86,28 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "account verification request only; refreshed accounts list remains truth",
         "display_name": "Validate account",
         "human_meaning": "Run account verification for the selected account, then refresh accounts truth.",
+    },
+    "hold_account": {
+        "adapter_command_id": "accounts_hold",
+        "action_role": "account_lifecycle_hold",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account hold request only; refreshed accounts list remains truth",
+        "display_name": "Hold account",
+        "human_meaning": "Place the selected account on manual hold, then refresh accounts truth.",
+    },
+    "release_account": {
+        "adapter_command_id": "accounts_release",
+        "action_role": "account_lifecycle_release",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account release request only; refreshed accounts list remains truth",
+        "display_name": "Release account",
+        "human_meaning": "Release the selected account from manual hold, then refresh accounts truth.",
     },
     "sync_runtime": {
         "adapter_command_id": "sync",
@@ -286,7 +309,7 @@ def run_ui_action(
         return _blocked_action(ui_action, "UI action is not allowlisted.")
 
     allowed_payload_keys = {"ui_action"}
-    if ui_action == "validate_account":
+    if ui_action in ACCOUNT_ID_UI_ACTIONS:
         allowed_payload_keys.add("account_id")
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
@@ -294,8 +317,8 @@ def run_ui_action(
 
     structured_args: dict[str, str] | None = None
     allow_disabled = False
-    if ui_action == "validate_account":
-        structured_args, blocked = _validate_account_action_args(runner, payload)
+    if ui_action in ACCOUNT_ID_UI_ACTIONS:
+        structured_args, blocked = _account_action_args(runner, payload, ui_action=ui_action)
         if blocked is not None:
             return blocked
     if ui_action == "launch_client_dispatch":
@@ -485,15 +508,17 @@ def _unavailable_action(ui_action: str, human_message: str, machine_error_code: 
     }
 
 
-def _validate_account_action_args(
+def _account_action_args(
     runner: CommandRunner,
     payload: dict[str, Any],
+    *,
+    ui_action: str,
 ) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
     account_id = payload.get("account_id")
     if not isinstance(account_id, str):
         return None, _unavailable_action(
-            "validate_account",
-            "validate_account requires account_id.",
+            ui_action,
+            f"{ui_action} requires account_id.",
             "UI_ACCOUNT_ID_REQUIRED",
         )
     account_id = account_id.strip()
@@ -504,34 +529,67 @@ def _validate_account_action_args(
         or any(char not in ACCOUNT_ID_SAFE_CHARS for char in account_id)
     ):
         return None, _unavailable_action(
-            "validate_account",
-            "validate_account got an unsafe account_id.",
+            ui_action,
+            f"{ui_action} got an unsafe account_id.",
             "UI_ACCOUNT_ID_INVALID",
         )
 
     result = execute_command(runner, "accounts_list")
     if result["status"] != "ok":
         return None, _unavailable_action(
-            "validate_account",
-            "Accounts list is unavailable; validation target cannot be verified.",
-            "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_UNAVAILABLE",
+            ui_action,
+            "Accounts list is unavailable; account action target cannot be verified.",
+            _account_list_unavailable_code(ui_action),
         )
     try:
         accounts = build_account_pool_snapshot(result["packet"])
     except UiShellError:
         return None, _unavailable_action(
-            "validate_account",
-            "Accounts packet is invalid; validation target cannot be verified.",
-            "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_INVALID",
+            ui_action,
+            "Accounts packet is invalid; account action target cannot be verified.",
+            _account_list_invalid_code(ui_action),
         )
-    known_ids = {account.backend_id for account in accounts.accounts}
-    if account_id not in known_ids:
+    target_account = next(
+        (account for account in accounts.accounts if account.backend_id == account_id),
+        None,
+    )
+    if target_account is None:
         return None, _unavailable_action(
-            "validate_account",
-            "validate_account target is not present in accounts list.",
+            ui_action,
+            f"{ui_action} target is not present in accounts list.",
             "UI_ACCOUNT_ID_NOT_FOUND",
         )
+    if ui_action in {"hold_account", "release_account"} and target_account.pool == "retired":
+        return None, _unavailable_action(
+            ui_action,
+            f"{ui_action} target is retired; retire/reactivation semantics are out of scope.",
+            "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+    if ui_action == "hold_account" and target_account.manual_hold:
+        return None, _unavailable_action(
+            ui_action,
+            "hold_account target is already on manual hold.",
+            "UI_ACCOUNT_HOLD_INELIGIBLE",
+        )
+    if ui_action == "release_account" and not target_account.manual_hold:
+        return None, _unavailable_action(
+            ui_action,
+            "release_account target is not on manual hold.",
+            "UI_ACCOUNT_RELEASE_INELIGIBLE",
+        )
     return {"account_id": account_id}, None
+
+
+def _account_list_unavailable_code(ui_action: str) -> str:
+    if ui_action == "validate_account":
+        return "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_UNAVAILABLE"
+    return "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_UNAVAILABLE"
+
+
+def _account_list_invalid_code(ui_action: str) -> str:
+    if ui_action == "validate_account":
+        return "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_INVALID"
+    return "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID"
 
 
 def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool:

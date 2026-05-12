@@ -60,6 +60,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "mode_get",
             "accounts_list",
             "accounts_validate",
+            "accounts_hold",
+            "accounts_release",
             "rollout_rotation_inspect",
             "mode_stable",
             "mode_managed",
@@ -75,6 +77,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
+        self.assertIn(
+            {
+                "command_id": "accounts_hold",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "hold", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "accounts_release",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "release", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
         self.assertIn(
             {
                 "command_id": "accounts_validate",
@@ -122,6 +148,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(runner.calls, [("accounts", "validate", "acct-active", "--json")])
         self.assertEqual(result["status"], "ok")
 
+    def test_account_lifecycle_commands_run_exact_argv_with_structured_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        hold = execute_command(
+            runner,
+            "accounts_hold",
+            structured_args={"account_id": "acct-active"},
+        )
+        release = execute_command(
+            runner,
+            "accounts_release",
+            structured_args={"account_id": "acct-hold"},
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "hold", "acct-active", "--json"),
+                ("accounts", "release", "acct-hold", "--json"),
+            ],
+        )
+        self.assertEqual(hold["status"], "ok")
+        self.assertEqual(release["status"], "ok")
+
     def test_accounts_validate_requires_only_account_id(self) -> None:
         runner = RecordingRunner()
 
@@ -144,6 +194,22 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("unsupported args", extra["human_message"])
         self.assertEqual(non_string["status"], "integration_failure")
         self.assertIn("non-string args", non_string["human_message"])
+
+    def test_account_lifecycle_commands_require_only_account_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "accounts_hold")
+        extra = execute_command(
+            runner,
+            "accounts_release",
+            structured_args={"account_id": "acct-hold", "argv": "accounts promote"},
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
 
     def test_forbidden_command_is_rejected_without_runner_call(self) -> None:
         runner = RecordingRunner()

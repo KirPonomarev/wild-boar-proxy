@@ -25,6 +25,7 @@ from wild_boar_proxy.web_design_live_server import (
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
+NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def command_packet(**overrides: object) -> dict[str, object]:
@@ -351,6 +352,18 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["validate_account"]["affects_primary_truth"])
         self.assertEqual(metadata["actions"]["validate_account"]["action_role"], "account_verification")
         self.assertTrue(metadata["actions"]["validate_account"]["post_action_refresh_required"])
+        self.assertIn("hold_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["hold_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["hold_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["hold_account"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["hold_account"]["action_role"], "account_lifecycle_hold")
+        self.assertTrue(metadata["actions"]["hold_account"]["post_action_refresh_required"])
+        self.assertIn("release_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["release_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["release_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["release_account"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["release_account"]["action_role"], "account_lifecycle_release")
+        self.assertTrue(metadata["actions"]["release_account"]["post_action_refresh_required"])
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
@@ -448,6 +461,82 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(extra_runner.calls, [])
         for calls in [unsafe_runner.calls, unknown_runner.calls, extra_runner.calls]:
             self.assertNotIn(("accounts", "validate", "acct-active", "--json"), calls)
+
+    def test_hold_release_actions_preflight_eligibility_and_execute_exact_commands(self) -> None:
+        hold_runner = MappingRunner(live_payloads())
+        release_runner = MappingRunner(live_payloads())
+
+        hold = run_ui_action(
+            hold_runner,
+            {"ui_action": "hold_account", "account_id": "acct-active"},
+        )
+        release = run_ui_action(
+            release_runner,
+            {"ui_action": "release_account", "account_id": "acct-hold"},
+        )
+
+        self.assertEqual(hold["status"], "ok")
+        self.assertEqual(hold["action_role"], "account_lifecycle_hold")
+        self.assertFalse(hold["mutates_runtime"])
+        self.assertTrue(hold["confirmation_required"])
+        self.assertEqual(hold["account_id"], "acct-active")
+        self.assertEqual(
+            hold_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "hold", "acct-active", "--json"),
+            ],
+        )
+        self.assertEqual(release["status"], "ok")
+        self.assertEqual(release["action_role"], "account_lifecycle_release")
+        self.assertFalse(release["mutates_runtime"])
+        self.assertTrue(release["confirmation_required"])
+        self.assertEqual(release["account_id"], "acct-hold")
+        self.assertEqual(
+            release_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "release", "acct-hold", "--json"),
+            ],
+        )
+
+    def test_hold_release_reject_ineligible_targets_without_lifecycle_execution(self) -> None:
+        hold_runner = MappingRunner(live_payloads())
+        release_runner = MappingRunner(live_payloads())
+        retired_runner = MappingRunner(live_payloads())
+        extra_runner = MappingRunner(live_payloads())
+
+        already_held = run_ui_action(
+            hold_runner,
+            {"ui_action": "hold_account", "account_id": "acct-hold"},
+        )
+        not_held = run_ui_action(
+            release_runner,
+            {"ui_action": "release_account", "account_id": "acct-active"},
+        )
+        retired = run_ui_action(
+            retired_runner,
+            {"ui_action": "hold_account", "account_id": "acct-problem"},
+        )
+        extra = run_ui_action(
+            extra_runner,
+            {"ui_action": "release_account", "account_id": "acct-hold", "argv": "accounts promote"},
+        )
+
+        self.assertEqual(already_held["result"]["machine_error_code"], "UI_ACCOUNT_HOLD_INELIGIBLE")
+        self.assertEqual(not_held["result"]["machine_error_code"], "UI_ACCOUNT_RELEASE_INELIGIBLE")
+        self.assertEqual(
+            retired["result"]["machine_error_code"],
+            "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(hold_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(release_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(retired_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(extra_runner.calls, [])
+        for calls in [hold_runner.calls, release_runner.calls, retired_runner.calls, extra_runner.calls]:
+            self.assertNotIn(("accounts", "hold", "acct-hold", "--json"), calls)
+            self.assertNotIn(("accounts", "release", "acct-active", "--json"), calls)
 
     def test_launch_client_dispatch_uses_server_owned_bounded_path_only(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -593,6 +682,12 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("accounts", "validate", "acct-active", "--json"): command_packet(
             human_message="Account validation completed."
         ),
+        ("accounts", "hold", "acct-active", "--json"): command_packet(
+            human_message="Account hold completed."
+        ),
+        ("accounts", "release", "acct-hold", "--json"): command_packet(
+            human_message="Account release completed."
+        ),
         ("diagnostics", "export", "--json"): command_packet(
             human_message="Diagnostics exported.",
             data={"bundle_path": "/tmp/wbp-diagnostics.zip"},
@@ -622,7 +717,7 @@ def free_port() -> int:
 
 
 def fetch(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=3) as response:
+    with NO_PROXY_OPENER.open(url, timeout=3) as response:
         return response.read().decode("utf-8")
 
 
@@ -633,7 +728,7 @@ def post_json(url: str, payload: dict[str, object]) -> str:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=3) as response:
+    with NO_PROXY_OPENER.open(request, timeout=3) as response:
         return response.read().decode("utf-8")
 
 

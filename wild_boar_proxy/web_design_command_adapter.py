@@ -73,6 +73,22 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("account_id",),
         allowed_args=("account_id",),
     ),
+    "accounts_hold": CommandSpec(
+        command_id="accounts_hold",
+        argv_template=("accounts", "hold", "{account_id}", "--json"),
+        category="lifecycle",
+        confirmation_required=True,
+        required_args=("account_id",),
+        allowed_args=("account_id",),
+    ),
+    "accounts_release": CommandSpec(
+        command_id="accounts_release",
+        argv_template=("accounts", "release", "{account_id}", "--json"),
+        category="lifecycle",
+        confirmation_required=True,
+        required_args=("account_id",),
+        allowed_args=("account_id",),
+    ),
     "rollout_rotation_inspect": CommandSpec(
         command_id="rollout_rotation_inspect",
         argv_template=("rollout", "rotation", "inspect", "--json"),

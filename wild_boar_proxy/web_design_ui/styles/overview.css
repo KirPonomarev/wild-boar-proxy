@@ -998,6 +998,12 @@ button:disabled {
   color: var(--muted);
 }
 
+.account-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .account-action {
   min-width: 0;
   padding-inline: 10px;

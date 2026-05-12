@@ -622,8 +622,8 @@ function renderAccountsSnapshot(snapshot) {
   const banner = document.getElementById("accountsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "Accounts live read-only. Truth comes only from the canonical accounts JSON packet; lifecycle actions are deferred."
-    : "Accounts fixture preview only. No lifecycle actions are enabled.";
+    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; hold/release are bounded action requests."
+    : "Accounts fixture preview only. Account actions are disabled.";
 
   const summary = safeSnapshot.summary;
   text("accountsActiveChip", `${summary.active} активных`);
@@ -655,7 +655,7 @@ function renderAccountRows(accounts) {
       td("", statusChip(account)),
       td(account.last_error_summary ? "" : "dash", account.last_error_summary || "—"),
       td("right mono-value", account.last_success || account.cooldown_until || "—"),
-      td("", validateButton(account))
+      td("", accountActionButtons(account))
     );
     body.append(row);
   }
@@ -678,7 +678,7 @@ function td(className, child) {
 function checkbox() {
   const node = document.createElement("div");
   node.className = "checkbox";
-  node.title = "Lifecycle actions are deferred in this contour.";
+  node.title = "Bulk lifecycle actions are deferred in this contour.";
   return node;
 }
 
@@ -706,16 +706,30 @@ function statusChip(account) {
   return chip;
 }
 
-function validateButton(account) {
+function accountActionButtons(account) {
+  const group = document.createElement("div");
+  group.className = "account-action-group";
+  group.append(accountActionButton(account, "validate_account", "Проверить"));
+  if (account.pool !== "retired") {
+    if (account.manual_hold) {
+      group.append(accountActionButton(account, "release_account", "Снять hold"));
+    } else {
+      group.append(accountActionButton(account, "hold_account", "Удержать"));
+    }
+  }
+  return group;
+}
+
+function accountActionButton(account, uiAction, label) {
   const button = document.createElement("button");
   button.className = "button small account-action";
   button.type = "button";
-  button.dataset.uiAction = "validate_account";
+  button.dataset.uiAction = uiAction;
   button.dataset.accountId = account.id || "";
-  button.textContent = "Проверить";
-  button.title = "Verify this account through an allowlisted UI action. Lifecycle actions stay disabled.";
+  button.textContent = label;
+  button.title = "Run an allowlisted account action. Accounts list refresh remains truth.";
   button.addEventListener("click", () => {
-    maybeConfirmAndRun("validate_account", { account_id: button.dataset.accountId });
+    maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId });
   });
   return button;
 }

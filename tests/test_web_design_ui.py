@@ -17,6 +17,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
 FIXTURES = WEB_DESIGN_UI / "fixtures"
+NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class WebDesignUiTests(unittest.TestCase):
@@ -198,13 +199,16 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="accountsTableBody"', html)
         self.assertIn("renderAccountsSnapshot", js)
         self.assertIn("accountsFixtureFromOverview", js)
-        self.assertIn("Lifecycle actions are deferred", js)
+        self.assertIn("Bulk lifecycle actions are deferred", js)
         self.assertIn("validate_account", js)
+        self.assertIn("hold_account", js)
+        self.assertIn("release_account", js)
         self.assertIn("account_id", js)
-        self.assertIn("validateButton", js)
+        self.assertIn("accountActionButtons", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
+        self.assertNotIn("accounts hold", html + js)
         self.assertNotIn("accounts promote", html + js)
         self.assertNotIn("accounts demote", html + js)
         self.assertNotIn("accounts release", html + js)
@@ -275,7 +279,7 @@ class WebDesignUiTests(unittest.TestCase):
         last_error: Exception | None = None
         for _ in range(20):
             try:
-                with urllib.request.urlopen(url, timeout=1) as response:
+                with NO_PROXY_OPENER.open(url, timeout=1) as response:
                     return response.read().decode("utf-8")
             except Exception as exc:  # pragma: no cover - diagnostic path
                 last_error = exc
