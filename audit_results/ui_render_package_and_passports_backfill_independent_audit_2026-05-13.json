@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_BACKFILL",
+  "artifact_type": "independent_audit",
+  "audited_at_local_date": "2026-05-13",
+  "auditor": "Mendel",
+  "mode": "read_only",
+  "verdict": "PASS",
+  "blocking_findings": [],
+  "artifacts_audited": [
+    "audit_results/ui_render_package_manifest_2026-05-13.json",
+    "audit_results/ui_screen_passports_2026-05-13.json",
+    "audit_results/ui_render_surface_registry_2026-05-13.json",
+    "audit_results/ui_render_package_and_passports_backfill_closeout_2026-05-13.md"
+  ],
+  "checks": [
+    {
+      "check": "json_validity",
+      "result": "pass",
+      "evidence": "all JSON artifacts parsed successfully"
+    },
+    {
+      "check": "screen_inventory_consistency",
+      "result": "pass",
+      "evidence": "manifest contains 10 source screen ids and passports contain matching 10 screen ids"
+    },
+    {
+      "check": "registry_authority_boundary",
+      "result": "pass",
+      "evidence": "surface registry states descriptive_snapshot_only and points to COMMAND_API.md as authority"
+    },
+    {
+      "check": "deferred_forbidden_controls",
+      "result": "pass",
+      "evidence": "rollout, policy, import, direct-file, and arbitrary command paths are deferred or forbidden"
+    },
+    {
+      "check": "direct_file_truth_boundary",
+      "result": "pass",
+      "evidence": "passports keep direct_file_truth_allowed false throughout"
+    },
+    {
+      "check": "privacy_and_leak_scan",
+      "result": "pass",
+      "evidence": "no absolute local paths, external reference service traces, tokens, or downloaded external screenshots found"
+    },
+    {
+      "check": "staged_scope",
+      "result": "pass",
+      "evidence": "no staged files at audit time"
+    },
+    {
+      "check": "runtime_desktop_external_lab_scope",
+      "result": "pass",
+      "evidence": "no runtime.py, desktop, external_agent_lab source, or tests/test_external_agent_lab.py changes are part of this contour"
+    }
+  ],
+  "non_blocking_notes": [
+    {
+      "note": "pre-existing untracked external_agent_lab eval results remain in the working tree",
+      "disposition": "unrelated dirty tail; not staged or modified by this contour"
+    }
+  ]
+}

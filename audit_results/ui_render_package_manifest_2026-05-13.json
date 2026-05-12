@@ -1,0 +1,112 @@
+{
+  "schema_version": 2,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_BACKFILL",
+  "artifact_type": "render_package_manifest",
+  "captured_at_local_date": "2026-05-13",
+  "package_label": "owner_design_archive",
+  "package_basename_repo_safe": "owner_design_archive.zip",
+  "package_present": true,
+  "package_sha256": "bc09f7f8d0811ca2f80ffa77e43d02250b699bea3f94aa8fb290e6e5095492ae",
+  "source_role": "visual_baseline_only",
+  "canonical_priority": "below CANON.md, MASTER_PLAN.md, RUNTIME_CONTRACT.md, STATE_SCHEMA.md, COMMAND_API.md, DELIVERY_RULES.md, and README.md",
+  "privacy_boundary": {
+    "absolute_local_path_included": false,
+    "external_reference_service_named": false,
+    "external_reference_artifacts_included": false,
+    "token_or_secret_included": false,
+    "raw_command_packet_included": false
+  },
+  "inventory_summary": {
+    "zip_entries_total_including_platform_metadata": 56,
+    "repo_relevant_files": 23,
+    "html_screen_count": 10,
+    "png_screen_count": 10,
+    "asset_count": 1,
+    "reference_contact_sheet_count": 1,
+    "readme_count": 1,
+    "platform_metadata_ignored": true
+  },
+  "screen_ids_detected": [
+    "00_brand_lockup",
+    "01_overview_dashboard",
+    "02_setup_client",
+    "03_select_codex_client",
+    "04_accounts",
+    "05_add_account_modal",
+    "06_diagnostics",
+    "07_settings",
+    "08_import_existing",
+    "09_confirm_action"
+  ],
+  "screen_files": [
+    {
+      "screen_id": "00_brand_lockup",
+      "html_basename": "00_brand_lockup.html",
+      "png_basename": "00_brand_lockup.png"
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "html_basename": "01_overview_dashboard.html",
+      "png_basename": "01_overview_dashboard.png"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "html_basename": "02_setup_client.html",
+      "png_basename": "02_setup_client.png"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "html_basename": "03_select_codex_client.html",
+      "png_basename": "03_select_codex_client.png"
+    },
+    {
+      "screen_id": "04_accounts",
+      "html_basename": "04_accounts.html",
+      "png_basename": "04_accounts.png"
+    },
+    {
+      "screen_id": "05_add_account_modal",
+      "html_basename": "05_add_account_modal.html",
+      "png_basename": "05_add_account_modal.png"
+    },
+    {
+      "screen_id": "06_diagnostics",
+      "html_basename": "06_diagnostics.html",
+      "png_basename": "06_diagnostics.png"
+    },
+    {
+      "screen_id": "07_settings",
+      "html_basename": "07_settings.html",
+      "png_basename": "07_settings.png"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "html_basename": "08_import_existing.html",
+      "png_basename": "08_import_existing.png"
+    },
+    {
+      "screen_id": "09_confirm_action",
+      "html_basename": "09_confirm_action.html",
+      "png_basename": "09_confirm_action.png"
+    }
+  ],
+  "asset_inventory": [
+    {
+      "asset_id": "boar_mark",
+      "basename": "boar_mark.png",
+      "role": "brand mark visual asset",
+      "repo_copy": "wild_boar_proxy/web_design_ui/assets/boar_mark.png"
+    },
+    {
+      "asset_id": "contact_sheet",
+      "basename": "wild_boar_proxy_redesign_contact_sheet.png",
+      "role": "visual reference contact sheet",
+      "repo_copy": ""
+    }
+  ],
+  "unexpected_repo_relevant_files": [],
+  "missing_expected_screens": [],
+  "runtime_truth": "not_applicable",
+  "live_commands_executed_for_manifest": false,
+  "desktop_work_started": false
+}

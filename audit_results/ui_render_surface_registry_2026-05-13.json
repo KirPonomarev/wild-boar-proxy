@@ -1,0 +1,245 @@
+{
+  "schema_version": 2,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_BACKFILL",
+  "artifact_type": "ui_render_surface_registry",
+  "created_at_local_date": "2026-05-13",
+  "registry_role": "descriptive_snapshot_only",
+  "authority": "COMMAND_API.md remains authoritative for command meaning",
+  "does_not_override_command_api": true,
+  "browser_boundary": {
+    "allowed_payload_shape": "ui_action plus structured payload",
+    "browser_command_id_allowed": false,
+    "browser_raw_argv_allowed": false,
+    "browser_shell_allowed": false,
+    "browser_arbitrary_path_allowed": false,
+    "browser_config_mutation_allowed": false
+  },
+  "truth_surfaces": [
+    {
+      "adapter_command_id": "status",
+      "argv": ["status", "--json"],
+      "ui_role": "primary runtime status",
+      "screens": ["overview", "settings"]
+    },
+    {
+      "adapter_command_id": "healthcheck",
+      "argv": ["healthcheck", "--json"],
+      "ui_role": "runtime health detail",
+      "screens": ["overview", "diagnostics", "settings"]
+    },
+    {
+      "adapter_command_id": "mode_get",
+      "argv": ["mode", "get", "--json"],
+      "ui_role": "desired and effective mode readout",
+      "screens": ["overview", "settings"]
+    },
+    {
+      "adapter_command_id": "accounts_list",
+      "argv": ["accounts", "list", "--json"],
+      "ui_role": "account pool truth and account action preflight",
+      "screens": ["overview", "accounts", "settings"]
+    },
+    {
+      "adapter_command_id": "rollout_rotation_inspect",
+      "argv": ["rollout", "rotation", "inspect", "--json"],
+      "ui_role": "supporting rotation detail",
+      "screens": ["overview", "settings"]
+    }
+  ],
+  "ui_action_surfaces": [
+    {
+      "ui_action": "refresh_health_detail",
+      "adapter_command_id": "healthcheck",
+      "argv": ["healthcheck", "--json"],
+      "status": "allowed",
+      "confirmation_required": false,
+      "structured_payload": [],
+      "post_action_refresh_required": false,
+      "claim_scope": "runtime detail refresh only"
+    },
+    {
+      "ui_action": "export_diagnostics",
+      "adapter_command_id": "diagnostics_export",
+      "argv": ["diagnostics", "export", "--json"],
+      "status": "allowed",
+      "confirmation_required": false,
+      "structured_payload": [],
+      "post_action_refresh_required": false,
+      "claim_scope": "support artifact only"
+    },
+    {
+      "ui_action": "stable_repair_plan",
+      "adapter_command_id": "stable_repair_dry_run",
+      "argv": ["stable", "repair", "--dry-run", "--json"],
+      "status": "allowed",
+      "confirmation_required": false,
+      "structured_payload": [],
+      "post_action_refresh_required": false,
+      "claim_scope": "dry-run recovery planning only"
+    },
+    {
+      "ui_action": "onboard_account",
+      "adapter_command_id": "accounts_onboard",
+      "argv": ["accounts", "onboard", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [],
+      "post_action_refresh_required": true,
+      "claim_scope": "account admission request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "validate_account",
+      "adapter_command_id": "accounts_validate",
+      "argv": ["accounts", "validate", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "post_action_refresh_required": true,
+      "claim_scope": "account verification request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "promote_account",
+      "adapter_command_id": "accounts_promote",
+      "argv": ["accounts", "promote", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "eligibility": "reserve, not manual hold, not retired",
+      "post_action_refresh_required": true,
+      "claim_scope": "account promotion request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "demote_account",
+      "adapter_command_id": "accounts_demote",
+      "argv": ["accounts", "demote", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "eligibility": "active, not manual hold, not retired",
+      "post_action_refresh_required": true,
+      "claim_scope": "account demotion request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "retire_account",
+      "adapter_command_id": "accounts_retire",
+      "argv": ["accounts", "retire", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "eligibility": "active or reserve, not already retired",
+      "post_action_refresh_required": true,
+      "claim_scope": "terminal account retirement request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "hold_account",
+      "adapter_command_id": "accounts_hold",
+      "argv": ["accounts", "hold", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "eligibility": "not retired and not already on manual hold",
+      "post_action_refresh_required": true,
+      "claim_scope": "account hold request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "release_account",
+      "adapter_command_id": "accounts_release",
+      "argv": ["accounts", "release", "{account_id}", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": ["account_id"],
+      "server_preflight": "accounts list --json",
+      "eligibility": "manual hold account, not retired",
+      "post_action_refresh_required": true,
+      "claim_scope": "account release request only; refreshed accounts list remains truth"
+    },
+    {
+      "ui_action": "sync_runtime",
+      "adapter_command_id": "sync",
+      "argv": ["sync", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [],
+      "post_action_refresh_required": true,
+      "claim_scope": "sync request only; refreshed live overview remains truth"
+    },
+    {
+      "ui_action": "set_mode_stable",
+      "adapter_command_id": "mode_stable",
+      "argv": ["mode", "set", "stable", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [],
+      "post_action_refresh_required": true,
+      "claim_scope": "mode request only; refreshed live overview remains truth"
+    },
+    {
+      "ui_action": "set_mode_managed",
+      "adapter_command_id": "mode_managed",
+      "argv": ["mode", "set", "managed", "--json"],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [],
+      "post_action_refresh_required": true,
+      "claim_scope": "mode request only; refreshed live overview remains truth"
+    },
+    {
+      "ui_action": "launch_smoke",
+      "adapter_command_id": "smoke",
+      "argv": ["launch", "smoke", "--json"],
+      "status": "allowed",
+      "confirmation_required": false,
+      "structured_payload": [],
+      "post_action_refresh_required": true,
+      "claim_scope": "runtime smoke check only; not host-client launch success"
+    },
+    {
+      "ui_action": "launch_client_dispatch",
+      "adapter_command_id": "launch_client",
+      "argv": ["launch", "client", "--client-path", "{client_path}", "--json"],
+      "status": "bounded_server_owned_only",
+      "confirmation_required": true,
+      "structured_payload": [],
+      "server_injected_payload": ["client_path"],
+      "post_action_refresh_required": true,
+      "claim_scope": "bounded OS dispatch request only; not host-client session success"
+    }
+  ],
+  "adapter_present_but_ui_deferred": [
+    {
+      "adapter_command_id": "stable_repair_apply",
+      "argv": ["stable", "repair", "--apply", "--json"],
+      "reason": "apply is mutating recovery and is not exposed as a current web UI action"
+    }
+  ],
+  "deferred_or_forbidden_first_pass": [
+    "policy stage set",
+    "rollout stage prove",
+    "rollout stage advance",
+    "rollout evidence capture",
+    "stable target switch",
+    "legacy import apply",
+    "setup discovery without command-owned packet",
+    "arbitrary shell commands",
+    "browser-submitted command_id",
+    "browser-submitted raw argv",
+    "browser-submitted local path",
+    "direct config, state, registry, auth, or log mutation"
+  ],
+  "implementation_evidence": {
+    "server_allowlist": "wild_boar_proxy/web_design_live_server.py",
+    "adapter_allowlist": "wild_boar_proxy/web_design_command_adapter.py",
+    "static_ui": "wild_boar_proxy/web_design_ui/index.html",
+    "browser_runtime_script": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests": [
+      "tests/test_web_design_ui.py",
+      "tests/test_web_design_live_server.py",
+      "tests/test_web_design_command_adapter.py"
+    ]
+  }
+}

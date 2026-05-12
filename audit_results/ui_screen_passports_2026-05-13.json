@@ -1,0 +1,471 @@
+{
+  "schema_version": 2,
+  "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_BACKFILL",
+  "artifact_type": "ui_screen_passports",
+  "created_at_local_date": "2026-05-13",
+  "authority_boundary": {
+    "product_runtime_canon_order": [
+      "CANON.md",
+      "MASTER_PLAN.md",
+      "RUNTIME_CONTRACT.md",
+      "STATE_SCHEMA.md",
+      "COMMAND_API.md",
+      "DELIVERY_RULES.md",
+      "README.md"
+    ],
+    "screen_passports_are_authoritative": false,
+    "render_package_is_runtime_truth": false,
+    "command_api_override_allowed": false,
+    "desktop_approval_granted": false
+  },
+  "global_browser_payload_boundary": "ui_action plus structured payload only; browser must not submit command_id, raw argv, shell, arbitrary path, or config mutation",
+  "global_truth_boundary": {
+    "direct_file_truth_allowed": false,
+    "runtime_truth_claims_from_screenshots_allowed": false,
+    "post_action_optimistic_success_allowed": false,
+    "canonical_refresh_required_after_mutating_action": true
+  },
+  "passports": [
+    {
+      "screen_id": "00_brand_lockup",
+      "source_render_status": "present",
+      "web_implementation_status": "reference_only",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "actions": {
+        "allowed": [],
+        "deferred": [],
+        "forbidden": []
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Use as style and brand reference only.",
+        "Does not admit runtime or command behavior."
+      ],
+      "known_gaps": [
+        "No route-level web implementation is required before desktop admission review."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_command_adapter.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_web_first_screen_live_overview_completion_matrix_2026-05-12.json",
+        "audit_results/ui_web_overview_confirmed_basic_actions_matrix_2026-05-12.json",
+        "audit_results/ui_web_overview_launch_client_dispatch_gate_matrix_2026-05-12.json",
+        "audit_results/ui_action_ledger_error_states_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "actions": {
+        "allowed": [
+          "refresh_health_detail",
+          "export_diagnostics",
+          "stable_repair_plan",
+          "sync_runtime",
+          "set_mode_stable",
+          "set_mode_managed",
+          "launch_smoke",
+          "launch_client_dispatch"
+        ],
+        "deferred": [
+          "stable_repair_apply",
+          "policy stage set",
+          "rollout stage prove",
+          "rollout stage advance"
+        ],
+        "forbidden": [
+          "browser command_id",
+          "raw argv",
+          "arbitrary shell",
+          "direct state or log truth"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Overview can seed desktop static overview after explicit desktop approval.",
+        "Live binding must continue through strict JSON command surfaces."
+      ],
+      "known_gaps": [
+        "Visual polish and screenshot parity are intentionally deferred.",
+        "Action density and Russian copy remain visual-stabilization work."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "02_setup_client",
+      "source_render_status": "present",
+      "web_implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_setup_select_import_decision_matrix_2026-05-13.json",
+        "audit_results/ui_setup_client_bounded_implementation_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [],
+      "actions": {
+        "allowed": [],
+        "deferred": [
+          "setup discovery",
+          "setup completion",
+          "server-owned host-client candidate display"
+        ],
+        "forbidden": [
+          "browser-submitted executable path",
+          "browser-submitted work directory",
+          "direct filesystem scan from UI",
+          "direct config, state, or log parsing"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Native picker can be reconsidered only in desktop phase after owner approval.",
+        "Desktop must still pass command-owned references, not raw shell strings."
+      ],
+      "known_gaps": [
+        "No command-owned setup discovery contract is admitted yet.",
+        "Current route is an inert skeleton and must not imply setup readiness."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "03_select_codex_client",
+      "source_render_status": "present",
+      "web_implementation_status": "deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_setup_select_import_decision_matrix_2026-05-13.json",
+        "audit_results/ui_setup_client_bounded_implementation_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [],
+      "actions": {
+        "allowed": [],
+        "deferred": [
+          "select server-supplied candidate id",
+          "save selection through strict JSON command",
+          "open server-owned known location"
+        ],
+        "forbidden": [
+          "choose file from browser",
+          "verify arbitrary browser path",
+          "persist path or config directly",
+          "treat launch client as path verification"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Desktop selection requires an explicit command API contract.",
+        "launch_client_dispatch remains bounded dispatch only, not selector truth."
+      ],
+      "known_gaps": [
+        "No command-owned candidate discovery or persistence surface is admitted."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "04_accounts",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_command_adapter.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_web_accounts_readonly_screen_matrix_2026-05-12.json",
+        "audit_results/ui_web_accounts_promote_demote_action_gate_matrix_2026-05-12.json",
+        "audit_results/ui_web_accounts_retire_action_gate_matrix_2026-05-12.json",
+        "audit_results/ui_web_accounts_onboard_modal_gate_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "actions": {
+        "allowed": [
+          "onboard_account",
+          "validate_account",
+          "promote_account",
+          "demote_account",
+          "retire_account",
+          "hold_account",
+          "release_account"
+        ],
+        "deferred": [
+          "bulk lifecycle actions",
+          "manual auth file picker",
+          "promotion after onboarding",
+          "reactivation"
+        ],
+        "forbidden": [
+          "browser-submitted account command",
+          "raw auth reference display",
+          "direct account registry edits",
+          "active count as scale proof",
+          "active count as pilot readiness"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Account lifecycle controls are command requests and require refreshed accounts truth.",
+        "Dense row action layout needs visual review before desktop transfer."
+      ],
+      "known_gaps": [
+        "Table overflow and button grouping remain visual-stabilization work.",
+        "No bulk account operation is admitted."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "05_add_account_modal",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented_as_modal_overlay",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_command_adapter.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_web_accounts_onboard_modal_gate_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "accounts onboard --json",
+        "accounts list --json after action refresh"
+      ],
+      "actions": {
+        "allowed": [
+          "onboard_account"
+        ],
+        "deferred": [
+          "manual auth file picker",
+          "explicit auth path import",
+          "auto-promote after onboarding"
+        ],
+        "forbidden": [
+          "browser-submitted auth path",
+          "browser-submitted credentials",
+          "browser-submitted backend id",
+          "direct auth directory scan"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Desktop may later own native auth UX, but reserve-first proof must remain command-owned.",
+        "No-new-auth and ambiguous identity remain operator-action outcomes, not success."
+      ],
+      "known_gaps": [
+        "Full visual parity with source modal remains deferred.",
+        "No desktop auth automation has started."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "06_diagnostics",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_command_adapter.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_web_diagnostics_screen_gate_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "actions": {
+        "allowed": [
+          "export_diagnostics",
+          "refresh_health_detail"
+        ],
+        "deferred": [
+          "upload diagnostics",
+          "open diagnostics bundle",
+          "hidden repair from diagnostics"
+        ],
+        "forbidden": [
+          "raw log display",
+          "direct diagnostics bundle reads",
+          "diagnostics-as-runtime-health-truth"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Diagnostics output remains a support artifact, not health truth.",
+        "Only bounded artifact metadata may be shown."
+      ],
+      "known_gaps": [
+        "Artifact download/open workflows are not admitted."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "07_settings",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented_bounded",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_live_server.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_web_settings_readonly_plus_safe_actions_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "actions": {
+        "allowed": [
+          "set_mode_stable",
+          "set_mode_managed",
+          "stable_repair_plan",
+          "launch_smoke",
+          "launch_client_dispatch",
+          "export_diagnostics"
+        ],
+        "deferred": [
+          "client selection",
+          "application data directory",
+          "network host and port",
+          "autorecovery policy",
+          "startup account checks",
+          "stable_repair_apply"
+        ],
+        "forbidden": [
+          "direct config writes",
+          "direct state writes",
+          "direct auth file reads",
+          "policy stage controls",
+          "rollout controls"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Settings is not a config editor.",
+        "Desktop settings must still use command-owned surfaces."
+      ],
+      "known_gaps": [
+        "Click-through tests are intentionally limited to avoid real runtime mutations.",
+        "Deferred settings controls need command contracts before activation."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "08_import_existing",
+      "source_render_status": "present",
+      "web_implementation_status": "deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_setup_select_import_decision_matrix_2026-05-13.json",
+        "audit_results/ui_setup_client_bounded_implementation_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [],
+      "actions": {
+        "allowed": [],
+        "deferred": [
+          "legacy import discovery",
+          "legacy import dry-run",
+          "legacy import apply",
+          "snapshot",
+          "rollback"
+        ],
+        "forbidden": [
+          "browser-submitted source directory",
+          "direct legacy config scan",
+          "direct legacy auth scan",
+          "dynamic account count claims without command packet",
+          "import apply without strong confirmation and post-action refresh"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Import UX should start from command-owned discovery and dry-run evidence.",
+        "Snapshot and rollback affordances require explicit command contracts."
+      ],
+      "known_gaps": [
+        "No safe source-location mediation is admitted for browser UI."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    },
+    {
+      "screen_id": "09_confirm_action",
+      "source_render_status": "present",
+      "web_implementation_status": "implemented_as_modal_overlay",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js"
+      ],
+      "evidence_artifacts": [
+        "audit_results/ui_confirmation_system_hardening_matrix_2026-05-13.json"
+      ],
+      "truth_sources": [
+        "server action metadata"
+      ],
+      "actions": {
+        "allowed": [
+          "confirmation wrapper for risky allowlisted UI actions"
+        ],
+        "deferred": [
+          "confirmation for import apply",
+          "confirmation for stable_repair_apply"
+        ],
+        "forbidden": [
+          "confirmation copy broadening command meaning",
+          "duplicate submit",
+          "treating confirmation as runtime truth"
+        ]
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "Confirmation modal should transfer as shared component.",
+        "Command meaning remains server metadata plus COMMAND_API authority."
+      ],
+      "known_gaps": [
+        "Modal geometry remains visual-stabilization work."
+      ],
+      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+    }
+  ]
+}
