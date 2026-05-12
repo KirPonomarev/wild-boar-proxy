@@ -48,6 +48,6 @@ This was an audit/decision closeout only.
 - base_head_before_c10:
   - `e11d0a8`
 - contour commit:
-  - pending_git_closeout
+  - `4596609`
 - push:
-  - pending_git_closeout
+  - `origin/codex/external-agent-lab-isolated`
