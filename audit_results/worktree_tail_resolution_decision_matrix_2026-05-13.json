@@ -1,0 +1,171 @@
+{
+  "contour_id": "WORKTREE_TAIL_RESOLUTION_DECISION_GATE",
+  "captured_at_local": "2026-05-13",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "c3346f2 Adjudicate dirty worktree tail before UI freeze",
+  "mode": "decision_only_by_default",
+  "source_adjudication": [
+    "audit_results/worktree_tail_adjudication_inventory_2026-05-13.json",
+    "audit_results/worktree_tail_adjudication_decision_packet_2026-05-13.json",
+    "audit_results/worktree_tail_adjudication_closeout_2026-05-13.md"
+  ],
+  "current_dirty_state": {
+    "tracked_dirty_files": 6,
+    "tracked_diff_stat": {
+      "files_changed": 6,
+      "insertions": 85,
+      "deletions": 17
+    },
+    "untracked_baseline_excluding_this_contour_artifacts": 168,
+    "current_untracked_including_this_contour_artifacts_before_staging": 170,
+    "this_contour_artifacts_count": 2,
+    "untracked_groups": {
+      "external_lab_audit_artifacts": 157,
+      "other_audit_artifacts": 1,
+      "external_agent_lab_eval_results": 10,
+      "other": 0
+    },
+    "material_change_since_adjudication": false
+  },
+  "decision_buckets": [
+    {
+      "bucket_id": "runtime_tail",
+      "paths": [
+        "wild_boar_proxy/runtime.py"
+      ],
+      "classification": "runtime_behavior_change",
+      "known_facts": [
+        "host-client dispatch timing is changed by a short settle loop",
+        "promote verification behavior is changed for the lock-acquired path"
+      ],
+      "default_disposition": "leave_untouched_pending_owner_decision",
+      "approval_required_for": [
+        "commit",
+        "revert",
+        "rewrite",
+        "format",
+        "preserve_as_accepted_runtime_work"
+      ],
+      "next_safe_action": "open_separate_runtime_contour_if_owner_wants_this_change",
+      "must_not_mix_with": [
+        "UI work",
+        "external-agent-lab work",
+        "generated evidence review"
+      ],
+      "selected_disposition_now": "owner_approval_required"
+    },
+    {
+      "bucket_id": "external_agent_lab_source_test_tail",
+      "paths": [
+        "external_agent_lab/legacy/agent_eval.py",
+        "external_agent_lab/legacy/proxy_server.py",
+        "external_agent_lab/legacy/run_lab.py",
+        "external_agent_lab/model_registry_seed.json",
+        "tests/test_external_agent_lab.py"
+      ],
+      "classification": "external_agent_lab_source_test_bundle",
+      "known_facts": [
+        "adds direct provider route and alias wiring",
+        "updates model registry evidence states",
+        "adds route and registry test coverage",
+        "changes generated eval-results import expectation"
+      ],
+      "default_disposition": "candidate_for_separate_external_lab_commit_after_approval",
+      "approval_required_for": [
+        "commit_external_lab_bundle_now",
+        "split_bundle_into_smaller_commits",
+        "revert_external_lab_bundle",
+        "include_generated_eval_evidence_as_companion_artifacts"
+      ],
+      "required_before_any_commit": [
+        "targeted external-agent-lab tests pass",
+        "staged diff contains only this bucket",
+        "staged diff secret and private marker scan passes",
+        "generated eval policy is explicitly decided"
+      ],
+      "must_not_mix_with": [
+        "UI work",
+        "runtime.py",
+        "generated evidence artifacts"
+      ],
+      "selected_disposition_now": "owner_approval_required"
+    },
+    {
+      "bucket_id": "generated_evidence_tail",
+      "paths": [
+        "audit_results/external_lab_*",
+        "audit_results/c02_mini_eval_admission_2026-05-09.json",
+        "external_agent_lab/legacy/eval_results/"
+      ],
+      "classification": "generated_operational_evidence_and_eval_logs",
+      "known_facts": [
+        "large untracked artifact set remains present",
+        "artifact names indicate operational evidence",
+        "prior scan found local path and provider placeholder markers",
+        "direct secret-value scan found no raw token values"
+      ],
+      "default_disposition": "do_not_auto_commit_keep_pending_owner_decision",
+      "approval_required_for": [
+        "park_outside_repo",
+        "delete",
+        "commit_as_evidence",
+        "redact_and_commit",
+        "add_ignore_or_exclude_rule"
+      ],
+      "required_before_any_evidence_commit": [
+        "dedicated evidence-review contour",
+        "direct secret-value scan",
+        "local path and private marker scan",
+        "raw log and auth reference scan",
+        "owner confirms evidence belongs in repo history"
+      ],
+      "must_not_mix_with": [
+        "UI work",
+        "runtime.py",
+        "external-agent-lab source commit"
+      ],
+      "selected_disposition_now": "owner_approval_required"
+    }
+  ],
+  "verification_summary": {
+    "dirty_state_matches_adjudication": true,
+    "direct_secret_value_scan": "no_matches",
+    "external_reference_trace_scan": "no_matches_reported_neutrally",
+    "targeted_external_agent_lab_tests": "pass",
+    "json_artifact_validation": "pass",
+    "independent_read_only_verifier": "current_tail_matches_prior_adjudication"
+  },
+  "next_state": "WORKTREE_TAIL_RESOLUTION_DECISION_READY_OWNER_APPROVAL_REQUIRED",
+  "owner_decisions_needed": [
+    {
+      "decision": "runtime_tail",
+      "options": [
+        "open runtime contour",
+        "approve revert in a separate action",
+        "keep pending"
+      ],
+      "recommended_default": "open runtime contour only if the change is still desired; otherwise request explicit revert approval"
+    },
+    {
+      "decision": "external_agent_lab_source_test_tail",
+      "options": [
+        "approve separate external-lab commit",
+        "split into smaller external-lab commits",
+        "keep pending",
+        "approve revert in a separate action"
+      ],
+      "recommended_default": "approve separate external-lab commit only after deciding eval-results policy"
+    },
+    {
+      "decision": "generated_evidence_tail",
+      "options": [
+        "park outside repo",
+        "run dedicated evidence-review contour",
+        "keep pending",
+        "approve deletion",
+        "approve redaction and commit"
+      ],
+      "recommended_default": "park or keep pending; do not commit as ordinary source"
+    }
+  ]
+}
