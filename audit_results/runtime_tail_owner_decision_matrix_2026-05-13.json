@@ -1,0 +1,107 @@
+{
+  "contour_id": "RUNTIME_TAIL_OWNER_DECISION_GATE",
+  "captured_at_local": "2026-05-13",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "0222cd5 Prepare generated evidence decision gate",
+  "mode": "decision_only",
+  "runtime_tail": {
+    "path": "wild_boar_proxy/runtime.py",
+    "diff_stat": {
+      "files_changed": 1,
+      "insertions": 16,
+      "deletions": 1
+    },
+    "broader_than_known_two_areas": false
+  },
+  "behavior_areas": [
+    {
+      "area_id": "launch_client_detached_settle_loop",
+      "function": "dispatch_external_client",
+      "runtime_lines": "wild_boar_proxy/runtime.py:391",
+      "summary": "Detached executable launch now waits up to 1.25 seconds for short-lived child processes to materialize side effects before returning.",
+      "command_surfaces": [
+        "launch client --json"
+      ],
+      "direct_callers": [
+        "run_launch_client"
+      ],
+      "existing_tests": [
+        "tests/test_cli.py::CliTests::test_launch_client_dispatches_bounded_executable_with_sanitized_env",
+        "tests/test_cli.py::CliTests::test_launch_client_treats_detached_executable_as_bounded_dispatch_only",
+        "tests/test_cli.py::CliTests::test_launch_client_reports_exec_format_failure_as_json_packet",
+        "tests/test_ui_shell.py::UiShellTests::test_run_launch_client_and_refresh_uses_launch_then_status_only",
+        "tests/test_web_design_live_server.py::WebDesignLiveServerTests::test_launch_client_dispatch_uses_server_owned_bounded_path_only"
+      ],
+      "missing_later_contour_tests": [
+        "prove the settle window matters by using a short-lived detached child that writes a marker shortly after start, then assert immediately after command return without an extra polling loop",
+        "prove detached launch remains bounded and does not become an unbounded wait",
+        "prove return shape and bounded claim scope stay unchanged"
+      ],
+      "owner_surface": "launch/client runtime owner"
+    },
+    {
+      "area_id": "lock_acquired_promote_selected_backend_relaxation",
+      "function": "run_promote",
+      "runtime_lines": "wild_boar_proxy/runtime.py:11154",
+      "summary": "When lock_acquired is true, routing_change_observed no longer requires selected_backend_ids membership locally; active placement and policy proof still apply, and selected-backend participation is expected to be owned by caller postflight checks.",
+      "command_surfaces": [
+        "accounts promote <id> --json",
+        "rollout stage advance ... --json"
+      ],
+      "direct_callers": [
+        "accounts promote CLI path",
+        "run_rollout_stage_advance with lock_acquired=true"
+      ],
+      "existing_tests": [
+        "tests/test_cli.py::CliTests::test_accounts_promote_promotes_reserve_backend_with_verified_active_routing",
+        "tests/test_cli.py::CliTests::test_accounts_promote_status_verification_failure_rolls_back",
+        "tests/test_cli.py::CliTests::test_accounts_promote_policy_verification_failure_rolls_back",
+        "tests/test_cli.py::CliTests::test_rollout_stage_advance_15_holds_outer_serialization_lock_across_composite_steps",
+        "tests/test_cli.py stage-advance success cases around stage 15 and stage 20"
+      ],
+      "missing_later_contour_tests": [
+        "prove lock_acquired run_promote succeeds when selected_backend_ids does not yet include the promoted backend and caller postflight owns that proof",
+        "prove direct accounts promote without lock_acquired still fails or rolls back when selected_backend_ids does not verify the backend",
+        "prove stage advance postflight catches selected-backend participation when local promote delegates that check"
+      ],
+      "owner_surface": "rollout/stage runtime owner"
+    }
+  ],
+  "read_only_verification": {
+    "git_status_captured": true,
+    "runtime_diff_reviewed": true,
+    "callers_searched": true,
+    "tests_searched": true,
+    "live_runtime_commands_run": false,
+    "command_packets_captured": false,
+    "runtime_artifacts_generated": false,
+    "runtime_file_modified": false,
+    "tests_modified": false
+  },
+  "independent_inspector": {
+    "agent": "Locke",
+    "result": "consistent",
+    "key_finding": "Diff is confined to detached-client settling and lock-acquired promotion verification predicate."
+  },
+  "owner_decision_options": [
+    {
+      "option": "open_runtime_tail_review_and_test_gate",
+      "when_to_choose": "Owner believes both behavior areas may be valid and wants tests/contract review before accepting them."
+    },
+    {
+      "option": "open_runtime_tail_revert_execution_gate",
+      "when_to_choose": "Owner wants an exact revert of the runtime tail in a separate approved execution contour."
+    },
+    {
+      "option": "open_runtime_tail_split_decision_gate",
+      "when_to_choose": "Owner wants launch/client timing and rollout/stage promotion semantics decided separately."
+    },
+    {
+      "option": "keep_pending_as_runtime_blocker",
+      "when_to_choose": "Owner wants no mutation yet. This branch remains blocked for UI backfill while runtime.py is dirty."
+    }
+  ],
+  "recommended_default": "open_runtime_tail_split_decision_gate",
+  "final_state": "RUNTIME_TAIL_DECISION_READY_OWNER_APPROVAL_REQUIRED",
+  "ui_backfill_status": "blocked_on_dirty_runtime_tail_in_this_branch"
+}
