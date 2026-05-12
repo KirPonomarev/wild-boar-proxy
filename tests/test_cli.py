@@ -134,10 +134,12 @@ class CliTests(unittest.TestCase):
         self.profile_dir = root / "profile"
         self.managed_dir = self.profile_dir / "managed"
         self.stable_dir = root / "stable"
+        self.external_models_dir = root / "external-models"
         self.bin_dir = self.managed_dir / "bin"
         self.profile_dir.mkdir(parents=True)
         self.managed_dir.mkdir(parents=True)
         self.stable_dir.mkdir(parents=True)
+        self.external_models_dir.mkdir(parents=True)
         self.bin_dir.mkdir(parents=True)
         (self.profile_dir / "auth.json").write_text(
             json.dumps({"OPENAI_API_KEY": "test-key"}) + "\n", encoding="utf-8"
@@ -253,6 +255,7 @@ class CliTests(unittest.TestCase):
         env["WBP_MANAGED_CONFIG_FILE"] = str(self.managed_dir / "managed-config.yaml")
         env["WBP_REGISTRY_FILE"] = str(self.managed_dir / "backend-registry.json")
         env["WBP_STATE_FILE"] = str(self.managed_dir / "supervisor-state.json")
+        env["WBP_EXTERNAL_MODELS_DIR"] = str(self.external_models_dir)
         env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(
             self.profile_dir / "runtime-effective-mode.txt"
         )
@@ -469,6 +472,26 @@ class CliTests(unittest.TestCase):
         (package_root / "wild_boar_proxy" / "api_token.txt").write_text(
             "token\n", encoding="utf-8"
         )
+        (package_root / "wild_boar_proxy" / "external_models").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "external_models" / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "state.json").write_text(
+            json.dumps({"schema_version": 2, "routes": {}}) + "\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=x\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models" / "evidence").mkdir(
+            parents=True, exist_ok=True
+        )
+        (
+            package_root
+            / "wild_boar_proxy"
+            / "external_models"
+            / "evidence"
+            / "capture.json"
+        ).write_text("{}\n", encoding="utf-8")
         (package_root / "docs" / "private-key.md").write_text(
             "# private\n", encoding="utf-8"
         )
@@ -503,6 +526,12 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("wild_boar_proxy/session.dump", archive_entries)
         self.assertNotIn("wild_boar_proxy/session.tmp", archive_entries)
         self.assertNotIn("wild_boar_proxy/api_token.txt", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/routes.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/state.json", archive_entries)
+        self.assertNotIn("wild_boar_proxy/external_models/secrets.env", archive_entries)
+        self.assertNotIn(
+            "wild_boar_proxy/external_models/evidence/capture.json", archive_entries
+        )
         self.assertNotIn("docs/private-key.md", archive_entries)
         self.assertNotIn("docs/.hidden-notes.md", archive_entries)
 
@@ -564,6 +593,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(verify_payload["machine_error_code"], "OK")
         self.assertEqual(verify_payload["severity"], "recoverable")
         self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["status"], "passed"
+        )
         self.assertEqual(verify_payload["changed_files"], [])
 
     def test_package_experimental_verify_checksum_mismatch_failure(self) -> None:
@@ -594,6 +626,111 @@ class CliTests(unittest.TestCase):
         self.assertEqual(verify_payload["status"], "error")
         self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_CHECKSUM_MISMATCH")
         self.assertFalse(verify_payload["package_result"]["checksum_match"])
+
+    def test_package_experimental_verify_rejects_boundary_violation(self) -> None:
+        package_root = Path(self.temp_dir.name) / "package-verify-boundary-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        module_path = package_root / "wild_boar_proxy" / "module.py"
+        module_path.write_text("value = 1\n", encoding="utf-8")
+        secret_path = package_root / "wild_boar_proxy" / "external_models" / "secrets.env"
+        secret_path.parent.mkdir(parents=True, exist_ok=True)
+        secret_path.write_text("OPENROUTER_API_KEY=x\n", encoding="utf-8")
+        output_dir = Path(self.temp_dir.name) / "package-verify-boundary-output"
+        artifact_path = output_dir / "experimental-package.tar.gz"
+        manifest_path = output_dir / "experimental-package.manifest.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            archive.add(module_path, arcname="wild_boar_proxy/module.py")
+            archive.add(
+                secret_path,
+                arcname="wild_boar_proxy/external_models/secrets.env",
+            )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-12T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_sha256": runtime_mod.hash_file(artifact_path),
+                    "artifact_format": "tar.gz",
+                    "metadata_path": "experimental-package.metadata.json",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID")
+        self.assertEqual(
+            verify_payload["package_result"]["status"], "boundary_invalid"
+        )
+        self.assertIn(
+            "wild_boar_proxy/external_models/secrets.env",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_experimental_verify_rejects_symlink_boundary_bypass(self) -> None:
+        package_root = Path(self.temp_dir.name) / "package-verify-symlink-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        module_path = package_root / "wild_boar_proxy" / "module.py"
+        module_path.write_text("value = 1\n", encoding="utf-8")
+        guide_path = package_root / "docs" / "guide.md"
+        guide_path.write_text("# Guide\n", encoding="utf-8")
+        output_dir = Path(self.temp_dir.name) / "package-verify-symlink-output"
+        artifact_path = output_dir / "experimental-package.tar.gz"
+        manifest_path = output_dir / "experimental-package.manifest.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            archive.add(module_path, arcname="wild_boar_proxy/module.py")
+            link_info = tarfile.TarInfo("wild_boar_proxy/link")
+            link_info.type = tarfile.SYMTYPE
+            link_info.linkname = "../docs"
+            archive.addfile(link_info)
+            archive.add(guide_path, arcname="wild_boar_proxy/link/guide.md")
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-12T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_sha256": runtime_mod.hash_file(artifact_path),
+                    "artifact_format": "tar.gz",
+                    "metadata_path": "experimental-package.metadata.json",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        verify_result = self.run_cli(
+            "package",
+            "experimental",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID")
+        self.assertIn(
+            "wild_boar_proxy/link",
+            verify_payload["package_result"]["violating_entries"],
+        )
 
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
@@ -13904,6 +14041,7 @@ class CliTests(unittest.TestCase):
         fresh_profile = Path(self.temp_dir.name) / "fresh-profile"
         fresh_managed = fresh_profile / "managed"
         fresh_stable = Path(self.temp_dir.name) / "fresh-stable"
+        fresh_external = Path(self.temp_dir.name) / "fresh-external-models"
         fresh_stable.mkdir(parents=True, exist_ok=True)
         (fresh_stable / "config.yaml").write_text(
             "host: 127.0.0.1\nport: 8318\n",
@@ -13918,6 +14056,7 @@ class CliTests(unittest.TestCase):
                 "WBP_REGISTRY_FILE": str(fresh_managed / "backend-registry.json"),
                 "WBP_STATE_FILE": str(fresh_managed / "supervisor-state.json"),
                 "WBP_MANAGED_CONFIG_FILE": str(fresh_managed / "managed-config.yaml"),
+                "WBP_EXTERNAL_MODELS_DIR": str(fresh_external),
                 "WBP_RUNTIME_EFFECTIVE_MODE_FILE": str(
                     fresh_profile / "runtime-effective-mode.txt"
                 ),
@@ -13943,6 +14082,14 @@ class CliTests(unittest.TestCase):
         state = json.loads((fresh_managed / "supervisor-state.json").read_text())
         self.assertEqual(state["schema_version"], 2)
         self.assertEqual(state["effective_mode"], "stable")
+        self.assertTrue((fresh_external / "routes.json").is_file())
+        self.assertTrue((fresh_external / "state.json").is_file())
+        self.assertTrue((fresh_external / "evidence").is_dir())
+        self.assertTrue((fresh_external / "secrets.env").is_file())
+        self.assertEqual((fresh_external / "secrets.env").stat().st_mode & 0o777, 0o600)
+        external_state = json.loads((fresh_external / "state.json").read_text())
+        self.assertEqual(external_state["adapter"]["state"], "stopped")
+        self.assertFalse(external_state["local_auth"]["token_present"])
 
     def test_legacy_import_updates_registry_and_state(self) -> None:
         source_dir = Path(self.temp_dir.name) / "legacy-source"
@@ -14016,6 +14163,138 @@ class CliTests(unittest.TestCase):
             "managed",
         )
 
+    def test_legacy_import_optionally_imports_external_models_layout(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-external-source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+        legacy_external = source_dir / "external-models"
+        legacy_external.mkdir(parents=True, exist_ok=True)
+        (legacy_external / "routes.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "routes": [
+                        {
+                            "schema_version": 1,
+                            "route_id": "wbp-imported",
+                            "display_name": "Imported",
+                            "provider": "openrouter",
+                            "base_url": "https://openrouter.ai/api/v1",
+                            "endpoint_path": "/chat/completions",
+                            "upstream_model": "deepseek/deepseek-chat",
+                            "compatibility": "openai_chat_completions",
+                            "auth": {
+                                "type": "bearer",
+                                "secret_ref": "OPENROUTER_API_KEY",
+                            },
+                            "cost_class": "paid_or_free_limited",
+                            "lane_role": "candidate",
+                            "fallback_eligible": False,
+                            "enabled": True,
+                        }
+                    ],
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (legacy_external / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {"wbp-imported": {"availability_state": "unverified"}},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (legacy_external / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=imported-key\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("legacy", "import", "--source-dir", str(source_dir), "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(
+            payload["external_models_result"]["final_outcome"],
+            "external_models_import_completed",
+        )
+        imported_routes = json.loads((self.external_models_dir / "routes.json").read_text())
+        self.assertEqual(imported_routes["routes"][0]["route_id"], "wbp-imported")
+        imported_state = json.loads((self.external_models_dir / "state.json").read_text())
+        self.assertIn("wbp-imported", imported_state["routes"])
+        self.assertEqual(
+            (self.external_models_dir / "secrets.env").read_text(encoding="utf-8"),
+            "OPENROUTER_API_KEY=imported-key\n",
+        )
+        self.assertEqual((self.external_models_dir / "secrets.env").stat().st_mode & 0o777, 0o600)
+
+    def test_legacy_import_marks_external_models_not_applicable_when_missing(self) -> None:
+        source_dir = Path(self.temp_dir.name) / "legacy-no-external-models"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        (source_dir / "backend-registry.json").write_text(
+            (self.managed_dir / "backend-registry.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "supervisor-state.json").write_text(
+            (self.managed_dir / "supervisor-state.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (source_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+        (source_dir / "runtime-effective-mode.txt").write_text(
+            "managed\n", encoding="utf-8"
+        )
+        (source_dir / "config.toml").write_text(
+            'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:8320/v1"\n',
+            encoding="utf-8",
+        )
+
+        result = self.run_cli("legacy", "import", "--source-dir", str(source_dir), "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload["external_models_result"]["final_outcome"],
+            "external_models_source_missing",
+        )
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+
     def test_legacy_import_rolls_back_on_invalid_source_state(self) -> None:
         before_registry = (self.managed_dir / "backend-registry.json").read_text(
             encoding="utf-8"
@@ -14079,6 +14358,118 @@ class CliTests(unittest.TestCase):
         self.assertFalse((self.profile_dir / "config.toml").exists())
         self.assertTrue((self.profile_dir / "auth.json").exists())
         self.assertTrue(payload["reset_result"]["auth_file_preserved"])
+
+    def test_companion_reset_clears_external_models_state_and_preserves_secrets(self) -> None:
+        (self.external_models_dir / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (self.external_models_dir / "routes.lock").write_text("lock\n", encoding="utf-8")
+        (self.external_models_dir / "state.lock").write_text("lock\n", encoding="utf-8")
+        (self.external_models_dir / "evidence").mkdir(parents=True, exist_ok=True)
+        (self.external_models_dir / "evidence" / "sample.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "secrets.env").write_text(
+            "KEY=value\n", encoding="utf-8"
+        )
+        os.chmod(self.external_models_dir / "secrets.env", 0o600)
+
+        result = self.run_cli("companion", "reset", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+        self.assertFalse((self.external_models_dir / "state.json").exists())
+        self.assertFalse((self.external_models_dir / "routes.lock").exists())
+        self.assertFalse((self.external_models_dir / "state.lock").exists())
+        self.assertFalse((self.external_models_dir / "evidence").exists())
+        self.assertTrue((self.external_models_dir / "secrets.env").exists())
+        self.assertTrue(payload["external_models_result"]["secrets_preserved"])
+
+    def test_companion_uninstall_clears_external_models_state_and_preserves_secrets(self) -> None:
+        (self.external_models_dir / "routes.json").write_text(
+            json.dumps({"schema_version": 1, "routes": []}) + "\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "policy": {
+                        "paid_routes_enabled": False,
+                        "paid_route_allowlist": [],
+                        "paid_route_default": "blocked",
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "stopped",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "init",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": False,
+                        "token_created_at_utc": None,
+                    },
+                    "routes": {},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (self.external_models_dir / "evidence").mkdir(parents=True, exist_ok=True)
+        (self.external_models_dir / "evidence" / "sample.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+        (self.external_models_dir / "secrets.env").write_text(
+            "KEY=value\n", encoding="utf-8"
+        )
+        os.chmod(self.external_models_dir / "secrets.env", 0o600)
+
+        result = self.run_cli("companion", "uninstall", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertFalse((self.external_models_dir / "routes.json").exists())
+        self.assertFalse((self.external_models_dir / "state.json").exists())
+        self.assertFalse((self.external_models_dir / "evidence").exists())
+        self.assertTrue((self.external_models_dir / "secrets.env").exists())
+        self.assertTrue(payload["external_models_result"]["secrets_preserved"])
 
     def test_sync_returns_single_json_object(self) -> None:
         result = self.run_cli("sync", "--json")

@@ -129,6 +129,11 @@ EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
     "stable-runtime-config.generated.yaml",
     "evidence-packet.json",
 }
+EXPERIMENTAL_EXTERNAL_MODELS_EXCLUDED_BASENAMES = {
+    "routes.json",
+    "state.json",
+    "secrets.env",
+}
 EXPERIMENTAL_PACKAGE_EXCLUDED_DIR_PARTS = {
     ".codex-custom-cli",
     "__pycache__",
@@ -3678,6 +3683,11 @@ def is_experimental_package_root_file_allowed(relative_path: Path) -> bool:
 def is_experimental_package_path_excluded(relative_path: Path) -> bool:
     lowered_parts = [part.lower() for part in relative_path.parts]
     basename = relative_path.name.lower()
+    if lowered_parts[:2] == ["wild_boar_proxy", "external_models"]:
+        if basename in EXPERIMENTAL_EXTERNAL_MODELS_EXCLUDED_BASENAMES:
+            return True
+        if "evidence" in lowered_parts[2:]:
+            return True
     if basename.startswith("."):
         return True
     if any(part.startswith(".") for part in lowered_parts):
@@ -3695,6 +3705,14 @@ def is_experimental_package_path_excluded(relative_path: Path) -> bool:
     if stem_tokens.intersection(EXPERIMENTAL_PACKAGE_EXCLUDED_STEM_TOKENS):
         return True
     return False
+
+
+def is_experimental_package_archive_entry_allowed(relative_path: Path) -> bool:
+    if len(relative_path.parts) == 1:
+        return is_experimental_package_root_file_allowed(relative_path)
+    if relative_path.parts[0] not in EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS:
+        return False
+    return not is_experimental_package_path_excluded(relative_path)
 
 
 def list_experimental_package_files(source_root: Path, output_dir: Path) -> list[Path]:
@@ -3899,6 +3917,51 @@ def run_package_experimental_verify(
                 }
             },
         )
+    violating_entries: list[str] = []
+    try:
+        with tarfile.open(artifact_path, "r:gz") as archive:
+            for member in archive.getmembers():
+                relative_path = Path(member.name)
+                if relative_path.is_absolute() or any(
+                    part in ("", ".", "..") for part in relative_path.parts
+                ):
+                    violating_entries.append(member.name)
+                    continue
+                if member.issym() or member.islnk():
+                    violating_entries.append(member.name)
+                    continue
+                if not member.isfile():
+                    continue
+                if not is_experimental_package_archive_entry_allowed(relative_path):
+                    violating_entries.append(member.name)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to inspect experimental package contents: {exc}",
+            machine_error_code="PACKAGE_VERIFY_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+    if violating_entries:
+        return build_command_payload(
+            ok=False,
+            human_message="Experimental package boundary verification failed.",
+            machine_error_code="PACKAGE_BOUNDARY_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "boundary_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": True,
+                    "violating_entries": sorted(violating_entries),
+                }
+            },
+        )
     return build_command_payload(
         ok=True,
         human_message="Experimental package checksum verification passed.",
@@ -3915,6 +3978,10 @@ def run_package_experimental_verify(
                 "artifact_sha256_expected": str(expected_sha256),
                 "artifact_sha256_observed": observed_sha256,
                 "checksum_match": True,
+                "boundary_check": {
+                    "status": "passed",
+                    "violating_entries": [],
+                },
             }
         },
     )
@@ -12118,6 +12185,10 @@ def build_installer_default_state_payload() -> dict[str, Any]:
 
 
 def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
+    from .external_models.integration import ensure_installed_layout, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
+    external_paths = ExternalModelsPaths.from_env()
     before_state = snapshot_path_states(
         [
             paths.profile_dir,
@@ -12128,6 +12199,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             paths.config_toml,
             paths.runtime_mode_file,
             paths.runtime_effective_mode_file,
+            *installer_managed_paths(external_paths),
         ]
     )
     with serialized_lock(paths):
@@ -12144,6 +12216,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             write_json_atomic(paths.state_file, build_installer_default_state_payload())
         if not paths.config_toml.exists():
             write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
+        ensure_installed_layout(external_paths)
     changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
     return build_command_payload(
         ok=True,
@@ -12157,19 +12230,30 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             "installer_result": {
                 "status": "owner_path_emitted",
                 "final_outcome": "baseline_initialized",
-            }
+            },
+            "external_models_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "layout_initialized",
+                "root_dir": str(external_paths.root_dir),
+                "secrets_mode": oct(external_paths.secrets_file.stat().st_mode & 0o777),
+            },
         },
     )
 
 
 def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any]:
+    from .external_models.integration import import_legacy_layout, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
     source_dir = Path(source_dir_raw).expanduser()
+    external_paths = ExternalModelsPaths.from_env()
     write_targets = [
         paths.registry_file,
         paths.state_file,
         paths.config_toml,
         paths.runtime_mode_file,
         paths.runtime_effective_mode_file,
+        *installer_managed_paths(external_paths),
     ]
     before_state = snapshot_path_states(write_targets)
     legacy_result: dict[str, Any] = {
@@ -12179,6 +12263,11 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
         "rollback_attempted": False,
         "rollback_outcome": "not_needed",
         "final_outcome": "pending",
+    }
+    external_models_result: dict[str, Any] = {
+        "status": "pending",
+        "final_outcome": "pending",
+        "imported_files": [],
     }
     if not source_dir.exists() or not source_dir.is_dir():
         legacy_result["final_outcome"] = "source_missing"
@@ -12190,7 +12279,10 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
             severity="recoverable",
             operator_action="user_action",
             changed_files=[],
-            extra={"legacy_import_result": legacy_result},
+            extra={
+                "legacy_import_result": legacy_result,
+                "external_models_result": external_models_result,
+            },
         )
     try:
         with serialized_lock(paths):
@@ -12224,6 +12316,7 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
                 write_text_atomic(paths.config_toml, staged_config)
             write_text_atomic(paths.runtime_mode_file, staged_mode or "stable")
             write_text_atomic(paths.runtime_effective_mode_file, staged_effective or "stable")
+            external_models_result = import_legacy_layout(source_dir, external_paths)
     except RuntimeErrorInfo as exc:
         legacy_result["rollback_attempted"] = True
         legacy_result["transaction_phase"] = "rollback"
@@ -12239,7 +12332,10 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
             severity=exc.severity,
             operator_action=exc.operator_action,
             changed_files=detect_changed_files_by_state(before_state, write_targets),
-            extra={"legacy_import_result": legacy_result},
+            extra={
+                "legacy_import_result": legacy_result,
+                "external_models_result": external_models_result,
+            },
             exit_code=exc.exit_code,
         )
     legacy_result["final_outcome"] = "import_completed"
@@ -12251,11 +12347,18 @@ def run_legacy_import(paths: RuntimePaths, source_dir_raw: str) -> dict[str, Any
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(before_state, write_targets),
-        extra={"legacy_import_result": legacy_result},
+        extra={
+            "legacy_import_result": legacy_result,
+            "external_models_result": external_models_result,
+        },
     )
 
 
 def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict[str, Any]:
+    from .external_models.integration import clear_managed_state, installer_managed_paths
+    from .external_models.paths import ExternalModelsPaths
+
+    external_paths = ExternalModelsPaths.from_env()
     targets = [
         paths.managed_dir,
         paths.registry_file,
@@ -12266,6 +12369,7 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
         paths.runtime_effective_mode_file,
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
+        *installer_managed_paths(external_paths),
     ]
     before_state = snapshot_path_states(targets)
     reset_result: dict[str, Any] = {
@@ -12278,6 +12382,7 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
     with serialized_lock(paths):
         if paths.managed_dir.exists():
             shutil.rmtree(paths.managed_dir)
+        clear_managed_state(external_paths, preserve_secrets=True)
         for file_path in (
             paths.config_toml,
             paths.runtime_mode_file,
@@ -12306,5 +12411,12 @@ def run_companion_reset(paths: RuntimePaths, *, uninstall: bool = False) -> dict
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(before_state, targets),
-        extra={"reset_result": reset_result},
+        extra={
+            "reset_result": reset_result,
+            "external_models_result": {
+                "status": "owner_path_emitted",
+                "final_outcome": "managed_state_cleared_secrets_preserved",
+                "secrets_preserved": external_paths.secrets_file.exists(),
+            },
+        },
     )

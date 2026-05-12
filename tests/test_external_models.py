@@ -12,6 +12,7 @@ from pathlib import Path
 
 from wild_boar_proxy.external_models import contracts, routes
 from wild_boar_proxy.external_models import lifecycle
+from wild_boar_proxy.external_models.integration import ensure_installed_layout
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
 from wild_boar_proxy.external_models.state import capture_local_evidence, load_state_file
 from wild_boar_proxy.runtime import RuntimeErrorInfo
@@ -63,6 +64,10 @@ class ExternalModelContractTests(unittest.TestCase):
             old = dict(os.environ)
             try:
                 os.environ["WBP_EXTERNAL_MODELS_DIR"] = str(root)
+                os.environ["WBP_EXTERNAL_MODELS_SECRETS"] = str(root / "custom-secrets.env")
+                os.environ["WBP_EXTERNAL_MODELS_EVIDENCE"] = str(root / "artifacts")
+                os.environ["WBP_EXTERNAL_MODELS_ROUTES_LOCK"] = str(root / "custom-routes.lock")
+                os.environ["WBP_EXTERNAL_MODELS_STATE_LOCK"] = str(root / "custom-state.lock")
                 paths = ExternalModelsPaths.from_env()
             finally:
                 os.environ.clear()
@@ -70,6 +75,25 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertEqual(paths.root_dir, root.resolve())
             self.assertEqual(paths.routes_file, (root / "routes.json").resolve())
             self.assertEqual(paths.state_file, (root / "state.json").resolve())
+            self.assertEqual(paths.secrets_file, (root / "custom-secrets.env").resolve())
+            self.assertEqual(paths.evidence_dir, (root / "artifacts").resolve())
+            self.assertEqual(paths.routes_lock, (root / "custom-routes.lock").resolve())
+            self.assertEqual(paths.state_lock, (root / "custom-state.lock").resolve())
+
+    def test_ensure_installed_layout_creates_neutral_files_and_secrets_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = ExternalModelsPaths.from_root(Path(temp_dir) / "external-models")
+            ensure_installed_layout(paths)
+            self.assertTrue(paths.root_dir.is_dir())
+            self.assertTrue(paths.evidence_dir.is_dir())
+            self.assertEqual(
+                json.loads(paths.routes_file.read_text(encoding="utf-8"))["routes"], []
+            )
+            state = json.loads(paths.state_file.read_text(encoding="utf-8"))
+            self.assertEqual(state["adapter"]["state"], "stopped")
+            self.assertFalse(state["local_auth"]["token_present"])
+            self.assertEqual(paths.secrets_file.read_text(encoding="utf-8"), "")
+            self.assertEqual(paths.secrets_file.stat().st_mode & 0o777, 0o600)
 
     def test_capture_local_evidence_writes_non_self_referential_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -149,4 +173,4 @@ class ZeroTestSelectionGuardTests(unittest.TestCase):
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(
             ExternalModelContractTests
         )
-        self.assertGreaterEqual(suite.countTestCases(), 4)
+        self.assertGreaterEqual(suite.countTestCases(), 5)

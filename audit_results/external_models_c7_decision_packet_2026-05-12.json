@@ -1,0 +1,140 @@
+{
+  "contour_id": "external_models_c7_installer_and_package_integration",
+  "date": "2026-05-12",
+  "status": "completed",
+  "machine_error_code": "OK",
+  "final_verdict": "bounded_external_models_installer_package_integration_completed",
+  "human_reason": "External-models managed artifact boundaries are now integrated into existing installer/init, legacy import, companion reset/uninstall, and package experimental owner surfaces without changing runtime truth or live-path state.",
+  "owner_surfaces_touched": [
+    "installer init --json",
+    "legacy import --source-dir <path> --json",
+    "companion reset --json",
+    "companion uninstall --json",
+    "package experimental build --output-dir <path> --json",
+    "package experimental verify --manifest <path> --json"
+  ],
+  "bounded_changes": [
+    {
+      "surface": "installer init --json",
+      "result": "creates external-models skeleton under the isolated configured root",
+      "details": [
+        "routes.json default payload created when missing",
+        "state.json neutral payload created when missing",
+        "evidence directory created",
+        "empty secrets.env created or normalized to 0600"
+      ]
+    },
+    {
+      "surface": "legacy import --source-dir <path> --json",
+      "result": "optionally imports compatible persisted external-models artifacts only",
+      "details": [
+        "looks only for source-dir/external-models",
+        "imports routes.json, state.json, and secrets.env when present",
+        "returns not_applicable when no compatible external-models source exists",
+        "does not reinterpret provider or route semantics"
+      ]
+    },
+    {
+      "surface": "companion reset/uninstall --json",
+      "result": "clears external-models managed state while preserving secrets boundary",
+      "details": [
+        "routes.json removed",
+        "state.json removed",
+        "lock files removed",
+        "evidence directory removed",
+        "secrets.env preserved"
+      ]
+    },
+    {
+      "surface": "package experimental build/verify",
+      "result": "excludes and verifies external-models runtime-like artifacts",
+      "details": [
+        "routes.json excluded from external_models subtree",
+        "state.json excluded from external_models subtree",
+        "secrets.env excluded from external_models subtree",
+        "evidence/* excluded from external_models subtree",
+        "verify now checks archive boundary, not checksum only"
+      ]
+    }
+  ],
+  "forbidden_claims_respected": [
+    "no runtime readiness claim",
+    "no pilot readiness claim",
+    "no release progress claim",
+    "no live-path reopening claim"
+  ],
+  "tests": [
+    {
+      "command": "python3 -m unittest -q tests.test_external_models",
+      "observed_result": "Ran 9 tests ... OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli_external_models",
+      "observed_result": "Ran 16 tests ... OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k installer",
+      "observed_result": "Ran 2 tests ... OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k legacy",
+      "observed_result": "Ran 5 tests ... OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k companion",
+      "observed_result": "Ran 6 tests ... OK"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_cli -k package",
+      "observed_result": "Ran 9 tests ... OK"
+    }
+  ],
+  "build_verification": [
+    {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "manual_verification": {
+    "installer_probe": {
+      "status": "passed",
+      "observed_result": "INSTALLER: OK layout_initialized"
+    },
+    "reset_probe": {
+      "status": "passed",
+      "observed_result": "RESET: OK managed_state_cleared_secrets_preserved True"
+    },
+    "package_verify_probe": {
+      "status": "passed",
+      "observed_result": "VERIFY: OK passed"
+    },
+    "archive_listing": {
+      "status": "passed",
+      "observed_entries": [
+        "docs/guide.md",
+        "wild_boar_proxy/module.py"
+      ],
+      "external_models_runtime_like_entries_present": false
+    }
+  },
+  "scope_check": {
+    "runtime_truth_changed": false,
+    "live_path_truth_changed": false,
+    "new_owner_surfaces_added": false,
+    "real_user_paths_mutated_in_verification": false,
+    "unrelated_dirty_runtime_findings_present_but_out_of_scope": true
+  },
+  "next_action": {
+    "status": "complete",
+    "remaining_v24_items": [
+      "custom transforms",
+      "Codex config mutation",
+      "sandbox/tool execution"
+    ],
+    "deferred_by_contour": true
+  }
+}

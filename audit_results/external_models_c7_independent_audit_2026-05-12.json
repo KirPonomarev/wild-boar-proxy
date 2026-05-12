@@ -1,0 +1,21 @@
+{
+  "contour_id": "external_models_c7_installer_and_package_integration",
+  "date": "2026-05-12",
+  "auditor": "Feynman",
+  "model": "gpt-5.4-mini",
+  "status": "completed",
+  "machine_error_code": "OK",
+  "audit_verdict": "contour_scope_canon_safe",
+  "contour_scope_findings": [],
+  "pre_existing_unrelated_findings": [
+    {
+      "severity": "P2",
+      "title": "run_promote skips selected-backend participation proof on one branch",
+      "file": "wild_boar_proxy/runtime.py",
+      "function": "run_promote",
+      "detail": "selected_backend_requirement_met becomes true whenever lock_acquired is true, so selected-backend participation is not rechecked on that branch before routing_change_observed can become true.",
+      "scope_relation": "outside_c7_scope"
+    }
+  ],
+  "final_note": "The earlier package verify symlink bypass is closed in the current contour diff. C7 itself is canon-safe, while the overall worktree still contains unrelated dirty runtime drift outside this contour."
+}

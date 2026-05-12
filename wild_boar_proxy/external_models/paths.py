@@ -22,6 +22,19 @@ class ExternalModelsPaths:
     state_lock: Path
 
     @classmethod
+    def from_root(cls, root_dir: Path) -> "ExternalModelsPaths":
+        resolved_root = _resolve_path(str(root_dir))
+        return cls(
+            root_dir=resolved_root,
+            routes_file=_resolve_path(str(resolved_root / "routes.json")),
+            state_file=_resolve_path(str(resolved_root / "state.json")),
+            secrets_file=_resolve_path(str(resolved_root / "secrets.env")),
+            evidence_dir=_resolve_path(str(resolved_root / "evidence")),
+            routes_lock=_resolve_path(str(resolved_root / "routes.lock")),
+            state_lock=_resolve_path(str(resolved_root / "state.lock")),
+        )
+
+    @classmethod
     def from_env(cls) -> "ExternalModelsPaths":
         root_dir = _resolve_path(
             os.environ.get(
