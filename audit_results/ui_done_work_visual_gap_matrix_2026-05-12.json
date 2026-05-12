@@ -1,0 +1,320 @@
+{
+  "contour_id": "UI_DONE_WORK_VISUAL_INTERACTION_GAP_REVIEW",
+  "generated_on": "2026-05-12",
+  "repo_root": "/Volumes/Work/wild-boar-proxy",
+  "mode": "audit_backlog_only",
+  "behavior_changes": false,
+  "implementation_now_policy": "No finding may be implemented in this contour.",
+  "canon_arbitration": [
+    "If visual fidelity conflicts with command truth, command truth wins.",
+    "If UI ambition conflicts with current COMMAND_API, current COMMAND_API wins.",
+    "If a finding requires implementation, it is recorded as a future contour item.",
+    "If a finding touches runtime behavior, it is out of scope for this contour."
+  ],
+  "inputs": {
+    "canon_docs": [
+      "CANON.md",
+      "MASTER_PLAN.md",
+      "RUNTIME_CONTRACT.md",
+      "COMMAND_API.md",
+      "DELIVERY_RULES.md",
+      "WORKFLOW_OS_V1_2.md"
+    ],
+    "previous_artifacts": [
+      "audit_results/ui_done_work_screen_passports_2026-05-12.json",
+      "audit_results/ui_done_work_action_surface_registry_2026-05-12.json",
+      "audit_results/ui_done_work_backfill_closeout_2026-05-12.md"
+    ],
+    "source_design_screens_reviewed_outside_repo": [
+      "01_overview_dashboard.png",
+      "04_accounts.png",
+      "09_confirm_action.png"
+    ],
+    "own_ui_screenshots": [
+      {
+        "path": "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/overview_fixture_1600x1000.png",
+        "viewport": "1600x1000",
+        "source": "fixture",
+        "screen": "overview"
+      },
+      {
+        "path": "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/accounts_fixture_1600x1000.png",
+        "viewport": "1600x1000",
+        "source": "fixture",
+        "screen": "accounts"
+      }
+    ]
+  },
+  "scope_guard": {
+    "allowed_writes_only": true,
+    "code_files_changed": false,
+    "desktop_files_changed": false,
+    "runtime_files_changed": false,
+    "dirty_external_tail_touched": false,
+    "private_external_reference_material_committed": false
+  },
+  "findings": [
+    {
+      "id": "UI_GAP_001_OVERVIEW_VIEWPORT_DENSITY",
+      "title": "Overview action ledger creates 1600x1000 viewport density pressure.",
+      "screen_or_action": "01_overview_dashboard",
+      "layer": "visual",
+      "severity": "medium",
+      "evidence": {
+        "screenshots": [
+          "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/overview_fixture_1600x1000.png"
+        ],
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:161",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css:69",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css:71"
+        ],
+        "observed": "At 1600x1000 the own-UI screenshot shows the action panel consuming vertical space and the lower overview content partially below the visible window. Source-design comparison was reviewed outside repo, but this finding is supported by the own-UI screenshot and current layout refs only."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:192 requires truthful UI visibility of mode, endpoint, health, and pool state.",
+        "WORKFLOW_OS_V1_2.md:452 through WORKFLOW_OS_V1_2.md:462 block design polish here; this contour may only record the gap."
+      ],
+      "recommended_future_contour": "UI_WEB_ACTION_LEDGER_AND_ERROR_STATES",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_002_OVERVIEW_HEADER_CONTROL_DENSITY",
+      "title": "Overview header mixes fixture controls with operator actions and diverges structurally from the source shell.",
+      "screen_or_action": "01_overview_dashboard",
+      "layer": "visual",
+      "severity": "low",
+      "evidence": {
+        "screenshots": [
+          "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/overview_fixture_1600x1000.png"
+        ],
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:80",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:87",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:107",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:113",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:119",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:125",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:131"
+        ],
+        "observed": "The current prototype header includes source/fixture selectors and several direct action buttons. This is useful for verification, but it is not structurally aligned with the cleaner source design header."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:175 says the GUI value is policy layer, truthful runtime status, staged scaling, and operator UX.",
+        "MASTER_PLAN.md:176 says every generic GUI feature must pass the managed-operations filter."
+      ],
+      "recommended_future_contour": "UI_WEB_VISUAL_STABILIZATION_PASS",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_003_ACCOUNTS_COPY_STILL_SAYS_LIFECYCLE_DEFERRED",
+      "title": "Accounts contains stale lifecycle-deferred copy even though live validate/hold/release actions are implemented.",
+      "screen_or_action": "04_accounts",
+      "layer": "truth_ux",
+      "severity": "high",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:333",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:393",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:625",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:712",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:715",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:717",
+          "/Volumes/Work/wild-boar-proxy/audit_results/ui_done_work_screen_passports_2026-05-12.json:144"
+        ],
+        "observed": "The live Accounts subtitle still says lifecycle actions are deferred, and the static Accounts table footer says read-only lifecycle deferred. The live banner copy is more accurate because it says hold/release are bounded action requests. The current live Accounts implementation admits bounded per-row validate, hold, and release."
+      },
+      "canon_basis": [
+        "CANON.md:36 requires one active truth surface per topic.",
+        "CANON.md:37 forbids split-brain between docs and runtime; this gap is the UI-copy version of that risk."
+      ],
+      "recommended_future_contour": "UI_WEB_CONFIRMATION_SYSTEM_HARDENING",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_004_ACCOUNTS_DISABLED_PRIMARY_ACTIONS_LOOK_AVAILABLE",
+      "title": "Accounts fixture mode shows disabled top-level actions with strong button styling.",
+      "screen_or_action": "04_accounts",
+      "layer": "action_ux",
+      "severity": "medium",
+      "evidence": {
+        "screenshots": [
+          "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/accounts_fixture_1600x1000.png"
+        ],
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:137",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:144",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css:324",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css:345"
+        ],
+        "observed": "The Add Account and bulk validate controls are disabled, but the primary visual treatment remains prominent enough to be read as an available path in a quick scan."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:175 makes operator UX part of the product value, so disabled high-risk controls should not visually read as ready.",
+        "The previous action registry records add/onboard as blocked or absent until a later action-gate contour."
+      ],
+      "recommended_future_contour": "UI_WEB_ACCOUNTS_ONBOARD_MODAL_GATE",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_005_ACCOUNTS_SEARCH_FILTERS_DECORATIVE",
+      "title": "Accounts search and filter affordances are visible but not wired.",
+      "screen_or_action": "04_accounts",
+      "layer": "action_ux",
+      "severity": "low",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:276",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:278",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:285",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:874",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:894",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:906"
+        ],
+        "observed": "Startup wiring covers source, fixture picker, navigation, live actions, confirmation, and refresh. No search/filter event wiring is present."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:176 says every generic GUI feature must pass the managed-operations filter.",
+        "WORKFLOW_OS_V1_2.md:460 through WORKFLOW_OS_V1_2.md:462 prevent fixing decorative UI controls in this contour."
+      ],
+      "recommended_future_contour": "UI_WEB_VISUAL_STABILIZATION_PASS",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_006_ACCOUNTS_LARGE_POOL_NAVIGATION",
+      "title": "Accounts rendering slices to 12 rows without pagination controls, which can hide larger live pool details.",
+      "screen_or_action": "04_accounts",
+      "layer": "truth_ux",
+      "severity": "medium",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:638",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:649",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:331",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:333"
+        ],
+        "observed": "The UI reports visible count and total count, but renderAccountRows only renders accounts.slice(0, 12), and there is no next/previous control."
+      },
+      "canon_basis": [
+        "CANON.md:42 requires architecture designed for 20 accounts from day one.",
+        "MASTER_PLAN.md:194 requires data format and UI readiness for 20 accounts without redesign."
+      ],
+      "recommended_future_contour": "UI_WEB_VISUAL_STABILIZATION_PASS",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_007_HOLD_RELEASE_NESTED_TRUTH_FIELDS_NOT_RENDERED",
+      "title": "Hold/release action results are shown through generic fields only, not through lifecycle-specific owner-packet fields.",
+      "screen_or_action": "hold_account / release_account",
+      "layer": "truth_ux",
+      "severity": "medium",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:878",
+          "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:886",
+          "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:899",
+          "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:903",
+          "/Volumes/Work/wild-boar-proxy/COMMAND_API.md:920",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:403",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:408",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:412"
+        ],
+        "observed": "The current action panel renders top-level status, machine code, message, next action, and changed files. COMMAND_API allows nested hold_result/release_result fields that are not surfaced yet."
+      },
+      "canon_basis": [
+        "COMMAND_API.md:886 says hold/release success must not be inferred from subprocess exit alone.",
+        "COMMAND_API.md:899 through COMMAND_API.md:920 define optional nested hold/release result fields that can inform later action-ledger rendering."
+      ],
+      "recommended_future_contour": "UI_WEB_ACTION_LEDGER_AND_ERROR_STATES",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_008_CONFIRMATION_COPY_TOO_TECHNICAL_FOR_OPERATOR_RISK",
+      "title": "Confirmation modal exposes raw technical booleans and is not yet strong enough for future destructive actions.",
+      "screen_or_action": "confirmation modal",
+      "layer": "copy",
+      "severity": "medium",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:339",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:345",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:347",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:348",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:351",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:454",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:460",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:461",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:462"
+        ],
+        "observed": "The modal is truthful and generic, but it displays UI action, true/false mutation state, and required/not required refresh state rather than a risk-calibrated operator explanation."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:175 makes operator UX part of the product value.",
+        "COMMAND_API.md:14 forbids UI fallback parsing; confirmation copy must explain command meaning without inventing extra truth."
+      ],
+      "recommended_future_contour": "UI_WEB_CONFIRMATION_SYSTEM_HARDENING",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_009_FIXTURE_GREEN_CAN_LOOK_LIKE_RUNTIME_GREEN",
+      "title": "Healthy fixture state uses green success styling even though the text correctly says it is not runtime truth.",
+      "screen_or_action": "overview/accounts fixture states",
+      "layer": "safety",
+      "severity": "low",
+      "evidence": {
+        "screenshots": [
+          "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/overview_fixture_1600x1000.png",
+          "audit_results/ui_done_work_visual_gap_screenshots_2026-05-12/accounts_fixture_1600x1000.png"
+        ],
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:317",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:325",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:327",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:623",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/styles/overview.css:395"
+        ],
+        "observed": "The copy is explicit, but fixture banners and chips still use success colors. This is acceptable for the current prototype but should be rechecked before desktop transfer."
+      },
+      "canon_basis": [
+        "CANON.md:38 forbids false-green or stale-green status.",
+        "The current copy mitigates the issue; this is a low-severity safety gap for later visual treatment."
+      ],
+      "recommended_future_contour": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT",
+      "implementation_now": false
+    },
+    {
+      "id": "UI_GAP_010_BULK_LIFECYCLE_DEFERRED",
+      "title": "Bulk lifecycle affordances remain deferred while visible table selection suggests future bulk behavior.",
+      "screen_or_action": "04_accounts",
+      "layer": "deferred",
+      "severity": "low",
+      "evidence": {
+        "refs": [
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:137",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:678",
+          "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:681",
+          "/Volumes/Work/wild-boar-proxy/audit_results/ui_done_work_screen_passports_2026-05-12.json:201",
+          "/Volumes/Work/wild-boar-proxy/audit_results/ui_done_work_action_surface_registry_2026-05-12.json:265"
+        ],
+        "observed": "Per-row account action gates are implemented, but bulk selection remains decorative/deferred. This is safe today but must not be accidentally activated without a separate action contract."
+      },
+      "canon_basis": [
+        "MASTER_PLAN.md:372 says operations that change active routing, registry, mode, or managed state must go through one serialized path.",
+        "MASTER_PLAN.md:377 says UI and automation use JSON output as the primary interface; bulk lifecycle would need its own admitted JSON command path."
+      ],
+      "recommended_future_contour": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT",
+      "implementation_now": false
+    }
+  ],
+  "independent_inspector_summary": {
+    "agent": "read_only_inspector",
+    "reported_code_changes_needed": false,
+    "reported_canon_conflicts": false,
+    "accepted_findings": [
+      "UI_GAP_005_ACCOUNTS_SEARCH_FILTERS_DECORATIVE",
+      "UI_GAP_006_ACCOUNTS_LARGE_POOL_NAVIGATION",
+      "UI_GAP_007_HOLD_RELEASE_NESTED_TRUTH_FIELDS_NOT_RENDERED",
+      "UI_GAP_010_BULK_LIFECYCLE_DEFERRED"
+    ]
+  }
+}
