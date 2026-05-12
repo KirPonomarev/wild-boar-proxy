@@ -1,0 +1,79 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_ONBOARD_MODAL_GATE",
+  "date": "2026-05-13",
+  "auditor_type": "read_only_independent_inspection",
+  "verdict": "pass_for_scoped_onboard_modal_gate_with_dirty_worktree_scope_note",
+  "findings": [],
+  "verified_ok": [
+    {
+      "claim": "adapter exact argv is accounts onboard --json with no browser args",
+      "evidence": [
+        "wild_boar_proxy/web_design_command_adapter.py defines accounts_onboard as accounts onboard --json",
+        "tests/test_web_design_command_adapter.py asserts accounts_onboard has no required or allowed args"
+      ]
+    },
+    {
+      "claim": "browser onboarding sends ui_action only",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js runOnboardFromModal calls maybeConfirmAndRun(\"onboard_account\") without extra payload",
+        "tests/test_web_design_live_server.py asserts accounts_onboard raw action and auth/path/credential/backend fields are rejected"
+      ]
+    },
+    {
+      "claim": "outcome mapper does not overclaim onboarding success",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py _onboarding_summary gates success on top-level ok, admitted final_outcome, reserve_first_enforced, reserve pool, no active routing change, and selected backend proof",
+        "tests/test_web_design_live_server.py covers no_new_auth_detected, ambiguous_new_auth_detection, missing onboarding_result, validate_failed, and top-level command error as non-success"
+      ]
+    },
+    {
+      "claim": "selected backend id is exposed only for admitted reserve-first success",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py emits selected_backend_id only when onboarding ui_state is success",
+        "tests/test_web_design_live_server.py asserts non-success onboarding summaries do not expose selected_backend_id"
+      ]
+    },
+    {
+      "claim": "modal has no file picker, path, credentials, or backend id inputs",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/index.html modal copy states browser does not send auth paths, source dirs, credentials, or backend ids",
+        "tests/test_web_design_ui.py guards against file input, source_dir, auth_ref, credentials, password, backend_id, raw accounts onboard, and auto-promote copy"
+      ]
+    },
+    {
+      "claim": "post-action truth refresh remains accounts readonly",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py onboard_account metadata requires post_action_refresh_required",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js refreshes accounts readonly when current screen is Accounts"
+      ]
+    }
+  ],
+  "scope_findings_adjudicated": [
+    {
+      "severity": "medium_if_staged_with_this_contour",
+      "finding": "dirty worktree contains runtime.py changes outside the UI contour",
+      "adjudication": "not introduced by this contour and must not be staged for this contour; remains deferred to WORKTREE_TAIL_ADJUDICATION"
+    },
+    {
+      "severity": "medium_if_staged_with_this_contour",
+      "finding": "dirty worktree contains external lab changes outside the UI contour",
+      "adjudication": "not introduced by this contour and must not be staged for this contour; remains deferred to WORKTREE_TAIL_ADJUDICATION"
+    }
+  ],
+  "unresolved_gaps": [
+    {
+      "item": "no real-browser E2E run for onboarding",
+      "adjudication": "accepted for this bounded gate because adapter, static UI, and live-server harness tests prove command boundaries; full browser operator flow is scheduled for UI_WEB_END_TO_END_OPERATOR_FLOW"
+    },
+    {
+      "item": "modal visual parity with source render package is not attempted",
+      "adjudication": "accepted because this contour is a bounded command gate; visual parity is deferred"
+    }
+  ],
+  "verification": {
+    "targeted_suite": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+    "targeted_result": "61 tests passed",
+    "full_suite": "python3 -m unittest discover -s tests -p 'test*.py'",
+    "full_result": "555 tests passed"
+  }
+}

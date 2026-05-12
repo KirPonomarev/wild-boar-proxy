@@ -281,16 +281,16 @@ async function runUiAction(uiAction, extraPayload = {}) {
 }
 
 function applyActionAvailability() {
-  for (const button of document.querySelectorAll(".live-action, .account-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = button.classList.contains("account-action");
+    const requiresLive = button.classList.contains("account-action") || button.classList.contains("onboard-action");
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
     const available = metadata.available !== false && (!requiresLive || isLiveSource);
     button.disabled = !available;
     button.dataset.available = available ? "true" : "false";
     button.title = available
       ? ""
-      : (requiresLive && !isLiveSource ? "Switch Accounts to live source before validation." : (metadata.unavailable_reason || "Action unavailable"));
+      : (requiresLive && !isLiveSource ? "Switch Accounts to live source before account actions." : (metadata.unavailable_reason || "Action unavailable"));
   }
 }
 
@@ -402,6 +402,7 @@ function setSourceCopy(source) {
 
 function setActionPanel(payload) {
   const result = payload.result || {};
+  const onboarding = result.onboarding || {};
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || "-");
@@ -414,12 +415,15 @@ function setActionPanel(payload) {
     "actionRefreshStatus",
     payload.post_action_refresh_required ? "required after action" : "not required"
   );
+  text("actionOnboardingOutcome", onboarding.final_outcome || "-");
+  text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "proven" : (onboarding.ui_state || "-"));
+  text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
 }
 
 function setActionsBusy(isBusy) {
-  for (const button of document.querySelectorAll(".live-action, .account-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = button.classList.contains("account-action");
+    const requiresLive = button.classList.contains("account-action") || button.classList.contains("onboard-action");
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
     const available = metadata.available !== false && (!requiresLive || isLiveSource);
     button.disabled = isBusy || !available;
@@ -475,6 +479,20 @@ function confirmPendingAction() {
   if (pending) {
     runUiAction(pending.uiAction, pending.extraPayload);
   }
+}
+
+function openOnboardModal() {
+  document.getElementById("onboardOverlay").hidden = false;
+  document.getElementById("runOnboardAction").focus();
+}
+
+function closeOnboardModal() {
+  document.getElementById("onboardOverlay").hidden = true;
+}
+
+function runOnboardFromModal() {
+  closeOnboardModal();
+  maybeConfirmAndRun("onboard_account");
 }
 
 function setScreen(screen, updateUrl = false) {
@@ -903,6 +921,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   for (const button of document.querySelectorAll(".live-action")) {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
+  document.getElementById("accountAddAction").addEventListener("click", () => openOnboardModal());
+  document.getElementById("cancelOnboardAction").addEventListener("click", () => closeOnboardModal());
+  document.getElementById("runOnboardAction").addEventListener("click", () => runOnboardFromModal());
   document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
   document.getElementById("confirmAction").addEventListener("click", () => confirmPendingAction());
   sourcePicker.addEventListener("change", () => {

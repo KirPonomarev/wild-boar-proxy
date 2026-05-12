@@ -141,7 +141,7 @@
               </svg>
               <span>Проверить выбранные</span>
             </button>
-            <button id="accountAddAction" class="button primary accounts-only" type="button" disabled hidden>
+            <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account" hidden>
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <circle cx="9" cy="8" r="4"></circle>
                 <path d="M2 20c1.5-4 3.8-6 7-6"></path>
@@ -170,6 +170,9 @@
             <div>Next action</div><div id="actionNextAction">none</div>
             <div>Changed files</div><div id="actionChangedFiles">[]</div>
             <div>Refresh</div><div id="actionRefreshStatus">not requested</div>
+            <div>Onboarding outcome</div><div id="actionOnboardingOutcome">-</div>
+            <div>Reserve proof</div><div id="actionOnboardingReserveProof">-</div>
+            <div>Selected backend</div><div id="actionOnboardingBackend">-</div>
           </div>
           </section>
 
@@ -335,6 +338,31 @@
           </section>
         </section>
       </main>
+
+      <div id="onboardOverlay" class="confirm-overlay" hidden>
+        <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle">
+          <div class="eyebrow">Add account</div>
+          <h2 id="onboardTitle">Добавить аккаунт в резерв</h2>
+          <p>
+            Onboarding is owned by <span class="mono-value">onboard_account</span>.
+            Browser does not send auth paths, source dirs, credentials, or backend ids.
+          </p>
+          <div class="confirm-facts">
+            <div>Placement</div><div>reserve-first only</div>
+            <div>Promotion</div><div>never automatic</div>
+            <div>Truth</div><div>command packet plus refreshed accounts JSON</div>
+            <div>Unavailable outcomes</div><div>no-new-auth and ambiguous identity require operator action</div>
+          </div>
+          <p class="confirm-note">
+            This modal starts a bounded owner command request. It does not scan files,
+            upload credentials, or prove active routing.
+          </p>
+          <div class="confirm-actions">
+            <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
+            <button id="runOnboardAction" class="button primary" type="button">Запустить onboarding</button>
+          </div>
+        </section>
+      </div>
 
       <div id="confirmOverlay" class="confirm-overlay" hidden>
         <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">

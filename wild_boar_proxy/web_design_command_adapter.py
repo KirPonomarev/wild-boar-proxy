@@ -65,6 +65,12 @@ ALLOWLIST: dict[str, CommandSpec] = {
         argv_template=("accounts", "list", "--json"),
         category="truth",
     ),
+    "accounts_onboard": CommandSpec(
+        command_id="accounts_onboard",
+        argv_template=("accounts", "onboard", "--json"),
+        category="onboarding",
+        confirmation_required=True,
+    ),
     "accounts_validate": CommandSpec(
         command_id="accounts_validate",
         argv_template=("accounts", "validate", "{account_id}", "--json"),

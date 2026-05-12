@@ -85,6 +85,18 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Stable repair dry-run",
         "human_meaning": "Preview stable repair work without applying changes.",
     },
+    "onboard_account": {
+        "adapter_command_id": "accounts_onboard",
+        "action_role": "account_onboarding",
+        "mutation_class": "account_admission",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "account admission request only; command packet and refreshed accounts list remain truth",
+        "display_name": "Onboard account",
+        "human_meaning": "Request reserve-first account onboarding without browser paths or credentials, then refresh accounts truth.",
+    },
     "validate_account": {
         "adapter_command_id": "accounts_validate",
         "action_role": "account_verification",
@@ -390,8 +402,9 @@ def run_ui_action(
         "confirmation_required": action_spec["confirmation_required"],
         "post_action_refresh_required": action_spec["post_action_refresh_required"],
         "action_claim_scope": action_spec["action_claim_scope"],
+        "mutation_class": action_spec.get("mutation_class", ""),
         "account_id": structured_args.get("account_id") if structured_args else "",
-        "result": _action_result(result),
+        "result": _action_result(result, ui_action=ui_action),
     }
 
 
@@ -408,6 +421,7 @@ def ui_action_metadata(*, launch_client_path: str | None = None) -> dict[str, An
                 "action_role": str(action_spec["action_role"]),
                 "mutates_runtime": bool(action_spec["mutates_runtime"]),
                 "affects_primary_truth": bool(action_spec["affects_primary_truth"]),
+                "mutation_class": str(action_spec.get("mutation_class", "")),
                 "confirmation_required": bool(action_spec["confirmation_required"]),
                 "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
                 "action_claim_scope": str(action_spec["action_claim_scope"]),
@@ -682,16 +696,92 @@ def _action_unavailable_reason(ui_action: str, *, launch_client_path: str | None
     return ""
 
 
-def _action_result(result: dict[str, Any]) -> dict[str, Any]:
+def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, Any]:
     packet = result.get("packet")
     data = packet.get("data", {}) if isinstance(packet, dict) else {}
-    return {
+    payload = {
         "status": result["status"],
         "machine_error_code": result["machine_error_code"],
         "human_message": result["human_message"],
         "next_action": result["next_action"],
         "changed_files": result["changed_files"],
         "data": data if isinstance(data, dict) else {},
+    }
+    if ui_action == "onboard_account":
+        payload["onboarding"] = _onboarding_summary(packet, command_status=str(result["status"]))
+    return payload
+
+
+def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any]:
+    onboarding_result = packet.get("onboarding_result") if isinstance(packet, dict) else None
+    if not isinstance(onboarding_result, dict):
+        return {
+            "ui_state": "unknown_outcome",
+            "final_outcome": "unknown_outcome",
+            "selected_backend_id": "",
+            "reserve_first_proven": False,
+            "operator_action_required": True,
+            "reason": "onboarding_result is missing or not an object",
+        }
+
+    final_outcome = str(onboarding_result.get("final_outcome") or "unknown_outcome")
+    selected_backend_id = str(onboarding_result.get("selected_backend_id") or "")
+    reserve_first_proven = (
+        onboarding_result.get("reserve_first_enforced") is True
+        and onboarding_result.get("pool_after_onboarding") == "reserve"
+        and onboarding_result.get("active_routing_changed") is False
+    )
+    successful_outcome = final_outcome in {
+        "explicit_auth_imported_to_reserve",
+        "reserve_only_success",
+    }
+    if command_status != "ok":
+        ui_state = "command_error"
+        operator_action_required = True
+        reason = "top-level command packet was not ok"
+    elif successful_outcome and reserve_first_proven and selected_backend_id:
+        ui_state = "success"
+        operator_action_required = False
+        reason = "reserve-first onboarding proof is present"
+    elif final_outcome in {"no_new_auth_detected", "ambiguous_new_auth_detection"}:
+        ui_state = "needs_user_action"
+        operator_action_required = True
+        reason = "operator action is required before onboarding can be treated as complete"
+    elif final_outcome in {"validate_failed", "sync_failed", "status_failed", "import_failed"}:
+        ui_state = "command_error"
+        operator_action_required = True
+        reason = "onboarding owner packet reported a failed proof step"
+    else:
+        ui_state = "unknown_outcome"
+        operator_action_required = True
+        reason = "onboarding outcome is not admitted as UI success"
+
+    return {
+        "ui_state": ui_state,
+        "final_outcome": final_outcome,
+        "selected_backend_id": selected_backend_id if ui_state == "success" else "",
+        "reserve_first_proven": reserve_first_proven,
+        "operator_action_required": operator_action_required,
+        "reason": reason,
+        "input_mode": str(onboarding_result.get("input_mode") or ""),
+        "selection_status": str(onboarding_result.get("selection_status") or ""),
+        "pool_after_onboarding": str(onboarding_result.get("pool_after_onboarding") or ""),
+        "active_routing_changed": onboarding_result.get("active_routing_changed"),
+        "validate_outcome": str(onboarding_result.get("validate_outcome") or ""),
+        "sync_outcome": str(onboarding_result.get("sync_outcome") or ""),
+        "auth_snapshot_before_login_status": str(
+            onboarding_result.get("auth_snapshot_before_login_status") or ""
+        ),
+        "auth_snapshot_before_login_count": onboarding_result.get(
+            "auth_snapshot_before_login_count"
+        ),
+        "auth_snapshot_before_login_source": str(
+            onboarding_result.get("auth_snapshot_before_login_source") or ""
+        ),
+        "external_command_status": str(onboarding_result.get("external_command_status") or ""),
+        "status_observed": onboarding_result.get("status_observed")
+        if isinstance(onboarding_result.get("status_observed"), dict)
+        else {},
     }
 
 

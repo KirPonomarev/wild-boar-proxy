@@ -138,6 +138,15 @@ class MappingRunner:
 
 
 class WebDesignLiveServerTests(unittest.TestCase):
+    def test_onboard_adapter_spec_uses_exact_argv_template(self) -> None:
+        onboard = ALLOWLIST["accounts_onboard"]
+
+        self.assertEqual(onboard.argv_template, ("accounts", "onboard", "--json"))
+        self.assertEqual(onboard.category, "onboarding")
+        self.assertTrue(onboard.confirmation_required)
+        self.assertEqual(onboard.required_args, ())
+        self.assertEqual(onboard.allowed_args, ())
+
     def test_promote_demote_adapter_specs_use_exact_argv_templates(self) -> None:
         promote = ALLOWLIST["accounts_promote"]
         demote = ALLOWLIST["accounts_demote"]
@@ -377,6 +386,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
         self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+        self.assertIn("onboard_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["onboard_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["onboard_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["onboard_account"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
+        self.assertEqual(metadata["actions"]["onboard_account"]["mutation_class"], "account_admission")
+        self.assertIn(
+            "command packet and refreshed accounts list remain truth",
+            metadata["actions"]["onboard_account"]["action_claim_scope"],
+        )
+        self.assertTrue(metadata["actions"]["onboard_account"]["post_action_refresh_required"])
         self.assertIn("validate_account", metadata["actions"])
         self.assertTrue(metadata["actions"]["validate_account"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["validate_account"]["mutates_runtime"])
@@ -433,6 +453,125 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertEqual(bounded_metadata["actions"]["launch_client_dispatch"]["unavailable_reason"], "")
         self.assertNotIn("/Applications/Codex.app", json.dumps(bounded_metadata))
+
+    def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(runner, {"ui_action": "onboard_account"})
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "account_onboarding")
+        self.assertEqual(result["mutation_class"], "account_admission")
+        self.assertFalse(result["mutates_runtime"])
+        self.assertFalse(result["affects_primary_truth"])
+        self.assertTrue(result["confirmation_required"])
+        self.assertTrue(result["post_action_refresh_required"])
+        self.assertEqual(result["account_id"], "")
+        self.assertEqual(result["result"]["onboarding"]["ui_state"], "success")
+        self.assertEqual(
+            result["result"]["onboarding"]["final_outcome"],
+            "reserve_only_success",
+        )
+        self.assertEqual(result["result"]["onboarding"]["input_mode"], "default")
+        self.assertEqual(
+            result["result"]["onboarding"]["auth_snapshot_before_login_status"],
+            "ok",
+        )
+        self.assertEqual(result["result"]["onboarding"]["external_command_status"], "nonzero")
+        self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
+        self.assertEqual(result["result"]["onboarding"]["selected_backend_id"], "acct-new")
+        self.assertEqual(runner.calls, [("accounts", "onboard", "--json")])
+
+    def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        raw_action = run_ui_action(runner, {"ui_action": "accounts_onboard"})
+        auth_ref = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account", "auth_ref": "/tmp/new-auth.json"},
+        )
+        source_dir = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account", "source_dir": "/tmp/auth-dir"},
+        )
+        credentials = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account", "password": "secret"},
+        )
+        backend_id = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account", "backend_id": "acct-new"},
+        )
+
+        for payload in [raw_action, auth_ref, source_dir, credentials, backend_id]:
+            self.assertEqual(payload["status"], "integration_failure")
+            self.assertEqual(payload["action_role"], "blocked")
+            self.assertEqual(payload["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(runner.calls, [])
+
+    def test_onboard_outcomes_do_not_overclaim_success_without_reserve_proof(self) -> None:
+        no_new_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "onboard", "--json"): onboarding_packet("no_new_auth_detected"),
+            }
+        )
+        ambiguous_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "onboard", "--json"): onboarding_packet(
+                    "ambiguous_new_auth_detection",
+                    selected_backend_id="",
+                    pool_after_onboarding="",
+                    reserve_first_enforced=False,
+                ),
+            }
+        )
+        unknown_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "onboard", "--json"): command_packet(
+                    human_message="Onboarding packet had no structured result."
+                ),
+            }
+        )
+        validate_failed_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "onboard", "--json"): onboarding_packet("validate_failed"),
+            }
+        )
+        command_error_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "onboard", "--json"): onboarding_packet(
+                    "reserve_only_success",
+                    status="error",
+                    machine_error_code="ONBOARDING_OWNER_FAILED",
+                ),
+            }
+        )
+
+        no_new = run_ui_action(no_new_runner, {"ui_action": "onboard_account"})
+        ambiguous = run_ui_action(ambiguous_runner, {"ui_action": "onboard_account"})
+        unknown = run_ui_action(unknown_runner, {"ui_action": "onboard_account"})
+        validate_failed = run_ui_action(validate_failed_runner, {"ui_action": "onboard_account"})
+        command_error = run_ui_action(command_error_runner, {"ui_action": "onboard_account"})
+
+        self.assertEqual(no_new["result"]["onboarding"]["ui_state"], "needs_user_action")
+        self.assertTrue(no_new["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(ambiguous["result"]["onboarding"]["ui_state"], "needs_user_action")
+        self.assertTrue(ambiguous["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(unknown["result"]["onboarding"]["ui_state"], "unknown_outcome")
+        self.assertTrue(unknown["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(validate_failed["result"]["onboarding"]["ui_state"], "command_error")
+        self.assertTrue(validate_failed["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(command_error["status"], "command_error")
+        self.assertEqual(command_error["result"]["onboarding"]["ui_state"], "command_error")
+        self.assertTrue(command_error["result"]["onboarding"]["operator_action_required"])
+        for payload in [no_new, ambiguous, unknown, validate_failed, command_error]:
+            self.assertNotEqual(payload["result"]["onboarding"]["ui_state"], "success")
+            self.assertEqual(payload["result"]["onboarding"]["selected_backend_id"], "")
 
     def test_ui_action_endpoint_accepts_allowlisted_actions_only(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -986,6 +1125,7 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("healthcheck", "--json"): command_packet(human_message="Healthcheck passed."),
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
+        ("accounts", "onboard", "--json"): onboarding_packet("reserve_only_success"),
         ("accounts", "validate", "acct-active", "--json"): command_packet(
             human_message="Account validation completed."
         ),
@@ -1027,6 +1167,47 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
             human_message="Rotation inspect passed."
         ),
     }
+
+
+def onboarding_packet(
+    final_outcome: str,
+    *,
+    status: str = "ok",
+    machine_error_code: str = "OK",
+    selected_backend_id: str = "acct-new",
+    pool_after_onboarding: str = "reserve",
+    reserve_first_enforced: bool = True,
+    active_routing_changed: bool = False,
+) -> dict[str, object]:
+    return command_packet(
+        status=status,
+        machine_error_code=machine_error_code,
+        human_message="Onboarding owner packet emitted.",
+        onboarding_result={
+            "status": "ok",
+            "attempted": True,
+            "input_mode": "default",
+            "explicit_auth_ref": "",
+            "new_backend_ids": [selected_backend_id] if selected_backend_id else [],
+            "selected_backend_id": selected_backend_id,
+            "selection_status": "selected_unique_backend" if selected_backend_id else "not_selected",
+            "reserve_first_enforced": reserve_first_enforced,
+            "auth_snapshot_before_login_status": "ok",
+            "auth_snapshot_before_login_count": 2,
+            "auth_snapshot_before_login_digest": "redacted-digest",
+            "auth_snapshot_before_login_source": "owner_packet",
+            "pool_after_onboarding": pool_after_onboarding,
+            "validate_attempted": True,
+            "validate_outcome": "ok",
+            "sync_attempted": True,
+            "sync_outcome": "ok",
+            "status_observed": {"command_status": "ok"},
+            "external_command_exit_code": 7,
+            "external_command_status": "nonzero",
+            "active_routing_changed": active_routing_changed,
+            "final_outcome": final_outcome,
+        },
+    )
 
 
 def free_port() -> int:

@@ -59,6 +59,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "healthcheck",
             "mode_get",
             "accounts_list",
+            "accounts_onboard",
             "accounts_validate",
             "accounts_promote",
             "accounts_demote",
@@ -80,6 +81,18 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
+        self.assertIn(
+            {
+                "command_id": "accounts_onboard",
+                "category": "onboarding",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": ["accounts", "onboard", "--json"],
+            },
+            allowlist_metadata(),
+        )
         self.assertIn(
             {
                 "command_id": "accounts_hold",
@@ -187,6 +200,14 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(runner.calls, [("accounts", "validate", "acct-active", "--json")])
         self.assertEqual(result["status"], "ok")
 
+    def test_accounts_onboard_runs_exact_argv_without_browser_args(self) -> None:
+        runner = RecordingRunner()
+
+        result = execute_command(runner, "accounts_onboard")
+
+        self.assertEqual(runner.calls, [("accounts", "onboard", "--json")])
+        self.assertEqual(result["status"], "ok")
+
     def test_account_lifecycle_commands_run_exact_argv_with_structured_account_id(self) -> None:
         runner = RecordingRunner()
 
@@ -254,6 +275,19 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(runner.calls, [])
         self.assertEqual(missing["status"], "integration_failure")
         self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+
+    def test_accounts_onboard_rejects_all_browser_args(self) -> None:
+        runner = RecordingRunner()
+
+        extra = execute_command(
+            runner,
+            "accounts_onboard",
+            structured_args={"auth_ref": "/tmp/new-auth.json"},
+        )
+
+        self.assertEqual(runner.calls, [])
         self.assertEqual(extra["status"], "integration_failure")
         self.assertIn("unsupported args", extra["human_message"])
 

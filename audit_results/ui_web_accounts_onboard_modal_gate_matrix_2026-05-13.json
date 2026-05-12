@@ -1,0 +1,120 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_ONBOARD_MODAL_GATE",
+  "date": "2026-05-13",
+  "status": "implemented_verified",
+  "scope": {
+    "included": [
+      "web design command adapter spec for accounts_onboard",
+      "live design server ui_action allowlist entry for onboard_account",
+      "safe onboarding_result summary mapping",
+      "minimal Add Account modal entry point",
+      "targeted adapter, live server, and static UI tests"
+    ],
+    "excluded": [
+      "manual auth file picker",
+      "browser-submitted auth path",
+      "browser-submitted source directory",
+      "browser-submitted credentials",
+      "browser-submitted backend id",
+      "direct auth directory scan",
+      "direct state or log reads",
+      "desktop auth automation",
+      "promotion after onboarding",
+      "import existing",
+      "runtime.py",
+      "external lab dirty tail",
+      "global confirmation system redesign",
+      "visual parity polish"
+    ]
+  },
+  "canonical_boundaries": {
+    "browser_payload": "ui_action only for onboard_account",
+    "adapter_command": {
+      "adapter_command_id": "accounts_onboard",
+      "argv_template": [
+        "accounts",
+        "onboard",
+        "--json"
+      ],
+      "category": "onboarding",
+      "confirmation_required": true,
+      "required_args": [],
+      "allowed_args": []
+    },
+    "post_action_truth": "UI action result is an owner command result summary; accounts screen refreshes canonical accounts readonly packet after action.",
+    "reserve_first_rule": "reserve placement is shown as success only when final_outcome is admitted, reserve_first_enforced is true, pool_after_onboarding is reserve, active_routing_changed is false, selected_backend_id is present, and the top-level command result is ok."
+  },
+  "outcome_mapping": {
+    "success_outcomes": [
+      "reserve_only_success",
+      "explicit_auth_imported_to_reserve"
+    ],
+    "needs_user_action_outcomes": [
+      "no_new_auth_detected",
+      "ambiguous_new_auth_detection"
+    ],
+    "command_error_outcomes": [
+      "validate_failed",
+      "sync_failed",
+      "status_failed",
+      "import_failed"
+    ],
+    "unknown_outcome_rule": "missing, non-object, or unadmitted onboarding_result is not success",
+    "selected_backend_rule": "selected_backend_id is exposed only for admitted success with reserve-first proof"
+  },
+  "ui_contract": {
+    "entry_point": "Add Account opens a minimal bounded modal on Accounts screen",
+    "modal_claim": "owner command request only; no file scan, no credentials upload, no active routing proof",
+    "availability": "Add Account participates in onboard-action availability and busy-state wiring",
+    "confirmation": "onboard_account uses existing confirmation metadata; global confirmation redesign is deferred",
+    "refresh": "post_action_refresh_required triggers live accounts readonly refresh on Accounts screen"
+  },
+  "tests": {
+    "targeted_suite": {
+      "command": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+      "result": "passed",
+      "count": 61
+    },
+    "coverage_added": [
+      "adapter allowlist exact argv metadata for accounts_onboard",
+      "adapter rejects structured browser args for accounts_onboard",
+      "server metadata for onboard_account",
+      "server exact command execution without browser args",
+      "server rejects raw adapter action and browser auth/path/credentials/backend fields",
+      "server maps reserve-first owner packet to success only with proof",
+      "server maps no-new-auth and ambiguous identity to needs_user_action",
+      "server maps failed proof steps and top-level command errors to command_error",
+      "server maps missing onboarding_result to unknown_outcome",
+      "static UI contains modal entry point and no raw accounts onboard command",
+      "static UI contains no file picker, path field, credentials field, or auto-promotion copy"
+    ],
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "count": 555
+    }
+  },
+  "changed_files": [
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "known_followups": [
+    {
+      "item": "full Add Account visual parity with source design package is not attempted",
+      "disposition": "defer to UI_WEB_VISUAL_STABILIZATION_PASS or desktop renderer admission"
+    },
+    {
+      "item": "manual auth file selection is unsupported in browser UI",
+      "disposition": "defer until a bounded server-owned command contract exists"
+    },
+    {
+      "item": "pre-existing dirty worktree tail includes runtime and external lab files outside this contour",
+      "disposition": "exclude from this contour commit and adjudicate under WORKTREE_TAIL_ADJUDICATION"
+    }
+  ]
+}
