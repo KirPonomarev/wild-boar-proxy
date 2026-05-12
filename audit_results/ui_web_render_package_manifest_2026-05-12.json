@@ -33,12 +33,15 @@
     {
       "id": "boar_mark",
       "path_in_zip": "wild_boar_proxy_redesign/assets/boar_mark.png",
+      "replacement_source": "/Users/kirillponomarev/Downloads/дикий кабан.png",
       "repo_path": "wild_boar_proxy/web_design_ui/assets/boar_mark.png",
-      "sha256": "3640f46e58cef9e274e2ea4576fbff789fb576a95ffd9b20ad79c0fae2ea1af9",
+      "sha256": "a45adc399d58d40c91748b68001e00cf414eae1c16b5d514a534431d705ae853",
       "dimensions": {
-        "width": 178,
-        "height": 187
-      }
+        "width": 887,
+        "height": 934
+      },
+      "background": "transparent_after_white_background_removal",
+      "identity_note": "replaced with sharper owner-provided logo source"
     }
   ],
   "runtime_truth": "not_applicable",

@@ -11,6 +11,8 @@ import unittest
 import urllib.request
 from pathlib import Path
 
+from PIL import Image
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
@@ -169,6 +171,16 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("fitPreviewToViewport", js)
         self.assertIn("window.innerWidth", js)
         self.assertIn("window.innerHeight", js)
+
+    def test_boar_logo_is_sharp_and_transparent(self) -> None:
+        logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"
+        image = Image.open(logo_path).convert("RGBA")
+        alpha = image.getchannel("A")
+        transparent_pixels = sum(1 for value in alpha.getdata() if value == 0)
+
+        self.assertGreaterEqual(image.width, 800)
+        self.assertGreaterEqual(image.height, 800)
+        self.assertGreater(transparent_pixels, 0)
 
     def _fetch_with_retry(self, url: str) -> str:
         last_error: Exception | None = None
