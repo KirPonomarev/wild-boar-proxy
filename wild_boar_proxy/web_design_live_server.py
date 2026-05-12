@@ -112,6 +112,17 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Launch smoke",
         "human_meaning": "Run a runtime smoke check without claiming host-client launch success.",
     },
+    "launch_client_dispatch": {
+        "adapter_command_id": "launch_client",
+        "action_role": "host_client_dispatch",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "bounded OS dispatch request only; not host-client session success",
+        "display_name": "Launch client",
+        "human_meaning": "Request bounded host-client dispatch, then refresh live overview truth.",
+    },
 }
 
 
@@ -194,11 +205,19 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     }
 
 
-def run_ui_action(runner: CommandRunner, payload: dict[str, Any]) -> dict[str, Any]:
+def run_ui_action(
+    runner: CommandRunner,
+    payload: dict[str, Any],
+    *,
+    launch_client_path: str | None = None,
+) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return _blocked_action("unknown", "UI action payload must be an object.")
     if "command_id" in payload:
         return _blocked_action("unknown", "Browser must submit ui_action, not command_id.")
+    unsupported_keys = sorted(set(payload) - {"ui_action"})
+    if unsupported_keys:
+        return _blocked_action("unknown", f"Unsupported UI action fields: {', '.join(unsupported_keys)}.")
 
     ui_action = payload.get("ui_action")
     if not isinstance(ui_action, str):
@@ -208,7 +227,24 @@ def run_ui_action(runner: CommandRunner, payload: dict[str, Any]) -> dict[str, A
     if action_spec is None:
         return _blocked_action(ui_action, "UI action is not allowlisted.")
 
-    result = execute_command(runner, str(action_spec["adapter_command_id"]))
+    structured_args: dict[str, str] | None = None
+    allow_disabled = False
+    if ui_action == "launch_client_dispatch":
+        if not launch_client_path:
+            return _unavailable_action(
+                ui_action,
+                "Bounded launch client path is unavailable.",
+                "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
+            )
+        structured_args = {"client_path": launch_client_path}
+        allow_disabled = True
+
+    result = execute_command(
+        runner,
+        str(action_spec["adapter_command_id"]),
+        structured_args=structured_args,
+        allow_disabled=allow_disabled,
+    )
     return {
         "schema_version": 1,
         "status": "ok" if result["status"] == "ok" else "command_error",
@@ -224,7 +260,7 @@ def run_ui_action(runner: CommandRunner, payload: dict[str, Any]) -> dict[str, A
     }
 
 
-def ui_action_metadata() -> dict[str, Any]:
+def ui_action_metadata(*, launch_client_path: str | None = None) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "status": "ok",
@@ -240,6 +276,11 @@ def ui_action_metadata() -> dict[str, Any]:
                 "confirmation_required": bool(action_spec["confirmation_required"]),
                 "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
                 "action_claim_scope": str(action_spec["action_claim_scope"]),
+                "available": _action_available(ui_action, launch_client_path=launch_client_path),
+                "unavailable_reason": _action_unavailable_reason(
+                    ui_action,
+                    launch_client_path=launch_client_path,
+                ),
             }
             for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items())
         },
@@ -250,6 +291,7 @@ def build_handler(
     *,
     runner: CommandRunner | None = None,
     static_dir: Path = WEB_DESIGN_UI,
+    launch_client_path: str | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     static_root = static_dir.resolve()
@@ -261,7 +303,7 @@ def build_handler(
                 self._send_json(build_live_readonly_snapshot(command_runner))
                 return
             if parsed.path == "/api/actions":
-                self._send_json(ui_action_metadata())
+                self._send_json(ui_action_metadata(launch_client_path=launch_client_path))
                 return
             self._send_static(parsed.path)
 
@@ -270,7 +312,13 @@ def build_handler(
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
-            self._send_json(run_ui_action(command_runner, self._read_json_body()))
+            self._send_json(
+                run_ui_action(
+                    command_runner,
+                    self._read_json_body(),
+                    launch_client_path=launch_client_path,
+                )
+            )
 
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             return
@@ -339,6 +387,41 @@ def _blocked_action(ui_action: str, human_message: str) -> dict[str, Any]:
             "data": {},
         },
     }
+
+
+def _unavailable_action(ui_action: str, human_message: str, machine_error_code: str) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": "blocked",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "unavailable",
+        "result": {
+            "status": "integration_failure",
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "next_action": "user_action",
+            "changed_files": [],
+            "data": {},
+        },
+    }
+
+
+def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool:
+    if ui_action == "launch_client_dispatch":
+        return bool(launch_client_path)
+    return True
+
+
+def _action_unavailable_reason(ui_action: str, *, launch_client_path: str | None) -> str:
+    if ui_action == "launch_client_dispatch" and not launch_client_path:
+        return "Bounded launch client path is unavailable."
+    return ""
 
 
 def _action_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -533,9 +616,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
+    parser.add_argument("--launch-client-path", default=None)
     args = parser.parse_args(argv)
 
-    server = ThreadingHTTPServer((args.host, args.port), build_handler())
+    server = ThreadingHTTPServer(
+        (args.host, args.port),
+        build_handler(launch_client_path=args.launch_client_path),
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

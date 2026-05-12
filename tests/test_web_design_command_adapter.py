@@ -143,6 +143,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(result["status"], "integration_failure")
         self.assertIn("disabled", result["human_message"])
 
+    def test_launch_client_requires_bounded_server_bypass_and_absolute_path(self) -> None:
+        runner = RecordingRunner()
+
+        relative = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": "Codex.app"},
+            allow_disabled=True,
+        )
+        absolute = execute_command(
+            runner,
+            "launch_client",
+            structured_args={"client_path": "/Applications/Codex.app"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(relative["status"], "integration_failure")
+        self.assertIn("absolute", relative["human_message"])
+        self.assertEqual(absolute["status"], "ok")
+        self.assertEqual(
+            runner.calls,
+            [("launch", "client", "--client-path", "/Applications/Codex.app", "--json")],
+        )
+
     def test_runner_parse_error_maps_to_integration_failure(self) -> None:
         runner = RaisingRunner(UiShellError("stdout must contain exactly one JSON object"))
 
@@ -194,7 +218,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         html = (WEB_DESIGN_UI / "index.html").read_text()
 
         self.assertIn("Запустить клиент", html)
-        self.assertIn('class="button primary disabled"', html)
+        self.assertIn('data-ui-action="launch_client_dispatch"', html)
         self.assertIn("disabled", html)
         self.assertNotIn("execute_command", html)
 

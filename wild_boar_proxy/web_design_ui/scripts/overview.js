@@ -160,7 +160,9 @@ function metadataFor(uiAction) {
     mutates_runtime: true,
     confirmation_required: true,
     post_action_refresh_required: true,
-    action_claim_scope: "unknown"
+    action_claim_scope: "unknown",
+    available: false,
+    unavailable_reason: "Action metadata could not be loaded."
   };
 }
 
@@ -210,6 +212,16 @@ async function runUiAction(uiAction) {
     });
   } finally {
     setActionsBusy(false);
+  }
+}
+
+function applyActionAvailability() {
+  for (const button of document.querySelectorAll(".live-action")) {
+    const metadata = metadataFor(button.dataset.uiAction);
+    const available = metadata.available !== false;
+    button.disabled = !available;
+    button.dataset.available = available ? "true" : "false";
+    button.title = available ? "" : (metadata.unavailable_reason || "Action unavailable");
   }
 }
 
@@ -327,12 +339,29 @@ function setActionPanel(payload) {
 
 function setActionsBusy(isBusy) {
   for (const button of document.querySelectorAll(".live-action")) {
-    button.disabled = isBusy;
+    const metadata = metadataFor(button.dataset.uiAction);
+    const available = metadata.available !== false;
+    button.disabled = isBusy || !available;
   }
 }
 
 function maybeConfirmAndRun(uiAction) {
   const metadata = metadataFor(uiAction);
+  if (metadata.available === false) {
+    setActionPanel({
+      ui_action: uiAction,
+      action_role: "blocked",
+      post_action_refresh_required: false,
+      result: {
+        status: "integration_failure",
+        machine_error_code: "UI_ACTION_UNAVAILABLE",
+        human_message: metadata.unavailable_reason || "Action unavailable.",
+        next_action: "user_action",
+        changed_files: []
+      }
+    });
+    return;
+  }
   if (metadata.confirmation_required) {
     openConfirmation(uiAction, metadata);
     return;
@@ -467,6 +496,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const initialState = stateFromLocation();
   const initialSource = sourceFromLocation();
   await loadActionMetadata();
+  applyActionAvailability();
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));

@@ -142,10 +142,11 @@ def execute_command(
     command_id: str,
     *,
     structured_args: dict[str, str] | None = None,
+    allow_disabled: bool = False,
 ) -> dict[str, Any]:
     try:
         spec = _require_spec(command_id)
-        if not spec.ui_enabled:
+        if not spec.ui_enabled and not allow_disabled:
             raise UiShellError(f"command is disabled for this UI contour: {command_id}")
         argv = _render_argv(spec, structured_args or {})
         result = runner.run(*argv)

@@ -260,6 +260,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
     def test_ui_action_metadata_hides_adapter_commands_and_marks_confirmed_actions(self) -> None:
         metadata = ui_action_metadata()
+        bounded_metadata = ui_action_metadata(launch_client_path="/Applications/Codex.app")
 
         self.assertEqual(metadata["status"], "ok")
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
@@ -271,6 +272,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
         self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+        self.assertIn("launch_client_dispatch", metadata["actions"])
+        self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
+        self.assertIn("unavailable", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+        self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
+        self.assertEqual(bounded_metadata["actions"]["launch_client_dispatch"]["unavailable_reason"], "")
+        self.assertNotIn("/Applications/Codex.app", json.dumps(bounded_metadata))
 
     def test_ui_action_endpoint_accepts_allowlisted_actions_only(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -310,15 +318,54 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
         )
 
+    def test_launch_client_dispatch_uses_server_owned_bounded_path_only(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        unavailable = run_ui_action(runner, {"ui_action": "launch_client_dispatch"})
+        browser_path = run_ui_action(
+            runner,
+            {
+                "ui_action": "launch_client_dispatch",
+                "client_path": "/Applications/Unsafe.app",
+            },
+            launch_client_path="/Applications/Codex.app",
+        )
+        dispatched = run_ui_action(
+            runner,
+            {"ui_action": "launch_client_dispatch"},
+            launch_client_path="/Applications/Codex.app",
+        )
+
+        self.assertEqual(unavailable["status"], "integration_failure")
+        self.assertEqual(
+            unavailable["result"]["machine_error_code"],
+            "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
+        )
+        self.assertEqual(browser_path["status"], "integration_failure")
+        self.assertEqual(browser_path["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(dispatched["status"], "ok")
+        self.assertEqual(dispatched["action_role"], "host_client_dispatch")
+        self.assertTrue(dispatched["confirmation_required"])
+        self.assertTrue(dispatched["post_action_refresh_required"])
+        self.assertIn("not host-client session success", dispatched["action_claim_scope"])
+        self.assertEqual(
+            runner.calls[-1],
+            ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+        )
+
     def test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions(self) -> None:
         runner = MappingRunner(live_payloads())
 
         command_id_payload = run_ui_action(runner, {"command_id": "diagnostics_export"})
         stable_repair_apply = run_ui_action(runner, {"ui_action": "stable_repair_apply"})
         launch_client = run_ui_action(runner, {"ui_action": "launch_client"})
+        client_path_payload = run_ui_action(
+            runner,
+            {"ui_action": "export_diagnostics", "client_path": "/Applications/Codex.app"},
+        )
         unknown = run_ui_action(runner, {"ui_action": "policy_stage_set"})
 
-        for payload in [command_id_payload, stable_repair_apply, launch_client, unknown]:
+        for payload in [command_id_payload, stable_repair_apply, launch_client, client_path_payload, unknown]:
             self.assertEqual(payload["status"], "integration_failure")
             self.assertEqual(payload["action_role"], "blocked")
             self.assertFalse(payload["mutates_runtime"])
@@ -339,7 +386,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
     def test_http_action_endpoint_uses_ui_action_not_command_id(self) -> None:
         runner = MappingRunner(live_payloads())
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(runner=runner, launch_client_path="/Applications/Codex.app"),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -351,6 +401,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 post_json(f"{base_url}/api/action", {"command_id": "diagnostics_export"})
             )
             metadata = json.loads(fetch(f"{base_url}/api/actions"))
+            launch = json.loads(
+                post_json(f"{base_url}/api/action", {"ui_action": "launch_client_dispatch"})
+            )
         finally:
             server.shutdown()
             server.server_close()
@@ -360,7 +413,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "integration_failure")
         self.assertIn("sync_runtime", metadata["actions"])
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
-        self.assertEqual(runner.calls, [("diagnostics", "export", "--json")])
+        self.assertNotIn("/Applications/Codex.app", json.dumps(metadata))
+        self.assertEqual(launch["status"], "ok")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("diagnostics", "export", "--json"),
+                ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+            ],
+        )
 
     def test_server_source_contains_no_direct_runtime_truth_file_reads(self) -> None:
         source = (ROOT / "wild_boar_proxy" / "web_design_live_server.py").read_text()
@@ -392,6 +453,10 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("mode", "set", "stable", "--json"): command_packet(human_message="Stable mode requested."),
         ("mode", "set", "managed", "--json"): command_packet(human_message="Managed mode requested."),
         ("launch", "smoke", "--json"): command_packet(human_message="Launch smoke passed."),
+        ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"): command_packet(
+            human_message="Client dispatch requested.",
+            data={"launch_claim_scope": "dispatch_requested"},
+        ),
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."
         ),

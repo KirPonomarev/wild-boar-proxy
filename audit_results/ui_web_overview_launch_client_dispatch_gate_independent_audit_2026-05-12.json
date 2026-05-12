@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_LAUNCH_CLIENT_DISPATCH_GATE",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "auditor": "Socrates",
+  "result": "PASS",
+  "findings": [
+    "staged files exclude runtime.py, web_ui.py, and ui_shell.py",
+    "browser traffic stays ui_action-only and server rejects command_id payloads",
+    "browser-side surfaces do not expose client_path",
+    "/api/actions metadata exposes availability and unavailable_reason but not adapter_command_id or the bounded path",
+    "launch_client remains disabled for ordinary adapter execution",
+    "bounded dispatch is available only through server-side allow_disabled plus structured_args",
+    "launch_client_dispatch is unavailable without server-owned path and available with one",
+    "launch_client_dispatch requires confirmation and post-action refresh",
+    "launch result stays in the action response path and does not become runtime truth",
+    "no file picker, auto-discovery, config mutation, desktop transfer, or direct state/log/runtime file reads were introduced",
+    "tests and contour artifacts are staged"
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py is dirty outside this contour and must remain unstaged",
+    "real host-client dispatch was intentionally not executed; fake runner smoke verifies UI/server wiring"
+  ]
+}

@@ -185,7 +185,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('snapshot.source === "live_readonly"', js)
         self.assertIn('safeSnapshot.state_id || safeSnapshot.ui_state', js)
         self.assertNotIn("command_id", js)
-        self.assertNotIn("launch_client", js)
+        self.assertNotIn("client_path", js)
 
     def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -198,14 +198,17 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('data-ui-action="set_mode_stable"', html)
         self.assertIn('data-ui-action="set_mode_managed"', html)
         self.assertIn('data-ui-action="launch_smoke"', html)
+        self.assertIn('data-ui-action="launch_client_dispatch"', html)
         self.assertNotIn('data-ui-action="launch_client"', html)
         self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertIn('fetch("api/action"', js)
         self.assertIn("JSON.stringify({ ui_action: uiAction })", js)
         self.assertNotIn("JSON.stringify({ command_id", js)
+        self.assertNotIn("client_path", html + js)
         self.assertNotIn("sync --json", html + js)
         self.assertNotIn("mode set stable --json", html + js)
         self.assertNotIn("launch smoke --json", html + js)
+        self.assertNotIn("launch client", html + js)
 
     def test_static_preview_requires_confirmation_for_mutating_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -220,6 +223,18 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("runUiAction(uiAction);", js)
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
+
+    def test_static_preview_applies_action_availability_from_metadata(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="launchClientAction"', html)
+        self.assertIn('data-ui-action="launch_client_dispatch"', html)
+        self.assertIn("disabled", html)
+        self.assertIn("applyActionAvailability", js)
+        self.assertIn("metadata.available !== false", js)
+        self.assertIn("metadata.unavailable_reason", js)
+        self.assertIn("UI_ACTION_UNAVAILABLE", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"
