@@ -1,0 +1,17 @@
+{
+  "contour_id": "external_models_c8_custom_transforms_contract_and_mocked_execution",
+  "date_utc": "2026-05-12T00:00:00Z",
+  "auditor": "Ampere",
+  "mode": "independent_diff_audit",
+  "scope": [
+    "wild_boar_proxy/external_models/contracts.py",
+    "wild_boar_proxy/external_models/routes.py",
+    "wild_boar_proxy/external_models/transforms.py",
+    "wild_boar_proxy/external_models/validate.py",
+    "tests/test_external_models.py",
+    "tests/test_cli_external_models.py"
+  ],
+  "verdict": "PASS",
+  "findings": [],
+  "summary": "no findings"
+}

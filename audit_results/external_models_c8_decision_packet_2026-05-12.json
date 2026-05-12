@@ -1,0 +1,75 @@
+{
+  "contour_id": "external_models_c8_custom_transforms_contract_and_mocked_execution",
+  "date_utc": "2026-05-12T00:00:00Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head_before_c8": "e04077e",
+  "status": "completed",
+  "machine_verdict": "PASS",
+  "scope": {
+    "bounded_adapter_local_transforms": true,
+    "dynamic_code_loading": false,
+    "tool_execution": false,
+    "runtime_truth_changed": false,
+    "main_repo_primary_path_changed": false
+  },
+  "route_schema": {
+    "optional_fields_added": [
+      "transform_profile",
+      "response_profile"
+    ],
+    "allowlisted_only": true,
+    "inline_transform_source_allowed": false
+  },
+  "profiles": {
+    "request_transform_profiles": [
+      "openai_chat_passthrough",
+      "openai_chat_system_to_developer",
+      "openai_chat_input_text"
+    ],
+    "response_profiles": [
+      "openai_chat_choices_message",
+      "top_level_output_text",
+      "content_blocks_text"
+    ]
+  },
+  "verification": {
+    "tests": [
+      {
+        "command": "python3 -m unittest -q tests.test_external_models",
+        "result": "Ran 11 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli_external_models",
+        "result": "Ran 17 tests ... OK"
+      },
+      {
+        "command": "python3 -m unittest -q tests.test_cli -k package",
+        "result": "Ran 9 tests ... OK"
+      }
+    ],
+    "build": {
+      "command": "python3 -m compileall -q wild_boar_proxy tests",
+      "result": "passed"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    "manual_probe": {
+      "check_status": "ok",
+      "transform_profile": "openai_chat_input_text",
+      "response_profile": "top_level_output_text",
+      "request_shape": "input_text",
+      "response_shape": "output_text",
+      "server_request_keys": [
+        "input_text",
+        "max_output_tokens",
+        "model"
+      ]
+    }
+  },
+  "closeout_rule": {
+    "commit": "pending_git_closeout",
+    "push": "pending_git_closeout"
+  }
+}

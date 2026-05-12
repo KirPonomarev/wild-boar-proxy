@@ -57,6 +57,7 @@ def mocked_provider(
     models: list[str] | None = None,
     malformed_models: bool = False,
     malformed_smoke: bool = False,
+    smoke_payload: dict[str, object] | None = None,
 ) -> tuple[str, ThreadingHTTPServer]:
     class Handler(BaseHTTPRequestHandler):
         def _send_json(self, status_code: int, payload: dict[str, object]) -> None:
@@ -97,9 +98,14 @@ def mocked_provider(
             if malformed_smoke:
                 self._send_json(200, {"unexpected": True})
                 return
+            raw_length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(raw_length) if raw_length else b""
+            if raw_body:
+                self.server.last_request_payload = json.loads(raw_body.decode("utf-8"))  # type: ignore[attr-defined]
             self._send_json(
                 200,
-                {
+                smoke_payload
+                or {
                     "id": "chatcmpl-test",
                     "choices": [
                         {"index": 0, "message": {"role": "assistant", "content": "pong"}}
@@ -113,6 +119,7 @@ def mocked_provider(
     port = _free_port()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.request_count = 0  # type: ignore[attr-defined]
+    server.last_request_payload = None  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -598,6 +605,48 @@ class ExternalModelsCliTests(unittest.TestCase):
             evidence_payload["result"]["effective_model"], "deepseek/deepseek-chat"
         )
 
+    def test_check_transform_profile_records_request_and_response_metadata(self) -> None:
+        route = sample_route(base_url="https://placeholder.invalid") | {
+            "transform_profile": "openai_chat_input_text",
+            "response_profile": "top_level_output_text",
+        }
+        with mocked_provider(
+            smoke_payload={"output_text": "pong"},
+        ) as (base_url, server):
+            route["base_url"] = base_url
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(route),
+            )
+            result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            request_payload = server.last_request_payload  # type: ignore[attr-defined]
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["transform_profile"], "openai_chat_input_text")
+        self.assertEqual(payload["data"]["response_profile"], "top_level_output_text")
+        self.assertEqual(payload["data"]["request_shape"], "input_text")
+        self.assertEqual(payload["data"]["response_shape"], "output_text")
+        self.assertIsInstance(request_payload, dict)
+        self.assertIn("input_text", request_payload)
+        self.assertNotIn("messages", request_payload)
+        evidence_payload = json.loads(
+            Path(payload["data"]["evidence_path"]).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            evidence_payload["result"]["transform_profile"], "openai_chat_input_text"
+        )
+        self.assertEqual(evidence_payload["result"]["response_shape"], "output_text")
+
     def test_check_paid_route_is_blocked_without_provider_call(self) -> None:
         with mocked_provider() as (base_url, server):
             self.run_cli(
@@ -658,4 +707,4 @@ class ExternalModelsCliTests(unittest.TestCase):
 class ZeroTestSelectionGuardTests(unittest.TestCase):
     def test_module_contains_real_tests(self) -> None:
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(ExternalModelsCliTests)
-        self.assertGreaterEqual(suite.countTestCases(), 10)
+        self.assertGreaterEqual(suite.countTestCases(), 11)

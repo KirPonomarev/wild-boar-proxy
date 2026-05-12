@@ -58,6 +58,21 @@ class ExternalModelContractTests(unittest.TestCase):
             routes.validate_route_schema(route)
         self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
 
+    def test_validate_route_schema_rejects_unknown_transform_profile(self) -> None:
+        route = sample_route() | {"transform_profile": "python_eval"}
+        with self.assertRaises(RuntimeErrorInfo) as ctx:
+            routes.validate_route_schema(route)
+        self.assertEqual(ctx.exception.machine_error_code, "schema_invalid")
+
+    def test_validate_route_schema_accepts_allowlisted_transform_profiles(self) -> None:
+        route = sample_route() | {
+            "transform_profile": "openai_chat_input_text",
+            "response_profile": "top_level_output_text",
+        }
+        validated = routes.validate_route_schema(route)
+        self.assertEqual(validated["transform_profile"], "openai_chat_input_text")
+        self.assertEqual(validated["response_profile"], "top_level_output_text")
+
     def test_paths_from_env_uses_isolated_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "external-models"
@@ -173,4 +188,4 @@ class ZeroTestSelectionGuardTests(unittest.TestCase):
         suite = unittest.defaultTestLoader.loadTestsFromTestCase(
             ExternalModelContractTests
         )
-        self.assertGreaterEqual(suite.countTestCases(), 5)
+        self.assertGreaterEqual(suite.countTestCases(), 7)

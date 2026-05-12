@@ -9,7 +9,7 @@ from typing import Any
 
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
-from . import contracts, errors
+from . import contracts, errors, transforms
 from .http_client import request_json
 from .paths import ExternalModelsPaths
 from .routes import find_route, load_routes_file
@@ -175,6 +175,8 @@ def _handle_models_probe(route: dict[str, Any], paths: ExternalModelsPaths) -> t
 
 def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dict[str, Any], list[str]]:
     route = find_route(load_routes_file(paths.routes_file), route_id)
+    transforms.validate_route_transform_profiles(route)
+    transform_metadata = transforms.route_transform_metadata(route)
     if str(route["cost_class"]) == "paid_direct":
         state_path = _update_route_observation(
             paths=paths,
@@ -202,6 +204,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
             "requested_model": route["route_id"],
             "provider": route["provider"],
         }
+        error.data.update(transform_metadata)
         raise error
     try:
         probe_data, model_count = _handle_models_probe(route, paths)
@@ -232,6 +235,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
             "verification_scope": "route_provider_only",
             "available_models_count": model_count,
         }
+        result.update(transform_metadata)
         evidence_path = _write_network_evidence(
             paths=paths,
             route=route,
@@ -252,6 +256,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
             "evidence_path": str(evidence_path),
         }
         data.update(probe_data)
+        data.update(transform_metadata)
         return data, [state_path, str(evidence_path)]
     except RuntimeErrorInfo as exc:
         availability_state = {
@@ -291,11 +296,14 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
             "requested_model": route["route_id"],
             "provider": route["provider"],
         }
+        error.data.update(transform_metadata)
         raise error from exc
 
 
 def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dict[str, Any], list[str]]:
     route = find_route(load_routes_file(paths.routes_file), route_id)
+    transforms.validate_route_transform_profiles(route)
+    transform_metadata = transforms.route_transform_metadata(route)
     if str(route["cost_class"]) == "paid_direct":
         state_path = _update_route_observation(
             paths=paths,
@@ -325,18 +333,18 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "fallback_used": False,
             "fallback_chain": [route["route_id"]],
         }
+        error.data.update(transform_metadata)
         raise error
     try:
         headers = _provider_headers(route, paths)
+        request_payload, request_metadata = transforms.build_check_request(
+            route, user_prompt="ping"
+        )
         response = request_json(
             url=_completion_url(route),
             method="POST",
             headers=headers,
-            payload={
-                "model": route["upstream_model"],
-                "messages": [{"role": "user", "content": "ping"}],
-                "max_tokens": 8,
-            },
+            payload=request_payload,
         )
         if response.status_code in (401, 403):
             raise RuntimeErrorInfo(
@@ -351,13 +359,7 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
                 operator_action="retry",
             )
         payload = response.payload
-        choices = payload.get("choices") if isinstance(payload, dict) else None
-        if not isinstance(choices, list) or not choices:
-            raise RuntimeErrorInfo(
-                "Provider smoke-check payload did not contain choices.",
-                machine_error_code=errors.INVALID_UPSTREAM_RESPONSE,
-                operator_action="retry",
-            )
+        _response_text, response_metadata = transforms.extract_check_response(route, payload)
         observed_at = contracts.utc_now_iso()
         state_path = _update_route_observation(
             paths=paths,
@@ -387,13 +389,20 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "latency_ms": response.latency_ms,
             "verification_scope": "route_provider_only",
         }
+        result.update(request_metadata)
+        result.update(
+            {
+                "response_profile": response_metadata["response_profile"],
+                "response_shape": response_metadata["response_shape"],
+            }
+        )
         evidence_path = _write_network_evidence(
             paths=paths,
             route=route,
             command_context="external-models check",
             result=result,
         )
-        return {
+        data = {
             "check_kind": "provider_route_smoke",
             "network_dependent": True,
             "listener_proven": False,
@@ -409,7 +418,15 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "evidence_path": str(evidence_path),
             "latency_ms": response.latency_ms,
             "request_count": 1,
-        }, [state_path, str(evidence_path)]
+        }
+        data.update(request_metadata)
+        data.update(
+            {
+                "response_profile": response_metadata["response_profile"],
+                "response_shape": response_metadata["response_shape"],
+            }
+        )
+        return data, [state_path, str(evidence_path)]
     except RuntimeErrorInfo as exc:
         availability_state = {
             errors.PROVIDER_AUTH_FAILED: "provider_auth_failed",
@@ -450,4 +467,5 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             "fallback_used": False,
             "fallback_chain": [route["route_id"]],
         }
+        error.data.update(transform_metadata)
         raise error from exc

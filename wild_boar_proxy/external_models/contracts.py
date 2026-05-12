@@ -27,6 +27,8 @@ ROUTE_ALLOWED_FIELDS = frozenset(
         "lane_role",
         "fallback_eligible",
         "enabled",
+        "transform_profile",
+        "response_profile",
     }
 )
 ROUTE_REQUIRED_FIELDS = frozenset(

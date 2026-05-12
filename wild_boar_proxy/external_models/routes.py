@@ -9,7 +9,7 @@ from typing import Any
 
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
-from . import contracts, errors
+from . import contracts, errors, transforms
 from .paths import ExternalModelsPaths
 from .state import atomic_write_json, dual_lock, ensure_secrets_permissions, load_state_file, serialized_lock, write_state_file
 
@@ -160,6 +160,7 @@ def validate_route_schema(route: dict[str, Any]) -> dict[str, Any]:
             machine_error_code=errors.SCHEMA_INVALID,
             operator_action="user_action",
         )
+    transforms.validate_route_transform_profiles(route)
     return route
 
 
@@ -176,6 +177,8 @@ def route_models_projection(route: dict[str, Any]) -> dict[str, Any]:
         "enabled": route["enabled"],
         "lane_role": route["lane_role"],
         "fallback_eligible": route["fallback_eligible"],
+        "transform_profile": route.get("transform_profile"),
+        "response_profile": route.get("response_profile"),
     }
 
 
