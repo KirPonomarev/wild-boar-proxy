@@ -1,0 +1,116 @@
+{
+  "contour_id": "WORKTREE_TAIL_ADJUDICATION",
+  "decision_at_local": "2026-05-13",
+  "decision_status": "tail_classified_next_owner_decisions_required",
+  "canon_alignment": {
+    "no_layer_mixing": true,
+    "runtime_separated": true,
+    "ui_work_not_started": true,
+    "external_lab_not_mixed_into_ui_commit": true,
+    "generated_evidence_not_auto_committed": true,
+    "external_reference_artifacts_absent": true
+  },
+  "decisions": [
+    {
+      "scope": "external_agent_lab_code_and_tests",
+      "paths": [
+        "external_agent_lab/legacy/agent_eval.py",
+        "external_agent_lab/legacy/proxy_server.py",
+        "external_agent_lab/legacy/run_lab.py",
+        "external_agent_lab/model_registry_seed.json",
+        "tests/test_external_agent_lab.py"
+      ],
+      "decision": "safe_to_consider_as_separate_external_lab_commit_after_targeted_tests",
+      "must_not_mix_with": [
+        "UI feature work",
+        "runtime.py",
+        "visual stabilization"
+      ],
+      "required_before_commit": [
+        "targeted external-agent-lab tests pass",
+        "registry evidence references are reviewed",
+        "generated eval_results policy is decided"
+      ]
+    },
+    {
+      "scope": "wild_boar_proxy_runtime",
+      "paths": [
+        "wild_boar_proxy/runtime.py"
+      ],
+      "decision": "separate_runtime_contour_required",
+      "reason": "Diff changes dispatch timing and promote verification behavior.",
+      "allowed_now": [
+        "inventory only"
+      ],
+      "forbidden_now": [
+        "stage",
+        "commit",
+        "revert",
+        "format",
+        "rewrite"
+      ]
+    },
+    {
+      "scope": "untracked_external_lab_audit_results",
+      "paths": [
+        "audit_results/external_lab_*",
+        "audit_results/c02_mini_eval_admission_2026-05-09.json"
+      ],
+      "decision": "park_or_separate_evidence_review",
+      "reason": "Files are generated evidence with absolute path markers and operational evidence naming.",
+      "must_not_auto_commit": true
+    },
+    {
+      "scope": "untracked_eval_results",
+      "paths": [
+        "external_agent_lab/legacy/eval_results/"
+      ],
+      "decision": "owner_decision_or_park",
+      "reason": "Generated task-eval logs contain provider/model outcome records and should not become ordinary source by accident.",
+      "must_not_auto_commit": true
+    }
+  ],
+  "next_actions": [
+    {
+      "order": 1,
+      "action": "Ask owner whether to park generated evidence outside repo or keep it pending for a separate evidence review contour.",
+      "blocks": [
+        "clean visual freeze path"
+      ]
+    },
+    {
+      "order": 2,
+      "action": "Open a separate runtime contour for wild_boar_proxy/runtime.py if the runtime changes are still wanted.",
+      "blocks": [
+        "runtime.py staging"
+      ]
+    },
+    {
+      "order": 3,
+      "action": "If approved, commit external-agent-lab code and tests separately after targeted tests.",
+      "blocks": [
+        "external-agent-lab tail closure"
+      ]
+    },
+    {
+      "order": 4,
+      "action": "Proceed to UI render package/passport backfill only after dirty tail no longer blocks the UI branch.",
+      "blocks": [
+        "UI visual stabilization"
+      ]
+    }
+  ],
+  "stop_conditions_triggered": [
+    {
+      "condition": "runtime.py behavior change detected",
+      "status": "triggered",
+      "resolution": "classified as separate_runtime_contour_required; no runtime mutation performed"
+    },
+    {
+      "condition": "generated evidence contains operational path markers",
+      "status": "triggered",
+      "resolution": "classified as park_or_separate_evidence_review; no generated evidence staged"
+    }
+  ],
+  "contour_result": "classification_complete_not_cleanup_complete"
+}

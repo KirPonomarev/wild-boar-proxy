@@ -1,0 +1,137 @@
+{
+  "contour_id": "WORKTREE_TAIL_ADJUDICATION",
+  "captured_at_local": "2026-05-13",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "0acaef1 Harden web action ledger error states",
+  "mode": "read_only_inspection_with_repo_safe_decision_artifacts",
+  "tracked_dirty_summary": {
+    "count": 6,
+    "diff_stat": {
+      "files_changed": 6,
+      "insertions": 85,
+      "deletions": 17
+    },
+    "files": [
+      {
+        "path": "external_agent_lab/legacy/agent_eval.py",
+        "layer": "external_agent_lab",
+        "classification": "lab_routing_config_change",
+        "diff_facts": [
+          "adds route-to-registry mapping for direct-mistral-devstral-2512",
+          "adds direct-mistral-devstral-2512 to candidate orders"
+        ],
+        "candidate_disposition": "separate_external_lab_commit_candidate"
+      },
+      {
+        "path": "external_agent_lab/legacy/proxy_server.py",
+        "layer": "external_agent_lab",
+        "classification": "lab_provider_config_change",
+        "diff_facts": [
+          "adds direct-mistral-devstral-2512 provider model entry",
+          "adds devstral aliases"
+        ],
+        "candidate_disposition": "separate_external_lab_commit_candidate"
+      },
+      {
+        "path": "external_agent_lab/legacy/run_lab.py",
+        "layer": "external_agent_lab",
+        "classification": "lab_provider_env_mapping_change",
+        "diff_facts": [
+          "adds direct-mistral-devstral-2512 provider key mapping",
+          "adds devstral aliases"
+        ],
+        "candidate_disposition": "separate_external_lab_commit_candidate"
+      },
+      {
+        "path": "external_agent_lab/model_registry_seed.json",
+        "layer": "external_agent_lab",
+        "classification": "lab_registry_seed_update",
+        "diff_facts": [
+          "updates multiple provider availability and evidence fields",
+          "adds direct-mistral-devstral-2512 as verified_accessible secondary_reasoning"
+        ],
+        "candidate_disposition": "separate_external_lab_commit_candidate_after_evidence_review"
+      },
+      {
+        "path": "tests/test_external_agent_lab.py",
+        "layer": "tests_external_agent_lab",
+        "classification": "test_coverage_update",
+        "diff_facts": [
+          "adds coverage for direct-mistral-devstral-2512 route and registry entry",
+          "removes eval_results from forbidden source artifact names"
+        ],
+        "candidate_disposition": "separate_external_lab_commit_candidate"
+      },
+      {
+        "path": "wild_boar_proxy/runtime.py",
+        "layer": "runtime",
+        "classification": "runtime_behavior_change",
+        "diff_facts": [
+          "adds short settle loop after detached host-client dispatch",
+          "changes promote routing_change_observed verification behavior when lock_acquired is true"
+        ],
+        "candidate_disposition": "separate_runtime_contour_required"
+      }
+    ]
+  },
+  "untracked_summary": {
+    "baseline_count_excluding_this_contour_artifacts": 168,
+    "current_count_including_this_contour_artifacts": 171,
+    "this_contour_artifacts_count": 3,
+    "groups": [
+      {
+        "group": "audit_results_external_lab",
+        "count": 157,
+        "examples": [
+          "audit_results/external_lab_access_smoke_c01_packet_2026-05-09.json",
+          "audit_results/external_lab_c20_runtime_execution_packet_2026-05-10.json",
+          "audit_results/external_lab_c23_operator_authorization_packet_2026-05-11.json",
+          "audit_results/external_lab_c25_operation_declaration_2026-05-11.md"
+        ],
+        "candidate_disposition": "park_or_separate_evidence_review"
+      },
+      {
+        "group": "audit_results_other",
+        "count": 1,
+        "examples": [
+          "audit_results/c02_mini_eval_admission_2026-05-09.json"
+        ],
+        "candidate_disposition": "park_or_separate_evidence_review"
+      },
+      {
+        "group": "external_agent_lab_eval_results",
+        "count": 10,
+        "examples": [
+          "external_agent_lab/legacy/eval_results/eval_20260510_105453_587249.json",
+          "external_agent_lab/legacy/eval_results/eval_20260510_105453_587249.md",
+          "external_agent_lab/legacy/eval_results/eval_20260510_105648_183628.json",
+          "external_agent_lab/legacy/eval_results/eval_20260510_105648_183628.md"
+        ],
+        "candidate_disposition": "owner_decision_or_park"
+      }
+    ]
+  },
+  "scan_summary": {
+    "baseline_untracked_file_count_excluding_this_contour_artifacts": 168,
+    "current_untracked_file_count_including_this_contour_artifacts": 171,
+    "untracked_size_notes": {
+      "audit_results_total": "4.0M",
+      "external_agent_lab_eval_results": "100K"
+    },
+    "direct_secret_value_matches": 0,
+    "files_with_absolute_or_private_path_markers": 21,
+    "files_with_provider_env_placeholder_markers": 17,
+    "external_reference_trace_scan": "no_matches_reported_neutrally",
+    "risk_interpretation": [
+      "No raw secret values were found by the direct secret-value scan.",
+      "Several evidence artifacts contain absolute local paths and provider env placeholder names.",
+      "Generated evidence should not be auto-committed before separate evidence review."
+    ]
+  },
+  "independent_inspector_cross_check": {
+    "agent": "Sartre",
+    "result": "consistent",
+    "noted_runtime_risk": "runtime.py is runtime-behavioral and requires a separate runtime contour",
+    "noted_generated_evidence_risk": "audit and eval artifacts should be treated as evidence logs, not ordinary source"
+  }
+}
