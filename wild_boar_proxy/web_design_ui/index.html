@@ -41,7 +41,7 @@
             </svg>
             <span>Аккаунты</span>
           </a>
-          <a class="nav-item disabled" href="#" aria-disabled="true">
+          <a id="diagnosticsNav" class="nav-item" href="?screen=diagnostics" data-screen-link="diagnostics">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
               <path d="M4 13h3l3-7 5 13 2-6h3"></path>
             </svg>
@@ -150,6 +150,14 @@
               </svg>
               <span>Добавить аккаунт</span>
             </button>
+            <button id="diagnosticsExportAction" class="button primary live-action diagnostics-only" type="button" data-ui-action="export_diagnostics" hidden>
+              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 3v12"></path>
+                <path d="m7 10 5 5 5-5"></path>
+                <path d="M5 21h14"></path>
+              </svg>
+              <span>Экспортировать артефакт</span>
+            </button>
           </div>
         </div>
 
@@ -168,7 +176,7 @@
             <div>Machine code</div><div id="actionMachineCode">-</div>
             <div>Message</div><div id="actionMessage">Actions have not run yet.</div>
             <div>Next action</div><div id="actionNextAction">none</div>
-            <div>Changed files</div><div id="actionChangedFiles">[]</div>
+            <div>Changed files</div><div id="actionChangedFiles">0 metadata entries</div>
             <div>Refresh</div><div id="actionRefreshStatus">not requested</div>
             <div>Onboarding outcome</div><div id="actionOnboardingOutcome">-</div>
             <div>Reserve proof</div><div id="actionOnboardingReserveProof">-</div>
@@ -336,6 +344,164 @@
               <span>canonical JSON · gated lifecycle</span>
             </div>
           </section>
+        </section>
+
+        <section id="diagnosticsScreen" class="screen" data-screen="diagnostics" hidden>
+          <div id="diagnosticsBanner" class="fixture-banner neutral">
+            Diagnostics screen shows support-artifact command metadata only. It is not runtime health truth.
+          </div>
+
+          <div class="diag-layout">
+            <section class="card diag-list">
+              <div class="diag-controls">
+                <div class="search" aria-label="Diagnostics scope">
+                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4 4"></path>
+                  </svg>
+                  <span>Support artifact scope</span>
+                </div>
+                <button class="button small disabled" type="button" disabled>Runtime truth is read elsewhere</button>
+              </div>
+              <div class="diag-buttons">
+                <button class="button small live-action" type="button" data-ui-action="export_diagnostics">
+                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 3v12"></path>
+                    <path d="m7 10 5 5 5-5"></path>
+                    <path d="M5 21h14"></path>
+                  </svg>
+                  <span>Экспорт</span>
+                </button>
+                <button class="button primary small live-action" type="button" data-ui-action="refresh_health_detail">
+                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M20 6 9 17l-5-5"></path>
+                  </svg>
+                  <span>Healthcheck</span>
+                </button>
+              </div>
+              <div class="signal-list" aria-label="Diagnostics boundaries">
+                <div class="signal-item active">
+                  <div class="signal-icon blue">
+                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M4 13h3l3-7 5 13 2-6h3"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="signal-title">Diagnostics export</div>
+                    <div class="signal-sub">Creates a bounded support artifact from JSON command output.</div>
+                    <div class="mini-bar"><span style="width:100%"></span></div>
+                  </div>
+                  <span class="chip blue"><span class="dot"></span>Support</span>
+                </div>
+                <div class="signal-item">
+                  <div class="signal-icon amber">
+                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 9v4"></path>
+                      <path d="M12 17h.01"></path>
+                      <path d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="signal-title">Not health truth</div>
+                    <div class="signal-sub">Status and health remain owned by status and healthcheck packets.</div>
+                    <div class="mini-bar"><span style="width:68%"></span></div>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>Bounded</span>
+                </div>
+                <div class="signal-item">
+                  <div class="signal-icon neutral">
+                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="signal-title">No direct file reads</div>
+                    <div class="signal-sub">The UI does not inspect artifacts, runtime state, or logs.</div>
+                    <div class="mini-bar"><span style="width:100%"></span></div>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>Guarded</span>
+                </div>
+              </div>
+              <div class="diag-footer">
+                <div>Source: strict JSON command packets only</div>
+                <div>Claim scope: support artifact metadata only</div>
+              </div>
+            </section>
+
+            <section class="diag-detail">
+              <div class="card detail-head">
+                <div class="detail-object">
+                  <div class="avatar">
+                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M4 13h3l3-7 5 13 2-6h3"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="object-title">Diagnostics support artifact</div>
+                    <div class="object-sub">Last export command packet</div>
+                  </div>
+                </div>
+                <span id="diagnosticsStatusChip" class="chip neutral"><span class="dot"></span><span>Idle</span></span>
+              </div>
+
+              <div class="card pad status-block">
+                <div class="card-title">Command result</div>
+                <p id="diagnosticsMessage">No diagnostics export has run from this UI session.</p>
+              </div>
+
+              <div class="card pad">
+                <div class="card-title">Support artifact chain</div>
+                <div class="chain">
+                  <div class="chain-step">
+                    <div class="chain-dot blue">1</div>
+                    <span>UI action</span>
+                    <span class="chip blue"><span class="dot"></span>bounded</span>
+                  </div>
+                  <div class="chain-line"></div>
+                  <div class="chain-step">
+                    <div class="chain-dot blue">2</div>
+                    <span>Adapter</span>
+                    <span class="chip blue"><span class="dot"></span>allowlist</span>
+                  </div>
+                  <div class="chain-line"></div>
+                  <div class="chain-step">
+                    <div class="chain-dot blue">3</div>
+                    <span>Command</span>
+                    <span class="chip blue"><span class="dot"></span>JSON</span>
+                  </div>
+                  <div class="chain-line"></div>
+                  <div class="chain-step">
+                    <div class="chain-dot neutral">4</div>
+                    <span>Artifact</span>
+                    <span class="chip neutral"><span class="dot"></span>metadata</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="detail-grid">
+                <div class="card pad tech-log">
+                  <div class="card-title">Packet fields</div>
+                  <div class="tech-row"><span>Status</span><span id="diagnosticsPacketStatus">idle</span></div>
+                  <div class="tech-row"><span>Exit</span><span id="diagnosticsExitCode">-</span></div>
+                  <div class="tech-row"><span>Machine</span><span id="diagnosticsMachineCode">-</span></div>
+                  <div class="tech-row"><span>Next</span><span id="diagnosticsNextAction">none</span></div>
+                </div>
+                <div class="card pad">
+                  <div class="card-title">Artifact metadata</div>
+                  <div class="kv diag-kv">
+                    <div>Changed entries</div><div id="diagnosticsChangedFiles">0</div>
+                    <div>Artifact ref</div><div id="diagnosticsBundleRef">not provided</div>
+                    <div>UI reads artifact</div><div>never</div>
+                    <div>Runtime truth</div><div>not affected</div>
+                  </div>
+                  <div class="action-stack">
+                    <button class="button small disabled" type="button" disabled>Artifact inspection deferred</button>
+                    <button class="button small disabled" type="button" disabled>Raw diagnostic text unavailable</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
         </section>
       </main>
 

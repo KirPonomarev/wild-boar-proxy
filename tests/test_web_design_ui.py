@@ -246,6 +246,34 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("pilot", html + js)
         self.assertNotIn("scale proof", html + js)
 
+    def test_diagnostics_screen_is_support_artifact_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-screen-link="diagnostics"', html)
+        self.assertIn('id="diagnosticsScreen"', html)
+        self.assertIn('class="button primary live-action diagnostics-only"', html)
+        self.assertIn('data-ui-action="export_diagnostics"', html)
+        self.assertIn("Diagnostics support artifact", html + js)
+        self.assertIn("Runtime health truth was not changed", js)
+        self.assertIn("metadata only:", js)
+        self.assertIn("Artifact inspection deferred", html)
+        self.assertIn("Raw diagnostic text unavailable", html)
+        self.assertIn('const SCREENS = ["overview", "accounts", "diagnostics"]', js)
+        self.assertIn("renderDiagnosticsAction", js)
+        self.assertIn("artifactReference(data.bundle_path)", js)
+        self.assertNotIn("Показать журнал", html)
+        self.assertNotIn("Открыть auth", html)
+        self.assertNotIn("В резерв", html)
+        self.assertNotIn('type="file"', html)
+        self.assertNotIn("readAsText", js)
+        self.assertNotIn("localStorage", js)
+        self.assertNotIn("window.open", js)
+        self.assertNotIn("diagnostics export --json", html + js)
+        self.assertNotIn("runtime healthy", (html + js).lower())
+        self.assertNotIn("pilot", html + js)
+        self.assertNotIn("scale proof", html + js)
+
     def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -295,6 +323,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("metadata.unavailable_reason", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
         self.assertIn(".live-action, .account-action", js)
+        self.assertIn(".diagnostics-only", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"

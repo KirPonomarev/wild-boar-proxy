@@ -386,6 +386,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
         self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+        self.assertIn("export_diagnostics", metadata["actions"])
+        self.assertEqual(metadata["actions"]["export_diagnostics"]["action_role"], "support_artifact")
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["affects_primary_truth"])
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["post_action_refresh_required"])
+        self.assertIn("support artifact only", metadata["actions"]["export_diagnostics"]["action_claim_scope"])
         self.assertIn("onboard_account", metadata["actions"])
         self.assertTrue(metadata["actions"]["onboard_account"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["onboard_account"]["mutates_runtime"])
@@ -1030,6 +1037,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner,
             {"ui_action": "export_diagnostics", "client_path": "/Applications/Codex.app"},
         )
+        bundle_path_payload = run_ui_action(
+            runner,
+            {"ui_action": "export_diagnostics", "bundle_path": "/tmp/wbp-diagnostics.zip"},
+        )
+        log_path_payload = run_ui_action(
+            runner,
+            {"ui_action": "export_diagnostics", "log_path": "/tmp/runtime.log"},
+        )
         unknown = run_ui_action(runner, {"ui_action": "policy_stage_set"})
 
         for payload in [
@@ -1038,6 +1053,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             launch_client,
             account_lifecycle,
             client_path_payload,
+            bundle_path_payload,
+            log_path_payload,
             unknown,
         ]:
             self.assertEqual(payload["status"], "integration_failure")

@@ -61,7 +61,7 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
-const SCREENS = ["overview", "accounts"];
+const SCREENS = ["overview", "accounts", "diagnostics"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -385,24 +385,37 @@ function renderEvents(events) {
 function setSourceCopy(source) {
   const screen = currentScreen();
   document.getElementById("sourceFooter").textContent = source === "live"
-    ? (screen === "accounts" ? "Accounts live read-only" : "Live read-only · basic actions")
+    ? (
+      screen === "accounts"
+        ? "Accounts live read-only"
+        : (screen === "diagnostics" ? "Diagnostics support artifact" : "Live read-only · basic actions")
+    )
     : "UI preview · no live commands";
   document.getElementById("subtitleText").textContent = source === "live"
     ? (
       screen === "accounts"
         ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия идут через bounded action gate."
-        : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+        : (
+          screen === "diagnostics"
+            ? "Экран диагностики показывает только support-artifact metadata из diagnostics JSON packet. Runtime health truth остаётся за status/healthcheck."
+            : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+        )
     )
     : (
       screen === "accounts"
         ? "Визуальный перенос экрана аккаунтов. Данные ниже являются fixtures, а не runtime truth."
-        : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+        : (
+          screen === "diagnostics"
+            ? "Визуальный перенос diagnostics screen. Экспорт создаёт support artifact, но не доказывает runtime health."
+            : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+        )
     );
 }
 
 function setActionPanel(payload) {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
+  const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || "-");
@@ -410,7 +423,7 @@ function setActionPanel(payload) {
   text("actionMachineCode", result.machine_error_code || "-");
   text("actionMessage", result.human_message || "-");
   text("actionNextAction", result.next_action || "none");
-  text("actionChangedFiles", JSON.stringify(result.changed_files || []));
+  text("actionChangedFiles", `${changedFiles.length} metadata entries`);
   text(
     "actionRefreshStatus",
     payload.post_action_refresh_required ? "required after action" : "not required"
@@ -418,6 +431,54 @@ function setActionPanel(payload) {
   text("actionOnboardingOutcome", onboarding.final_outcome || "-");
   text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "proven" : (onboarding.ui_state || "-"));
   text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
+  if (payload.ui_action === "export_diagnostics") {
+    renderDiagnosticsAction(payload);
+  }
+}
+
+function renderDiagnosticsAction(payload) {
+  const result = payload.result || {};
+  const packet = result.packet || {};
+  const data = packet.data || {};
+  const status = result.status || payload.status || "unknown";
+  const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
+  const visual = status === "ok" ? "blue" : (status === "running" ? "amber" : "red");
+  const chip = document.getElementById("diagnosticsStatusChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${visual}`;
+  chip.lastElementChild.textContent = diagnosticsStatusLabel(status);
+  text("diagnosticsMessage", result.human_message || "Diagnostics command returned no message.");
+  text("diagnosticsPacketStatus", status);
+  text("diagnosticsExitCode", result.exit_code ?? "-");
+  text("diagnosticsMachineCode", result.machine_error_code || "-");
+  text("diagnosticsNextAction", result.next_action || "none");
+  text("diagnosticsChangedFiles", `${changedFiles.length}`);
+  text("diagnosticsBundleRef", artifactReference(data.bundle_path));
+
+  const banner = document.getElementById("diagnosticsBanner");
+  setClassName(banner, "fixture-banner", status === "ok" ? "healthy" : (status === "running" ? "stale" : "integration_failure"));
+  banner.textContent = status === "ok"
+    ? "Diagnostics support artifact exported. Runtime health truth was not changed."
+    : "Diagnostics command did not produce a successful support artifact. Runtime health truth was not changed.";
+}
+
+function diagnosticsStatusLabel(status) {
+  return {
+    ok: "Artifact exported",
+    running: "Running",
+    command_error: "Command error",
+    integration_failure: "Integration failure"
+  }[status] || "Unknown";
+}
+
+function artifactReference(value) {
+  if (typeof value !== "string" || !value) {
+    return "not provided";
+  }
+  const basename = value.split(/[\\/]/).filter(Boolean).pop() || "artifact";
+  return `metadata only: ${basename}`;
 }
 
 function setActionsBusy(isBusy) {
@@ -509,6 +570,9 @@ function setScreen(screen, updateUrl = false) {
   for (const node of document.querySelectorAll(".accounts-only")) {
     node.hidden = nextScreen !== "accounts";
   }
+  for (const node of document.querySelectorAll(".diagnostics-only")) {
+    node.hidden = nextScreen !== "diagnostics";
+  }
   for (const link of document.querySelectorAll("[data-screen-link]")) {
     const active = link.dataset.screenLink === nextScreen;
     link.classList.toggle("active", active);
@@ -519,7 +583,10 @@ function setScreen(screen, updateUrl = false) {
     }
   }
 
-  text("mainTitle", nextScreen === "accounts" ? "Аккаунты" : "Обзор");
+  text(
+    "mainTitle",
+    nextScreen === "accounts" ? "Аккаунты" : (nextScreen === "diagnostics" ? "Диагностика" : "Обзор")
+  );
   setSourceCopy(document.getElementById("sourcePicker").value);
 
   if (updateUrl) {
