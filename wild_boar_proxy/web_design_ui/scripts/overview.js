@@ -61,6 +61,19 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
+const ACTION_STATUS_VISUAL_CLASS = {
+  ok: "green",
+  running: "amber",
+  command_error: "red",
+  integration_failure: "red",
+  invalid_json: "red",
+  timeout: "amber",
+  stale: "amber",
+  degraded: "amber",
+  down: "red",
+  unknown: "neutral"
+};
+
 const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
@@ -304,6 +317,55 @@ function confirmationPolicyFor(uiAction, metadata) {
   return policy;
 }
 
+function actionDisplayState(payload, refreshState = "none") {
+  const result = payload.result || {};
+  const status = String(payload.status || result.status || "unknown");
+  let displayState = status;
+  if (refreshState === "failed" && status === "ok" && payload.post_action_refresh_required) {
+    displayState = "stale";
+  }
+  const visualClass = ACTION_STATUS_VISUAL_CLASS[displayState] || (
+    displayState === "ok" ? "green" : "red"
+  );
+  return {
+    status,
+    displayState,
+    visualClass,
+    truthNote: actionTruthNote(payload, displayState, refreshState)
+  };
+}
+
+function actionTruthNote(payload, displayState, refreshState) {
+  if (displayState === "running") {
+    return "Action request is in flight. No runtime truth has changed in the UI.";
+  }
+  if (displayState === "ok" && payload.post_action_refresh_required) {
+    return "Action packet reported ok; canonical runtime truth requires refreshed JSON.";
+  }
+  if (displayState === "ok") {
+    return "Action packet reported ok. This ledger is not a separate runtime truth source.";
+  }
+  if (displayState === "stale" || refreshState === "failed") {
+    return "Post-action refresh failed or stale. Do not treat the previous UI state as green runtime truth.";
+  }
+  if (displayState === "timeout") {
+    return "Request timed out. This is a recoverable integration failure, not success.";
+  }
+  if (displayState === "invalid_json") {
+    return "Endpoint returned invalid JSON. This is a hard integration failure, not success.";
+  }
+  if (displayState === "command_error") {
+    return "Strict JSON packet reported command_error. The UI must not render this as success.";
+  }
+  if (displayState === "integration_failure") {
+    return "UI/server integration failure. No command success is inferred.";
+  }
+  if (displayState === "degraded" || displayState === "down" || displayState === "unknown") {
+    return `Action ledger is ${displayState}; it is not healthy runtime truth.`;
+  }
+  return "Non-ok action state. The UI must not infer success.";
+}
+
 async function runUiAction(uiAction, extraPayload = {}) {
   setActionsBusy(true);
   setActionPanel({
@@ -337,17 +399,26 @@ async function runUiAction(uiAction, extraPayload = {}) {
         : (currentScreen() === "settings" ? "settings" : "overview");
       text("actionRefreshStatus", `refreshing live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
-      text("actionRefreshStatus", refreshed.status === "ok" ? "live refresh ok" : "live refresh failed");
+      if (refreshed.status === "ok") {
+        text("actionRefreshStatus", "live refresh ok");
+      } else {
+        setActionPanel(payload, "failed");
+      }
     }
   } catch (error) {
+    const timeoutFailure = error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout");
+    const failureStatus = error instanceof SyntaxError ? "invalid_json" : (timeoutFailure ? "timeout" : "integration_failure");
+    const machineCode = error instanceof SyntaxError
+      ? "UI_ACTION_INVALID_JSON"
+      : (timeoutFailure ? "UI_ACTION_TIMEOUT" : "UI_ACTION_FETCH_FAILED");
     setActionPanel({
       ui_action: uiAction,
       action_role: "integration_failure",
       account_id: extraPayload.account_id || "",
       post_action_refresh_required: false,
       result: {
-        status: "integration_failure",
-        machine_error_code: "UI_ACTION_FETCH_FAILED",
+        status: failureStatus,
+        machine_error_code: machineCode,
         human_message: error.message,
         next_action: "retry",
         changed_files: []
@@ -516,22 +587,29 @@ function setSourceCopy(source) {
     );
 }
 
-function setActionPanel(payload) {
+function setActionPanel(payload, refreshState = "none") {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
+  const display = actionDisplayState(payload, refreshState);
+  const panel = document.getElementById("actionPanel");
+  panel.className = `action-panel ${display.visualClass}`;
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || "-");
-  text("actionStatus", result.status || payload.status || "unknown");
+  text("actionStatus", display.status);
+  text("actionDisplayState", display.displayState);
   text("actionMachineCode", result.machine_error_code || "-");
   text("actionMessage", result.human_message || "-");
   text("actionNextAction", result.next_action || "none");
   text("actionChangedFiles", `${changedFiles.length} metadata entries`);
   text(
     "actionRefreshStatus",
-    payload.post_action_refresh_required ? "required after action" : "not required"
+    refreshState === "failed"
+      ? "live refresh failed; state is stale"
+      : (payload.post_action_refresh_required ? "required after action" : "not required")
   );
+  text("actionTruthNote", display.truthNote);
   text("actionOnboardingOutcome", onboarding.final_outcome || "-");
   text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "proven" : (onboarding.ui_state || "-"));
   text("actionOnboardingBackend", onboarding.selected_backend_id || "-");

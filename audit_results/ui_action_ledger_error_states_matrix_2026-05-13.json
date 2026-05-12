@@ -1,0 +1,67 @@
+{
+  "contour_id": "UI_WEB_ACTION_LEDGER_AND_ERROR_STATES",
+  "date": "2026-05-13",
+  "scope": "web UI action ledger display hardening only",
+  "canon_basis": [
+    "CANON.md no false-green or stale-green",
+    "MASTER_PLAN.md truthful UI state separation",
+    "COMMAND_API.md strict JSON only, no plain-text/log fallback",
+    "DELIVERY_RULES.md runtime truth over narrative summaries"
+  ],
+  "changed_surfaces": {
+    "ui_markup": "wild_boar_proxy/web_design_ui/index.html",
+    "ui_script": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "ui_style": "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests": "tests/test_web_design_ui.py"
+  },
+  "unchanged_surfaces": [
+    "wild_boar_proxy/runtime.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "external_agent_lab/**",
+    "desktop files"
+  ],
+  "status_mapping": {
+    "ok": "green",
+    "running": "amber",
+    "command_error": "red",
+    "integration_failure": "red",
+    "invalid_json": "red",
+    "timeout": "amber",
+    "stale": "amber",
+    "degraded": "amber",
+    "down": "red",
+    "unknown": "neutral"
+  },
+  "truth_rules": [
+    "Action ledger status uses payload.status before nested result.status.",
+    "Command error is red and is never rendered as success.",
+    "Invalid JSON is a hard integration failure and is never rendered as success.",
+    "Timeout is a recoverable integration failure and is not rendered as success.",
+    "Post-action refresh failure converts the display state to stale for refresh-required ok action packets.",
+    "The action ledger is explicitly not a separate runtime truth source."
+  ],
+  "tests": [
+    {
+      "file": "tests/test_web_design_ui.py",
+      "test": "test_action_ledger_normalizes_error_states_without_false_green",
+      "coverage": "ledger fields, state mapping, top-level status precedence, stale refresh handling, invalid JSON, timeout, and action-panel classes"
+    },
+    {
+      "file": "tests/test_web_design_ui.py",
+      "test": "test_action_ledger_rendering_executes_status_mapping",
+      "coverage": "executes overview.js in a Node VM with a DOM stub and proves command_error and invalid_json render red, while failed refresh renders stale amber"
+    }
+  ],
+  "scope_risks": [
+    {
+      "risk": "Inspector observed existing overview/detail warning semantics where overall overview may remain healthy while detail warnings are appended.",
+      "disposition": "Not changed in this contour because it is server/runtime truth semantics, not action ledger display. Keep for a separate canon-scoped contour if owner wants to reclassify overview warnings."
+    },
+    {
+      "risk": "Pre-existing dirty tail remains in runtime/external-agent files.",
+      "disposition": "Not staged; deferred to WORKTREE_TAIL_ADJUDICATION."
+    }
+  ],
+  "external_reference_service_traces": "none"
+}

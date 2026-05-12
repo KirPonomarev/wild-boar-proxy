@@ -424,6 +424,26 @@ button:disabled {
   padding: 14px;
 }
 
+.action-panel.green {
+  background: var(--success-bg);
+  border-color: rgba(45, 122, 75, .2);
+}
+
+.action-panel.amber {
+  background: var(--amber-bg);
+  border-color: rgba(168, 106, 16, .22);
+}
+
+.action-panel.red {
+  background: var(--red-bg);
+  border-color: rgba(182, 64, 44, .22);
+}
+
+.action-panel.neutral {
+  background: var(--neutral-bg);
+  border-color: rgba(217, 208, 195, .8);
+}
+
 .action-panel-grid {
   display: grid;
   gap: 7px 16px;

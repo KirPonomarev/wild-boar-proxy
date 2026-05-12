@@ -425,6 +425,154 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
 
+    def test_action_ledger_normalizes_error_states_without_false_green(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        self.assertIn('id="actionDisplayState"', html)
+        self.assertIn('id="actionTruthNote"', html)
+        self.assertIn('id="actionPanel" class="action-panel neutral"', html)
+        self.assertIn("ACTION_STATUS_VISUAL_CLASS", js)
+        self.assertIn('command_error: "red"', js)
+        self.assertIn('integration_failure: "red"', js)
+        self.assertIn('invalid_json: "red"', js)
+        self.assertIn('timeout: "amber"', js)
+        self.assertIn('stale: "amber"', js)
+        self.assertIn('unknown: "neutral"', js)
+        self.assertIn("payload.status || result.status", js)
+        self.assertIn('displayState = "stale"', js)
+        self.assertIn("live refresh failed; state is stale", js)
+        self.assertIn("UI_ACTION_INVALID_JSON", js)
+        self.assertIn("UI_ACTION_TIMEOUT", js)
+        self.assertIn("not success", js)
+        self.assertIn(".action-panel.green", css)
+        self.assertIn(".action-panel.amber", css)
+        self.assertIn(".action-panel.red", css)
+        self.assertIn(".action-panel.neutral", css)
+
+    def test_action_ledger_rendering_executes_status_mapping(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, {
+  className: "",
+  textContent: "",
+  lastElementChild: { textContent: "" }
+}]));
+const sandbox = {
+  console,
+  Node: function Node() {},
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = { className: "", textContent: "", lastElementChild: { textContent: "" } };
+      }
+      return elements[id];
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "overview", source: "fixture" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+function render(payload, refreshState) {
+  sandbox.setActionPanel(payload, refreshState);
+  return {
+    panel: elements.actionPanel.className,
+    status: elements.actionStatus.textContent,
+    display: elements.actionDisplayState.textContent,
+    truth: elements.actionTruthNote.textContent
+  };
+}
+
+const commandError = render({
+  status: "command_error",
+  ui_action: "sync_runtime",
+  action_role: "runtime_sync",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "COMMAND_FAILED",
+    human_message: "nested ok must not win",
+    next_action: "retry",
+    changed_files: []
+  }
+});
+const invalidJson = render({
+  ui_action: "refresh_health_detail",
+  action_role: "read_only_detail",
+  post_action_refresh_required: false,
+  result: {
+    status: "invalid_json",
+    machine_error_code: "UI_ACTION_INVALID_JSON",
+    human_message: "invalid json",
+    next_action: "retry",
+    changed_files: []
+  }
+});
+const staleRefresh = render({
+  status: "ok",
+  ui_action: "set_mode_managed",
+  action_role: "mode_set",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "ok",
+    next_action: "none",
+    changed_files: []
+  }
+}, "failed");
+
+if (commandError.panel !== "action-panel red" || commandError.status !== "command_error") {
+  throw new Error(`command_error not red: ${JSON.stringify(commandError)}`);
+}
+if (invalidJson.panel !== "action-panel red" || invalidJson.display !== "invalid_json") {
+  throw new Error(`invalid_json not red: ${JSON.stringify(invalidJson)}`);
+}
+if (staleRefresh.panel !== "action-panel amber" || staleRefresh.display !== "stale") {
+  throw new Error(`failed refresh not stale amber: ${JSON.stringify(staleRefresh)}`);
+}
+if (!commandError.truth.includes("must not render this as success")) {
+  throw new Error(`missing command_error truth note: ${commandError.truth}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_static_confirmation_policy_covers_risky_actions_without_new_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
