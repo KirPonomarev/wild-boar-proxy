@@ -54,6 +54,30 @@
             </svg>
             <span>Настройки</span>
           </a>
+          <a id="setupNav" class="nav-item" href="?screen=setup" data-screen-link="setup">
+            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M5 12h14"></path>
+              <path d="M12 5v14"></path>
+              <circle cx="12" cy="12" r="8"></circle>
+            </svg>
+            <span>Setup</span>
+          </a>
+          <a id="selectClientNav" class="nav-item" href="?screen=select-client" data-screen-link="select-client">
+            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <rect x="4" y="5" width="16" height="11" rx="2"></rect>
+              <path d="M9 20h6"></path>
+              <path d="M12 16v4"></path>
+            </svg>
+            <span>Клиент</span>
+          </a>
+          <a id="importExistingNav" class="nav-item" href="?screen=import-existing" data-screen-link="import-existing">
+            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 3v12"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M5 21h14"></path>
+            </svg>
+            <span>Импорт</span>
+          </a>
         </nav>
 
         <div class="sidebar-footer">
@@ -590,6 +614,184 @@
                 <div class="deferred-row"><span>Startup account checks</span><span>startup policy mutation deferred</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
               </div>
             </section>
+          </div>
+        </section>
+
+        <section id="setupScreen" class="screen setup-screen" data-screen="setup" hidden>
+          <div class="fixture-banner amber">
+            Setup screen is a bounded visual skeleton. It does not scan files, submit paths, or mutate configuration.
+          </div>
+
+          <div class="setup-layout">
+            <section class="card setup-hero">
+              <div class="eyebrow">Setup flow</div>
+              <div class="section-head">
+                <div>
+                  <h3>Настройка Wild Boar Proxy</h3>
+                  <div class="secondary">Подключение host-client остаётся deferred до command-owned discovery.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>read-only skeleton</span>
+              </div>
+              <div class="stepper" aria-label="Setup steps">
+                <span class="step active">1 Клиент</span>
+                <span class="step muted">2 Данные</span>
+                <span class="step muted">3 Проверка</span>
+                <span class="step muted">4 Готово</span>
+              </div>
+            </section>
+
+            <div class="setup-grid">
+              <section class="card form-section">
+                <div class="section-head">
+                  <div>
+                    <h3>Find automatically</h3>
+                    <div class="secondary">Needs command-owned discovery before it can run.</div>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>deferred</span>
+                </div>
+                <p class="bounded-copy">
+                  This placeholder does not inspect the filesystem. A future command packet must provide discovered candidates.
+                </p>
+                <button class="button disabled" type="button" disabled>Deferred: discovery command missing</button>
+              </section>
+
+              <section class="card form-section">
+                <div class="section-head">
+                  <div>
+                    <h3>Specify manually</h3>
+                    <div class="secondary">Manual local paths are not accepted from the browser.</div>
+                  </div>
+                  <span class="chip red"><span class="dot"></span>forbidden</span>
+                </div>
+                <p class="bounded-copy">
+                  browser path submission is forbidden. Future manual selection belongs to desktop/native picker admission.
+                </p>
+                <button class="button disabled" type="button" disabled>Forbidden in web first pass</button>
+              </section>
+            </div>
+
+            <section class="card form-section">
+              <div class="section-head">
+                <div>
+                  <h3>Observed setup facts</h3>
+                  <div class="secondary">No real setup status is claimed on this screen.</div>
+                </div>
+                <span class="chip neutral"><span class="dot"></span>placeholder</span>
+              </div>
+              <div class="deferred-list">
+                <div class="deferred-row"><span>Work/data directory</span><span>display only after command packet exists</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Host-client candidates</span><span>not detected by this UI skeleton</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Continue</span><span>local navigation only; no setup completion claim</span><button class="button small disabled" type="button" disabled>No command</button></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="selectClientScreen" class="screen setup-screen" data-screen="select-client" hidden>
+          <div class="fixture-banner amber">
+            Client selection is deferred. Rows below are design placeholders, not detected applications.
+          </div>
+
+          <div class="setup-layout">
+            <section class="card form-section">
+              <div class="section-head">
+                <div>
+                  <h3>Выбор клиента</h3>
+                  <div class="secondary">Selection needs command-owned candidate ids and a persistence command.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
+              </div>
+              <div class="search-placeholder">Search by name or path · disabled until discovery packet exists</div>
+              <div class="candidate-list" aria-label="Placeholder candidates">
+                <div class="candidate-row">
+                  <div><strong>Host Client Custom</strong><span>design placeholder, not detected</span></div>
+                  <button class="button small disabled" type="button" disabled>Select disabled</button>
+                </div>
+                <div class="candidate-row">
+                  <div><strong>Host Client Stable</strong><span>design placeholder, not detected</span></div>
+                  <button class="button small disabled" type="button" disabled>Select disabled</button>
+                </div>
+                <div class="candidate-row">
+                  <div><strong>Host Client CLI</strong><span>requires future command-owned verification</span></div>
+                  <button class="button small disabled" type="button" disabled>Verify disabled</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="card form-section">
+              <div class="section-head">
+                <div>
+                  <h3>Disabled actions</h3>
+                  <div class="secondary">Visible affordances without a safe browser contract.</div>
+                </div>
+                <span class="chip red"><span class="dot"></span>not executable</span>
+              </div>
+              <div class="deferred-list">
+                <div class="deferred-row"><span>Choose file</span><span>future desktop/native picker only</span><button class="button small disabled" type="button" disabled>Forbidden</button></div>
+                <div class="deferred-row"><span>Verify path</span><span>bounded dispatch is not path verification</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Save selection</span><span>needs command-owned candidate id</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Show location</span><span>support open-location contract missing</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="importExistingScreen" class="screen setup-screen" data-screen="import-existing" hidden>
+          <div class="fixture-banner amber">
+            Import is deferred. This screen shows structure only; no existing setup is discovered, verified, or ready to apply here.
+          </div>
+
+          <div class="setup-layout">
+            <section class="card setup-hero">
+              <div class="eyebrow">Legacy import</div>
+              <div class="section-head">
+                <div>
+                  <h3>Импорт существующей установки</h3>
+                  <div class="secondary">Requires source-location mediation, dry-run evidence, confirmation, and refresh.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
+              </div>
+              <div class="stepper" aria-label="Import steps">
+                <span class="step active">1 Найти</span>
+                <span class="step muted">2 Проверить</span>
+                <span class="step muted">3 Снимок</span>
+                <span class="step muted">4 Применить</span>
+              </div>
+            </section>
+
+            <div class="setup-grid">
+              <section class="card form-section">
+                <div class="section-head">
+                  <div>
+                    <h3>Installation placeholder</h3>
+                    <div class="secondary">Placeholder only; no discovery command has run.</div>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>not detected</span>
+                </div>
+                <div class="deferred-list">
+                  <div class="deferred-row"><span>Installation</span><span>deferred until strict JSON discovery packet exists</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                  <div class="deferred-row"><span>Import plan</span><span>no account counts or active assignment claimed</span><button class="button small disabled" type="button" disabled>Placeholder</button></div>
+                  <div class="deferred-row"><span>Safety state</span><span>snapshot and rollback availability not proven</span><button class="button small disabled" type="button" disabled>No packet</button></div>
+                </div>
+              </section>
+
+              <section class="card form-section">
+                <div class="section-head">
+                  <div>
+                    <h3>Import controls</h3>
+                    <div class="secondary">All controls are inert until command contracts exist.</div>
+                  </div>
+                  <span class="chip red"><span class="dot"></span>not executable</span>
+                </div>
+                <div class="deferred-list">
+                  <div class="deferred-row"><span>Find installation</span><span>needs command-owned discovery</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                  <div class="deferred-row"><span>Create snapshot</span><span>needs command-owned snapshot surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                  <div class="deferred-row"><span>Verify</span><span>needs non-mutating import dry-run packet</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                  <div class="deferred-row"><span>Apply</span><span>source-location mediation and strong confirmation missing</span><button class="button small disabled" type="button" disabled>Disabled</button></div>
+                  <div class="deferred-row"><span>Rollback</span><span>needs command-owned rollback surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                </div>
+              </section>
+            </div>
           </div>
         </section>
       </main>

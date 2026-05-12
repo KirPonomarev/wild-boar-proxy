@@ -61,7 +61,7 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
-const SCREENS = ["overview", "accounts", "diagnostics", "settings"];
+const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -387,6 +387,7 @@ function renderEvents(events) {
 
 function setSourceCopy(source) {
   const screen = currentScreen();
+  const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
   document.getElementById("sourceFooter").textContent = source === "live"
     ? (
       screen === "accounts"
@@ -394,7 +395,11 @@ function setSourceCopy(source) {
         : (
           screen === "diagnostics"
             ? "Diagnostics support artifact"
-            : (screen === "settings" ? "Settings command-packet bounded" : "Live read-only · basic actions")
+            : (
+              screen === "settings"
+                ? "Settings command-packet bounded"
+                : (setupLike ? "Setup screens · deferred skeleton" : "Live read-only · basic actions")
+            )
         )
     )
     : "UI preview · no live commands";
@@ -408,7 +413,11 @@ function setSourceCopy(source) {
             : (
               screen === "settings"
                 ? "Настройки показывают observed status/configuration из JSON packets. Safe actions are requests, not saved preferences."
-                : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+                : (
+                  setupLike
+                    ? "Setup/select/import screens are inert in this contour. They do not run discovery, selection, or import commands."
+                    : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+                )
             )
         )
     )
@@ -421,7 +430,11 @@ function setSourceCopy(source) {
             : (
               screen === "settings"
                 ? "Визуальный перенос settings screen. Controls are read-only or deferred unless backed by existing ui_action."
-                : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+                : (
+                  setupLike
+                    ? "Визуальный перенос setup/select/import skeleton. Все risky controls disabled; no simulated truth."
+                    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+                )
             )
         )
     );
@@ -634,7 +647,23 @@ function setScreen(screen, updateUrl = false) {
     "mainTitle",
     nextScreen === "accounts"
       ? "Аккаунты"
-      : (nextScreen === "diagnostics" ? "Диагностика" : (nextScreen === "settings" ? "Настройки" : "Обзор"))
+      : (
+        nextScreen === "diagnostics"
+          ? "Диагностика"
+          : (
+            nextScreen === "settings"
+              ? "Настройки"
+              : (
+                nextScreen === "setup"
+                  ? "Setup"
+                  : (
+                    nextScreen === "select-client"
+                      ? "Выбор клиента"
+                      : (nextScreen === "import-existing" ? "Импорт" : "Обзор")
+                  )
+              )
+          )
+      )
   );
   setSourceCopy(document.getElementById("sourcePicker").value);
 

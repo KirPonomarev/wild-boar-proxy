@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_SETUP_CLIENT_BOUNDED_IMPLEMENTATION",
+  "created_at": "2026-05-13",
+  "artifact_type": "independent_audit",
+  "auditor": {
+    "agent": "Kepler",
+    "mode": "read_only",
+    "model_class": "low_cost_scanner"
+  },
+  "findings": [
+    {
+      "severity": "medium",
+      "status": "fixed",
+      "file": "audit_results/ui_setup_client_bounded_implementation_closeout_2026-05-13.md",
+      "issue": "Closeout named the independent audit artifact before it existed.",
+      "resolution": "Created this independent audit JSON before final closeout."
+    },
+    {
+      "severity": "low",
+      "status": "mitigated",
+      "file": "tests/test_web_design_ui.py",
+      "issue": "Static string tests do not exercise browser route rendering by themselves.",
+      "resolution": "Browser smoke was run for setup, select-client, and import-existing routes and verified deferred/forbidden copy plus absence of active setup/select/import actions."
+    }
+  ],
+  "checks": [
+    {
+      "name": "active_setup_select_import_actions",
+      "status": "passed",
+      "evidence": "Auditor found no active setup/select/import ui_action, adapter command, or server allowlist action in changed contour files."
+    },
+    {
+      "name": "browser_origin_payloads",
+      "status": "passed",
+      "evidence": "Auditor found no browser-origin path/source/auth/config payload handling in changed contour files."
+    },
+    {
+      "name": "direct_file_truth",
+      "status": "passed",
+      "evidence": "Auditor found no direct state/log/config read or runtime truth file parsing introduced by this contour."
+    },
+    {
+      "name": "runtime_desktop_scope",
+      "status": "passed",
+      "evidence": "Auditor found no runtime.py scope change and no desktop/native picker behavior."
+    },
+    {
+      "name": "simulated_truth_claims",
+      "status": "passed",
+      "evidence": "Auditor found no simulated-truth claim in the audited contour files."
+    },
+    {
+      "name": "external_reference_traces",
+      "status": "passed",
+      "evidence": "Auditor found no external reference service traces or token-ish strings in changed contour files."
+    }
+  ],
+  "browser_smoke": [
+    {
+      "route": "?screen=setup&source=fixture",
+      "status": "passed",
+      "verified_copy": [
+        "Setup screen is a bounded visual skeleton",
+        "browser path submission is forbidden",
+        "discovery command missing"
+      ],
+      "forbidden_hits": []
+    },
+    {
+      "route": "?screen=select-client&source=fixture",
+      "status": "passed",
+      "verified_copy": [
+        "Client selection is deferred",
+        "design placeholder, not detected",
+        "future desktop/native picker only"
+      ],
+      "forbidden_hits": []
+    },
+    {
+      "route": "?screen=import-existing&source=fixture",
+      "status": "passed",
+      "verified_copy": [
+        "Import is deferred",
+        "no existing setup is discovered, verified, or ready to apply here",
+        "needs non-mutating import dry-run packet"
+      ],
+      "forbidden_hits": []
+    }
+  ],
+  "verdict": "pass_after_fix"
+}

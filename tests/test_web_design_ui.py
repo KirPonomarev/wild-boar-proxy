@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import subprocess
 import time
@@ -259,7 +260,10 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("metadata only:", js)
         self.assertIn("Artifact inspection deferred", html)
         self.assertIn("Raw diagnostic text unavailable", html)
-        self.assertIn('const SCREENS = ["overview", "accounts", "diagnostics", "settings"]', js)
+        self.assertIn(
+            'const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            js,
+        )
         self.assertIn("renderDiagnosticsAction", js)
         self.assertIn("artifactReference(data.bundle_path)", js)
         self.assertNotIn("Показать журнал", html)
@@ -312,6 +316,66 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("config.toml", html + js)
         self.assertNotIn("state.json", html + js)
         self.assertNotIn("supervisor-state", html + js)
+
+    def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-screen-link="setup"', html)
+        self.assertIn('data-screen-link="select-client"', html)
+        self.assertIn('data-screen-link="import-existing"', html)
+        self.assertIn('id="setupScreen"', html)
+        self.assertIn('id="selectClientScreen"', html)
+        self.assertIn('id="importExistingScreen"', html)
+        self.assertIn('data-screen="setup"', html)
+        self.assertIn('data-screen="select-client"', html)
+        self.assertIn('data-screen="import-existing"', html)
+        self.assertIn("Setup/select/import screens are inert in this contour", js)
+        self.assertIn("no simulated truth", js)
+        self.assertIn("browser path submission is forbidden", html.lower())
+        self.assertIn("discovery command missing", html)
+        self.assertIn("future desktop/native picker only", html)
+        self.assertIn("needs command-owned candidate id", html)
+        self.assertIn("needs non-mutating import dry-run packet", html)
+        self.assertIn("source-location mediation and strong confirmation missing", html)
+        self.assertIn("no existing setup is discovered, verified, or ready to apply here", html)
+
+        for screen_id in ["setupScreen", "selectClientScreen", "importExistingScreen"]:
+            section = self._section_html(html, screen_id)
+            self.assertNotIn("data-ui-action", section)
+            self.assertNotIn("live-action", section)
+            self.assertNotIn('type="file"', section)
+            self.assertNotIn("readAsText", section)
+            self.assertNotIn("window.open", section)
+            self.assertNotIn("localStorage", section)
+            self.assertNotIn("client_path", section)
+            self.assertNotIn("source_dir", section)
+            self.assertNotIn("source-dir", section)
+            self.assertNotIn("auth_ref", section)
+            self.assertNotIn("password", section)
+            self.assertNotIn("backend_id", section)
+            self.assertNotIn("installer init", section)
+            self.assertNotIn("legacy import", section)
+            self.assertNotIn("Проверка завершена. Импорт можно применить.", section)
+            self.assertNotIn("28 accounts", section)
+            self.assertNotIn("Применить</button>", section)
+
+    def test_setup_select_import_routes_are_static_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('"setup"', js)
+        self.assertIn('"select-client"', js)
+        self.assertIn('"import-existing"', js)
+        self.assertIn('?screen=setup', html)
+        self.assertIn('?screen=select-client', html)
+        self.assertIn('?screen=import-existing', html)
+        self.assertNotIn("setup_discovery", html + js)
+        self.assertNotIn("verify_path", html + js)
+        self.assertNotIn("save_selection", html + js)
+        self.assertNotIn("legacy_import", html + js)
+        self.assertNotIn("installer_init", html + js)
+        self.assertNotIn("import_apply", html + js)
 
     def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -374,6 +438,18 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertGreaterEqual(image.width, 800)
         self.assertGreaterEqual(image.height, 800)
         self.assertGreater(transparent_pixels, 0)
+
+    def _section_html(self, html: str, section_id: str) -> str:
+        needle = f'<section id="{section_id}"'
+        start = html.find(needle)
+        self.assertNotEqual(start, -1, f"Missing section {section_id}")
+        next_match = re.search(r'\n        <section id="[^"]+" class="screen', html[start + len(needle):])
+        if next_match is None:
+            next_overlay = html.find('\n      <div id="onboardOverlay"', start + len(needle))
+            end = next_overlay if next_overlay != -1 else len(html)
+        else:
+            end = start + len(needle) + next_match.start()
+        return html[start:end]
 
     def _fetch_with_retry(self, url: str) -> str:
         last_error: Exception | None = None
