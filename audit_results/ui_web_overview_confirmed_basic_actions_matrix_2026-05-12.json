@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_CONFIRMED_BASIC_ACTIONS",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "scope": {
+    "web_only": true,
+    "desktop_transfer": false,
+    "runtime_core_changes": false
+  },
+  "allowed_actions": {
+    "sync_runtime": {
+      "command": "sync --json",
+      "confirmation_required": true,
+      "mutates_runtime": true,
+      "post_action_refresh_required": true
+    },
+    "set_mode_stable": {
+      "command": "mode set stable --json",
+      "confirmation_required": true,
+      "mutates_runtime": true,
+      "post_action_refresh_required": true
+    },
+    "set_mode_managed": {
+      "command": "mode set managed --json",
+      "confirmation_required": true,
+      "mutates_runtime": true,
+      "post_action_refresh_required": true
+    },
+    "launch_smoke": {
+      "command": "launch smoke --json",
+      "confirmation_required": false,
+      "mutates_runtime": false,
+      "post_action_refresh_required": true,
+      "claim_scope": "runtime smoke check only; not host-client launch success"
+    }
+  },
+  "forbidden_actions": [
+    "launch_client",
+    "stable_repair_apply",
+    "accounts_validate",
+    "accounts_promote",
+    "accounts_demote",
+    "accounts_hold",
+    "accounts_release",
+    "accounts_retire",
+    "accounts_onboard",
+    "policy_stage_set",
+    "rollout_stage_prove",
+    "rollout_stage_advance",
+    "rollout_evidence_capture"
+  ],
+  "verification": {
+    "unit_contract_tests": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter",
+    "legacy_shell_web_tests": "python3 -m unittest -q tests.test_ui_shell tests.test_web_ui",
+    "whitespace": "git diff --check",
+    "browser_smoke": "fake runner on 127.0.0.1:8788"
+  },
+  "browser_smoke_observations": [
+    "sync_runtime opens confirmation",
+    "sync_runtime cancel leaves action panel idle",
+    "sync_runtime confirm returns controlled_runtime_mutation OK and live refresh ok",
+    "launch_smoke returns runtime_smoke_check OK and live refresh ok without confirmation",
+    "set_mode_stable opens confirmation and refreshes live overview after OK",
+    "set_mode_managed opens confirmation and refreshes live overview after OK"
+  ]
+}

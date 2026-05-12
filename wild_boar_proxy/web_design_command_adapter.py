@@ -92,7 +92,7 @@ ALLOWLIST: dict[str, CommandSpec] = {
         command_id="smoke",
         argv_template=("launch", "smoke", "--json"),
         category="action",
-        confirmation_required=True,
+        confirmation_required=False,
     ),
     "stable_repair_dry_run": CommandSpec(
         command_id="stable_repair_dry_run",

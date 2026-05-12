@@ -122,6 +122,12 @@
               </svg>
               <span>Dry-run</span>
             </button>
+            <button id="managedModeAction" class="button live-action" type="button" data-ui-action="set_mode_managed">
+              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 12h5l2-4 2 8 2-4h5"></path>
+              </svg>
+              <span>Managed</span>
+            </button>
             <button class="button primary disabled" type="button" disabled>
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"></path>
@@ -142,9 +148,10 @@
             <div>Role</div><div id="actionRole">none</div>
             <div>Status</div><div id="actionStatus">idle</div>
             <div>Machine code</div><div id="actionMachineCode">-</div>
-            <div>Message</div><div id="actionMessage">Safe actions have not run yet.</div>
+            <div>Message</div><div id="actionMessage">Actions have not run yet.</div>
             <div>Next action</div><div id="actionNextAction">none</div>
             <div>Changed files</div><div id="actionChangedFiles">[]</div>
+            <div>Refresh</div><div id="actionRefreshStatus">not requested</div>
           </div>
         </section>
 
@@ -172,7 +179,7 @@
               <span id="stableSegment">Стабильный</span>
             </div>
             <div class="action-row">
-              <button class="action-tile" type="button" disabled>
+              <button id="syncAction" class="action-tile live-action" type="button" data-ui-action="sync_runtime">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M17.5 7.5h3v-3"></path>
                   <path d="M20 7.5A8 8 0 0 0 6.3 5.8"></path>
@@ -181,13 +188,13 @@
                 </svg>
                 <span>Синхронизировать</span>
               </button>
-              <button class="action-tile" type="button" disabled>
+              <button id="smokeAction" class="action-tile live-action" type="button" data-ui-action="launch_smoke">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M20 6 9 17l-5-5"></path>
                 </svg>
                 <span>Проверить работу</span>
               </button>
-              <button class="action-tile" type="button" disabled>
+              <button id="stableModeAction" class="action-tile live-action" type="button" data-ui-action="set_mode_stable">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
                 </svg>
@@ -242,6 +249,28 @@
           <div id="eventList" class="log-list" aria-live="polite"></div>
         </section>
       </main>
+
+      <div id="confirmOverlay" class="confirm-overlay" hidden>
+        <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+          <div class="eyebrow">Подтверждение действия</div>
+          <h2 id="confirmTitle">Подтвердить действие</h2>
+          <p id="confirmMeaning">Действие ожидает подтверждения.</p>
+          <div class="confirm-facts">
+            <div>UI action</div><div id="confirmUiAction">-</div>
+            <div>Mutation</div><div id="confirmMutation">-</div>
+            <div>Refresh</div><div id="confirmRefresh">-</div>
+            <div>Scope</div><div id="confirmScope">-</div>
+          </div>
+          <p class="confirm-note">
+            Результат действия не является runtime truth. После выполнения экран
+            обновится только из live JSON-команд.
+          </p>
+          <div class="confirm-actions">
+            <button id="cancelAction" class="button" type="button">Отмена</button>
+            <button id="confirmAction" class="button primary" type="button">Подтвердить</button>
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 

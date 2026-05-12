@@ -73,6 +73,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(set(ALLOWLIST), expected)
         self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
+        self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
         self.assertIn(
             {
                 "command_id": "launch_client",

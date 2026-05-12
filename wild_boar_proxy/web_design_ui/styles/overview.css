@@ -431,6 +431,79 @@ button:disabled {
   color: var(--text);
 }
 
+.confirm-overlay {
+  align-items: center;
+  background: rgba(30, 27, 24, .28);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 28px;
+  position: absolute;
+  z-index: 40;
+}
+
+.confirm-overlay[hidden] {
+  display: none;
+}
+
+.confirm-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: var(--window-shadow);
+  color: var(--secondary);
+  max-width: 520px;
+  padding: 24px;
+  width: min(100%, 520px);
+}
+
+.confirm-modal h2 {
+  color: var(--text);
+  font-size: 24px;
+  line-height: 30px;
+  margin: 10px 0 8px;
+}
+
+.confirm-modal p {
+  margin: 0;
+}
+
+.confirm-facts {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .8);
+  border-radius: 14px;
+  display: grid;
+  font-size: 12px;
+  gap: 8px 16px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  line-height: 18px;
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+  padding: 14px;
+}
+
+.confirm-facts div:nth-child(odd) {
+  color: var(--muted);
+}
+
+.confirm-facts div:nth-child(even) {
+  color: var(--text);
+}
+
+.confirm-note {
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 18px;
+  margin-top: 14px !important;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
 .grid {
   display: grid;
   gap: 24px;

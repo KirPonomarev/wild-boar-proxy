@@ -181,23 +181,45 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('<option value="live">live read-only</option>', html)
         self.assertIn('fetch("api/live-readonly"', js)
+        self.assertIn('fetch("api/actions"', js)
         self.assertIn('snapshot.source === "live_readonly"', js)
         self.assertIn('safeSnapshot.state_id || safeSnapshot.ui_state', js)
         self.assertNotIn("command_id", js)
         self.assertNotIn("launch_client", js)
 
-    def test_static_preview_uses_ui_action_for_safe_actions(self) -> None:
+    def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
         self.assertIn('data-ui-action="refresh_health_detail"', html)
         self.assertIn('data-ui-action="export_diagnostics"', html)
         self.assertIn('data-ui-action="stable_repair_plan"', html)
-        self.assertNotIn('data-ui-action="sync"', html)
+        self.assertIn('data-ui-action="sync_runtime"', html)
+        self.assertIn('data-ui-action="set_mode_stable"', html)
+        self.assertIn('data-ui-action="set_mode_managed"', html)
+        self.assertIn('data-ui-action="launch_smoke"', html)
         self.assertNotIn('data-ui-action="launch_client"', html)
+        self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertIn('fetch("api/action"', js)
         self.assertIn("JSON.stringify({ ui_action: uiAction })", js)
         self.assertNotIn("JSON.stringify({ command_id", js)
+        self.assertNotIn("sync --json", html + js)
+        self.assertNotIn("mode set stable --json", html + js)
+        self.assertNotIn("launch smoke --json", html + js)
+
+    def test_static_preview_requires_confirmation_for_mutating_actions(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn("confirmOverlay", html)
+        self.assertIn("confirmAction", html)
+        self.assertIn("cancelAction", html)
+        self.assertIn("maybeConfirmAndRun", js)
+        self.assertIn("metadata.confirmation_required", js)
+        self.assertIn("closeConfirmation();", js)
+        self.assertIn("runUiAction(uiAction);", js)
+        self.assertIn("post_action_refresh_required", js)
+        self.assertIn("setLiveReadonly(false)", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"

@@ -61,6 +61,9 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
+let actionMetadata = {};
+let pendingConfirmedAction = null;
+
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
 }
@@ -135,10 +138,38 @@ async function loadLiveReadonly() {
   }
 }
 
+async function loadActionMetadata() {
+  try {
+    const response = await fetch("api/actions", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`metadata http ${response.status}`);
+    }
+    const payload = await response.json();
+    actionMetadata = payload.actions || {};
+  } catch (error) {
+    actionMetadata = {};
+  }
+}
+
+function metadataFor(uiAction) {
+  return actionMetadata[uiAction] || {
+    ui_action: uiAction,
+    display_name: uiAction,
+    human_meaning: "Action metadata could not be loaded.",
+    action_role: "unknown",
+    mutates_runtime: true,
+    confirmation_required: true,
+    post_action_refresh_required: true,
+    action_claim_scope: "unknown"
+  };
+}
+
 async function runUiAction(uiAction) {
+  setActionsBusy(true);
   setActionPanel({
     ui_action: uiAction,
     action_role: "running",
+    post_action_refresh_required: false,
     result: {
       status: "running",
       machine_error_code: "RUNNING",
@@ -159,10 +190,16 @@ async function runUiAction(uiAction) {
     }
     const payload = await response.json();
     setActionPanel(payload);
+    if (payload.post_action_refresh_required) {
+      text("actionRefreshStatus", "refreshing live overview");
+      const refreshed = await setLiveReadonly(false);
+      text("actionRefreshStatus", refreshed.status === "ok" ? "live refresh ok" : "live refresh failed");
+    }
   } catch (error) {
     setActionPanel({
       ui_action: uiAction,
       action_role: "integration_failure",
+      post_action_refresh_required: false,
       result: {
         status: "integration_failure",
         machine_error_code: "UI_ACTION_FETCH_FAILED",
@@ -171,6 +208,8 @@ async function runUiAction(uiAction) {
         changed_files: []
       }
     });
+  } finally {
+    setActionsBusy(false);
   }
 }
 
@@ -264,10 +303,10 @@ function renderEvents(events) {
 
 function setSourceCopy(source) {
   document.getElementById("sourceFooter").textContent = source === "live"
-    ? "Live read-only · safe actions"
+    ? "Live read-only · basic actions"
     : "UI preview · no live commands";
   document.getElementById("subtitleText").textContent = source === "live"
-    ? "Первый экран подключен к живым read-only JSON-командам. Ниже доступны только безопасные действия."
+    ? "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
     : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth.";
 }
 
@@ -280,6 +319,50 @@ function setActionPanel(payload) {
   text("actionMessage", result.human_message || "-");
   text("actionNextAction", result.next_action || "none");
   text("actionChangedFiles", JSON.stringify(result.changed_files || []));
+  text(
+    "actionRefreshStatus",
+    payload.post_action_refresh_required ? "required after action" : "not required"
+  );
+}
+
+function setActionsBusy(isBusy) {
+  for (const button of document.querySelectorAll(".live-action")) {
+    button.disabled = isBusy;
+  }
+}
+
+function maybeConfirmAndRun(uiAction) {
+  const metadata = metadataFor(uiAction);
+  if (metadata.confirmation_required) {
+    openConfirmation(uiAction, metadata);
+    return;
+  }
+  runUiAction(uiAction);
+}
+
+function openConfirmation(uiAction, metadata) {
+  pendingConfirmedAction = uiAction;
+  text("confirmTitle", metadata.display_name || uiAction);
+  text("confirmMeaning", metadata.human_meaning || "Confirm this action.");
+  text("confirmUiAction", uiAction);
+  text("confirmMutation", metadata.mutates_runtime ? "true" : "false");
+  text("confirmRefresh", metadata.post_action_refresh_required ? "required" : "not required");
+  text("confirmScope", metadata.action_claim_scope || "unknown");
+  document.getElementById("confirmOverlay").hidden = false;
+  document.getElementById("confirmAction").focus();
+}
+
+function closeConfirmation() {
+  pendingConfirmedAction = null;
+  document.getElementById("confirmOverlay").hidden = true;
+}
+
+function confirmPendingAction() {
+  const uiAction = pendingConfirmedAction;
+  closeConfirmation();
+  if (uiAction) {
+    runUiAction(uiAction);
+  }
 }
 
 function renderSnapshot(snapshot) {
@@ -366,6 +449,7 @@ async function setLiveReadonly(updateUrl = false) {
   }
   renderSnapshot(snapshot);
   setSourceCopy("live");
+  return snapshot;
 }
 
 function refreshCurrentSource() {
@@ -376,18 +460,21 @@ function refreshCurrentSource() {
   return setFixtureState(document.getElementById("statePicker").value, false);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const sourcePicker = document.getElementById("sourcePicker");
   const picker = document.getElementById("statePicker");
   const refresh = document.getElementById("refreshFixture");
   const initialState = stateFromLocation();
   const initialSource = sourceFromLocation();
+  await loadActionMetadata();
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
   for (const button of document.querySelectorAll(".live-action")) {
-    button.addEventListener("click", () => runUiAction(button.dataset.uiAction));
+    button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
+  document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
+  document.getElementById("confirmAction").addEventListener("click", () => confirmPendingAction());
   sourcePicker.addEventListener("change", () => {
     if (sourcePicker.value === "live") {
       setLiveReadonly(true);

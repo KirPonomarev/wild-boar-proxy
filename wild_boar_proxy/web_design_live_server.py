@@ -40,18 +40,77 @@ UI_ACTION_ALLOWLIST = {
         "action_role": "runtime_detail",
         "mutates_runtime": False,
         "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "runtime detail refresh only",
+        "display_name": "Healthcheck",
+        "human_meaning": "Refresh runtime health detail without changing runtime state.",
     },
     "export_diagnostics": {
         "adapter_command_id": "diagnostics_export",
         "action_role": "support_artifact",
         "mutates_runtime": False,
         "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "support artifact only",
+        "display_name": "Diagnostics export",
+        "human_meaning": "Create a diagnostics support artifact without making it runtime truth.",
     },
     "stable_repair_plan": {
         "adapter_command_id": "stable_repair_dry_run",
         "action_role": "recovery_planning",
         "mutates_runtime": False,
         "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "dry-run recovery planning only",
+        "display_name": "Stable repair dry-run",
+        "human_meaning": "Preview stable repair work without applying changes.",
+    },
+    "sync_runtime": {
+        "adapter_command_id": "sync",
+        "action_role": "controlled_runtime_mutation",
+        "mutates_runtime": True,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "sync request only; refreshed live overview remains truth",
+        "display_name": "Sync runtime",
+        "human_meaning": "Run managed sync, then refresh the overview from live JSON truth.",
+    },
+    "set_mode_stable": {
+        "adapter_command_id": "mode_stable",
+        "action_role": "controlled_mode_mutation",
+        "mutates_runtime": True,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "mode request only; refreshed live overview remains truth",
+        "display_name": "Set stable mode",
+        "human_meaning": "Request stable mode, then refresh desired/effective mode from live JSON truth.",
+    },
+    "set_mode_managed": {
+        "adapter_command_id": "mode_managed",
+        "action_role": "controlled_mode_mutation",
+        "mutates_runtime": True,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "mode request only; refreshed live overview remains truth",
+        "display_name": "Set managed mode",
+        "human_meaning": "Request managed mode, then refresh desired/effective mode from live JSON truth.",
+    },
+    "launch_smoke": {
+        "adapter_command_id": "smoke",
+        "action_role": "runtime_smoke_check",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "runtime smoke check only; not host-client launch success",
+        "display_name": "Launch smoke",
+        "human_meaning": "Run a runtime smoke check without claiming host-client launch success.",
     },
 }
 
@@ -158,7 +217,32 @@ def run_ui_action(runner: CommandRunner, payload: dict[str, Any]) -> dict[str, A
         "action_role": action_spec["action_role"],
         "mutates_runtime": action_spec["mutates_runtime"],
         "affects_primary_truth": action_spec["affects_primary_truth"],
+        "confirmation_required": action_spec["confirmation_required"],
+        "post_action_refresh_required": action_spec["post_action_refresh_required"],
+        "action_claim_scope": action_spec["action_claim_scope"],
         "result": _action_result(result),
+    }
+
+
+def ui_action_metadata() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "source": "ui_action_metadata",
+        "actions": {
+            ui_action: {
+                "ui_action": ui_action,
+                "display_name": str(action_spec["display_name"]),
+                "human_meaning": str(action_spec["human_meaning"]),
+                "action_role": str(action_spec["action_role"]),
+                "mutates_runtime": bool(action_spec["mutates_runtime"]),
+                "affects_primary_truth": bool(action_spec["affects_primary_truth"]),
+                "confirmation_required": bool(action_spec["confirmation_required"]),
+                "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
+                "action_claim_scope": str(action_spec["action_claim_scope"]),
+            }
+            for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items())
+        },
     }
 
 
@@ -175,6 +259,9 @@ def build_handler(
             parsed = urlparse(self.path)
             if parsed.path == "/api/live-readonly":
                 self._send_json(build_live_readonly_snapshot(command_runner))
+                return
+            if parsed.path == "/api/actions":
+                self._send_json(ui_action_metadata())
                 return
             self._send_static(parsed.path)
 
@@ -240,6 +327,9 @@ def _blocked_action(ui_action: str, human_message: str) -> dict[str, Any]:
         "action_role": "blocked",
         "mutates_runtime": False,
         "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "blocked",
         "result": {
             "status": "integration_failure",
             "machine_error_code": "UI_ACTION_NOT_ALLOWED",

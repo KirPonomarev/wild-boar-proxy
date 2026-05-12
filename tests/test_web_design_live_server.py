@@ -17,6 +17,7 @@ from wild_boar_proxy.web_design_live_server import (
     build_handler,
     build_live_readonly_snapshot,
     run_ui_action,
+    ui_action_metadata,
 )
 
 
@@ -257,12 +258,30 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
-    def test_ui_action_endpoint_accepts_safe_actions_only(self) -> None:
+    def test_ui_action_metadata_hides_adapter_commands_and_marks_confirmed_actions(self) -> None:
+        metadata = ui_action_metadata()
+
+        self.assertEqual(metadata["status"], "ok")
+        self.assertNotIn("adapter_command_id", json.dumps(metadata))
+        self.assertTrue(metadata["actions"]["sync_runtime"]["confirmation_required"])
+        self.assertTrue(metadata["actions"]["sync_runtime"]["mutates_runtime"])
+        self.assertTrue(metadata["actions"]["sync_runtime"]["post_action_refresh_required"])
+        self.assertTrue(metadata["actions"]["set_mode_stable"]["confirmation_required"])
+        self.assertTrue(metadata["actions"]["set_mode_managed"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
+        self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+
+    def test_ui_action_endpoint_accepts_allowlisted_actions_only(self) -> None:
         runner = MappingRunner(live_payloads())
 
         diagnostics = run_ui_action(runner, {"ui_action": "export_diagnostics"})
         repair_plan = run_ui_action(runner, {"ui_action": "stable_repair_plan"})
         health = run_ui_action(runner, {"ui_action": "refresh_health_detail"})
+        sync = run_ui_action(runner, {"ui_action": "sync_runtime"})
+        stable = run_ui_action(runner, {"ui_action": "set_mode_stable"})
+        managed = run_ui_action(runner, {"ui_action": "set_mode_managed"})
+        smoke = run_ui_action(runner, {"ui_action": "launch_smoke"})
 
         self.assertEqual(diagnostics["action_role"], "support_artifact")
         self.assertFalse(diagnostics["mutates_runtime"])
@@ -270,24 +289,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(repair_plan["action_role"], "recovery_planning")
         self.assertFalse(repair_plan["mutates_runtime"])
         self.assertEqual(health["action_role"], "runtime_detail")
+        self.assertTrue(sync["confirmation_required"])
+        self.assertTrue(sync["mutates_runtime"])
+        self.assertTrue(sync["post_action_refresh_required"])
+        self.assertEqual(stable["action_role"], "controlled_mode_mutation")
+        self.assertEqual(managed["action_role"], "controlled_mode_mutation")
+        self.assertEqual(smoke["action_role"], "runtime_smoke_check")
+        self.assertFalse(smoke["mutates_runtime"])
+        self.assertIn("not host-client launch", smoke["action_claim_scope"])
         self.assertEqual(
-            runner.calls[-3:],
+            runner.calls[-7:],
             [
                 ("diagnostics", "export", "--json"),
                 ("stable", "repair", "--dry-run", "--json"),
                 ("healthcheck", "--json"),
+                ("sync", "--json"),
+                ("mode", "set", "stable", "--json"),
+                ("mode", "set", "managed", "--json"),
+                ("launch", "smoke", "--json"),
             ],
         )
 
-    def test_ui_action_endpoint_blocks_command_id_payload_and_mutating_actions(self) -> None:
+    def test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions(self) -> None:
         runner = MappingRunner(live_payloads())
 
         command_id_payload = run_ui_action(runner, {"command_id": "diagnostics_export"})
-        sync = run_ui_action(runner, {"ui_action": "sync"})
         stable_repair_apply = run_ui_action(runner, {"ui_action": "stable_repair_apply"})
         launch_client = run_ui_action(runner, {"ui_action": "launch_client"})
+        unknown = run_ui_action(runner, {"ui_action": "policy_stage_set"})
 
-        for payload in [command_id_payload, sync, stable_repair_apply, launch_client]:
+        for payload in [command_id_payload, stable_repair_apply, launch_client, unknown]:
             self.assertEqual(payload["status"], "integration_failure")
             self.assertEqual(payload["action_role"], "blocked")
             self.assertFalse(payload["mutates_runtime"])
@@ -319,6 +350,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             rejected = json.loads(
                 post_json(f"{base_url}/api/action", {"command_id": "diagnostics_export"})
             )
+            metadata = json.loads(fetch(f"{base_url}/api/actions"))
         finally:
             server.shutdown()
             server.server_close()
@@ -326,6 +358,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(accepted["status"], "ok")
         self.assertEqual(rejected["status"], "integration_failure")
+        self.assertIn("sync_runtime", metadata["actions"])
+        self.assertNotIn("adapter_command_id", json.dumps(metadata))
         self.assertEqual(runner.calls, [("diagnostics", "export", "--json")])
 
     def test_server_source_contains_no_direct_runtime_truth_file_reads(self) -> None:
@@ -354,6 +388,10 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
             human_message="Stable repair dry-run completed.",
             data={"would_change": False},
         ),
+        ("sync", "--json"): command_packet(human_message="Sync completed."),
+        ("mode", "set", "stable", "--json"): command_packet(human_message="Stable mode requested."),
+        ("mode", "set", "managed", "--json"): command_packet(human_message="Managed mode requested."),
+        ("launch", "smoke", "--json"): command_packet(human_message="Launch smoke passed."),
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."
         ),
