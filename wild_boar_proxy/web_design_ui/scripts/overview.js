@@ -135,10 +135,51 @@ async function loadLiveReadonly() {
   }
 }
 
-function validateFixture(fixture) {
-  const requiredTop = ["schema_version", "state_id", "runtime", "pool_summary", "events"];
-  const missingTop = requiredTop.filter((key) => !(key in fixture));
-  const runtime = fixture.runtime || {};
+async function runUiAction(uiAction) {
+  setActionPanel({
+    ui_action: uiAction,
+    action_role: "running",
+    result: {
+      status: "running",
+      machine_error_code: "RUNNING",
+      human_message: "Action is running.",
+      next_action: "wait",
+      changed_files: []
+    }
+  });
+  try {
+    const response = await fetch("api/action", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ui_action: uiAction })
+    });
+    if (!response.ok) {
+      throw new Error(`action http ${response.status}`);
+    }
+    const payload = await response.json();
+    setActionPanel(payload);
+  } catch (error) {
+    setActionPanel({
+      ui_action: uiAction,
+      action_role: "integration_failure",
+      result: {
+        status: "integration_failure",
+        machine_error_code: "UI_ACTION_FETCH_FAILED",
+        human_message: error.message,
+        next_action: "retry",
+        changed_files: []
+      }
+    });
+  }
+}
+
+function validateSnapshot(snapshot) {
+  const requiredTop = snapshot.source === "live_readonly"
+    ? ["schema_version", "runtime", "pool_summary", "events"]
+    : ["schema_version", "state_id", "runtime", "pool_summary", "events"];
+  const missingTop = requiredTop.filter((key) => !(key in snapshot));
+  const runtime = snapshot.runtime || {};
   const requiredRuntime = [
     "visual_state",
     "status_label",
@@ -221,8 +262,28 @@ function renderEvents(events) {
   }
 }
 
+function setSourceCopy(source) {
+  document.getElementById("sourceFooter").textContent = source === "live"
+    ? "Live read-only · safe actions"
+    : "UI preview · no live commands";
+  document.getElementById("subtitleText").textContent = source === "live"
+    ? "Первый экран подключен к живым read-only JSON-командам. Ниже доступны только безопасные действия."
+    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth.";
+}
+
+function setActionPanel(payload) {
+  const result = payload.result || {};
+  text("actionUiAction", payload.ui_action || "unknown");
+  text("actionRole", payload.action_role || "unknown");
+  text("actionStatus", result.status || payload.status || "unknown");
+  text("actionMachineCode", result.machine_error_code || "-");
+  text("actionMessage", result.human_message || "-");
+  text("actionNextAction", result.next_action || "none");
+  text("actionChangedFiles", JSON.stringify(result.changed_files || []));
+}
+
 function renderSnapshot(snapshot) {
-  const validation = validateFixture(snapshot);
+  const validation = validateSnapshot(snapshot);
   const safeSnapshot = validation.ok ? snapshot : {
     ...FALLBACK_FIXTURE,
     state_id: "integration_failure",
@@ -233,22 +294,17 @@ function renderSnapshot(snapshot) {
   const visualState = runtime.visual_state || safeSnapshot.state_id || "unknown";
   const source = safeSnapshot.source === "live_readonly" ? "live" : "fixture";
   const desktop = document.querySelector(".desktop");
-  desktop.dataset.fixtureState = safeSnapshot.state_id || visualState;
+  desktop.dataset.fixtureState = safeSnapshot.state_id || safeSnapshot.ui_state || visualState;
   desktop.dataset.source = source;
 
   const picker = document.getElementById("statePicker");
-  picker.value = canonicalState(safeSnapshot.state_id);
+  picker.value = canonicalState(safeSnapshot.state_id || safeSnapshot.ui_state);
   picker.disabled = source === "live";
   document.getElementById("sourcePicker").value = source;
   document.getElementById("brandCaption").textContent = source === "live"
     ? "live read-only web preview"
     : "fixture-backed web preview";
-  document.getElementById("sourceFooter").textContent = source === "live"
-    ? "Live read-only · no actions"
-    : "UI preview · no live commands";
-  document.getElementById("subtitleText").textContent = source === "live"
-    ? "Первый экран подключен к живым read-only JSON-командам. Действия выключены."
-    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth.";
+  setSourceCopy(source);
   document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
     ? "Обновить live"
     : "Обновить fixture";
@@ -288,6 +344,7 @@ function renderSnapshot(snapshot) {
 }
 
 async function setFixtureState(stateId, updateUrl = false) {
+  setSourceCopy("fixture");
   const state = canonicalState(stateId);
   const fixture = await loadFixture(state);
   if (updateUrl) {
@@ -300,6 +357,7 @@ async function setFixtureState(stateId, updateUrl = false) {
 }
 
 async function setLiveReadonly(updateUrl = false) {
+  setSourceCopy("live");
   const snapshot = await loadLiveReadonly();
   if (updateUrl) {
     const url = new URL(window.location.href);
@@ -307,6 +365,7 @@ async function setLiveReadonly(updateUrl = false) {
     window.history.replaceState({}, "", url);
   }
   renderSnapshot(snapshot);
+  setSourceCopy("live");
 }
 
 function refreshCurrentSource() {
@@ -326,6 +385,9 @@ document.addEventListener("DOMContentLoaded", () => {
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
+  for (const button of document.querySelectorAll(".live-action")) {
+    button.addEventListener("click", () => runUiAction(button.dataset.uiAction));
+  }
   sourcePicker.addEventListener("change", () => {
     if (sourcePicker.value === "live") {
       setLiveReadonly(true);

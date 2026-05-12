@@ -181,8 +181,23 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('<option value="live">live read-only</option>', html)
         self.assertIn('fetch("api/live-readonly"', js)
+        self.assertIn('snapshot.source === "live_readonly"', js)
+        self.assertIn('safeSnapshot.state_id || safeSnapshot.ui_state', js)
         self.assertNotIn("command_id", js)
         self.assertNotIn("launch_client", js)
+
+    def test_static_preview_uses_ui_action_for_safe_actions(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-ui-action="refresh_health_detail"', html)
+        self.assertIn('data-ui-action="export_diagnostics"', html)
+        self.assertIn('data-ui-action="stable_repair_plan"', html)
+        self.assertNotIn('data-ui-action="sync"', html)
+        self.assertNotIn('data-ui-action="launch_client"', html)
+        self.assertIn('fetch("api/action"', js)
+        self.assertIn("JSON.stringify({ ui_action: uiAction })", js)
+        self.assertNotIn("JSON.stringify({ command_id", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"

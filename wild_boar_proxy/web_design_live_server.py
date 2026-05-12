@@ -34,6 +34,26 @@ READONLY_COMMAND_IDS = (
 )
 PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
+UI_ACTION_ALLOWLIST = {
+    "refresh_health_detail": {
+        "adapter_command_id": "healthcheck",
+        "action_role": "runtime_detail",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+    },
+    "export_diagnostics": {
+        "adapter_command_id": "diagnostics_export",
+        "action_role": "support_artifact",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+    },
+    "stable_repair_plan": {
+        "adapter_command_id": "stable_repair_dry_run",
+        "action_role": "recovery_planning",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+    },
+}
 
 
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
@@ -115,6 +135,33 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     }
 
 
+def run_ui_action(runner: CommandRunner, payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return _blocked_action("unknown", "UI action payload must be an object.")
+    if "command_id" in payload:
+        return _blocked_action("unknown", "Browser must submit ui_action, not command_id.")
+
+    ui_action = payload.get("ui_action")
+    if not isinstance(ui_action, str):
+        return _blocked_action("unknown", "UI action must be a string.")
+
+    action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
+    if action_spec is None:
+        return _blocked_action(ui_action, "UI action is not allowlisted.")
+
+    result = execute_command(runner, str(action_spec["adapter_command_id"]))
+    return {
+        "schema_version": 1,
+        "status": "ok" if result["status"] == "ok" else "command_error",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": action_spec["action_role"],
+        "mutates_runtime": action_spec["mutates_runtime"],
+        "affects_primary_truth": action_spec["affects_primary_truth"],
+        "result": _action_result(result),
+    }
+
+
 def build_handler(
     *,
     runner: CommandRunner | None = None,
@@ -131,6 +178,13 @@ def build_handler(
                 return
             self._send_static(parsed.path)
 
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path != "/api/action":
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(run_ui_action(command_runner, self._read_json_body()))
+
         def log_message(self, format: str, *args: object) -> None:  # noqa: A002
             return
 
@@ -142,6 +196,19 @@ def build_handler(
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _read_json_body(self) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return {}
+            if length <= 0:
+                return {}
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return {}
+            return payload if isinstance(payload, dict) else {}
 
         def _send_static(self, request_path: str) -> None:
             relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")
@@ -162,6 +229,39 @@ def build_handler(
             self.wfile.write(body)
 
     return Handler
+
+
+def _blocked_action(ui_action: str, human_message: str) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": "blocked",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "result": {
+            "status": "integration_failure",
+            "machine_error_code": "UI_ACTION_NOT_ALLOWED",
+            "human_message": human_message,
+            "next_action": "none",
+            "changed_files": [],
+            "data": {},
+        },
+    }
+
+
+def _action_result(result: dict[str, Any]) -> dict[str, Any]:
+    packet = result.get("packet")
+    data = packet.get("data", {}) if isinstance(packet, dict) else {}
+    return {
+        "status": result["status"],
+        "machine_error_code": result["machine_error_code"],
+        "human_message": result["human_message"],
+        "next_action": result["next_action"],
+        "changed_files": result["changed_files"],
+        "data": data if isinstance(data, dict) else {},
+    }
 
 
 def _integration_failure(

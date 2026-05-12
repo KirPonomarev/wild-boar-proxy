@@ -16,6 +16,7 @@ from wild_boar_proxy.web_design_live_server import (
     READONLY_COMMAND_IDS,
     build_handler,
     build_live_readonly_snapshot,
+    run_ui_action,
 )
 
 
@@ -256,6 +257,77 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
+    def test_ui_action_endpoint_accepts_safe_actions_only(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        diagnostics = run_ui_action(runner, {"ui_action": "export_diagnostics"})
+        repair_plan = run_ui_action(runner, {"ui_action": "stable_repair_plan"})
+        health = run_ui_action(runner, {"ui_action": "refresh_health_detail"})
+
+        self.assertEqual(diagnostics["action_role"], "support_artifact")
+        self.assertFalse(diagnostics["mutates_runtime"])
+        self.assertFalse(diagnostics["affects_primary_truth"])
+        self.assertEqual(repair_plan["action_role"], "recovery_planning")
+        self.assertFalse(repair_plan["mutates_runtime"])
+        self.assertEqual(health["action_role"], "runtime_detail")
+        self.assertEqual(
+            runner.calls[-3:],
+            [
+                ("diagnostics", "export", "--json"),
+                ("stable", "repair", "--dry-run", "--json"),
+                ("healthcheck", "--json"),
+            ],
+        )
+
+    def test_ui_action_endpoint_blocks_command_id_payload_and_mutating_actions(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        command_id_payload = run_ui_action(runner, {"command_id": "diagnostics_export"})
+        sync = run_ui_action(runner, {"ui_action": "sync"})
+        stable_repair_apply = run_ui_action(runner, {"ui_action": "stable_repair_apply"})
+        launch_client = run_ui_action(runner, {"ui_action": "launch_client"})
+
+        for payload in [command_id_payload, sync, stable_repair_apply, launch_client]:
+            self.assertEqual(payload["status"], "integration_failure")
+            self.assertEqual(payload["action_role"], "blocked")
+            self.assertFalse(payload["mutates_runtime"])
+            self.assertEqual(payload["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(runner.calls, [])
+
+    def test_action_result_does_not_alter_runtime_visual_state(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        snapshot_before = build_live_readonly_snapshot(runner)
+        diagnostics = run_ui_action(runner, {"ui_action": "export_diagnostics"})
+        snapshot_after = build_live_readonly_snapshot(runner)
+
+        self.assertEqual(diagnostics["action_role"], "support_artifact")
+        self.assertEqual(snapshot_before["runtime"]["visual_state"], "healthy")
+        self.assertEqual(snapshot_after["runtime"]["visual_state"], "healthy")
+        self.assertFalse(diagnostics["affects_primary_truth"])
+
+    def test_http_action_endpoint_uses_ui_action_not_command_id(self) -> None:
+        runner = MappingRunner(live_payloads())
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            accepted = json.loads(
+                post_json(f"{base_url}/api/action", {"ui_action": "export_diagnostics"})
+            )
+            rejected = json.loads(
+                post_json(f"{base_url}/api/action", {"command_id": "diagnostics_export"})
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(accepted["status"], "ok")
+        self.assertEqual(rejected["status"], "integration_failure")
+        self.assertEqual(runner.calls, [("diagnostics", "export", "--json")])
+
     def test_server_source_contains_no_direct_runtime_truth_file_reads(self) -> None:
         source = (ROOT / "wild_boar_proxy" / "web_design_live_server.py").read_text()
         forbidden = [
@@ -274,6 +346,14 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("healthcheck", "--json"): command_packet(human_message="Healthcheck passed."),
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
+        ("diagnostics", "export", "--json"): command_packet(
+            human_message="Diagnostics exported.",
+            data={"bundle_path": "/tmp/wbp-diagnostics.zip"},
+        ),
+        ("stable", "repair", "--dry-run", "--json"): command_packet(
+            human_message="Stable repair dry-run completed.",
+            data={"would_change": False},
+        ),
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."
         ),
@@ -288,6 +368,17 @@ def free_port() -> int:
 
 def fetch(url: str) -> str:
     with urllib.request.urlopen(url, timeout=3) as response:
+        return response.read().decode("utf-8")
+
+
+def post_json(url: str, payload: dict[str, object]) -> str:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=3) as response:
         return response.read().decode("utf-8")
 
 

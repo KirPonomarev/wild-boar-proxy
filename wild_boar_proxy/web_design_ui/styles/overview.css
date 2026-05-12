@@ -404,6 +404,33 @@ button:disabled {
   color: var(--red);
 }
 
+.action-panel {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .8);
+  border-radius: 14px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
+  padding: 14px;
+}
+
+.action-panel-grid {
+  display: grid;
+  gap: 7px 16px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin-top: 10px;
+}
+
+.action-panel-grid div:nth-child(odd) {
+  color: var(--muted);
+}
+
+.action-panel-grid div:nth-child(even) {
+  color: var(--text);
+}
+
 .grid {
   display: grid;
   gap: 24px;
