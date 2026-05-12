@@ -155,11 +155,25 @@ function validateFixture(fixture) {
 
 function snapshotNotice(snapshot) {
   if (snapshot.source === "live_readonly") {
-    return snapshot.status === "ok"
-      ? "Live read-only preview. Runtime truth comes from strict command packets."
-      : "Live read-only integration failure. Previous healthy data was not reused.";
+    if (snapshot.status !== "ok") {
+      return "Live read-only integration failure. Previous healthy data was not reused.";
+    }
+    if (snapshot.has_warnings) {
+      return `Live read-only preview with warnings. ${warningSummary(snapshot.warnings || [])}`;
+    }
+    return "Live read-only preview. Runtime truth comes from strict command packets.";
   }
   return snapshot.fixture_notice || "Fixture preview only. No command execution, no runtime file reads.";
+}
+
+function warningSummary(warnings) {
+  if (!warnings.length) {
+    return "";
+  }
+  return warnings
+    .slice(0, 2)
+    .map((warning) => `${warning.label || warning.role}: ${warning.human_message}`)
+    .join(" · ");
 }
 
 function modeLabel(value) {
@@ -266,7 +280,8 @@ function renderSnapshot(snapshot) {
   text("problemNote", pool.problem_note);
 
   const banner = document.getElementById("fixtureBanner");
-  setClassName(banner, "fixture-banner", visualState);
+  const bannerState = safeSnapshot.has_warnings && visualState === "healthy" ? "degraded" : visualState;
+  setClassName(banner, "fixture-banner", bannerState);
   banner.textContent = snapshotNotice(safeSnapshot);
 
   renderEvents(safeSnapshot.events || []);

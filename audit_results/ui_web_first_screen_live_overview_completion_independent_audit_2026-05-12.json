@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_LIVE_OVERVIEW_COMPLETION",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "auditor": "independent_explorer",
+  "result": "PASS",
+  "facts": [
+    "status, mode_get, and accounts_list are primary truth and their failures produce integration_failure",
+    "healthcheck failures produce degraded warning detail",
+    "rollout_rotation_inspect failures produce warning/event without full integration failure",
+    "browser UI fetches only api/live-readonly and does not submit command_id",
+    "action buttons remain disabled",
+    "no direct state/log/registry reads were introduced",
+    "runtime.py, web_ui.py, and ui_shell.py are not changed by this contour"
+  ],
+  "tests_observed_by_auditor": [
+    {
+      "command": "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter",
+      "result": "PASS"
+    }
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py remains dirty outside this contour",
+    "the auditor did not run full repo-wide regression; full regression is recorded separately"
+  ]
+}

@@ -134,9 +134,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner.calls,
             [
                 ("status", "--json"),
-                ("healthcheck", "--json"),
                 ("mode", "get", "--json"),
                 ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
                 ("rollout", "rotation", "inspect", "--json"),
             ],
         )
@@ -149,8 +149,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["pool_summary"]["reserve"], 2)
         self.assertEqual(snapshot["pool_summary"]["hold"], 1)
         self.assertEqual(snapshot["pool_summary"]["problem"], 1)
+        self.assertFalse(snapshot["has_warnings"])
+        self.assertTrue(snapshot["primary_truth_ok"])
 
-    def test_command_error_becomes_integration_failure_without_stale_green(self) -> None:
+    def test_healthcheck_error_becomes_degraded_warning_without_full_failure(self) -> None:
         payloads = live_payloads()
         payloads[("healthcheck", "--json")] = command_packet(
             status="error",
@@ -161,11 +163,49 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         snapshot = build_live_readonly_snapshot(runner)
 
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["ui_state"], "degraded")
+        self.assertEqual(snapshot["runtime"]["visual_state"], "degraded")
+        self.assertEqual(snapshot["pool_summary"]["active"], 1)
+        self.assertEqual(snapshot["warnings"][0]["role"], "runtime_detail")
+        self.assertEqual(snapshot["warnings"][0]["severity"], "degraded")
+        self.assertIn("Network failed", snapshot["warnings"][0]["human_message"])
+
+    def test_rotation_error_becomes_warning_without_full_failure(self) -> None:
+        payloads = live_payloads()
+        payloads[("rollout", "rotation", "inspect", "--json")] = command_packet(
+            status="error",
+            machine_error_code="ROTATION_EVIDENCE_CONTRADICTED",
+            human_message="Rotation evidence is contradicted.",
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_live_readonly_snapshot(runner)
+
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["ui_state"], "healthy")
+        self.assertEqual(snapshot["runtime"]["visual_state"], "healthy")
+        self.assertTrue(snapshot["has_warnings"])
+        self.assertEqual(snapshot["warnings"][0]["role"], "rollout_evidence")
+        self.assertEqual(snapshot["warnings"][0]["severity"], "warning")
+        self.assertEqual(snapshot["evidence_summary"]["rollout_warnings"], 1)
+
+    def test_primary_status_error_becomes_integration_failure_without_stale_green(self) -> None:
+        payloads = live_payloads()
+        payloads[("status", "--json")] = command_packet(
+            status="error",
+            machine_error_code="runtime_down",
+            human_message="Runtime status failed.",
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_live_readonly_snapshot(runner)
+
         self.assertEqual(snapshot["status"], "integration_failure")
         self.assertEqual(snapshot["ui_state"], "integration_failure")
         self.assertEqual(snapshot["runtime"]["visual_state"], "integration_failure")
         self.assertEqual(snapshot["pool_summary"]["active"], 0)
-        self.assertIn("Network failed", snapshot["runtime"]["last_error"])
+        self.assertFalse(snapshot["primary_truth_ok"])
 
     def test_mode_status_disagreement_becomes_integration_failure(self) -> None:
         payloads = live_payloads()
@@ -177,6 +217,25 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["status"], "integration_failure")
         self.assertEqual(snapshot["runtime"]["machine_error_code"], "UI_LIVE_READONLY_PACKET_INVALID")
         self.assertIn("disagree", snapshot["runtime"]["last_error"])
+
+    def test_invalid_accounts_packet_becomes_integration_failure(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = command_packet(
+            human_message="Accounts malformed.",
+            accounts="not-a-list",
+            registry_identity={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "next_action": "none",
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_live_readonly_snapshot(runner)
+
+        self.assertEqual(snapshot["status"], "integration_failure")
+        self.assertEqual(snapshot["runtime"]["machine_error_code"], "UI_LIVE_READONLY_PACKET_INVALID")
+        self.assertIn("accounts must be a list", snapshot["runtime"]["last_error"])
 
     def test_http_server_serves_static_index_and_readonly_api(self) -> None:
         runner = MappingRunner(live_payloads())

@@ -27,21 +27,23 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
 READONLY_COMMAND_IDS = (
     "status",
-    "healthcheck",
     "mode_get",
     "accounts_list",
+    "healthcheck",
     "rollout_rotation_inspect",
 )
+PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
+DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
 
 
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     commands: dict[str, dict[str, Any]] = {}
-    for command_id in READONLY_COMMAND_IDS:
+    for command_id in PRIMARY_COMMAND_IDS:
         result = execute_command(runner, command_id)
         commands[command_id] = result
         if result["status"] != "ok":
             return _integration_failure(
-                "Live read-only command failed.",
+                "Live read-only primary command failed.",
                 str(result["human_message"]),
                 str(result["machine_error_code"]),
                 commands,
@@ -61,7 +63,16 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
             commands,
         )
 
+    warnings: list[dict[str, str]] = []
+    for command_id in DETAIL_COMMAND_IDS:
+        result = execute_command(runner, command_id)
+        commands[command_id] = result
+        if result["status"] != "ok":
+            warnings.append(_warning_from_result(command_id, result))
+
     visual_state = _visual_state(runtime.liveness)
+    if visual_state == "healthy" and any(warning["severity"] == "degraded" for warning in warnings):
+        visual_state = "degraded"
     hold_count = sum(1 for account in accounts.accounts if account.manual_hold)
     problem_count = sum(
         1
@@ -74,6 +85,10 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
         "status": "ok",
         "ui_state": visual_state,
         "source": "live_readonly",
+        "primary_truth_ok": True,
+        "has_warnings": bool(warnings),
+        "warnings": warnings,
+        "evidence_summary": _evidence_summary(commands, warnings),
         "runtime": {
             "visual_state": visual_state,
             "status_label": _status_label(visual_state),
@@ -95,7 +110,7 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
             "hold_note": "manual hold accounts",
             "problem_note": "degraded/down/error accounts",
         },
-        "events": _events_from_commands(commands, visual_state),
+        "events": _events_from_commands(commands, visual_state, warnings),
         "commands": _public_command_results(commands),
     }
 
@@ -160,6 +175,23 @@ def _integration_failure(
         "status": "integration_failure",
         "ui_state": "integration_failure",
         "source": "live_readonly",
+        "primary_truth_ok": False,
+        "has_warnings": True,
+        "warnings": [
+            {
+                "command_id": "primary_truth",
+                "role": "primary",
+                "severity": "integration_failure",
+                "machine_error_code": machine_error_code,
+                "human_message": last_error,
+            }
+        ],
+        "evidence_summary": {
+            "primary_truth_ok": False,
+            "detail_warnings": 0,
+            "rollout_warnings": 0,
+            "highest_warning_severity": "integration_failure",
+        },
         "runtime": {
             "visual_state": "integration_failure",
             "status_label": "Ошибка интеграции",
@@ -197,6 +229,7 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
         command_id: {
             "status": result["status"],
             "ui_state": result["ui_state"],
+            "role": _command_role(command_id),
             "machine_error_code": result["machine_error_code"],
             "human_message": result["human_message"],
             "exit_code": result["exit_code"],
@@ -206,24 +239,87 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
     }
 
 
-def _events_from_commands(commands: dict[str, dict[str, Any]], visual_state: str) -> list[dict[str, str]]:
-    return [
+def _events_from_commands(
+    commands: dict[str, dict[str, Any]],
+    visual_state: str,
+    warnings: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    events = [
         {
             "level": "green" if visual_state == "healthy" else "amber",
             "message": str(commands["status"]["human_message"]),
             "observed_at": "status --json",
         },
-        {
-            "level": "blue",
-            "message": str(commands["healthcheck"]["human_message"]),
-            "observed_at": "healthcheck --json",
-        },
-        {
-            "level": "blue",
-            "message": str(commands["rollout_rotation_inspect"]["human_message"]),
-            "observed_at": "rollout rotation inspect --json",
-        },
     ]
+    for warning in warnings:
+        events.append(
+            {
+                "level": "amber",
+                "message": warning["human_message"],
+                "observed_at": warning["command_id"],
+            }
+        )
+    for command_id in DETAIL_COMMAND_IDS:
+        if command_id in commands and commands[command_id]["status"] == "ok":
+            events.append(
+                {
+                    "level": "blue",
+                    "message": str(commands[command_id]["human_message"]),
+                    "observed_at": _command_observed_at(command_id),
+                }
+            )
+    return events
+
+
+def _warning_from_result(command_id: str, result: dict[str, Any]) -> dict[str, str]:
+    return {
+        "command_id": command_id,
+        "label": _command_observed_at(command_id),
+        "role": _command_role(command_id),
+        "severity": "degraded" if command_id == "healthcheck" else "warning",
+        "machine_error_code": str(result["machine_error_code"]),
+        "human_message": str(result["human_message"]),
+    }
+
+
+def _evidence_summary(
+    commands: dict[str, dict[str, Any]],
+    warnings: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "primary_truth_ok": True,
+        "detail_warnings": sum(1 for warning in warnings if warning["role"] == "runtime_detail"),
+        "rollout_warnings": sum(1 for warning in warnings if warning["role"] == "rollout_evidence"),
+        "highest_warning_severity": _highest_warning_severity(warnings),
+        "available_detail_commands": [
+            command_id for command_id in DETAIL_COMMAND_IDS if command_id in commands
+        ],
+    }
+
+
+def _highest_warning_severity(warnings: list[dict[str, str]]) -> str:
+    if any(warning["severity"] == "degraded" for warning in warnings):
+        return "degraded"
+    if warnings:
+        return "warning"
+    return "none"
+
+
+def _command_role(command_id: str) -> str:
+    if command_id in PRIMARY_COMMAND_IDS:
+        return "primary_truth"
+    if command_id == "healthcheck":
+        return "runtime_detail"
+    if command_id == "rollout_rotation_inspect":
+        return "rollout_evidence"
+    return "unknown"
+
+
+def _command_observed_at(command_id: str) -> str:
+    return {
+        "healthcheck": "healthcheck --json",
+        "rollout_rotation_inspect": "rollout rotation inspect --json",
+    }.get(command_id, command_id)
 
 
 def _visual_state(liveness: str) -> str:
