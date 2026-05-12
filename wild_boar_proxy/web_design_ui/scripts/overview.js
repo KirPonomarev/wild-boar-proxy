@@ -61,7 +61,7 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
-const SCREENS = ["overview", "accounts", "diagnostics"];
+const SCREENS = ["overview", "accounts", "diagnostics", "settings"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -256,7 +256,9 @@ async function runUiAction(uiAction, extraPayload = {}) {
     const payload = await response.json();
     setActionPanel(payload);
     if (payload.post_action_refresh_required) {
-      const refreshTarget = currentScreen() === "accounts" ? "accounts" : "overview";
+      const refreshTarget = currentScreen() === "accounts"
+        ? "accounts"
+        : (currentScreen() === "settings" ? "settings" : "overview");
       text("actionRefreshStatus", `refreshing live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       text("actionRefreshStatus", refreshed.status === "ok" ? "live refresh ok" : "live refresh failed");
@@ -292,6 +294,7 @@ function applyActionAvailability() {
       ? ""
       : (requiresLive && !isLiveSource ? "Switch Accounts to live source before account actions." : (metadata.unavailable_reason || "Action unavailable"));
   }
+  updateSettingsActionMetadata();
 }
 
 function validateSnapshot(snapshot) {
@@ -388,7 +391,11 @@ function setSourceCopy(source) {
     ? (
       screen === "accounts"
         ? "Accounts live read-only"
-        : (screen === "diagnostics" ? "Diagnostics support artifact" : "Live read-only · basic actions")
+        : (
+          screen === "diagnostics"
+            ? "Diagnostics support artifact"
+            : (screen === "settings" ? "Settings command-packet bounded" : "Live read-only · basic actions")
+        )
     )
     : "UI preview · no live commands";
   document.getElementById("subtitleText").textContent = source === "live"
@@ -398,7 +405,11 @@ function setSourceCopy(source) {
         : (
           screen === "diagnostics"
             ? "Экран диагностики показывает только support-artifact metadata из diagnostics JSON packet. Runtime health truth остаётся за status/healthcheck."
-            : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+            : (
+              screen === "settings"
+                ? "Настройки показывают observed status/configuration из JSON packets. Safe actions are requests, not saved preferences."
+                : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+            )
         )
     )
     : (
@@ -407,7 +418,11 @@ function setSourceCopy(source) {
         : (
           screen === "diagnostics"
             ? "Визуальный перенос diagnostics screen. Экспорт создаёт support artifact, но не доказывает runtime health."
-            : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+            : (
+              screen === "settings"
+                ? "Визуальный перенос settings screen. Controls are read-only or deferred unless backed by existing ui_action."
+                : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+            )
         )
     );
 }
@@ -479,6 +494,35 @@ function artifactReference(value) {
   }
   const basename = value.split(/[\\/]/).filter(Boolean).pop() || "artifact";
   return `metadata only: ${basename}`;
+}
+
+function renderSettingsSnapshot(snapshot) {
+  const runtime = snapshot.runtime || {};
+  const statusLabel = runtime.status_label || "Неизвестно";
+  text("settingsDesiredMode", modeLabel(runtime.desired_mode));
+  text("settingsEffectiveMode", modeLabel(runtime.effective_mode));
+  text("settingsEndpoint", runtime.endpoint || "not provided by command packet");
+  text("settingsRuntimeStatus", `${statusLabel} · observed, not editable`);
+  text("settingsMachineCode", runtime.machine_error_code || "not provided by command packet");
+  updateSettingsActionMetadata();
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner) {
+    const visualState = runtime.visual_state || snapshot.state_id || "unknown";
+    setClassName(banner, "fixture-banner", visualState);
+    banner.textContent = "Settings is read-only in this contour. Safe actions are requests, not saved preferences.";
+  }
+}
+
+function updateSettingsActionMetadata() {
+  const launch = metadataFor("launch_client_dispatch");
+  const target = document.getElementById("settingsLaunchAvailability");
+  if (!target) {
+    return;
+  }
+  target.textContent = launch.available === false
+    ? `unavailable · ${launch.unavailable_reason || "server-owned path not provided"}`
+    : "available · server-owned bounded dispatch";
 }
 
 function setActionsBusy(isBusy) {
@@ -573,6 +617,9 @@ function setScreen(screen, updateUrl = false) {
   for (const node of document.querySelectorAll(".diagnostics-only")) {
     node.hidden = nextScreen !== "diagnostics";
   }
+  for (const node of document.querySelectorAll(".settings-only")) {
+    node.hidden = nextScreen !== "settings";
+  }
   for (const link of document.querySelectorAll("[data-screen-link]")) {
     const active = link.dataset.screenLink === nextScreen;
     link.classList.toggle("active", active);
@@ -585,7 +632,9 @@ function setScreen(screen, updateUrl = false) {
 
   text(
     "mainTitle",
-    nextScreen === "accounts" ? "Аккаунты" : (nextScreen === "diagnostics" ? "Диагностика" : "Обзор")
+    nextScreen === "accounts"
+      ? "Аккаунты"
+      : (nextScreen === "diagnostics" ? "Диагностика" : (nextScreen === "settings" ? "Настройки" : "Обзор"))
   );
   setSourceCopy(document.getElementById("sourcePicker").value);
 
@@ -900,6 +949,7 @@ function renderSnapshot(snapshot) {
   text("endpoint", runtime.endpoint);
   text("lastError", runtime.last_error || "нет");
   document.getElementById("lastError").className = runtime.last_error ? "last-error problem" : "last-error ok";
+  renderSettingsSnapshot(safeSnapshot);
 
   renderModeSegments(runtime);
 

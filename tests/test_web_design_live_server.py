@@ -378,6 +378,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(metadata["status"], "ok")
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
+        self.assertNotIn("save_settings", metadata["actions"])
+        self.assertNotIn("update_settings", metadata["actions"])
+        self.assertNotIn("settings_write", metadata["actions"])
         self.assertTrue(metadata["actions"]["sync_runtime"]["confirmation_required"])
         self.assertTrue(metadata["actions"]["sync_runtime"]["mutates_runtime"])
         self.assertTrue(metadata["actions"]["sync_runtime"]["post_action_refresh_required"])

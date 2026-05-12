@@ -47,7 +47,7 @@
             </svg>
             <span>Диагностика</span>
           </a>
-          <a class="nav-item disabled" href="#" aria-disabled="true">
+          <a id="settingsNav" class="nav-item" href="?screen=settings" data-screen-link="settings">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="3.2"></circle>
               <path d="M12 3.5v2M12 18.5v2M4.6 7.8l1.7 1M17.7 15.2l1.7 1M4.6 16.2l1.7-1M17.7 8.8l1.7-1M3.5 12h2M18.5 12h2"></path>
@@ -499,6 +499,95 @@
                     <button class="button small disabled" type="button" disabled>Raw diagnostic text unavailable</button>
                   </div>
                 </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="settingsScreen" class="screen" data-screen="settings" hidden>
+          <div id="settingsBanner" class="fixture-banner neutral">
+            Settings is read-only in this contour. Values below are observed from JSON packets, not direct config reads.
+          </div>
+
+          <div class="settings-layout">
+            <section class="card form-section settings-observed">
+              <div class="section-head">
+                <div>
+                  <h3>Observed configuration / status</h3>
+                  <div class="secondary">Read-only facts from existing command packets.</div>
+                </div>
+                <span class="chip neutral"><span class="dot"></span>read-only</span>
+              </div>
+              <div class="form-row"><label>Desired mode</label><div id="settingsDesiredMode">-</div></div>
+              <div class="form-row"><label>Effective mode</label><div id="settingsEffectiveMode">-</div></div>
+              <div class="form-row"><label>Observed endpoint</label><div id="settingsEndpoint" class="mono-value">-</div></div>
+              <div class="form-row"><label>Runtime status</label><div id="settingsRuntimeStatus">-</div></div>
+              <div class="form-row"><label>Machine code</label><div id="settingsMachineCode">-</div></div>
+              <div class="form-row"><label>Launch client</label><div id="settingsLaunchAvailability">metadata unavailable</div></div>
+            </section>
+
+            <section class="card form-section settings-safe-actions">
+              <div class="section-head">
+                <div>
+                  <h3>Safe existing actions</h3>
+                  <div class="secondary">These are action requests, not saved settings.</div>
+                </div>
+                <span class="chip blue"><span class="dot"></span>allowlisted</span>
+              </div>
+              <div class="settings-action-grid">
+                <button class="action-tile live-action" type="button" data-ui-action="set_mode_stable">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
+                  </svg>
+                  <span>Request stable mode</span>
+                </button>
+                <button class="action-tile live-action" type="button" data-ui-action="set_mode_managed">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M4 12h5l2-4 2 8 2-4h5"></path>
+                  </svg>
+                  <span>Request managed mode</span>
+                </button>
+                <button class="action-tile live-action" type="button" data-ui-action="stable_repair_plan">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
+                  </svg>
+                  <span>Repair dry-run</span>
+                </button>
+                <button class="action-tile live-action" type="button" data-ui-action="launch_smoke">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M20 6 9 17l-5-5"></path>
+                  </svg>
+                  <span>Launch smoke</span>
+                </button>
+                <button class="action-tile live-action" type="button" data-ui-action="launch_client_dispatch">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"></path>
+                  </svg>
+                  <span>Dispatch client</span>
+                </button>
+                <button class="action-tile live-action" type="button" data-ui-action="export_diagnostics">
+                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M4 13h3l3-7 5 13 2-6h3"></path>
+                  </svg>
+                  <span>Export diagnostics</span>
+                </button>
+              </div>
+            </section>
+
+            <section class="card form-section settings-deferred">
+              <div class="section-head">
+                <div>
+                  <h3>Deferred settings controls</h3>
+                  <div class="secondary">Visible design affordances without safe command surfaces.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
+              </div>
+              <div class="deferred-list">
+                <div class="deferred-row"><span>Client selection</span><span>browser path submission forbidden</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Application data directory</span><span>direct filesystem access deferred</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Network host / port</span><span>runtime config mutation out of scope</span><button class="button small disabled" type="button" disabled>Read-only</button></div>
+                <div class="deferred-row"><span>Autorecovery policy</span><span>policy mutation requires owner command surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Startup account checks</span><span>startup policy mutation deferred</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
               </div>
             </section>
           </div>

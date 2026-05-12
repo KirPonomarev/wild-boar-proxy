@@ -1,0 +1,110 @@
+{
+  "contour_id": "UI_WEB_SETTINGS_READONLY_PLUS_SAFE_ACTIONS",
+  "status": "implemented_verified",
+  "date": "2026-05-13",
+  "goal": "Transfer the settings screen as a read-only observed status/configuration surface with safe existing actions and deferred settings controls.",
+  "canon_basis": [
+    "CANON.md: one active truth surface per topic; no false-green or stale-green",
+    "MASTER_PLAN.md: managed control app, not a generic config/OAuth/log editor",
+    "RUNTIME_CONTRACT.md: launch/config/profile surfaces stay bounded and do not become generic config-routing surfaces",
+    "COMMAND_API.md: UI consumes strict JSON command surfaces",
+    "AGENTS.md: do not mix UI/runtime/docs/release scope"
+  ],
+  "implemented_scope": {
+    "screen": "settings",
+    "source_render": "07_settings.html / 07_settings.png visual baseline",
+    "screen_structure": [
+      "read-only observed configuration/status",
+      "safe existing actions",
+      "deferred settings controls"
+    ],
+    "active_ui_actions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "deferred_controls": [
+      "client selection",
+      "application data directory",
+      "network host / port",
+      "autorecovery policy",
+      "startup account checks"
+    ]
+  },
+  "layer_boundaries": {
+    "settings_is_config_editor": false,
+    "ui_reads_config_files": false,
+    "ui_reads_state_files": false,
+    "ui_reads_logs": false,
+    "ui_reads_auth_files": false,
+    "browser_sends_path": false,
+    "browser_sends_command_id": false,
+    "browser_sends_raw_argv": false,
+    "new_command_surface_added": false,
+    "runtime_core_changed_in_contour": false,
+    "desktop_files_changed_in_contour": false,
+    "rollout_policy_stage_controls_added": false
+  },
+  "tests": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "passed"
+    },
+    "targeted": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter",
+      "result": "passed",
+      "tests_run": 63
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "tests_run": 557,
+      "duration_seconds": 212.496
+    },
+    "browser_smoke": {
+      "target": "http://127.0.0.1:8800/?screen=settings&source=fixture",
+      "result": "passed",
+      "notes": "Verified Settings screen, read-only/safe/deferred sections, and deferred reasons. Runtime actions were not clicked."
+    }
+  },
+  "independent_audit": {
+    "agent": "Maxwell",
+    "blocking_findings_in_contour_scope": 0,
+    "verdict": "No contour-scope findings.",
+    "residual_risks": [
+      "Settings tests are mostly string/structure assertions rather than full button click-through.",
+      "Settings values render from the same snapshot shape as overview, so upstream snapshot changes are guarded primarily by tests."
+    ]
+  },
+  "changed_files_for_this_contour": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py",
+    "audit_results/ui_web_settings_readonly_plus_safe_actions_matrix_2026-05-13.json",
+    "audit_results/ui_web_settings_readonly_plus_safe_actions_closeout_2026-05-13.md",
+    "audit_results/ui_web_settings_readonly_plus_safe_actions_independent_audit_2026-05-13.json"
+  ],
+  "excluded_dirty_tail": [
+    "wild_boar_proxy/runtime.py",
+    "external_agent_lab/**",
+    "tests/test_external_agent_lab.py",
+    "audit_results/external_lab_*",
+    "external_agent_lab/legacy/eval_results/**"
+  ],
+  "acceptance": {
+    "settings_nav_reachable": true,
+    "read_only_by_default": true,
+    "safe_actions_are_existing_allowlisted_actions": true,
+    "deferred_controls_have_reasons": true,
+    "no_direct_file_reads": true,
+    "no_browser_path_submission": true,
+    "no_runtime_core_changes": true,
+    "tests_green": true,
+    "ready_for_commit_after_staged_scope_scan": true
+  }
+}
