@@ -181,11 +181,32 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('<option value="live">live read-only</option>', html)
         self.assertIn('fetch("api/live-readonly"', js)
+        self.assertIn('fetch("api/accounts-readonly"', js)
         self.assertIn('fetch("api/actions"', js)
         self.assertIn('snapshot.source === "live_readonly"', js)
+        self.assertIn('safeSnapshot.source === "accounts_readonly"', js)
         self.assertIn('safeSnapshot.state_id || safeSnapshot.ui_state', js)
         self.assertNotIn("command_id", js)
         self.assertNotIn("client_path", js)
+
+    def test_accounts_screen_is_readonly_and_redacted(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-screen-link="accounts"', html)
+        self.assertIn('id="accountsScreen"', html)
+        self.assertIn('id="accountsTableBody"', html)
+        self.assertIn("renderAccountsSnapshot", js)
+        self.assertIn("accountsFixtureFromOverview", js)
+        self.assertIn("Lifecycle actions are deferred", js)
+        self.assertIn("secret_references", js)
+        self.assertNotIn("auth_ref", html + js)
+        self.assertNotIn("accounts validate", html + js)
+        self.assertNotIn("accounts promote", html + js)
+        self.assertNotIn("accounts demote", html + js)
+        self.assertNotIn("accounts release", html + js)
+        self.assertNotIn("accounts retire", html + js)
+        self.assertNotIn("accounts onboard", html + js)
 
     def test_static_preview_uses_ui_action_for_basic_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

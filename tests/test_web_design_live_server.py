@@ -13,7 +13,9 @@ from pathlib import Path
 
 from wild_boar_proxy.ui_shell import CommandResult
 from wild_boar_proxy.web_design_live_server import (
+    ACCOUNTS_READONLY_COMMAND_IDS,
     READONLY_COMMAND_IDS,
+    build_accounts_readonly_snapshot,
     build_handler,
     build_live_readonly_snapshot,
     run_ui_action,
@@ -100,10 +102,13 @@ def account(
     *,
     manual_hold: bool = False,
     last_error: str = "",
+    label: str | None = None,
+    auth_ref: str | None = None,
+    last_error_class: str = "",
 ) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "id": backend_id,
-        "label": backend_id,
+        "label": label if label is not None else backend_id,
         "pool": pool,
         "manual_hold": manual_hold,
         "status": status,
@@ -111,9 +116,13 @@ def account(
         "success_count": 1,
         "last_success": None,
         "last_error": last_error,
+        "last_error_class": last_error_class,
         "cooldown_until": None,
         "notes": "",
     }
+    if auth_ref is not None:
+        payload["auth_ref"] = auth_ref
+    return payload
 
 
 class MappingRunner:
@@ -239,6 +248,67 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["runtime"]["machine_error_code"], "UI_LIVE_READONLY_PACKET_INVALID")
         self.assertIn("accounts must be a list", snapshot["runtime"]["last_error"])
 
+    def test_accounts_readonly_calls_only_accounts_list_and_redacts_private_fields(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[
+                account(
+                    "acct-private",
+                    "active",
+                    "healthy",
+                    label="private.user@example.com",
+                    auth_ref="/Users/kirill/.cli-proxy-api/codex-private.json",
+                ),
+                account(
+                    "acct-quota",
+                    "reserve",
+                    "down",
+                    last_error="HTTP 429: usage_limit_reached in /tmp/private-token.json",
+                    last_error_class="quota",
+                ),
+            ],
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_accounts_readonly_snapshot(runner)
+
+        self.assertEqual(runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(tuple(snapshot["commands"]), ACCOUNTS_READONLY_COMMAND_IDS)
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["source"], "accounts_readonly")
+        self.assertTrue(snapshot["privacy"]["redacted"])
+        self.assertFalse(snapshot["privacy"]["raw_command_packet_included"])
+        self.assertEqual(snapshot["summary"]["active"], 1)
+        self.assertEqual(snapshot["summary"]["reserve"], 1)
+        self.assertEqual(snapshot["summary"]["problem"], 1)
+        self.assertEqual(snapshot["accounts"][0]["label"], "pri***@***.com")
+        self.assertEqual(snapshot["accounts"][1]["last_error_summary"], "quota or usage limit")
+        serialized = json.dumps(snapshot)
+        self.assertNotIn("auth_ref", serialized)
+        self.assertNotIn("/Users/kirill", serialized)
+        self.assertNotIn("/tmp/private-token", serialized)
+        self.assertNotIn("private.user@example.com", serialized)
+
+    def test_accounts_readonly_invalid_packet_becomes_integration_failure(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = command_packet(
+            human_message="Accounts malformed.",
+            accounts="not-a-list",
+            registry_identity={
+                "status": "ok",
+                "machine_error_code": "OK",
+                "next_action": "none",
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_accounts_readonly_snapshot(runner)
+
+        self.assertEqual(snapshot["status"], "integration_failure")
+        self.assertEqual(snapshot["source"], "accounts_readonly")
+        self.assertEqual(snapshot["summary"]["machine_error_code"], "UI_ACCOUNTS_READONLY_PACKET_INVALID")
+        self.assertEqual(snapshot["accounts"], [])
+
     def test_http_server_serves_static_index_and_readonly_api(self) -> None:
         runner = MappingRunner(live_payloads())
         server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
@@ -248,6 +318,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             base_url = f"http://127.0.0.1:{server.server_port}"
             index = fetch(f"{base_url}/?source=live")
             api = json.loads(fetch(f"{base_url}/api/live-readonly?command_id=sync"))
+            accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly?command_id=sync"))
         finally:
             server.shutdown()
             server.server_close()
@@ -255,6 +326,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertIn("sourcePicker", index)
         self.assertEqual(api["status"], "ok")
+        self.assertEqual(accounts["status"], "ok")
+        self.assertEqual(accounts["source"], "accounts_readonly")
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 

@@ -25,7 +25,7 @@
         </div>
 
         <nav class="nav" aria-label="Основная навигация">
-          <a class="nav-item active" href="#" aria-current="page">
+          <a id="overviewNav" class="nav-item active" href="?screen=overview" aria-current="page" data-screen-link="overview">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
               <rect x="4" y="4" width="6" height="6" rx="1.5"></rect>
               <rect x="14" y="4" width="6" height="6" rx="1.5"></rect>
@@ -34,7 +34,7 @@
             </svg>
             <span>Обзор</span>
           </a>
-          <a class="nav-item disabled" href="#" aria-disabled="true">
+          <a id="accountsNav" class="nav-item" href="?screen=accounts" data-screen-link="accounts">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
               <circle cx="12" cy="8" r="4"></circle>
               <path d="M5 20c1.7-4 4-6 7-6s5.3 2 7 6"></path>
@@ -68,7 +68,7 @@
       <main class="main">
         <div class="main-header">
           <div>
-            <h1>Обзор</h1>
+            <h1 id="mainTitle">Обзор</h1>
             <div class="subtitle">
               <span id="subtitleText">
                 Визуальный перенос первого экрана. Данные ниже являются fixtures,
@@ -104,44 +104,61 @@
               </svg>
               <span>Обновить fixture</span>
             </button>
-            <button id="healthcheckAction" class="button live-action" type="button" data-ui-action="refresh_health_detail">
+            <button id="healthcheckAction" class="button live-action overview-only" type="button" data-ui-action="refresh_health_detail">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
               <span>Healthcheck</span>
             </button>
-            <button id="diagnosticsAction" class="button live-action" type="button" data-ui-action="export_diagnostics">
+            <button id="diagnosticsAction" class="button live-action overview-only" type="button" data-ui-action="export_diagnostics">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 13h3l3-7 5 13 2-6h3"></path>
               </svg>
               <span>Диагностика</span>
             </button>
-            <button id="repairPlanAction" class="button live-action" type="button" data-ui-action="stable_repair_plan">
+            <button id="repairPlanAction" class="button live-action overview-only" type="button" data-ui-action="stable_repair_plan">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
               </svg>
               <span>Dry-run</span>
             </button>
-            <button id="managedModeAction" class="button live-action" type="button" data-ui-action="set_mode_managed">
+            <button id="managedModeAction" class="button live-action overview-only" type="button" data-ui-action="set_mode_managed">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 12h5l2-4 2 8 2-4h5"></path>
               </svg>
               <span>Managed</span>
             </button>
-            <button id="launchClientAction" class="button primary live-action" type="button" data-ui-action="launch_client_dispatch" disabled>
+            <button id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch" disabled>
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"></path>
               </svg>
               <span>Запустить клиент</span>
             </button>
+            <button id="accountValidateSelectedAction" class="button accounts-only" type="button" disabled hidden>
+              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
+                <path d="m9 12 2 2 4-5"></path>
+              </svg>
+              <span>Проверить выбранные</span>
+            </button>
+            <button id="accountAddAction" class="button primary accounts-only" type="button" disabled hidden>
+              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="9" cy="8" r="4"></circle>
+                <path d="M2 20c1.5-4 3.8-6 7-6"></path>
+                <path d="M18 10v8"></path>
+                <path d="M14 14h8"></path>
+              </svg>
+              <span>Добавить аккаунт</span>
+            </button>
           </div>
         </div>
 
-        <div id="fixtureBanner" class="fixture-banner">
-          Fixture preview only. No command execution, no runtime file reads.
-        </div>
+        <section id="overviewScreen" class="screen" data-screen="overview">
+          <div id="fixtureBanner" class="fixture-banner">
+            Fixture preview only. No command execution, no runtime file reads.
+          </div>
 
-        <section id="actionPanel" class="action-panel" aria-live="polite">
+          <section id="actionPanel" class="action-panel" aria-live="polite">
           <div class="eyebrow">Последнее действие</div>
           <div class="action-panel-grid">
             <div>UI action</div><div id="actionUiAction">none</div>
@@ -153,9 +170,9 @@
             <div>Changed files</div><div id="actionChangedFiles">[]</div>
             <div>Refresh</div><div id="actionRefreshStatus">not requested</div>
           </div>
-        </section>
+          </section>
 
-        <div class="grid overview-top">
+          <div class="grid overview-top">
           <section class="card system-card">
             <div class="eyebrow">Состояние системы</div>
             <div class="kv">
@@ -247,6 +264,74 @@
             <button class="button ghost small disabled" type="button" disabled>Показать все</button>
           </div>
           <div id="eventList" class="log-list" aria-live="polite"></div>
+        </section>
+        </section>
+
+        <section id="accountsScreen" class="screen" data-screen="accounts" hidden>
+          <div id="accountsBanner" class="fixture-banner">
+            Accounts fixture preview only. No lifecycle actions are enabled.
+          </div>
+
+          <div class="filter-row accounts-filter-row">
+            <div class="left-filters">
+              <div class="search" aria-label="Поиск аккаунта">
+                <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <path d="m16.5 16.5 4 4"></path>
+                </svg>
+                <span>Поиск аккаунта</span>
+              </div>
+              <div class="filter-seg" aria-label="Account filters">
+                <span class="active">Все</span>
+                <span>Активные</span>
+                <span>Резерв</span>
+                <span>Ошибки</span>
+              </div>
+            </div>
+            <div class="chips accounts-chips" aria-label="Account summary">
+              <span class="chip green"><span class="dot"></span><span id="accountsActiveChip">0 активных</span></span>
+              <span class="chip blue"><span class="dot"></span><span id="accountsReserveChip">0 резерв</span></span>
+              <span class="chip amber"><span class="dot"></span><span id="accountsHoldChip">0 удержание</span></span>
+              <span class="chip red"><span class="dot"></span><span id="accountsProblemChip">0 проблемных</span></span>
+            </div>
+          </div>
+
+          <section class="card table-card accounts-table-card">
+            <div class="table-top">
+              <div>
+                <div class="card-title">Список аккаунтов</div>
+                <div id="accountsRegistryStatus" class="secondary">registry identity: fixture</div>
+              </div>
+              <div id="accountsVisibleCount" class="secondary">Показано 0 из 0</div>
+            </div>
+            <table class="table accounts-table">
+              <colgroup>
+                <col style="width:42px">
+                <col style="width:260px">
+                <col style="width:120px">
+                <col style="width:140px">
+                <col>
+                <col style="width:150px">
+                <col style="width:72px">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Аккаунт</th>
+                  <th>Пул</th>
+                  <th>Статус</th>
+                  <th>Последняя ошибка</th>
+                  <th class="right">Проверка</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="accountsTableBody"></tbody>
+            </table>
+            <div class="pagination">
+              <span id="accountsPagination">Строки 0-0 из 0</span>
+              <span>read-only · lifecycle deferred</span>
+            </div>
+          </section>
         </section>
       </main>
 

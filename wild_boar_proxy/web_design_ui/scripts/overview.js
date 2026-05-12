@@ -61,6 +61,15 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
+const SCREENS = ["overview", "accounts"];
+const ACCOUNT_VISUAL_CLASS = {
+  green: "green",
+  blue: "blue",
+  amber: "amber",
+  red: "red",
+  neutral: "neutral"
+};
+
 let actionMetadata = {};
 let pendingConfirmedAction = null;
 
@@ -84,6 +93,16 @@ function stateFromLocation() {
 function sourceFromLocation() {
   const params = new URLSearchParams(window.location.search);
   return params.get("source") === "live" ? "live" : "fixture";
+}
+
+function screenFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const screen = params.get("screen") || "overview";
+  return SCREENS.includes(screen) ? screen : "overview";
+}
+
+function currentScreen() {
+  return document.querySelector(".desktop").dataset.screen || "overview";
 }
 
 async function loadFixture(stateId) {
@@ -134,6 +153,49 @@ async function loadLiveReadonly() {
           observed_at: "live-readonly"
         }
       ]
+    };
+  }
+}
+
+async function loadAccountsReadonly() {
+  try {
+    const response = await fetch("api/accounts-readonly", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`accounts http ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    return {
+      schema_version: 1,
+      status: "integration_failure",
+      source: "accounts_readonly",
+      primary_truth_ok: false,
+      privacy: {
+        redacted: true,
+        raw_command_packet_included: false,
+        forbidden_fields_excluded: ["secret_references", "tokens", "raw_paths", "raw_logs"]
+      },
+      registry_identity: {
+        status: "unknown",
+        machine_error_code: "UI_ACCOUNTS_READONLY_FETCH_FAILED",
+        next_action: "retry"
+      },
+      summary: {
+        active: 0,
+        reserve: 0,
+        retired: 0,
+        hold: 0,
+        problem: 0,
+        healthy: 0,
+        degraded: 0,
+        down: 0,
+        capacity_target: 20,
+        visible_count: 0,
+        human_message: "Accounts read-only request failed.",
+        machine_error_code: "UI_ACCOUNTS_READONLY_FETCH_FAILED",
+        last_error: error.message
+      },
+      accounts: []
     };
   }
 }
@@ -314,12 +376,21 @@ function renderEvents(events) {
 }
 
 function setSourceCopy(source) {
+  const screen = currentScreen();
   document.getElementById("sourceFooter").textContent = source === "live"
-    ? "Live read-only · basic actions"
+    ? (screen === "accounts" ? "Accounts live read-only" : "Live read-only · basic actions")
     : "UI preview · no live commands";
   document.getElementById("subtitleText").textContent = source === "live"
-    ? "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
-    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth.";
+    ? (
+      screen === "accounts"
+        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия отложены."
+        : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+    )
+    : (
+      screen === "accounts"
+        ? "Визуальный перенос экрана аккаунтов. Данные ниже являются fixtures, а не runtime truth."
+        : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+    );
 }
 
 function setActionPanel(payload) {
@@ -394,6 +465,274 @@ function confirmPendingAction() {
   }
 }
 
+function setScreen(screen, updateUrl = false) {
+  const nextScreen = SCREENS.includes(screen) ? screen : "overview";
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.screen = nextScreen;
+
+  for (const node of document.querySelectorAll(".screen")) {
+    node.hidden = node.dataset.screen !== nextScreen;
+  }
+  for (const node of document.querySelectorAll(".overview-only")) {
+    node.hidden = nextScreen !== "overview";
+  }
+  for (const node of document.querySelectorAll(".accounts-only")) {
+    node.hidden = nextScreen !== "accounts";
+  }
+  for (const link of document.querySelectorAll("[data-screen-link]")) {
+    const active = link.dataset.screenLink === nextScreen;
+    link.classList.toggle("active", active);
+    if (active) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  }
+
+  text("mainTitle", nextScreen === "accounts" ? "Аккаунты" : "Обзор");
+  setSourceCopy(document.getElementById("sourcePicker").value);
+
+  if (updateUrl) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("screen", nextScreen);
+    window.history.replaceState({}, "", url);
+  }
+}
+
+function accountsFixtureFromOverview(fixture) {
+  const stateId = fixture.state_id || "unknown";
+  const pool = fixture.pool_summary || {};
+  const problemState = stateId === "healthy" ? "red" : "amber";
+  const accounts = [
+    accountFixture("acct-active-01", "codex-primary@example.com", "active", "healthy", "green", "", "Сегодня, 12:42"),
+    accountFixture("acct-reserve-01", "codex-reserve@example.com", "reserve", "healthy", "blue", "", "Сегодня, 11:50"),
+    accountFixture("acct-hold-01", "codex-hold@example.com", "reserve", "healthy", "amber", "manual hold", "Сегодня, 10:48", true),
+    accountFixture("acct-problem-01", "codex-auth@example.com", "retired", "down", problemState, "auth/session error", "Сегодня, 09:44")
+  ];
+  return {
+    schema_version: 1,
+    status: stateId === "integration_failure" ? "integration_failure" : "ok",
+    source: "accounts_fixture",
+    primary_truth_ok: false,
+    privacy: {
+      redacted: true,
+      raw_command_packet_included: false,
+      forbidden_fields_excluded: ["secret_references", "tokens", "raw_paths", "raw_logs"]
+    },
+    registry_identity: {
+      status: stateId === "integration_failure" ? "unknown" : "fixture",
+      machine_error_code: fixture.runtime?.machine_error_code || "fixture",
+      next_action: "none"
+    },
+    summary: {
+      active: pool.active ?? 0,
+      reserve: pool.reserve ?? 0,
+      retired: 1,
+      hold: pool.hold ?? 0,
+      problem: pool.problem ?? 0,
+      healthy: stateId === "healthy" ? 3 : 1,
+      degraded: stateId === "degraded" ? 2 : 0,
+      down: stateId === "down" ? 2 : 1,
+      capacity_target: 20,
+      visible_count: accounts.length,
+      human_message: fixture.fixture_notice || "Accounts fixture preview.",
+      machine_error_code: fixture.runtime?.machine_error_code || "fixture",
+      last_error: fixture.runtime?.last_error || ""
+    },
+    accounts
+  };
+}
+
+function accountFixture(id, label, pool, status, visualState, lastError, lastSuccess, manualHold = false) {
+  return {
+    id,
+    label: redactAccountLabel(label),
+    pool,
+    pool_label: manualHold ? "На удержании" : poolLabel(pool),
+    status,
+    status_label: manualHold ? "Удержание" : statusLabel(status),
+    visual_state: visualState,
+    manual_hold: manualHold,
+    enabled: true,
+    fail_count: lastError ? 2 : 0,
+    success_count: lastError ? 0 : 8,
+    last_success: lastSuccess,
+    last_error_class: lastError ? "fixture" : "",
+    last_error_summary: lastError,
+    cooldown_until: "",
+    notes_summary: "fixture"
+  };
+}
+
+function validateAccountsSnapshot(snapshot) {
+  const summary = snapshot.summary || {};
+  const registry = snapshot.registry_identity || {};
+  const missingTop = ["schema_version", "status", "source", "summary", "accounts"].filter((key) => !(key in snapshot));
+  const missingSummary = ["active", "reserve", "retired", "hold", "problem", "visible_count", "human_message", "machine_error_code"].filter((key) => !(key in summary));
+  const missingRegistry = ["status", "machine_error_code", "next_action"].filter((key) => !(key in registry));
+  return {
+    ok: missingTop.length === 0 && missingSummary.length === 0 && missingRegistry.length === 0 && Array.isArray(snapshot.accounts),
+    missingTop,
+    missingSummary,
+    missingRegistry
+  };
+}
+
+function renderAccountsSnapshot(snapshot) {
+  const validation = validateAccountsSnapshot(snapshot);
+  const safeSnapshot = validation.ok ? snapshot : {
+    ...accountsFixtureFromOverview(FALLBACK_FIXTURE),
+    status: "integration_failure",
+    source: "accounts_fixture_invalid",
+    summary: {
+      ...accountsFixtureFromOverview(FALLBACK_FIXTURE).summary,
+      machine_error_code: "UI_ACCOUNTS_SCHEMA_INVALID",
+      last_error: `Accounts schema invalid: top [${validation.missingTop.join(", ")}], summary [${validation.missingSummary.join(", ")}], registry [${validation.missingRegistry.join(", ")}]`
+    },
+    accounts: []
+  };
+
+  const source = safeSnapshot.source === "accounts_readonly" ? "live" : "fixture";
+  const visualState = safeSnapshot.status === "ok" ? "healthy" : "integration_failure";
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.fixtureState = visualState;
+  desktop.dataset.source = source;
+  document.getElementById("sourcePicker").value = source;
+  document.getElementById("statePicker").disabled = source === "live";
+  document.getElementById("brandCaption").textContent = source === "live"
+    ? "accounts live read-only"
+    : "accounts fixture preview";
+  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
+    ? "Обновить live"
+    : "Обновить fixture";
+  setSourceCopy(source);
+
+  const banner = document.getElementById("accountsBanner");
+  setClassName(banner, "fixture-banner", visualState);
+  banner.textContent = source === "live"
+    ? "Accounts live read-only. Truth comes only from the canonical accounts JSON packet; lifecycle actions are deferred."
+    : "Accounts fixture preview only. No lifecycle actions are enabled.";
+
+  const summary = safeSnapshot.summary;
+  text("accountsActiveChip", `${summary.active} активных`);
+  text("accountsReserveChip", `${summary.reserve} резерв`);
+  text("accountsHoldChip", `${summary.hold} удержание`);
+  text("accountsProblemChip", `${summary.problem} проблемных`);
+  text(
+    "accountsRegistryStatus",
+    `registry identity: ${safeSnapshot.registry_identity.status} · ${safeSnapshot.registry_identity.machine_error_code}`
+  );
+  text("accountsVisibleCount", `Показано ${safeSnapshot.accounts.length} из ${summary.visible_count}`);
+  text("accountsPagination", `Строки ${safeSnapshot.accounts.length ? 1 : 0}-${safeSnapshot.accounts.length} из ${summary.visible_count}`);
+  renderAccountRows(safeSnapshot.accounts);
+
+  const sidebarDot = document.getElementById("sidebarDot");
+  setClassName(sidebarDot, "dot", visualState);
+  text("sidebarStatus", summary.human_message || "Accounts read-only");
+}
+
+function renderAccountRows(accounts) {
+  const body = document.getElementById("accountsTableBody");
+  body.replaceChildren();
+  for (const account of accounts.slice(0, 12)) {
+    const row = document.createElement("tr");
+    row.append(
+      td("checkcell", checkbox()),
+      td("", accountIdentity(account)),
+      td("", account.pool_label || poolLabel(account.pool)),
+      td("", statusChip(account)),
+      td(account.last_error_summary ? "" : "dash", account.last_error_summary || "—"),
+      td("right mono-value", account.last_success || account.cooldown_until || "—"),
+      td("", dots())
+    );
+    body.append(row);
+  }
+}
+
+function td(className, child) {
+  const cell = document.createElement("td");
+  if (className) {
+    cell.className = className;
+  }
+  if (child instanceof Node) {
+    cell.append(child);
+  } else {
+    cell.textContent = String(child);
+  }
+  return cell;
+}
+
+function checkbox() {
+  const node = document.createElement("div");
+  node.className = "checkbox";
+  node.title = "Lifecycle actions are deferred in this contour.";
+  return node;
+}
+
+function accountIdentity(account) {
+  const wrap = document.createElement("div");
+  const main = document.createElement("div");
+  main.className = "account-main";
+  main.textContent = account.id || "unknown-account";
+  const sub = document.createElement("div");
+  sub.className = "account-sub";
+  sub.textContent = redactAccountLabel(account.label || account.id || "redacted account");
+  wrap.append(main, sub);
+  return wrap;
+}
+
+function statusChip(account) {
+  const chip = document.createElement("span");
+  const visual = ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral";
+  chip.className = `chip ${visual}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const label = document.createElement("span");
+  label.textContent = account.status_label || statusLabel(account.status);
+  chip.append(dot, label);
+  return chip;
+}
+
+function dots() {
+  const node = document.createElement("div");
+  node.className = "dots";
+  node.textContent = "···";
+  node.title = "Account lifecycle actions are disabled in this contour.";
+  return node;
+}
+
+function poolLabel(pool) {
+  return {
+    active: "Активные",
+    reserve: "Резерв",
+    retired: "Выведен"
+  }[pool] || pool || "Неизвестно";
+}
+
+function statusLabel(status) {
+  return {
+    healthy: "Работает",
+    degraded: "Деградация",
+    down: "Недоступен",
+    unknown: "Неизвестно"
+  }[status] || status || "Неизвестно";
+}
+
+function redactAccountLabel(label) {
+  const value = String(label || "");
+  if (!value.includes("@")) {
+    return value
+      .replaceAll("/Users/", "[redacted]/")
+      .replaceAll("/Volumes/", "[redacted]/")
+      .replaceAll("/tmp/", "[redacted]/")
+      .replaceAll(".cli" + "-proxy-api", "[redacted]")
+      .replaceAll(".co" + "dex", "[redacted]");
+  }
+  const [left, domain] = value.split("@");
+  const tail = (domain || "account").split(".").pop();
+  return `${left.slice(0, 3)}***@***.${tail || "account"}`;
+}
+
 function renderSnapshot(snapshot) {
   const validation = validateSnapshot(snapshot);
   const safeSnapshot = validation.ok ? snapshot : {
@@ -465,18 +804,28 @@ async function setFixtureState(stateId, updateUrl = false) {
     url.searchParams.set("source", "fixture");
     window.history.replaceState({}, "", url);
   }
-  renderSnapshot(fixture);
+  if (currentScreen() === "accounts") {
+    renderAccountsSnapshot(accountsFixtureFromOverview(fixture));
+  } else {
+    renderSnapshot(fixture);
+  }
 }
 
 async function setLiveReadonly(updateUrl = false) {
   setSourceCopy("live");
-  const snapshot = await loadLiveReadonly();
+  const snapshot = currentScreen() === "accounts"
+    ? await loadAccountsReadonly()
+    : await loadLiveReadonly();
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("source", "live");
     window.history.replaceState({}, "", url);
   }
-  renderSnapshot(snapshot);
+  if (currentScreen() === "accounts") {
+    renderAccountsSnapshot(snapshot);
+  } else {
+    renderSnapshot(snapshot);
+  }
   setSourceCopy("live");
   return snapshot;
 }
@@ -495,11 +844,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   const refresh = document.getElementById("refreshFixture");
   const initialState = stateFromLocation();
   const initialSource = sourceFromLocation();
+  const initialScreen = screenFromLocation();
   await loadActionMetadata();
   applyActionAvailability();
+  setScreen(initialScreen, false);
   sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
+  for (const link of document.querySelectorAll("[data-screen-link]")) {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setScreen(link.dataset.screenLink, true);
+      refreshCurrentSource();
+    });
+  }
   for (const button of document.querySelectorAll(".live-action")) {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }

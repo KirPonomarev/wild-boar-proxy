@@ -1,0 +1,21 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_READONLY_SCREEN",
+  "date": "2026-05-12",
+  "auditor": "Cicero",
+  "status": "PASS",
+  "findings": [],
+  "evidence": [
+    "wild_boar_proxy/web_design_ui/index.html:270 isolates the accounts screen behind data-screen=\"accounts\".",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js:160 fetches api/accounts-readonly for the accounts live path.",
+    "wild_boar_proxy/web_design_live_server.py:209 calls only accounts_list for build_accounts_readonly_snapshot.",
+    "wild_boar_proxy/web_design_live_server.py:236 returns redaction metadata and excludes raw command packet inclusion.",
+    "wild_boar_proxy/web_design_live_server.py:260 rejects browser command_id payloads.",
+    "tests/test_web_design_live_server.py:251 covers accounts readonly call count and private-field redaction.",
+    "tests/test_web_design_ui.py:192 covers static accounts screen read-only and redaction guards."
+  ],
+  "residual_risks": [
+    "wild_boar_proxy/runtime.py is dirty in the worktree but outside this UI contour.",
+    "Full visual polish remains future work.",
+    "Account lifecycle actions are deferred and require a separate contour."
+  ]
+}

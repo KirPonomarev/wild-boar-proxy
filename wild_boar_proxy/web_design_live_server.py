@@ -34,6 +34,7 @@ READONLY_COMMAND_IDS = (
 )
 PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
+ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -205,6 +206,49 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     }
 
 
+def build_accounts_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
+    result = execute_command(runner, "accounts_list")
+    commands = {"accounts_list": result}
+    if result["status"] != "ok":
+        return _accounts_integration_failure(
+            "Accounts read-only command failed.",
+            str(result["human_message"]),
+            str(result["machine_error_code"]),
+        )
+
+    packet = result["packet"]
+    try:
+        accounts = build_account_pool_snapshot(packet)
+    except UiShellError as exc:
+        return _accounts_integration_failure(
+            "Accounts read-only packet validation failed.",
+            str(exc),
+            "UI_ACCOUNTS_READONLY_PACKET_INVALID",
+        )
+
+    rows = _account_rows(accounts.accounts, packet)
+    summary = _account_summary(rows, accounts)
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "source": "accounts_readonly",
+        "primary_truth_ok": True,
+        "privacy": {
+            "redacted": True,
+            "raw_command_packet_included": False,
+            "forbidden_fields_excluded": ["secret_references", "tokens", "raw_paths", "raw_logs"],
+        },
+        "registry_identity": {
+            "status": accounts.registry_identity_status,
+            "machine_error_code": accounts.registry_identity_machine_error_code,
+            "next_action": accounts.registry_identity_next_action,
+        },
+        "summary": summary,
+        "accounts": rows,
+        "commands": _public_command_results(commands),
+    }
+
+
 def run_ui_action(
     runner: CommandRunner,
     payload: dict[str, Any],
@@ -301,6 +345,9 @@ def build_handler(
             parsed = urlparse(self.path)
             if parsed.path == "/api/live-readonly":
                 self._send_json(build_live_readonly_snapshot(command_runner))
+                return
+            if parsed.path == "/api/accounts-readonly":
+                self._send_json(build_accounts_readonly_snapshot(command_runner))
                 return
             if parsed.path == "/api/actions":
                 self._send_json(ui_action_metadata(launch_client_path=launch_client_path))
@@ -497,6 +544,46 @@ def _integration_failure(
     }
 
 
+def _accounts_integration_failure(
+    human_message: str,
+    last_error: str,
+    machine_error_code: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "accounts_readonly",
+        "primary_truth_ok": False,
+        "privacy": {
+            "redacted": True,
+            "raw_command_packet_included": False,
+            "forbidden_fields_excluded": ["secret_references", "tokens", "raw_paths", "raw_logs"],
+        },
+        "registry_identity": {
+            "status": "unknown",
+            "machine_error_code": machine_error_code,
+            "next_action": "retry",
+        },
+        "summary": {
+            "active": 0,
+            "reserve": 0,
+            "retired": 0,
+            "hold": 0,
+            "problem": 0,
+            "healthy": 0,
+            "degraded": 0,
+            "down": 0,
+            "capacity_target": 20,
+            "visible_count": 0,
+            "human_message": human_message,
+            "machine_error_code": machine_error_code,
+            "last_error": last_error,
+        },
+        "accounts": [],
+        "commands": {},
+    }
+
+
 def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
         command_id: {
@@ -510,6 +597,141 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
         }
         for command_id, result in commands.items()
     }
+
+
+def _account_rows(accounts: tuple[Any, ...], packet: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_by_id = {
+        str(item.get("id")): item
+        for item in packet.get("accounts", [])
+        if isinstance(item, dict) and "id" in item
+    }
+    return [
+        {
+            "id": _safe_account_id(account.backend_id),
+            "label": _safe_account_label(account.label, account.backend_id),
+            "pool": account.pool,
+            "pool_label": _pool_label(account.pool, account.manual_hold),
+            "status": account.status,
+            "status_label": _account_status_label(account.status, account.manual_hold),
+            "visual_state": _account_visual_state(account.status, account.manual_hold, account.last_error),
+            "manual_hold": account.manual_hold,
+            "enabled": _optional_bool(raw_by_id.get(account.backend_id, {}), "enabled"),
+            "fail_count": account.fail_count,
+            "success_count": account.success_count,
+            "last_success": account.last_success,
+            "last_error_class": _safe_short_text(
+                raw_by_id.get(account.backend_id, {}).get("last_error_class", "")
+            ),
+            "last_error_summary": _redact_error(account.last_error),
+            "cooldown_until": account.cooldown_until,
+            "notes_summary": _safe_short_text(account.notes),
+        }
+        for account in accounts
+    ]
+
+
+def _account_summary(rows: list[dict[str, Any]], accounts: Any) -> dict[str, Any]:
+    return {
+        "active": accounts.active_count,
+        "reserve": accounts.reserve_count,
+        "retired": accounts.retired_count,
+        "hold": sum(1 for row in rows if row["manual_hold"]),
+        "problem": sum(
+            1
+            for row in rows
+            if row["visual_state"] in {"red", "amber"} or bool(row["last_error_summary"])
+        ),
+        "healthy": sum(1 for row in rows if row["status"] == "healthy"),
+        "degraded": sum(1 for row in rows if row["status"] == "degraded"),
+        "down": sum(1 for row in rows if row["status"] == "down"),
+        "capacity_target": accounts.capacity_target,
+        "visible_count": len(rows),
+        "human_message": accounts.human_message,
+        "machine_error_code": accounts.machine_error_code,
+        "last_error": "",
+    }
+
+
+def _safe_account_id(value: str) -> str:
+    return _safe_short_text(value, max_length=64) or "unknown-account"
+
+
+def _safe_account_label(label: str, backend_id: str) -> str:
+    value = label or backend_id
+    if "@" in value:
+        left, _, domain = value.partition("@")
+        safe_left = left[:3] + "***" if left else "***"
+        domain_tail = domain.split(".")[-1] if "." in domain else "account"
+        return f"{safe_left}@***.{domain_tail}"
+    return _safe_short_text(value, max_length=72) or _safe_account_id(backend_id)
+
+
+def _safe_short_text(value: object, *, max_length: int = 96) -> str:
+    text = "" if value is None else str(value)
+    text = text.replace("\n", " ").replace("\r", " ").strip()
+    for marker in (
+        "/" + "Users/",
+        "/" + "Volumes/",
+        "/" + "tmp/",
+        "/" + "var/",
+        ".cli" + "-proxy-api",
+        ".co" + "dex",
+    ):
+        text = text.replace(marker, "[redacted]/")
+    if len(text) > max_length:
+        return f"{text[: max_length - 1]}…"
+    return text
+
+
+def _redact_error(value: str) -> str:
+    text = _safe_short_text(value, max_length=120)
+    if not text:
+        return ""
+    if "HTTP 429" in text or "usage_limit" in text or "quota" in text:
+        return "quota or usage limit"
+    if "HTTP 401" in text or "auth" in text.lower() or "session" in text.lower():
+        return "auth/session error"
+    if "timeout" in text.lower():
+        return "timeout"
+    return text
+
+
+def _optional_bool(raw: dict[str, Any], key: str) -> bool | None:
+    value = raw.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def _pool_label(pool: str, manual_hold: bool) -> str:
+    if manual_hold:
+        return "На удержании"
+    return {
+        "active": "Активные",
+        "reserve": "Резерв",
+        "retired": "Выведен",
+    }.get(pool, pool)
+
+
+def _account_status_label(status: str, manual_hold: bool) -> str:
+    if manual_hold:
+        return "Удержание"
+    return {
+        "healthy": "Работает",
+        "degraded": "Деградация",
+        "down": "Недоступен",
+        "unknown": "Неизвестно",
+    }.get(status, status)
+
+
+def _account_visual_state(status: str, manual_hold: bool, last_error: str) -> str:
+    if manual_hold:
+        return "amber"
+    if status == "healthy" and not last_error:
+        return "green"
+    if status == "down" or last_error:
+        return "red"
+    if status == "degraded":
+        return "amber"
+    return "neutral"
 
 
 def _events_from_commands(
