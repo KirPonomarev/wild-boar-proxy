@@ -70,8 +70,73 @@ const ACCOUNT_VISUAL_CLASS = {
   neutral: "neutral"
 };
 
+const CONFIRMATION_POLICY = {
+  sync_runtime: {
+    severity: "medium",
+    policy: "operator-request",
+    warning: "This requests a bounded sync. The refreshed JSON packet remains truth."
+  },
+  set_mode_stable: {
+    severity: "medium",
+    policy: "mode-request",
+    warning: "This requests desired mode stable. Effective mode must be proven by refreshed JSON."
+  },
+  set_mode_managed: {
+    severity: "medium",
+    policy: "mode-request",
+    warning: "This requests desired mode managed. Effective mode must be proven by refreshed JSON."
+  },
+  launch_client_dispatch: {
+    severity: "high",
+    policy: "bounded-dispatch",
+    warning: "This requests server-owned app dispatch only. It does not prove app startup or runtime health."
+  },
+  onboard_account: {
+    severity: "high",
+    policy: "account-admission",
+    warning: "This may start external auth. Reserve-first success requires command packet proof."
+  },
+  validate_account: {
+    severity: "medium",
+    policy: "account-verification",
+    warning: "This verifies one account. Refreshed accounts JSON remains the pool truth."
+  },
+  promote_account: {
+    severity: "high",
+    policy: "account-placement",
+    warning: "This requests active placement. It is not capacity proof or readiness evidence."
+  },
+  demote_account: {
+    severity: "medium",
+    policy: "account-placement",
+    warning: "This requests reserve placement. Refreshed accounts JSON remains truth."
+  },
+  hold_account: {
+    severity: "medium",
+    policy: "account-hold",
+    warning: "This requests manual hold. Refreshed accounts JSON remains truth."
+  },
+  release_account: {
+    severity: "medium",
+    policy: "account-hold",
+    warning: "This requests hold release. Refreshed accounts JSON remains truth."
+  },
+  retire_account: {
+    severity: "critical",
+    policy: "terminal-account-lifecycle",
+    warning: "This requests terminal account retirement. It is not removal or return path."
+  }
+};
+
+const CONSERVATIVE_CONFIRMATION_POLICY = {
+  severity: "critical",
+  policy: "metadata-fallback",
+  warning: "Action metadata is incomplete. Treat this as risky and rely only on server response plus refreshed JSON."
+};
+
 let actionMetadata = {};
 let pendingConfirmedAction = null;
+let confirmationInFlight = false;
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -226,6 +291,17 @@ function metadataFor(uiAction) {
     available: false,
     unavailable_reason: "Action metadata could not be loaded."
   };
+}
+
+function confirmationPolicyFor(uiAction, metadata) {
+  const policy = CONFIRMATION_POLICY[uiAction];
+  if (!policy || metadata.available === false || metadata.confirmation_required !== true) {
+    return {
+      ...CONSERVATIVE_CONFIRMATION_POLICY,
+      warning: policy?.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning
+    };
+  }
+  return policy;
 }
 
 async function runUiAction(uiAction, extraPayload = {}) {
@@ -567,35 +643,68 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
     return;
   }
   if (metadata.confirmation_required) {
-    openConfirmation(uiAction, metadata, extraPayload);
+    openConfirmation(uiAction, metadata, confirmationPolicyFor(uiAction, metadata), extraPayload);
     return;
   }
   runUiAction(uiAction, extraPayload);
 }
 
-function openConfirmation(uiAction, metadata, extraPayload = {}) {
+function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
+  confirmationInFlight = false;
   pendingConfirmedAction = { uiAction, extraPayload };
   text("confirmTitle", metadata.display_name || uiAction);
   text("confirmMeaning", metadata.human_meaning || "Confirm this action.");
   text("confirmUiAction", uiAction);
   text("confirmAccountId", extraPayload.account_id || "-");
+  text("confirmSeverity", policy.severity || "critical");
+  text("confirmPolicy", policy.policy || "metadata-fallback");
   text("confirmMutation", metadata.mutates_runtime ? "true" : "false");
   text("confirmRefresh", metadata.post_action_refresh_required ? "required" : "not required");
   text("confirmScope", metadata.action_claim_scope || "unknown");
+  text("confirmTruthWarning", policy.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning);
+  setConfirmationInFlight(false);
   document.getElementById("confirmOverlay").hidden = false;
   document.getElementById("confirmAction").focus();
 }
 
 function closeConfirmation() {
+  if (confirmationInFlight) {
+    return;
+  }
   pendingConfirmedAction = null;
+  setConfirmationInFlight(false);
   document.getElementById("confirmOverlay").hidden = true;
 }
 
-function confirmPendingAction() {
+function setConfirmationInFlight(isInFlight) {
+  confirmationInFlight = isInFlight;
+  const confirmButton = document.getElementById("confirmAction");
+  const cancelButton = document.getElementById("cancelAction");
+  if (confirmButton) {
+    confirmButton.disabled = isInFlight;
+    confirmButton.textContent = isInFlight ? "Выполняется..." : "Подтвердить";
+  }
+  if (cancelButton) {
+    cancelButton.disabled = isInFlight;
+  }
+  text("confirmDispatchState", isInFlight ? "dispatching once" : "idle");
+}
+
+async function confirmPendingAction() {
+  if (confirmationInFlight) {
+    return;
+  }
   const pending = pendingConfirmedAction;
-  closeConfirmation();
-  if (pending) {
-    runUiAction(pending.uiAction, pending.extraPayload);
+  if (!pending) {
+    return;
+  }
+  pendingConfirmedAction = null;
+  setConfirmationInFlight(true);
+  try {
+    await runUiAction(pending.uiAction, pending.extraPayload);
+  } finally {
+    setConfirmationInFlight(false);
+    document.getElementById("confirmOverlay").hidden = true;
   }
 }
 

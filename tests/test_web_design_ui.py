@@ -407,12 +407,54 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("confirmOverlay", html)
         self.assertIn("confirmAction", html)
         self.assertIn("cancelAction", html)
+        self.assertIn("confirmSeverity", html)
+        self.assertIn("confirmPolicy", html)
+        self.assertIn("confirmTruthWarning", html)
+        self.assertIn("confirmDispatchState", html)
+        self.assertIn("CONFIRMATION_POLICY", js)
+        self.assertIn("CONSERVATIVE_CONFIRMATION_POLICY", js)
+        self.assertIn("confirmationInFlight", js)
+        self.assertIn("setConfirmationInFlight", js)
         self.assertIn("maybeConfirmAndRun", js)
         self.assertIn("metadata.confirmation_required", js)
-        self.assertIn("closeConfirmation();", js)
+        self.assertIn("confirmationPolicyFor(uiAction, metadata)", js)
+        self.assertIn("function closeConfirmation()", js)
+        self.assertIn("if (confirmationInFlight)", js)
+        self.assertIn("pendingConfirmedAction = null;", js)
         self.assertIn("runUiAction(pending.uiAction, pending.extraPayload);", js)
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
+
+    def test_static_confirmation_policy_covers_risky_actions_without_new_actions(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        for ui_action in [
+            "sync_runtime",
+            "set_mode_stable",
+            "set_mode_managed",
+            "launch_client_dispatch",
+            "onboard_account",
+            "validate_account",
+            "promote_account",
+            "demote_account",
+            "hold_account",
+            "release_account",
+            "retire_account",
+        ]:
+            self.assertIn(f"{ui_action}:", js)
+
+        self.assertIn("terminal-account-lifecycle", js)
+        self.assertIn("metadata-fallback", js)
+        self.assertIn("dispatching once", js)
+        self.assertIn("capacity proof", js)
+        self.assertIn("readiness evidence", js)
+        self.assertNotIn('data-ui-action="stable_repair_apply"', html)
+        self.assertNotIn("stable_repair_apply:", js)
+        self.assertNotIn("setup_discovery:", js)
+        self.assertNotIn("select_client:", js)
+        self.assertNotIn("legacy_import:", js)
+        self.assertNotIn("installer_init:", js)
 
     def test_static_preview_applies_action_availability_from_metadata(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
