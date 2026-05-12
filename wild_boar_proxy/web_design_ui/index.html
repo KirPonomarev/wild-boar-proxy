@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="styles/overview.css">
 </head>
 <body>
-  <div class="desktop" data-fixture-state="unknown">
+  <div class="desktop" data-fixture-state="unknown" data-source="fixture">
     <div class="window">
       <div class="traffic" aria-hidden="true">
         <span class="r"></span>
@@ -21,7 +21,7 @@
         <div class="brand">
           <img src="assets/boar_mark.png" alt="Wild Boar Proxy">
           <div class="name">WILD BOAR<br>PROXY</div>
-          <div class="caption">fixture-backed web preview</div>
+          <div id="brandCaption" class="caption">fixture-backed web preview</div>
         </div>
 
         <nav class="nav" aria-label="Основная навигация">
@@ -61,7 +61,7 @@
             <span id="sidebarDot" class="dot neutral"></span>
             <span id="sidebarStatus">Fixture state unknown</span>
           </div>
-          <div>UI preview · no live commands</div>
+          <div id="sourceFooter">UI preview · no live commands</div>
         </div>
       </aside>
 
@@ -70,11 +70,20 @@
           <div>
             <h1>Обзор</h1>
             <div class="subtitle">
-              Визуальный перенос первого экрана. Данные ниже являются fixtures,
-              а не runtime truth.
+              <span id="subtitleText">
+                Визуальный перенос первого экрана. Данные ниже являются fixtures,
+                а не runtime truth.
+              </span>
             </div>
           </div>
           <div class="header-actions">
+            <label class="input state-picker">
+              <span>Source</span>
+              <select id="sourcePicker" aria-label="Data source">
+                <option value="fixture">fixture</option>
+                <option value="live">live read-only</option>
+              </select>
+            </label>
             <label class="input state-picker">
               <span>Fixture</span>
               <select id="statePicker" aria-label="Fixture state">

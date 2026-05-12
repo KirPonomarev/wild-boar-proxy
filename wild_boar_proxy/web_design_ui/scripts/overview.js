@@ -78,6 +78,11 @@ function stateFromLocation() {
   return canonicalState(params.get("state") || "healthy");
 }
 
+function sourceFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("source") === "live" ? "live" : "fixture";
+}
+
 async function loadFixture(stateId) {
   try {
     const response = await fetch(`fixtures/${stateId}.json`, { cache: "no-store" });
@@ -90,6 +95,42 @@ async function loadFixture(stateId) {
       ...FALLBACK_FIXTURE,
       state_id: "unknown",
       fixture_notice: `${FALLBACK_FIXTURE.fixture_notice} (${error.message})`
+    };
+  }
+}
+
+async function loadLiveReadonly() {
+  try {
+    const response = await fetch("api/live-readonly", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`live http ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    return {
+      ...FALLBACK_FIXTURE,
+      schema_version: 1,
+      state_id: "integration_failure",
+      status: "integration_failure",
+      ui_state: "integration_failure",
+      source: "live_readonly",
+      fixture_notice: `Live read-only request failed: ${error.message}`,
+      runtime: {
+        ...FALLBACK_FIXTURE.runtime,
+        visual_state: "integration_failure",
+        status_label: "Ошибка интеграции",
+        machine_error_code: "UI_LIVE_READONLY_FETCH_FAILED",
+        human_message: "Live read-only request failed.",
+        last_error: error.message,
+        observed_at_utc: "live-readonly"
+      },
+      events: [
+        {
+          level: "red",
+          message: "Live read-only request failed.",
+          observed_at: "live-readonly"
+        }
+      ]
     };
   }
 }
@@ -110,6 +151,15 @@ function validateFixture(fixture) {
   ];
   const missingRuntime = requiredRuntime.filter((key) => !(key in runtime));
   return { ok: missingTop.length === 0 && missingRuntime.length === 0, missingTop, missingRuntime };
+}
+
+function snapshotNotice(snapshot) {
+  if (snapshot.source === "live_readonly") {
+    return snapshot.status === "ok"
+      ? "Live read-only preview. Runtime truth comes from strict command packets."
+      : "Live read-only integration failure. Previous healthy data was not reused.";
+  }
+  return snapshot.fixture_notice || "Fixture preview only. No command execution, no runtime file reads.";
 }
 
 function modeLabel(value) {
@@ -157,20 +207,37 @@ function renderEvents(events) {
   }
 }
 
-function renderFixture(fixture) {
-  const validation = validateFixture(fixture);
-  const safeFixture = validation.ok ? fixture : {
+function renderSnapshot(snapshot) {
+  const validation = validateFixture(snapshot);
+  const safeSnapshot = validation.ok ? snapshot : {
     ...FALLBACK_FIXTURE,
     state_id: "integration_failure",
     fixture_notice: `Fixture schema invalid: missing top [${validation.missingTop.join(", ")}], runtime [${validation.missingRuntime.join(", ")}]`
   };
 
-  const runtime = safeFixture.runtime;
-  const visualState = runtime.visual_state || safeFixture.state_id || "unknown";
-  document.querySelector(".desktop").dataset.fixtureState = safeFixture.state_id;
+  const runtime = safeSnapshot.runtime;
+  const visualState = runtime.visual_state || safeSnapshot.state_id || "unknown";
+  const source = safeSnapshot.source === "live_readonly" ? "live" : "fixture";
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.fixtureState = safeSnapshot.state_id || visualState;
+  desktop.dataset.source = source;
 
   const picker = document.getElementById("statePicker");
-  picker.value = canonicalState(safeFixture.state_id);
+  picker.value = canonicalState(safeSnapshot.state_id);
+  picker.disabled = source === "live";
+  document.getElementById("sourcePicker").value = source;
+  document.getElementById("brandCaption").textContent = source === "live"
+    ? "live read-only web preview"
+    : "fixture-backed web preview";
+  document.getElementById("sourceFooter").textContent = source === "live"
+    ? "Live read-only · no actions"
+    : "UI preview · no live commands";
+  document.getElementById("subtitleText").textContent = source === "live"
+    ? "Первый экран подключен к живым read-only JSON-командам. Действия выключены."
+    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth.";
+  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
+    ? "Обновить live"
+    : "Обновить fixture";
 
   const runtimeChip = document.getElementById("runtimeChip");
   setClassName(runtimeChip, "chip", visualState);
@@ -188,7 +255,7 @@ function renderFixture(fixture) {
 
   renderModeSegments(runtime);
 
-  const pool = safeFixture.pool_summary;
+  const pool = safeSnapshot.pool_summary;
   text("activeCount", pool.active);
   text("reserveCount", pool.reserve);
   text("holdCount", pool.hold);
@@ -200,9 +267,9 @@ function renderFixture(fixture) {
 
   const banner = document.getElementById("fixtureBanner");
   setClassName(banner, "fixture-banner", visualState);
-  banner.textContent = safeFixture.fixture_notice;
+  banner.textContent = snapshotNotice(safeSnapshot);
 
-  renderEvents(safeFixture.events || []);
+  renderEvents(safeSnapshot.events || []);
 }
 
 async function setFixtureState(stateId, updateUrl = false) {
@@ -211,17 +278,50 @@ async function setFixtureState(stateId, updateUrl = false) {
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("state", state);
+    url.searchParams.set("source", "fixture");
     window.history.replaceState({}, "", url);
   }
-  renderFixture(fixture);
+  renderSnapshot(fixture);
+}
+
+async function setLiveReadonly(updateUrl = false) {
+  const snapshot = await loadLiveReadonly();
+  if (updateUrl) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("source", "live");
+    window.history.replaceState({}, "", url);
+  }
+  renderSnapshot(snapshot);
+}
+
+function refreshCurrentSource() {
+  const source = document.getElementById("sourcePicker").value;
+  if (source === "live") {
+    return setLiveReadonly(false);
+  }
+  return setFixtureState(document.getElementById("statePicker").value, false);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const sourcePicker = document.getElementById("sourcePicker");
   const picker = document.getElementById("statePicker");
   const refresh = document.getElementById("refreshFixture");
   const initialState = stateFromLocation();
+  const initialSource = sourceFromLocation();
+  sourcePicker.value = initialSource;
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
-  refresh.addEventListener("click", () => setFixtureState(picker.value, false));
-  setFixtureState(initialState, false);
+  sourcePicker.addEventListener("change", () => {
+    if (sourcePicker.value === "live") {
+      setLiveReadonly(true);
+    } else {
+      setFixtureState(picker.value, true);
+    }
+  });
+  refresh.addEventListener("click", () => refreshCurrentSource());
+  if (initialSource === "live") {
+    setLiveReadonly(false);
+  } else {
+    setFixtureState(initialState, false);
+  }
 });

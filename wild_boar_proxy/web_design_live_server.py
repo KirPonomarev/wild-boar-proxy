@@ -1,0 +1,263 @@
+# SPDX-FileCopyrightText: 2026 Kirill Ponomarev
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+"""Read-only live preview server for the first web-design screen."""
+
+from __future__ import annotations
+
+import argparse
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+import mimetypes
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+from wild_boar_proxy.ui_shell import (
+    JsonCommandRunner,
+    UiShellError,
+    build_account_pool_snapshot,
+    build_runtime_snapshot,
+)
+from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
+
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
+READONLY_COMMAND_IDS = (
+    "status",
+    "healthcheck",
+    "mode_get",
+    "accounts_list",
+    "rollout_rotation_inspect",
+)
+
+
+def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
+    commands: dict[str, dict[str, Any]] = {}
+    for command_id in READONLY_COMMAND_IDS:
+        result = execute_command(runner, command_id)
+        commands[command_id] = result
+        if result["status"] != "ok":
+            return _integration_failure(
+                "Live read-only command failed.",
+                str(result["human_message"]),
+                str(result["machine_error_code"]),
+                commands,
+            )
+
+    try:
+        runtime = build_runtime_snapshot(
+            status_payload=commands["status"]["packet"],
+            mode_payload=commands["mode_get"]["packet"],
+        )
+        accounts = build_account_pool_snapshot(commands["accounts_list"]["packet"])
+    except UiShellError as exc:
+        return _integration_failure(
+            "Live read-only packet validation failed.",
+            str(exc),
+            "UI_LIVE_READONLY_PACKET_INVALID",
+            commands,
+        )
+
+    visual_state = _visual_state(runtime.liveness)
+    hold_count = sum(1 for account in accounts.accounts if account.manual_hold)
+    problem_count = sum(
+        1
+        for account in accounts.accounts
+        if account.status in {"down", "degraded"} or bool(account.last_error)
+    )
+
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "ui_state": visual_state,
+        "source": "live_readonly",
+        "runtime": {
+            "visual_state": visual_state,
+            "status_label": _status_label(visual_state),
+            "desired_mode": runtime.desired_mode,
+            "effective_mode": runtime.effective_mode,
+            "endpoint": runtime.endpoint or runtime.current_proxy_url,
+            "machine_error_code": runtime.machine_error_code,
+            "human_message": runtime.human_message,
+            "last_error": runtime.last_error,
+            "observed_at_utc": runtime.attestation_observed_at,
+        },
+        "pool_summary": {
+            "active": accounts.active_count,
+            "reserve": accounts.reserve_count,
+            "hold": hold_count,
+            "problem": problem_count,
+            "active_note": f"{runtime.active_count} active in status packet",
+            "reserve_note": f"{runtime.reserve_count} reserve in status packet",
+            "hold_note": "manual hold accounts",
+            "problem_note": "degraded/down/error accounts",
+        },
+        "events": _events_from_commands(commands, visual_state),
+        "commands": _public_command_results(commands),
+    }
+
+
+def build_handler(
+    *,
+    runner: CommandRunner | None = None,
+    static_dir: Path = WEB_DESIGN_UI,
+) -> type[BaseHTTPRequestHandler]:
+    command_runner = runner or JsonCommandRunner()
+    static_root = static_dir.resolve()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path == "/api/live-readonly":
+                self._send_json(build_live_readonly_snapshot(command_runner))
+                return
+            self._send_static(parsed.path)
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+            return
+
+        def _send_json(self, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_static(self, request_path: str) -> None:
+            relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")
+            target = (static_root / relative).resolve()
+            if static_root not in target.parents and target != static_root:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            if not target.is_file():
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            body = target.read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return Handler
+
+
+def _integration_failure(
+    human_message: str,
+    last_error: str,
+    machine_error_code: str,
+    commands: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "ui_state": "integration_failure",
+        "source": "live_readonly",
+        "runtime": {
+            "visual_state": "integration_failure",
+            "status_label": "Ошибка интеграции",
+            "desired_mode": "unknown",
+            "effective_mode": "unknown",
+            "endpoint": "unknown",
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "last_error": last_error,
+            "observed_at_utc": "live-readonly",
+        },
+        "pool_summary": {
+            "active": 0,
+            "reserve": 0,
+            "hold": 0,
+            "problem": 0,
+            "active_note": "live read failed",
+            "reserve_note": "live read failed",
+            "hold_note": "live read failed",
+            "problem_note": "live read failed",
+        },
+        "events": [
+            {
+                "level": "red",
+                "message": human_message,
+                "observed_at": "live-readonly",
+            }
+        ],
+        "commands": _public_command_results(commands),
+    }
+
+
+def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        command_id: {
+            "status": result["status"],
+            "ui_state": result["ui_state"],
+            "machine_error_code": result["machine_error_code"],
+            "human_message": result["human_message"],
+            "exit_code": result["exit_code"],
+            "next_action": result["next_action"],
+        }
+        for command_id, result in commands.items()
+    }
+
+
+def _events_from_commands(commands: dict[str, dict[str, Any]], visual_state: str) -> list[dict[str, str]]:
+    return [
+        {
+            "level": "green" if visual_state == "healthy" else "amber",
+            "message": str(commands["status"]["human_message"]),
+            "observed_at": "status --json",
+        },
+        {
+            "level": "blue",
+            "message": str(commands["healthcheck"]["human_message"]),
+            "observed_at": "healthcheck --json",
+        },
+        {
+            "level": "blue",
+            "message": str(commands["rollout_rotation_inspect"]["human_message"]),
+            "observed_at": "rollout rotation inspect --json",
+        },
+    ]
+
+
+def _visual_state(liveness: str) -> str:
+    if liveness in {"healthy", "degraded", "down", "stale", "unknown"}:
+        return liveness
+    return "integration_failure"
+
+
+def _status_label(visual_state: str) -> str:
+    return {
+        "healthy": "Работает",
+        "degraded": "Есть деградация",
+        "down": "Не работает",
+        "stale": "Устаревшие данные",
+        "unknown": "Неизвестно",
+        "integration_failure": "Ошибка интеграции",
+    }.get(visual_state, "Неизвестно")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8788)
+    args = parser.parse_args(argv)
+
+    server = ThreadingHTTPServer((args.host, args.port), build_handler())
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -3,10 +3,10 @@
 
 # Web Design UI Preview
 
-This directory contains the fixture-backed web transfer of the
-`01_overview_dashboard` design frame from the local render package.
+This directory contains the web transfer of the `01_overview_dashboard` design
+frame from the local render package.
 
-It is intentionally static in this contour:
+The default mode remains fixture-backed:
 
 - no live command execution
 - no runtime/state/log file reads
@@ -27,6 +27,21 @@ Then visit:
 ```text
 http://127.0.0.1:8787/?state=healthy
 ```
+
+For live read-only preview, use the bounded local server:
+
+```sh
+python3 -m wild_boar_proxy.web_design_live_server --port 8788
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:8788/?source=live
+```
+
+Live read-only mode uses strict JSON command packets through
+`web_design_command_adapter`. It does not enable action buttons.
 
 Available fixture states:
 

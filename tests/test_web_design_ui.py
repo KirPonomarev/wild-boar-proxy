@@ -142,6 +142,7 @@ class WebDesignUiTests(unittest.TestCase):
             base_url = f"http://127.0.0.1:{port}"
             index = self._fetch_with_retry(f"{base_url}/?state=healthy")
             self.assertIn("Wild Boar Proxy - Overview Design Preview", index)
+            self.assertIn("sourcePicker", index)
             self.assertIn("statePicker", index)
             self.assertIn("fixtureBanner", index)
 
@@ -173,6 +174,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("@media (max-width: 1420px)", css)
         self.assertNotIn("--preview-scale", css)
         self.assertNotIn("fitPreviewToViewport", js)
+
+    def test_static_preview_can_request_live_readonly_source_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('<option value="live">live read-only</option>', html)
+        self.assertIn('fetch("api/live-readonly"', js)
+        self.assertNotIn("command_id", js)
+        self.assertNotIn("launch_client", js)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"
