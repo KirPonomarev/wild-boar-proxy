@@ -1,0 +1,179 @@
+<!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1600,height=1000">
+  <title>Wild Boar Proxy - Overview Design Preview</title>
+  <link rel="stylesheet" href="styles/overview.css">
+</head>
+<body>
+  <div class="desktop" data-fixture-state="unknown">
+    <div class="window">
+      <div class="traffic" aria-hidden="true">
+        <span class="r"></span>
+        <span class="y"></span>
+        <span class="g"></span>
+      </div>
+
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="assets/boar_mark.png" alt="Wild Boar Proxy">
+          <div class="name">WILD BOAR<br>PROXY</div>
+          <div class="caption">fixture-backed web preview</div>
+        </div>
+
+        <nav class="nav" aria-label="Основная навигация">
+          <a class="nav-item active" href="#" aria-current="page">
+            <span class="nav-icon">▦</span>
+            <span>Обзор</span>
+          </a>
+          <a class="nav-item disabled" href="#" aria-disabled="true">
+            <span class="nav-icon">◎</span>
+            <span>Аккаунты</span>
+          </a>
+          <a class="nav-item disabled" href="#" aria-disabled="true">
+            <span class="nav-icon">◇</span>
+            <span>Диагностика</span>
+          </a>
+          <a class="nav-item disabled" href="#" aria-disabled="true">
+            <span class="nav-icon">⚙</span>
+            <span>Настройки</span>
+          </a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="status-line">
+            <span id="sidebarDot" class="dot neutral"></span>
+            <span id="sidebarStatus">Fixture state unknown</span>
+          </div>
+          <div>UI preview · no live commands</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="main-header">
+          <div>
+            <h1>Обзор</h1>
+            <div class="subtitle">
+              Визуальный перенос первого экрана. Данные ниже являются fixtures,
+              а не runtime truth.
+            </div>
+          </div>
+          <div class="header-actions">
+            <label class="input state-picker">
+              <span>Fixture</span>
+              <select id="statePicker" aria-label="Fixture state">
+                <option value="healthy">healthy</option>
+                <option value="degraded">degraded</option>
+                <option value="down">down</option>
+                <option value="stale">stale</option>
+                <option value="unknown">unknown</option>
+                <option value="integration_failure">integration_failure</option>
+              </select>
+            </label>
+            <button id="refreshFixture" class="button" type="button">
+              <span class="button-icon">↻</span>
+              <span>Обновить fixture</span>
+            </button>
+            <button class="button primary disabled" type="button" disabled>
+              <span class="button-icon">▶</span>
+              <span>Запустить клиент</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="fixtureBanner" class="fixture-banner">
+          Fixture preview only. No command execution, no runtime file reads.
+        </div>
+
+        <div class="grid overview-top">
+          <section class="card system-card">
+            <div class="eyebrow">Состояние системы</div>
+            <div class="kv">
+              <div>Состояние</div>
+              <div><span id="runtimeChip" class="chip neutral"><span class="dot"></span><span>Неизвестно</span></span></div>
+              <div>Желаемый режим</div>
+              <div id="desiredMode">-</div>
+              <div>Фактический режим</div>
+              <div id="effectiveMode">-</div>
+              <div>Адрес подключения</div>
+              <div id="endpoint" class="mono-value">-</div>
+              <div>Последняя ошибка</div>
+              <div id="lastError" class="last-error">-</div>
+            </div>
+          </section>
+
+          <section class="card mode-card">
+            <div class="eyebrow">Режим работы</div>
+            <div class="segmented" aria-label="Desired mode">
+              <span id="managedSegment">Управляемый</span>
+              <span id="stableSegment">Стабильный</span>
+            </div>
+            <div class="action-row">
+              <button class="action-tile" type="button" disabled>
+                <span class="tile-icon">↻</span>
+                <span>Синхронизировать</span>
+              </button>
+              <button class="action-tile" type="button" disabled>
+                <span class="tile-icon">✓</span>
+                <span>Проверить работу</span>
+              </button>
+              <button class="action-tile" type="button" disabled>
+                <span class="tile-icon">⬚</span>
+                <span>Стабильный режим</span>
+              </button>
+              <button class="action-tile" type="button" disabled>
+                <span class="tile-icon">◇</span>
+                <span>Открыть диагностику</span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <div class="grid overview-kpis" aria-label="Account pool summary">
+          <section class="card kpi-card green">
+            <div class="kpi-head">Активные</div>
+            <div>
+              <div class="kpi-line"><span id="activeCount" class="kpi-number">0</span><span class="kpi-note">аккаунтов</span></div>
+              <div id="activeNote" class="kpi-note">fixture</div>
+            </div>
+          </section>
+          <section class="card kpi-card blue">
+            <div class="kpi-head">Резерв</div>
+            <div>
+              <div class="kpi-line"><span id="reserveCount" class="kpi-number">0</span><span class="kpi-note">готовы</span></div>
+              <div id="reserveNote" class="kpi-note">fixture</div>
+            </div>
+          </section>
+          <section class="card kpi-card">
+            <div class="kpi-head">На удержании</div>
+            <div>
+              <div class="kpi-line"><span id="holdCount" class="kpi-number">0</span><span class="kpi-note">пауза</span></div>
+              <div id="holdNote" class="kpi-note">fixture</div>
+            </div>
+          </section>
+          <section class="card kpi-card red">
+            <div class="kpi-head">Проблемные</div>
+            <div>
+              <div class="kpi-line"><span id="problemCount" class="kpi-number">0</span><span class="kpi-note">требуют внимания</span></div>
+              <div id="problemNote" class="kpi-note">fixture</div>
+            </div>
+          </section>
+        </div>
+
+        <section class="card log-card">
+          <div class="log-head">
+            <div class="card-title">Последние события</div>
+            <button class="button ghost small disabled" type="button" disabled>Показать все</button>
+          </div>
+          <div id="eventList" class="log-list" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="scripts/overview.js"></script>
+</body>
+</html>

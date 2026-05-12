@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "state_id": "integration_failure",
+  "fixture_notice": "Fixture preview only. Integration failure is red and recoverable.",
+  "runtime": {
+    "visual_state": "integration_failure",
+    "status_label": "Ошибка интеграции",
+    "desired_mode": "managed",
+    "effective_mode": "unknown",
+    "endpoint": "unknown",
+    "machine_error_code": "INVALID_JSON_FIXTURE",
+    "human_message": "Fixture: command packet could not be parsed.",
+    "last_error": "invalid JSON packet",
+    "observed_at_utc": "2026-05-12T21:00:00Z"
+  },
+  "pool_summary": {
+    "active": 0,
+    "reserve": 0,
+    "hold": 0,
+    "problem": 1,
+    "active_note": "не подтверждено",
+    "reserve_note": "не подтверждено",
+    "hold_note": "не подтверждено",
+    "problem_note": "интеграционный сбой"
+  },
+  "events": [
+    {
+      "level": "red",
+      "message": "Fixture: invalid JSON maps to integration failure, not success",
+      "observed_at": "fixture"
+    },
+    {
+      "level": "amber",
+      "message": "Fixture: previous green state must not be reused",
+      "observed_at": "fixture"
+    }
+  ]
+}

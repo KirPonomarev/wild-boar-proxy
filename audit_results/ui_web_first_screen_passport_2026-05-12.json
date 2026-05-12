@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "screen_id": "01_overview_dashboard",
+  "screen_name": "Overview Dashboard",
+  "implementation_path": "wild_boar_proxy/web_design_ui/index.html",
+  "status": "admitted_for_fixture_backed_web_transfer",
+  "source_html": "wild_boar_proxy_redesign/html/01_overview_dashboard.html",
+  "source_png": "wild_boar_proxy_redesign/png/01_overview_dashboard.png",
+  "visual_source_of_truth": "source_png_and_source_html_from_render_package",
+  "runtime_truth_source": "none_in_this_contour",
+  "fixture_source": "wild_boar_proxy/web_design_ui/fixtures/*.json",
+  "states": [
+    "healthy",
+    "degraded",
+    "down",
+    "stale",
+    "unknown",
+    "integration_failure"
+  ],
+  "allowed_now": [
+    "render static web UI",
+    "load fixture JSON",
+    "switch fixture states",
+    "show disabled first-pass action shapes",
+    "show fixture notice"
+  ],
+  "forbidden_now": [
+    "execute live commands",
+    "read runtime state files",
+    "parse logs",
+    "claim runtime health",
+    "claim pilot readiness",
+    "replace web_ui.py",
+    "change runtime.py",
+    "desktop shell integration"
+  ],
+  "layer_boundary": {
+    "design_layer": "implemented",
+    "fixture_layer": "implemented",
+    "command_adapter_layer": "deferred",
+    "live_binding_layer": "deferred",
+    "desktop_layer": "deferred"
+  }
+}

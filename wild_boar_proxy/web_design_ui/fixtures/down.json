@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "state_id": "down",
+  "fixture_notice": "Fixture preview only. Down never collapses into green.",
+  "runtime": {
+    "visual_state": "down",
+    "status_label": "Недоступно",
+    "desired_mode": "managed",
+    "effective_mode": "unknown",
+    "endpoint": "unknown",
+    "machine_error_code": "LISTENER_DOWN_FIXTURE",
+    "human_message": "Fixture: local listener is unavailable.",
+    "last_error": "listener unavailable",
+    "observed_at_utc": "2026-05-12T21:00:00Z"
+  },
+  "pool_summary": {
+    "active": 0,
+    "reserve": 15,
+    "hold": 1,
+    "problem": 10,
+    "active_note": "runtime недоступен",
+    "reserve_note": "truth не подтверждена",
+    "hold_note": "не меняется",
+    "problem_note": "нужен repair"
+  },
+  "events": [
+    {
+      "level": "red",
+      "message": "Fixture: listener недоступен",
+      "observed_at": "Сегодня, 12:55:01"
+    },
+    {
+      "level": "amber",
+      "message": "Fixture: cached green запрещен",
+      "observed_at": "Сегодня, 12:55:00"
+    }
+  ]
+}

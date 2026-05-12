@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "state_id": "healthy",
+  "fixture_notice": "Fixture preview only. Healthy here is not runtime truth or runtime evidence.",
+  "runtime": {
+    "visual_state": "healthy",
+    "status_label": "Работает",
+    "desired_mode": "managed",
+    "effective_mode": "managed",
+    "endpoint": "127.0.0.1:8320",
+    "machine_error_code": "OK",
+    "human_message": "Fixture: all primary surfaces are represented as healthy.",
+    "last_error": "",
+    "observed_at_utc": "2026-05-12T21:00:00Z"
+  },
+  "pool_summary": {
+    "active": 10,
+    "reserve": 15,
+    "hold": 1,
+    "problem": 2,
+    "active_note": "+1 за последние 24 ч",
+    "reserve_note": "ротация без задержек",
+    "hold_note": "ожидает оператора",
+    "problem_note": "2 проверки не прошли"
+  },
+  "events": [
+    {
+      "level": "green",
+      "message": "Fixture: синхронизация завершена успешно",
+      "observed_at": "Сегодня, 12:45:02"
+    },
+    {
+      "level": "blue",
+      "message": "Fixture: переключение в управляемый режим выполнено",
+      "observed_at": "Сегодня, 12:44:10"
+    },
+    {
+      "level": "green",
+      "message": "Fixture: аккаунт #034 переведен в активные",
+      "observed_at": "Сегодня, 12:42:38"
+    },
+    {
+      "level": "red",
+      "message": "Fixture: ошибка проверки аккаунта #021: недоступен",
+      "observed_at": "Сегодня, 12:38:54"
+    },
+    {
+      "level": "blue",
+      "message": "Fixture: проверка работы завершена: OK",
+      "observed_at": "Сегодня, 12:36:21"
+    }
+  ]
+}

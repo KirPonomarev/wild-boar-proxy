@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "source_package": "/Users/kirillponomarev/Desktop/кабан дизайн/эталон дизайна.zip",
+  "source_package_sha256": "bc09f7f8d0811ca2f80ffa77e43d02250b699bea3f94aa8fb290e6e5095492ae",
+  "source_package_role": "visual_baseline_only",
+  "screens": [
+    "00_brand_lockup",
+    "01_overview_dashboard",
+    "02_setup_client",
+    "03_select_codex_client",
+    "04_accounts",
+    "05_add_account_modal",
+    "06_diagnostics",
+    "07_settings",
+    "08_import_existing",
+    "09_confirm_action"
+  ],
+  "first_screen": {
+    "id": "01_overview_dashboard",
+    "html_path_in_zip": "wild_boar_proxy_redesign/html/01_overview_dashboard.html",
+    "png_path_in_zip": "wild_boar_proxy_redesign/png/01_overview_dashboard.png",
+    "png_dimensions": {
+      "width": 3200,
+      "height": 2000
+    },
+    "baseline_viewport": {
+      "width": 1600,
+      "height": 1000
+    }
+  },
+  "assets": [
+    {
+      "id": "boar_mark",
+      "path_in_zip": "wild_boar_proxy_redesign/assets/boar_mark.png",
+      "repo_path": "wild_boar_proxy/web_design_ui/assets/boar_mark.png",
+      "sha256": "3640f46e58cef9e274e2ea4576fbff789fb576a95ffd9b20ad79c0fae2ea1af9",
+      "dimensions": {
+        "width": 178,
+        "height": 187
+      }
+    }
+  ],
+  "runtime_truth": "not_applicable",
+  "live_commands": "forbidden_in_this_contour"
+}
