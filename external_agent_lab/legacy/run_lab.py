@@ -56,6 +56,9 @@ DIRECT_PROVIDER_MODEL_KEYS = {
     "cerebras-gpt-oss-120b-direct": "CEREBRAS_API_KEY",
     "direct-mistral-small-latest": "MISTRAL_API_KEY",
     "mistral-small-latest-direct": "MISTRAL_API_KEY",
+    "direct-mistral-devstral-2512": "MISTRAL_API_KEY",
+    "mistral-devstral-2512-direct": "MISTRAL_API_KEY",
+    "devstral-small-2512-direct": "MISTRAL_API_KEY",
 }
 CLIENT_TOKEN_KEY = "LAB_CLIENT_TOKEN"
 

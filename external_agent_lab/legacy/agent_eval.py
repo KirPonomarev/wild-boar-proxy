@@ -150,12 +150,15 @@ ROUTE_MODEL_TO_REGISTRY_MODEL_ID = {
     "qwen3-next": "or-qwen3-next",
     "glm-flash": "glm-4.7-flash",
     "gpt-5.4-mini": "glm-4.7-flash",
+    "devstral-small-2512": "direct-mistral-devstral-2512",
+    "mistral-devstral-2512": "direct-mistral-devstral-2512",
 }
 REGISTRY_MODEL_TO_ROUTE_MODEL_HINT = {
     "or-gpt-oss-20b": "gpt-oss-20b",
     "or-qwen3-coder": "qwen3-coder",
     "or-qwen3-next": "qwen3-next",
     "glm-4.7-flash": "glm-flash",
+    "direct-mistral-devstral-2512": "devstral-small-2512",
 }
 
 
@@ -4341,6 +4344,7 @@ def wave_2c_candidate_order():
         "direct-cerebras-llama3.1-8b",
         "direct-groq-openai-gpt-oss-20b",
         "direct-gemini-2.5-flash",
+        "direct-mistral-devstral-2512",
         "direct-mistral-small-latest",
         "direct-cerebras-qwen-3-235b-a22b-instruct-2507",
     ]
@@ -6904,6 +6908,7 @@ def run_contour_6a_second_route_stability_gap_closure_generator(args):
     candidate_order = [
         "direct-groq-openai-gpt-oss-20b",
         "direct-gemini-2.5-flash",
+        "direct-mistral-devstral-2512",
         "direct-mistral-small-latest",
     ]
     effect_scope = {
