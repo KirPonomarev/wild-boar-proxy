@@ -158,6 +158,18 @@ class WebDesignUiTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
+    def test_preview_scales_to_viewport_and_uses_svg_icons(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('class="ui-icon nav-icon"', html)
+        self.assertIn('class="ui-icon tile-icon"', html)
+        self.assertIn("--preview-scale", css)
+        self.assertIn("fitPreviewToViewport", js)
+        self.assertIn("window.innerWidth", js)
+        self.assertIn("window.innerHeight", js)
+
     def _fetch_with_retry(self, url: str) -> str:
         last_error: Exception | None = None
         for _ in range(20):

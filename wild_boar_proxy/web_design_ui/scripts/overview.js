@@ -61,6 +61,16 @@ const EVENT_ICON = {
   neutral: "·"
 };
 
+function fitPreviewToViewport() {
+  const frameWidth = 1544;
+  const frameHeight = 944;
+  const margin = 56;
+  const availableWidth = Math.max(320, window.innerWidth - margin);
+  const availableHeight = Math.max(320, window.innerHeight - margin);
+  const scale = Math.min(1, availableWidth / frameWidth, availableHeight / frameHeight);
+  document.documentElement.style.setProperty("--preview-scale", scale.toFixed(4));
+}
+
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
 }
@@ -217,11 +227,13 @@ async function setFixtureState(stateId, updateUrl = false) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  fitPreviewToViewport();
   const picker = document.getElementById("statePicker");
   const refresh = document.getElementById("refreshFixture");
   const initialState = stateFromLocation();
   picker.value = initialState;
   picker.addEventListener("change", () => setFixtureState(picker.value, true));
   refresh.addEventListener("click", () => setFixtureState(picker.value, false));
+  window.addEventListener("resize", fitPreviewToViewport);
   setFixtureState(initialState, false);
 });

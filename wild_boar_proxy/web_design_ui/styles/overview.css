@@ -33,6 +33,7 @@ body {
   height: 100%;
   margin: 0;
   background: var(--canvas);
+  overflow: hidden;
 }
 
 body {
@@ -53,10 +54,11 @@ select {
   align-items: center;
   background: radial-gradient(900px 420px at 78% 8%, rgba(255, 255, 255, .46), transparent 65%), var(--canvas);
   display: flex;
-  height: 1000px;
+  height: 100vh;
   justify-content: center;
   overflow: hidden;
-  width: 1600px;
+  padding: 28px;
+  width: 100vw;
 }
 
 .window {
@@ -67,6 +69,8 @@ select {
   height: 944px;
   overflow: hidden;
   position: relative;
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: center;
   width: 1544px;
 }
 
@@ -181,13 +185,19 @@ select {
   pointer-events: none;
 }
 
+.ui-icon {
+  display: block;
+  fill: none;
+  flex: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .nav-icon {
-  align-items: center;
   color: currentColor;
-  display: flex;
-  font-size: 17px;
   height: 18px;
-  justify-content: center;
   width: 18px;
 }
 
@@ -330,9 +340,8 @@ button:disabled {
 }
 
 .button-icon {
-  display: inline-flex;
-  font-size: 16px;
-  line-height: 1;
+  height: 16px;
+  width: 16px;
 }
 
 .input {
@@ -554,8 +563,8 @@ button:disabled {
 
 .tile-icon {
   color: var(--secondary);
-  font-size: 20px;
-  line-height: 20px;
+  height: 22px;
+  width: 22px;
 }
 
 .overview-kpis {
