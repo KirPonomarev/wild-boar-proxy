@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_COMMAND_ADAPTER_BOUNDARY",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "command_ids": [
+    {
+      "command_id": "accounts_list",
+      "argv": ["accounts", "list", "--json"],
+      "category": "truth",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "diagnostics_export",
+      "argv": ["diagnostics", "export", "--json"],
+      "category": "support",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "healthcheck",
+      "argv": ["healthcheck", "--json"],
+      "category": "truth",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "launch_client",
+      "argv": ["launch", "client", "--client-path", "{client_path}", "--json"],
+      "category": "action",
+      "ui_enabled": false,
+      "confirmation_required": true,
+      "required_args": ["client_path"]
+    },
+    {
+      "command_id": "mode_get",
+      "argv": ["mode", "get", "--json"],
+      "category": "truth",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "mode_managed",
+      "argv": ["mode", "set", "managed", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": true
+    },
+    {
+      "command_id": "mode_stable",
+      "argv": ["mode", "set", "stable", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": true
+    },
+    {
+      "command_id": "rollout_rotation_inspect",
+      "argv": ["rollout", "rotation", "inspect", "--json"],
+      "category": "truth",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "smoke",
+      "argv": ["launch", "smoke", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": true
+    },
+    {
+      "command_id": "stable_repair_apply",
+      "argv": ["stable", "repair", "--apply", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": true
+    },
+    {
+      "command_id": "stable_repair_dry_run",
+      "argv": ["stable", "repair", "--dry-run", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "status",
+      "argv": ["status", "--json"],
+      "category": "truth",
+      "ui_enabled": true,
+      "confirmation_required": false
+    },
+    {
+      "command_id": "sync",
+      "argv": ["sync", "--json"],
+      "category": "action",
+      "ui_enabled": true,
+      "confirmation_required": true
+    }
+  ],
+  "guardrails": {
+    "arbitrary_command_strings": "blocked",
+    "unknown_structured_args": "blocked",
+    "invalid_json_or_packet": "integration_failure",
+    "timeout": "integration_failure_recoverable",
+    "exit_code_alone_success": "forbidden",
+    "direct_state_or_log_reads": "not_introduced",
+    "launch_client_first_screen": "disabled_in_static_ui_and_blocked_by_adapter"
+  }
+}

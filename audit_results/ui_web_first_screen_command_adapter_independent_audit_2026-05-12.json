@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_FIRST_SCREEN_COMMAND_ADAPTER_BOUNDARY",
+  "captured_at_utc": "2026-05-12T21:00:00Z",
+  "auditor": "independent_explorer",
+  "initial_result": "fail",
+  "initial_findings": [
+    "runtime.py is modified in the working tree, so the closeout statement 'No changes to runtime.py' was not precise enough.",
+    "launch_client was disabled as metadata and in static HTML, but the adapter could still execute it when called directly with a structured absolute client_path."
+  ],
+  "remediation": [
+    "launch_client now raises an integration failure before runner execution because ui_enabled=false is enforced by execute_command.",
+    "closeout now records the pre-existing dirty runtime.py state and states that runtime.py is excluded from this contour commit."
+  ],
+  "post_remediation_expected_result": "pass_after_recheck",
+  "residual_risks": [
+    "runtime.py remains dirty outside this contour and must be handled separately.",
+    "Live browser binding remains intentionally out of scope for this contour."
+  ]
+}
