@@ -1,0 +1,226 @@
+{
+  "contour_id": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_PROOF_GATE",
+  "created_at": "2026-05-13",
+  "head_before_artifacts": "9f248c9",
+  "mode": "decision_only_proof_gate",
+  "final_state": "RUNTIME_LAUNCH_DISPATCH_SETTLE_LOOP_PROOF_READY_FOR_OWNER_DECISION",
+  "recommendation": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+  "recommendation_reason": "The settle loop is bounded, but it observes quick detached-process exit through process.poll() and then discards that observation. The detached-executable packet still reports dispatch_observed=true, dispatch_exit_code=null, and stderr=\"\". No command contract was found that requires the wait, and launch-client dispatch truth must remain explicit OS dispatch truth only.",
+  "scope": {
+    "allowed_writes": [
+      "audit_results/runtime_launch_dispatch_settle_loop_proof_matrix_2026-05-13.json",
+      "audit_results/runtime_launch_dispatch_settle_loop_proof_closeout_2026-05-13.md"
+    ],
+    "forbidden_writes": [
+      "wild_boar_proxy/runtime.py",
+      "tests/",
+      "UI files",
+      "desktop files",
+      "generated external evidence tail"
+    ],
+    "runtime_behavior_accepted": false,
+    "runtime_behavior_reverted": false,
+    "runtime_behavior_fixed": false,
+    "tests_written": false,
+    "live_runtime_mutation_performed": false
+  },
+  "canon_basis": [
+    {
+      "source": "RUNTIME_CONTRACT.md",
+      "line_refs": [
+        "RUNTIME_CONTRACT.md:44-52",
+        "RUNTIME_CONTRACT.md:63-70"
+      ],
+      "finding": "launch client is a bounded external host-client dispatch owner surface and must not become runtime health, fallback, recovery, or connectivity truth."
+    },
+    {
+      "source": "COMMAND_API.md",
+      "line_refs": [
+        "COMMAND_API.md:162-174",
+        "COMMAND_API.md:176-209"
+      ],
+      "finding": "launch client packets may carry dispatch fields, but success must make no stronger claim than OS dispatch truth and remains separate from launch smoke runtime truth."
+    },
+    {
+      "source": "DELIVERY_RULES.md",
+      "line_refs": [
+        "DELIVERY_RULES.md:10-11",
+        "DELIVERY_RULES.md:26"
+      ],
+      "finding": "Dirty tail is not normal state, false/stale green is forbidden, and runtime truth is stronger than narrative summaries."
+    }
+  ],
+  "dirty_hunk_under_review": {
+    "file": "wild_boar_proxy/runtime.py",
+    "function": "dispatch_external_client",
+    "line_refs": [
+      "wild_boar_proxy/runtime.py:436-442"
+    ],
+    "diff_stat": {
+      "files_changed": 1,
+      "insertions": 7,
+      "deletions": 0
+    },
+    "summary": "Adds a 1.25 second settle loop after detached subprocess.Popen and breaks if process.poll() shows the process has exited."
+  },
+  "required_questions": [
+    {
+      "question": "Where is dispatch_external_client defined?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:391-455"
+      ],
+      "answer": "dispatch_external_client is defined in runtime.py and contains the dirty settle loop in the detached executable branch."
+    },
+    {
+      "question": "Who calls dispatch_external_client?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:6453-6454"
+      ],
+      "answer": "The only production direct caller found is run_launch_client."
+    },
+    {
+      "question": "Does run_launch_smoke call dispatch_external_client directly or indirectly?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:6164",
+        "wild_boar_proxy/runtime.py:3235-3270"
+      ],
+      "answer": "No. run_launch_smoke calls run_stable_runtime_launcher_attempt, which uses the launcher script path and does not call dispatch_external_client."
+    },
+    {
+      "question": "Which command surfaces can reach dispatch_external_client?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/cli.py:318-319",
+        "wild_boar_proxy/runtime.py:6287-6595"
+      ],
+      "answer": "The owner command surface is launch client --json. UI/Tk/web surfaces may consume or invoke that command, but they are not separate runtime truth owners."
+    },
+    {
+      "question": "Does the settle loop observe process exit but discard that observation?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:438-442",
+        "wild_boar_proxy/runtime.py:450-455"
+      ],
+      "answer": "Yes. The loop checks process.poll() and breaks when the process exits, but the detached return packet is fixed and does not carry the observed poll result."
+    },
+    {
+      "question": "Can a quick failed detached process still return dispatch_observed=true?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:450-455",
+        "tests/test_cli.py:15482-15541"
+      ],
+      "answer": "Yes. The detached branch returns dispatch_observed=true, dispatch_exit_code=null, and stderr=\"\". Existing bounded-dispatch-only test asserts that shape for a script that exits nonzero after a short delay."
+    },
+    {
+      "question": "Does the return packet shape change?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:450-455",
+        "wild_boar_proxy/runtime.py:6520-6536"
+      ],
+      "answer": "No packet field was added by the dirty hunk. The existing client_launch_result fields are populated from the same dispatch_result keys."
+    },
+    {
+      "question": "Is the wait bounded?",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:438-442"
+      ],
+      "answer": "Yes. The loop uses time.monotonic() + 1.25 and sleeps in 0.01 second increments."
+    },
+    {
+      "question": "Is there a test proving the wait is needed?",
+      "status": "FAIL",
+      "evidence": [
+        "tests/test_cli.py:15340-15417",
+        "tests/test_cli.py:15482-15541"
+      ],
+      "answer": "No dedicated test was found that proves the 1.25 second wait is required by command contract rather than test convenience."
+    },
+    {
+      "question": "Is there a test proving the wait cannot create false/stale green?",
+      "status": "FAIL",
+      "evidence": [
+        "tests/test_cli.py:15482-15541"
+      ],
+      "answer": "No dedicated quick-exit failure test asserts packet truth for a process that exits before the settle deadline. Existing detached-dispatch test preserves the os_dispatch_only contract but does not make the discarded observation explicit."
+    }
+  ],
+  "affected_surfaces": {
+    "runtime_owner_surface": [
+      "launch client --json"
+    ],
+    "not_affected_as_runtime_path": [
+      "launch smoke --json"
+    ],
+    "ui_consumers_only": [
+      "web_design_live_server launch_client_dispatch",
+      "web_ui launch_client",
+      "ui_shell launch client action"
+    ]
+  },
+  "existing_test_evidence": {
+    "tests_run_in_this_contour": [
+      {
+        "command": "python3 -m unittest -q tests.test_cli.CliTests.test_launch_client_treats_detached_executable_as_bounded_dispatch_only tests.test_cli.CliTests.test_launch_client_dispatches_bounded_executable_with_sanitized_env tests.test_cli.CliTests.test_launch_client_reports_exec_format_failure_as_json_packet tests.test_cli.CliTests.test_launch_client_blocks_dispatch_when_runtime_precondition_is_unhealthy tests.test_cli.CliTests.test_launch_smoke_reports_nonzero_launcher_even_if_runtime_is_healthy",
+        "result": "PASS",
+        "tests_ran": 5,
+        "duration_seconds": 4.138
+      }
+    ],
+    "coverage_candidates": [
+      "tests/test_cli.py:15340-15417 launch client executable dispatch with sanitized env",
+      "tests/test_cli.py:15454-15480 runtime precondition failure blocks dispatch",
+      "tests/test_cli.py:15482-15541 detached executable bounded dispatch only",
+      "tests/test_cli.py:15543-15594 exec format failure reports JSON packet",
+      "tests/test_cli.py:15142-15204 launch smoke reports nonzero launcher even if runtime is healthy",
+      "tests/test_web_design_live_server.py:1004-1037 web-design launch_client_dispatch routing",
+      "tests/test_ui_shell.py:866-940 UI dispatch field rendering"
+    ],
+    "gaps": [
+      "No test proves the settle loop is required.",
+      "No test explicitly asserts that a process exiting before the settle deadline is reported with truthful dispatch_exit_code or a dedicated quick-exit field.",
+      "No contract field currently carries the observed process.poll() result."
+    ]
+  },
+  "inspector_report_summary": {
+    "performed": true,
+    "result": "PASS_WITH_GAPS",
+    "passes": [
+      "dispatch_external_client definition found",
+      "only production direct caller is run_launch_client",
+      "run_launch_smoke does not reach dispatch_external_client",
+      "settle loop is bounded",
+      "settle loop observes and discards process-exit observation",
+      "existing launch-client tests found"
+    ],
+    "gaps": [
+      "no proof that the wait is required",
+      "no packet truth field for quick detached-process exit",
+      "no dedicated quick-exit truth test"
+    ]
+  },
+  "decision": {
+    "selected_output": "RECOMMEND_REVERT_WITH_SEPARATE_RUNTIME_CONTOUR",
+    "why_not_accept_now": [
+      "Current contour is decision-only.",
+      "The hunk observes process exit but discards that observation in the packet.",
+      "No existing command contract was found that requires the wait.",
+      "Accepting as-is risks making a timed wait look like stronger dispatch truth than the packet carries."
+    ],
+    "why_not_fix_now": [
+      "Current contour forbids runtime edits.",
+      "A fix would require an explicit packet truth design and targeted tests in a separate runtime contour."
+    ],
+    "owner_options": [
+      "approve a separate fail-closed revert contour for only the settle-loop hunk",
+      "approve a separate fix contour that adds explicit quick-exit packet truth and tests",
+      "stop and diagnose if owner believes detached dispatch should intentionally ignore quick exits even after observing them"
+    ]
+  }
+}
