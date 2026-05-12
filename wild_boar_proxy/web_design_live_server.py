@@ -46,6 +46,7 @@ ACCOUNT_ID_UI_ACTIONS = frozenset(
         "validate_account",
         "promote_account",
         "demote_account",
+        "retire_account",
         "hold_account",
         "release_account",
     }
@@ -116,6 +117,17 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "account demotion request only; refreshed accounts list remains truth",
         "display_name": "Demote account",
         "human_meaning": "Request active-to-reserve demotion for the selected account, then refresh accounts truth.",
+    },
+    "retire_account": {
+        "adapter_command_id": "accounts_retire",
+        "action_role": "account_lifecycle_retirement",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "terminal account retirement request only; refreshed accounts list remains truth",
+        "display_name": "Retire account",
+        "human_meaning": "Request terminal lifecycle retirement for the selected account, then refresh accounts truth.",
     },
     "hold_account": {
         "adapter_command_id": "accounts_hold",
@@ -592,13 +604,20 @@ def _account_action_args(
     if ui_action in {
         "promote_account",
         "demote_account",
+        "retire_account",
         "hold_account",
         "release_account",
     } and target_account.pool == "retired":
         return None, _unavailable_action(
             ui_action,
-            f"{ui_action} target is retired; retire/reactivation semantics are out of scope.",
+            f"{ui_action} target is already retired; terminal retirement has no automatic return path.",
             "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+    if ui_action == "retire_account" and target_account.pool not in {"active", "reserve"}:
+        return None, _unavailable_action(
+            ui_action,
+            "retire_account target is not active or reserve.",
+            "UI_ACCOUNT_RETIRE_INELIGIBLE",
         )
     if ui_action == "promote_account" and target_account.pool != "reserve":
         return None, _unavailable_action(

@@ -157,6 +157,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(demote.required_args, ("account_id",))
         self.assertEqual(demote.allowed_args, ("account_id",))
 
+    def test_retire_adapter_spec_uses_exact_argv_template(self) -> None:
+        retire = ALLOWLIST["accounts_retire"]
+
+        self.assertEqual(
+            retire.argv_template,
+            ("accounts", "retire", "{account_id}", "--json"),
+        )
+        self.assertTrue(retire.confirmation_required)
+        self.assertEqual(retire.required_args, ("account_id",))
+        self.assertEqual(retire.allowed_args, ("account_id",))
+
     def test_live_snapshot_calls_only_readonly_commands_and_maps_shape(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -390,6 +401,19 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "account_lifecycle_demotion",
         )
         self.assertTrue(metadata["actions"]["demote_account"]["post_action_refresh_required"])
+        self.assertIn("retire_account", metadata["actions"])
+        self.assertTrue(metadata["actions"]["retire_account"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["retire_account"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["retire_account"]["affects_primary_truth"])
+        self.assertEqual(
+            metadata["actions"]["retire_account"]["action_role"],
+            "account_lifecycle_retirement",
+        )
+        self.assertIn(
+            "terminal account retirement request only",
+            metadata["actions"]["retire_account"]["action_claim_scope"],
+        )
+        self.assertTrue(metadata["actions"]["retire_account"]["post_action_refresh_required"])
         self.assertIn("hold_account", metadata["actions"])
         self.assertTrue(metadata["actions"]["hold_account"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["hold_account"]["mutates_runtime"])
@@ -703,6 +727,124 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertNotIn(("accounts", "promote", "acct-reserve", "--json"), calls)
             self.assertNotIn(("accounts", "demote", "acct-active", "--json"), calls)
 
+    def test_retire_action_preflights_eligibility_and_executes_exact_commands(self) -> None:
+        active_runner = MappingRunner(live_payloads())
+        reserve_runner = MappingRunner(live_payloads())
+
+        active = run_ui_action(
+            active_runner,
+            {"ui_action": "retire_account", "account_id": "acct-active"},
+        )
+        reserve = run_ui_action(
+            reserve_runner,
+            {"ui_action": "retire_account", "account_id": "acct-reserve"},
+        )
+
+        self.assertEqual(active["status"], "ok")
+        self.assertEqual(active["action_role"], "account_lifecycle_retirement")
+        self.assertFalse(active["mutates_runtime"])
+        self.assertFalse(active["affects_primary_truth"])
+        self.assertTrue(active["confirmation_required"])
+        self.assertTrue(active["post_action_refresh_required"])
+        self.assertEqual(active["account_id"], "acct-active")
+        self.assertEqual(
+            active_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "retire", "acct-active", "--json"),
+            ],
+        )
+        self.assertEqual(reserve["status"], "ok")
+        self.assertEqual(reserve["action_role"], "account_lifecycle_retirement")
+        self.assertEqual(reserve["account_id"], "acct-reserve")
+        self.assertEqual(
+            reserve_runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "retire", "acct-reserve", "--json"),
+            ],
+        )
+
+    def test_retire_rejects_bad_targets_without_lifecycle_execution(self) -> None:
+        missing_runner = MappingRunner(live_payloads())
+        retired_runner = MappingRunner(live_payloads())
+        unknown_runner = MappingRunner(live_payloads())
+        unsafe_runner = MappingRunner(live_payloads())
+        extra_runner = MappingRunner(live_payloads())
+        raw_action_runner = MappingRunner(live_payloads())
+        malformed_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "list", "--json"): command_packet(
+                    human_message="Accounts malformed.",
+                    accounts="not-a-list",
+                    registry_identity={
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "next_action": "none",
+                    },
+                ),
+            }
+        )
+
+        missing = run_ui_action(missing_runner, {"ui_action": "retire_account"})
+        retired = run_ui_action(
+            retired_runner,
+            {"ui_action": "retire_account", "account_id": "acct-problem"},
+        )
+        unknown = run_ui_action(
+            unknown_runner,
+            {"ui_action": "retire_account", "account_id": "acct-missing"},
+        )
+        unsafe = run_ui_action(
+            unsafe_runner,
+            {"ui_action": "retire_account", "account_id": "../acct-active"},
+        )
+        extra = run_ui_action(
+            extra_runner,
+            {"ui_action": "retire_account", "account_id": "acct-active", "argv": "accounts retire"},
+        )
+        raw_action = run_ui_action(
+            raw_action_runner,
+            {"ui_action": "accounts_retire", "account_id": "acct-active"},
+        )
+        malformed = run_ui_action(
+            malformed_runner,
+            {"ui_action": "retire_account", "account_id": "acct-active"},
+        )
+
+        self.assertEqual(missing["result"]["machine_error_code"], "UI_ACCOUNT_ID_REQUIRED")
+        self.assertEqual(
+            retired["result"]["machine_error_code"],
+            "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
+        )
+        self.assertEqual(unknown["result"]["machine_error_code"], "UI_ACCOUNT_ID_NOT_FOUND")
+        self.assertEqual(unsafe["result"]["machine_error_code"], "UI_ACCOUNT_ID_INVALID")
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(raw_action["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(
+            malformed["result"]["machine_error_code"],
+            "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID",
+        )
+        self.assertEqual(missing_runner.calls, [])
+        self.assertEqual(retired_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(unknown_runner.calls, [("accounts", "list", "--json")])
+        self.assertEqual(unsafe_runner.calls, [])
+        self.assertEqual(extra_runner.calls, [])
+        self.assertEqual(raw_action_runner.calls, [])
+        self.assertEqual(malformed_runner.calls, [("accounts", "list", "--json")])
+        for calls in [
+            missing_runner.calls,
+            retired_runner.calls,
+            unknown_runner.calls,
+            unsafe_runner.calls,
+            extra_runner.calls,
+            raw_action_runner.calls,
+            malformed_runner.calls,
+        ]:
+            self.assertNotIn(("accounts", "retire", "acct-active", "--json"), calls)
+            self.assertNotIn(("accounts", "retire", "acct-reserve", "--json"), calls)
+
     def test_launch_client_dispatch_uses_server_owned_bounded_path_only(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -852,6 +994,12 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ),
         ("accounts", "demote", "acct-active", "--json"): command_packet(
             human_message="Account demotion requested."
+        ),
+        ("accounts", "retire", "acct-active", "--json"): command_packet(
+            human_message="Account terminal retirement requested."
+        ),
+        ("accounts", "retire", "acct-reserve", "--json"): command_packet(
+            human_message="Account terminal retirement requested."
         ),
         ("accounts", "hold", "acct-active", "--json"): command_packet(
             human_message="Account hold completed."

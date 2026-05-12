@@ -62,6 +62,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "accounts_validate",
             "accounts_promote",
             "accounts_demote",
+            "accounts_retire",
             "accounts_hold",
             "accounts_release",
             "rollout_rotation_inspect",
@@ -141,6 +142,18 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         )
         self.assertIn(
             {
+                "command_id": "accounts_retire",
+                "category": "lifecycle",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["account_id"],
+                "allowed_args": ["account_id"],
+                "argv": ["accounts", "retire", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
                 "command_id": "launch_client",
                 "category": "action",
                 "ui_enabled": False,
@@ -187,16 +200,23 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "accounts_release",
             structured_args={"account_id": "acct-hold"},
         )
+        retire = execute_command(
+            runner,
+            "accounts_retire",
+            structured_args={"account_id": "acct-reserve"},
+        )
 
         self.assertEqual(
             runner.calls,
             [
                 ("accounts", "hold", "acct-active", "--json"),
                 ("accounts", "release", "acct-hold", "--json"),
+                ("accounts", "retire", "acct-reserve", "--json"),
             ],
         )
         self.assertEqual(hold["status"], "ok")
         self.assertEqual(release["status"], "ok")
+        self.assertEqual(retire["status"], "ok")
 
     def test_accounts_validate_requires_only_account_id(self) -> None:
         runner = RecordingRunner()
@@ -227,7 +247,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         missing = execute_command(runner, "accounts_hold")
         extra = execute_command(
             runner,
-            "accounts_release",
+            "accounts_retire",
             structured_args={"account_id": "acct-hold", "argv": "accounts promote"},
         )
 

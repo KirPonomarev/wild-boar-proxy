@@ -1,0 +1,88 @@
+{
+  "contour_id": "UI_WEB_ACCOUNTS_RETIRE_ACTION_GATE",
+  "date": "2026-05-12",
+  "auditor_type": "read_only_independent_inspection",
+  "verdict": "pass_for_retire_gate_with_dirty_worktree_scope_note",
+  "verified_ok": [
+    {
+      "claim": "adapter exact argv is fixed and structured",
+      "evidence": [
+        "wild_boar_proxy/web_design_command_adapter.py defines accounts_retire as accounts retire {account_id} --json",
+        "tests/test_web_design_command_adapter.py asserts accounts_retire allowlist metadata and exact command execution"
+      ]
+    },
+    {
+      "claim": "browser payload is bounded to ui_action plus account_id",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py rejects browser command_id and unsupported payload keys before dispatch",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js posts JSON.stringify({ ui_action: uiAction, ...extraPayload })",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js account action click passes only account_id"
+      ]
+    },
+    {
+      "claim": "retire preflights accounts list before lifecycle execution",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py runs accounts list before account action args are admitted",
+        "tests/test_web_design_live_server.py asserts accounts list precedes accounts retire for active targets",
+        "tests/test_web_design_live_server.py asserts accounts list precedes accounts retire for reserve targets"
+      ]
+    },
+    {
+      "claim": "retire eligibility is active or reserve and already-retired targets are blocked before execution",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py rejects retired pool before adapter execution",
+        "wild_boar_proxy/web_design_live_server.py allows retire only for active or reserve pools",
+        "tests/test_web_design_live_server.py asserts retired target never executes accounts retire"
+      ]
+    },
+    {
+      "claim": "malformed account truth is blocked",
+      "evidence": [
+        "tests/test_web_design_live_server.py asserts malformed accounts list returns UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID without retire execution"
+      ]
+    },
+    {
+      "claim": "UI copy treats retire as terminal lifecycle retirement and not deletion or return path",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py retire metadata says terminal account retirement request only",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js retire button title says terminal lifecycle retirement",
+        "tests/test_web_design_ui.py guards against raw accounts retire and delete/return-path wording in UI files"
+      ]
+    },
+    {
+      "claim": "post-action truth refresh remains canonical accounts readonly",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js uses setLiveReadonly after post_action_refresh_required",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js chooses accounts readonly refresh on the Accounts screen"
+      ]
+    }
+  ],
+  "scope_findings_adjudicated": [
+    {
+      "severity": "medium_if_staged_with_this_contour",
+      "finding": "dirty worktree contains runtime.py changes outside the UI contour",
+      "adjudication": "not introduced by this contour and must not be staged for this contour; remains deferred to WORKTREE_TAIL_ADJUDICATION"
+    },
+    {
+      "severity": "medium_if_staged_with_this_contour",
+      "finding": "dirty worktree contains external lab changes outside the UI contour",
+      "adjudication": "not introduced by this contour and must not be staged for this contour; remains deferred to WORKTREE_TAIL_ADJUDICATION"
+    }
+  ],
+  "unresolved_gaps": [
+    {
+      "item": "no real-browser E2E run for retire",
+      "adjudication": "accepted for this bounded gate because adapter, static UI, and live-server harness tests prove command boundaries; full browser operator flow is scheduled for UI_WEB_END_TO_END_OPERATOR_FLOW"
+    },
+    {
+      "item": "global stronger confirmation system remains deferred",
+      "adjudication": "accepted because this contour uses existing confirmation metadata only; global redesign belongs to UI_WEB_CONFIRMATION_SYSTEM_HARDENING"
+    }
+  ],
+  "verification": {
+    "targeted_suite": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui",
+    "targeted_result": "55 tests passed",
+    "full_suite": "python3 -m unittest discover -s tests -p 'test*.py'",
+    "full_result": "549 tests passed"
+  }
+}

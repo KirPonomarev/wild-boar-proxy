@@ -89,6 +89,14 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("account_id",),
         allowed_args=("account_id",),
     ),
+    "accounts_retire": CommandSpec(
+        command_id="accounts_retire",
+        argv_template=("accounts", "retire", "{account_id}", "--json"),
+        category="lifecycle",
+        confirmation_required=True,
+        required_args=("account_id",),
+        allowed_args=("account_id",),
+    ),
     "accounts_hold": CommandSpec(
         command_id="accounts_hold",
         argv_template=("accounts", "hold", "{account_id}", "--json"),

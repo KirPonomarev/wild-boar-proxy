@@ -622,7 +622,7 @@ function renderAccountsSnapshot(snapshot) {
   const banner = document.getElementById("accountsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; promote/demote/hold/release are bounded action requests."
+    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; lifecycle controls are bounded action requests."
     : "Accounts fixture preview only. Account actions are disabled.";
 
   const summary = safeSnapshot.summary;
@@ -722,6 +722,7 @@ function accountActionButtons(account) {
       }
       group.append(accountActionButton(account, "hold_account", "Удержать"));
     }
+    group.append(accountActionButton(account, "retire_account", "Вывести"));
   }
   return group;
 }
@@ -733,7 +734,9 @@ function accountActionButton(account, uiAction, label) {
   button.dataset.uiAction = uiAction;
   button.dataset.accountId = account.id || "";
   button.textContent = label;
-  button.title = "Run an allowlisted account action. Accounts list refresh remains truth.";
+  button.title = uiAction === "retire_account"
+    ? "Request terminal lifecycle retirement. Refreshed accounts list remains truth."
+    : "Run an allowlisted account action. Accounts list refresh remains truth.";
   button.addEventListener("click", () => {
     maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId });
   });
