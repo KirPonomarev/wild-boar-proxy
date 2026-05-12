@@ -69,7 +69,7 @@
     }
   },
   "closeout_rule": {
-    "commit": "pending_git_closeout",
-    "push": "pending_git_closeout"
+    "commit": "4e84c25",
+    "push": "origin/codex/external-agent-lab-isolated"
   }
 }

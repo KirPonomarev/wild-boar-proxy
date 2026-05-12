@@ -65,6 +65,6 @@ reverted or mixed into C8.
 - base_head_before_c8:
   - `e04077e`
 - contour commit:
-  - pending_git_closeout
+  - `4e84c25`
 - push:
-  - pending_git_closeout
+  - `origin/codex/external-agent-lab-isolated`
