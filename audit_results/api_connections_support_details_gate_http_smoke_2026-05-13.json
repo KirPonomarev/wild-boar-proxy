@@ -1,0 +1,28 @@
+{
+  "actions_present": [
+    "api_route_allow",
+    "api_route_check",
+    "api_route_disable",
+    "api_route_evidence_capture",
+    "api_route_profile",
+    "api_route_validate"
+  ],
+  "browser_engine": "not_used_http_smoke_only",
+  "contour": "API_CONNECTIONS_SUPPORT_DETAILS_GATE",
+  "evidence_changed_files_count": 1,
+  "evidence_data_keys": [
+    "evidence_path",
+    "network_dependent_evidence",
+    "route_id"
+  ],
+  "evidence_network_dependent": false,
+  "evidence_status": "ok",
+  "html_has_api_screen": true,
+  "profile_listener_not_proven": true,
+  "profile_non_mutating": true,
+  "profile_not_ready": true,
+  "profile_runtime_claim_blocked": true,
+  "profile_status": "ok",
+  "readonly_status": "ok",
+  "server_url": "http://127.0.0.1:52664"
+}

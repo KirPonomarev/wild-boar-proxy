@@ -277,17 +277,25 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("api_route_check", js)
         self.assertIn("api_route_allow", js)
         self.assertIn("api_route_disable", js)
+        self.assertIn("api_route_profile", js)
+        self.assertIn("api_route_evidence_capture", js)
         self.assertIn("routeActionButtons", js)
         self.assertIn("routeActionButton", js)
+        self.assertIn("apiRouteStateRequirement", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
 
         api_screen = self._section_html(html, "apiConnectionsScreen")
         self.assertIn("API-подключения пока не настроены", js)
         self.assertIn("Разрешён", api_screen + js)
         self.assertIn("Отключён", api_screen + js)
+        self.assertIn("Пакет профиля", js)
+        self.assertIn("Свидетельство", js)
+        self.assertIn("UI не читает evidence file", js)
         self.assertNotIn('data-ui-action=', api_screen)
         self.assertNotIn("Вкл", api_screen + js)
         self.assertNotIn("Сделать активным", api_screen + js)
+        self.assertNotIn("Подключить Codex", api_screen + js)
+        self.assertNotIn("Профиль готов", api_screen + js)
         self.assertNotIn("Основной", api_screen + js)
         self.assertNotIn("Непрерывный поток", api_screen + js)
         self.assertNotIn("Сетка", api_screen + js)
@@ -518,6 +526,7 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('id="actionDisplayState"', html)
         self.assertIn('id="actionTruthNote"', html)
+        self.assertIn('id="actionSupportDetails"', html)
         self.assertIn('id="actionPanel" class="action-panel neutral compact-action-panel"', html)
         self.assertIn("ACTION_STATUS_VISUAL_CLASS", js)
         self.assertIn('command_error: "red"', js)
@@ -527,6 +536,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('stale: "amber"', js)
         self.assertIn('unknown: "neutral"', js)
         self.assertIn("payload.status || result.status", js)
+        self.assertIn("actionSupportDetails(payload)", js)
+        self.assertIn("artifactReference(data.evidence_path)", js)
         self.assertIn('displayState = "stale"', js)
         self.assertIn("live-обновление не удалось; состояние устарело", js)
         self.assertIn("UI_ACTION_INVALID_JSON", js)
@@ -554,6 +565,7 @@ const ids = [
   "actionChangedFiles",
   "actionRefreshStatus",
   "actionTruthNote",
+  "actionSupportDetails",
   "actionOnboardingOutcome",
   "actionOnboardingReserveProof",
   "actionOnboardingBackend"
@@ -594,7 +606,8 @@ function render(payload, refreshState) {
     panel: elements.actionPanel.className,
     status: elements.actionStatus.textContent,
     display: elements.actionDisplayState.textContent,
-    truth: elements.actionTruthNote.textContent
+    truth: elements.actionTruthNote.textContent,
+    support: elements.actionSupportDetails.textContent
   };
 }
 
@@ -636,6 +649,41 @@ const staleRefresh = render({
     changed_files: []
   }
 }, "failed");
+const profileSupport = render({
+  status: "ok",
+  ui_action: "api_route_profile",
+  action_role: "api_route_profile_packet",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "profile packet",
+    next_action: "none",
+    changed_files: [],
+    data: {
+      writes_external_config: false,
+      profile_ready: false,
+      listener_proven: false,
+      runtime_claim_blocked: true
+    }
+  }
+});
+const evidenceSupport = render({
+  status: "ok",
+  ui_action: "api_route_evidence_capture",
+  action_role: "api_route_local_evidence_capture",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "evidence packet",
+    next_action: "none",
+    changed_files: ["/tmp/wbp-evidence/wbp-deepseek-v3.json"],
+    data: {
+      evidence_path: "/tmp/wbp-evidence/wbp-deepseek-v3.json"
+    }
+  }
+});
 
 if (commandError.panel !== "action-panel compact-action-panel red" || commandError.status !== "command_error") {
   throw new Error(`command_error not red: ${JSON.stringify(commandError)}`);
@@ -645,6 +693,12 @@ if (invalidJson.panel !== "action-panel compact-action-panel red" || invalidJson
 }
 if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRefresh.display !== "stale") {
   throw new Error(`failed refresh not stale amber: ${JSON.stringify(staleRefresh)}`);
+}
+if (!profileSupport.support.includes("writes_external_config=false") || !profileSupport.support.includes("runtime_claim_blocked=true")) {
+  throw new Error(`profile support packet details missing: ${JSON.stringify(profileSupport)}`);
+}
+if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport.support.includes("/tmp/wbp-evidence/")) {
+  throw new Error(`evidence support should show only artifact basename metadata: ${JSON.stringify(evidenceSupport)}`);
 }
         if (!commandError.truth.includes("не должен показывать это как успех")) {
   throw new Error(`missing command_error truth note: ${commandError.truth}`);
@@ -679,6 +733,8 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
             "api_route_check",
             "api_route_allow",
             "api_route_disable",
+            "api_route_profile",
+            "api_route_evidence_capture",
         ]:
             self.assertIn(f"{ui_action}:", js)
 
@@ -687,6 +743,8 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
         self.assertIn("api-route-check", js)
         self.assertIn("api-route-allow", js)
         self.assertIn("api-route-disable", js)
+        self.assertIn("api-route-profile-packet", js)
+        self.assertIn("api-route-local-evidence", js)
         self.assertIn("metadata-fallback", js)
         self.assertIn("однократная отправка", js)
         self.assertIn("доказательство ёмкости", js)
@@ -748,6 +806,18 @@ const allowEnabledRouteButton = {
   disabled: false,
   title: ""
 };
+const profileDisabledRouteButton = {
+  dataset: { uiAction: "api_route_profile", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "any" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
+const evidenceDisabledRouteButton = {
+  dataset: { uiAction: "api_route_evidence_capture", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "any" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
 
 const sandbox = {
   console,
@@ -762,7 +832,14 @@ const sandbox = {
     addEventListener() {},
     querySelectorAll(selector) {
       if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
-        return [enabledButton, disabledRouteButton, allowDisabledRouteButton, allowEnabledRouteButton];
+        return [
+          enabledButton,
+          disabledRouteButton,
+          allowDisabledRouteButton,
+          allowEnabledRouteButton,
+          profileDisabledRouteButton,
+          evidenceDisabledRouteButton
+        ];
       }
       return [];
     },
@@ -789,6 +866,8 @@ actionMetadata = {
   api_route_validate: { available: true, unavailable_reason: "", ui_action: "api_route_validate" },
   api_route_check: { available: true, unavailable_reason: "", ui_action: "api_route_check" },
   api_route_allow: { available: true, unavailable_reason: "", ui_action: "api_route_allow" },
+  api_route_profile: { available: true, unavailable_reason: "", ui_action: "api_route_profile" },
+  api_route_evidence_capture: { available: true, unavailable_reason: "", ui_action: "api_route_evidence_capture" },
   launch_client_dispatch: { available: false, unavailable_reason: "server-owned path недоступен", ui_action: "launch_client_dispatch" }
 };
 `, sandbox);
@@ -812,6 +891,12 @@ if (allowDisabledRouteButton.disabled) {
 }
 if (!allowEnabledRouteButton.disabled || !allowEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
+}
+if (profileDisabledRouteButton.disabled) {
+  throw new Error(`profile packet should be available for disabled route in live source: ${JSON.stringify(profileDisabledRouteButton)}`);
+}
+if (evidenceDisabledRouteButton.disabled) {
+  throw new Error(`evidence capture should be available for disabled route in live source: ${JSON.stringify(evidenceDisabledRouteButton)}`);
 }
 if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);

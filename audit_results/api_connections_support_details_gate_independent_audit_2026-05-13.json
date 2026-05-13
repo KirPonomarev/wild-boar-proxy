@@ -1,0 +1,83 @@
+{
+  "contour": "API_CONNECTIONS_SUPPORT_DETAILS_GATE",
+  "date": "2026-05-13",
+  "auditor": "Boyle",
+  "verdict": "PASS",
+  "findings": [],
+  "checks": {
+    "forbidden_wording": {
+      "result": "PASS",
+      "summary": "No new user-facing UI/action copy in the touched support-detail surfaces introduces forbidden selected-route or automatic route-switching wording. The existing internal metadata field affects_primary_truth remains non-product metadata."
+    },
+    "argv": {
+      "result": "PASS",
+      "api_route_profile": [
+        "external-models",
+        "profile",
+        "codex-desktop",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "api_route_evidence_capture": [
+        "external-models",
+        "evidence",
+        "capture",
+        "--route",
+        "{route_id}",
+        "--json"
+      ]
+    },
+    "browser_payload": {
+      "result": "PASS",
+      "summary": "Browser route actions send ui_action plus route_id only; server allows only ui_action plus route_id for route actions and rejects command_id or unsupported raw fields."
+    },
+    "route_preflight": {
+      "result": "PASS",
+      "summary": "_api_route_action_args preflights with external-models routes list --json before executing support actions."
+    },
+    "evidence_handling": {
+      "result": "PASS",
+      "summary": "Evidence capture remains a local support-artifact packet; the UI formats evidence_path through artifactReference and renders basename metadata without opening or parsing the file."
+    },
+    "profile_semantics": {
+      "result": "PASS",
+      "summary": "Profile remains non-mutating and non-ready; tests assert writes_external_config=false, profile_ready=false, listener_proven=false, and runtime_claim_blocked=true."
+    },
+    "runtime_py": {
+      "result": "PASS",
+      "summary": "wild_boar_proxy/runtime.py was not touched."
+    }
+  },
+  "refs": [
+    "wild_boar_proxy/web_design_command_adapter.py:199-213",
+    "wild_boar_proxy/web_design_live_server.py:236-258",
+    "wild_boar_proxy/web_design_live_server.py:590-659",
+    "wild_boar_proxy/web_design_live_server.py:947-1009",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js:737-796",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js:1358-1404",
+    "tests/test_web_design_command_adapter.py:195-439",
+    "tests/test_web_design_live_server.py:939-975",
+    "tests/test_web_design_live_server.py:1513-1597",
+    "tests/test_web_design_ui.py:202-219",
+    "tests/test_web_design_ui.py:277-298",
+    "tests/test_web_design_ui.py:526-540",
+    "tests/test_web_design_ui.py:649-693",
+    "audit_results/api_connections_support_details_gate_matrix_2026-05-13.json:14-52",
+    "audit_results/api_connections_support_details_gate_matrix_2026-05-13.json:73-113"
+  ],
+  "commands_run": [
+    "git status --short",
+    "git diff --name-only --diff-filter=AM",
+    "git diff -- wild_boar_proxy/web_design_command_adapter.py wild_boar_proxy/web_design_live_server.py wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js tests/test_web_design_command_adapter.py tests/test_web_design_live_server.py tests/test_web_design_ui.py",
+    "rg -n api_route_profile|api_route_evidence_capture|external-models|routes list --json|ui_action|route_id|evidence_path|runtime.py ...",
+    "nl -ba ... targeted file/line inspection",
+    "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui -q",
+    "git diff --check",
+    "git diff -- wild_boar_proxy/runtime.py"
+  ],
+  "residual_risks": [
+    "The independent audit is backed by unit tests, HTTP smoke, and static inspection, not a live browser engine session.",
+    "Pre-existing broader repo text still contains unrelated active/primary vocabulary outside this contour, but the newly added support-detail flow itself avoids introducing forbidden product copy."
+  ]
+}

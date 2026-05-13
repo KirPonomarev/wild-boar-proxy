@@ -158,6 +158,16 @@ const CONFIRMATION_POLICY = {
     severity: "high",
     policy: "api-route-disable",
     warning: "Это запрашивает отключение маршрута. Подтверждением остаётся ответ сервера плюс обновлённый JSON."
+  },
+  api_route_profile: {
+    severity: "medium",
+    policy: "api-route-profile-packet",
+    warning: "Это показывает профильный пакет поддержки. Это не настройка Codex, не готовность listener и не готовность runtime."
+  },
+  api_route_evidence_capture: {
+    severity: "high",
+    policy: "api-route-local-evidence",
+    warning: "Это создаёт локальный support artifact. UI показывает только метаданные пакета команды и не читает evidence file."
   }
 };
 
@@ -708,6 +718,7 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionMessage", result.human_message || "-");
   text("actionNextAction", result.next_action || "none");
   text("actionChangedFiles", `${changedFiles.length} записей метаданных`);
+  text("actionSupportDetails", actionSupportDetails(payload));
   text(
     "actionRefreshStatus",
     refreshState === "failed"
@@ -721,6 +732,23 @@ function setActionPanel(payload, refreshState = "none") {
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
+}
+
+function actionSupportDetails(payload) {
+  const result = payload.result || {};
+  const data = result.data || {};
+  if (payload.ui_action === "api_route_profile") {
+    return [
+      `writes_external_config=${data.writes_external_config === true ? "true" : "false"}`,
+      `profile_ready=${data.profile_ready === true ? "true" : "false"}`,
+      `listener_proven=${data.listener_proven === true ? "true" : "false"}`,
+      `runtime_claim_blocked=${data.runtime_claim_blocked === false ? "false" : "true"}`
+    ].join(" · ");
+  }
+  if (payload.ui_action === "api_route_evidence_capture") {
+    return `локальный artifact · ${artifactReference(data.evidence_path)}`;
+  }
+  return "-";
 }
 
 function renderDiagnosticsAction(payload) {
@@ -807,7 +835,11 @@ function setActionsBusy(isBusy) {
     );
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
     const routeEnabled = button.dataset.routeEnabled !== "false";
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeEnabled;
+    const routeStateRequirement = button.dataset.routeStateRequirement || "any";
+    const routeStateAllowed = routeStateRequirement === "disabled"
+      ? !routeEnabled
+      : (routeStateRequirement === "enabled" ? routeEnabled : true);
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed;
     button.disabled = isBusy || !available;
   }
 }
@@ -1330,7 +1362,9 @@ function routeActionButtons(route) {
     routeActionButton(route, "api_route_allow", "Разрешить маршрут"),
     routeActionButton(route, "api_route_disable", "Отключить маршрут"),
     routeActionButton(route, "api_route_validate", "Проверить"),
-    routeActionButton(route, "api_route_check", "Проверить запросом")
+    routeActionButton(route, "api_route_check", "Проверить запросом"),
+    routeActionButton(route, "api_route_profile", "Пакет профиля"),
+    routeActionButton(route, "api_route_evidence_capture", "Свидетельство")
   );
   return group;
 }
@@ -1342,19 +1376,31 @@ function routeActionButton(route, uiAction, label) {
   button.dataset.uiAction = uiAction;
   button.dataset.routeId = route.route_id || "";
   button.dataset.routeEnabled = route.enabled === true ? "true" : "false";
-  button.dataset.routeStateRequirement = uiAction === "api_route_allow" ? "disabled" : "enabled";
+  button.dataset.routeStateRequirement = apiRouteStateRequirement(uiAction);
   button.textContent = label;
   const routeActionTitles = {
     api_route_allow: "Разрешить выбранный маршрут. Это не утверждение готовности runtime.",
     api_route_disable: "Отключить выбранный маршрут. Это не утверждение готовности runtime.",
     api_route_check: "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime.",
-    api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime."
+    api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime.",
+    api_route_profile: "Показать профильный пакет поддержки без настройки Codex config и без runtime readiness.",
+    api_route_evidence_capture: "Собрать локальное свидетельство маршрута. UI не читает evidence file."
   };
   button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
   button.addEventListener("click", () => {
     maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId });
   });
   return button;
+}
+
+function apiRouteStateRequirement(uiAction) {
+  if (uiAction === "api_route_allow") {
+    return "disabled";
+  }
+  if (uiAction === "api_route_profile" || uiAction === "api_route_evidence_capture") {
+    return "any";
+  }
+  return "enabled";
 }
 
 function renderAccountRows(accounts) {

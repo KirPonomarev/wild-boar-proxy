@@ -78,6 +78,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_enable",
             "external_models_routes_disable",
             "external_models_check",
+            "external_models_profile_codex_desktop",
+            "external_models_evidence_capture",
             "launch_client",
         }
 
@@ -190,6 +192,44 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 "required_args": ["route_id"],
                 "allowed_args": ["route_id"],
                 "argv": ["external-models", "check", "--route", "{route_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_profile_codex_desktop",
+                "category": "external_models_support",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": [
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "{route_id}",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_evidence_capture",
+                "category": "external_models_support",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": [
+                    "external-models",
+                    "evidence",
+                    "capture",
+                    "--route",
+                    "{route_id}",
+                    "--json",
+                ],
             },
             allowlist_metadata(),
         )
@@ -329,6 +369,16 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_disable",
             structured_args={"route_id": "wbp-deepseek-v3"},
         )
+        profile = execute_command(
+            runner,
+            "external_models_profile_codex_desktop",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        evidence = execute_command(
+            runner,
+            "external_models_evidence_capture",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
 
         self.assertEqual(
             runner.calls,
@@ -337,12 +387,16 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
             ],
         )
         self.assertEqual(validate["status"], "ok")
         self.assertEqual(check["status"], "ok")
         self.assertEqual(enable["status"], "ok")
         self.assertEqual(disable["status"], "ok")
+        self.assertEqual(profile["status"], "ok")
+        self.assertEqual(evidence["status"], "ok")
 
     def test_external_models_route_checks_require_only_route_id(self) -> None:
         runner = RecordingRunner()
@@ -358,6 +412,16 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_enable",
             structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes add"},
         )
+        profile_extra = execute_command(
+            runner,
+            "external_models_profile_codex_desktop",
+            structured_args={"route_id": "wbp-deepseek-v3", "path": "/tmp/profile.json"},
+        )
+        evidence_extra = execute_command(
+            runner,
+            "external_models_evidence_capture",
+            structured_args={"route_id": "wbp-deepseek-v3", "evidence_path": "/tmp/evidence.json"},
+        )
         non_string = execute_command(
             runner,
             "external_models_routes_disable",
@@ -371,6 +435,10 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("unsupported args", extra["human_message"])
         self.assertEqual(enable_extra["status"], "integration_failure")
         self.assertIn("unsupported args", enable_extra["human_message"])
+        self.assertEqual(profile_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", profile_extra["human_message"])
+        self.assertEqual(evidence_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", evidence_extra["human_message"])
         self.assertEqual(non_string["status"], "integration_failure")
         self.assertIn("non-string args", non_string["human_message"])
 

@@ -586,6 +586,34 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertTrue(metadata["actions"]["api_route_disable"]["post_action_refresh_required"])
         self.assertIn("runtime readiness", metadata["actions"]["api_route_disable"]["action_claim_scope"])
+        self.assertIn("api_route_profile", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_profile"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_profile"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_profile"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
+        self.assertEqual(
+            metadata["actions"]["api_route_profile"]["mutation_class"],
+            "api_route_support",
+        )
+        self.assertFalse(metadata["actions"]["api_route_profile"]["post_action_refresh_required"])
+        self.assertIn("Codex config mutation", metadata["actions"]["api_route_profile"]["action_claim_scope"])
+        self.assertIn("api_route_evidence_capture", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_evidence_capture"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["affects_primary_truth"])
+        self.assertEqual(
+            metadata["actions"]["api_route_evidence_capture"]["action_role"],
+            "api_route_local_evidence_capture",
+        )
+        self.assertEqual(
+            metadata["actions"]["api_route_evidence_capture"]["mutation_class"],
+            "api_route_support_artifact",
+        )
+        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["post_action_refresh_required"])
+        self.assertIn(
+            "runtime proof",
+            metadata["actions"]["api_route_evidence_capture"]["action_claim_scope"],
+        )
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
@@ -820,6 +848,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
         )
         disable_runner = MappingRunner(live_payloads())
+        profile_runner = MappingRunner(live_payloads())
+        evidence_runner = MappingRunner(live_payloads())
 
         validate = run_ui_action(
             validate_runner,
@@ -836,6 +866,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         disable = run_ui_action(
             disable_runner,
             {"ui_action": "api_route_disable", "route_id": "wbp-deepseek-v3"},
+        )
+        profile = run_ui_action(
+            profile_runner,
+            {"ui_action": "api_route_profile", "route_id": "wbp-deepseek-v3"},
+        )
+        evidence = run_ui_action(
+            evidence_runner,
+            {"ui_action": "api_route_evidence_capture", "route_id": "wbp-deepseek-v3"},
         )
 
         self.assertEqual(validate["status"], "ok")
@@ -898,6 +936,43 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
             ],
         )
+        self.assertEqual(profile["status"], "ok")
+        self.assertEqual(profile["action_role"], "api_route_profile_packet")
+        self.assertEqual(profile["mutation_class"], "api_route_support")
+        self.assertFalse(profile["mutates_runtime"])
+        self.assertFalse(profile["affects_primary_truth"])
+        self.assertTrue(profile["confirmation_required"])
+        self.assertFalse(profile["post_action_refresh_required"])
+        self.assertEqual(profile["route_id"], "wbp-deepseek-v3")
+        self.assertFalse(profile["result"]["data"]["writes_external_config"])
+        self.assertFalse(profile["result"]["data"]["profile_ready"])
+        self.assertFalse(profile["result"]["data"]["listener_proven"])
+        self.assertTrue(profile["result"]["data"]["runtime_claim_blocked"])
+        self.assertEqual(
+            profile_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+        self.assertEqual(evidence["status"], "ok")
+        self.assertEqual(evidence["action_role"], "api_route_local_evidence_capture")
+        self.assertEqual(evidence["mutation_class"], "api_route_support_artifact")
+        self.assertFalse(evidence["mutates_runtime"])
+        self.assertFalse(evidence["affects_primary_truth"])
+        self.assertTrue(evidence["confirmation_required"])
+        self.assertFalse(evidence["post_action_refresh_required"])
+        self.assertEqual(evidence["route_id"], "wbp-deepseek-v3")
+        self.assertFalse(evidence["result"]["data"]["network_dependent_evidence"])
+        self.assertIn("evidence_path", evidence["result"]["data"])
+        self.assertIn("/tmp/wbp-evidence/", evidence["result"]["data"]["evidence_path"])
+        self.assertEqual(
+            evidence_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
 
     def test_api_route_actions_reject_bad_targets_without_execution(self) -> None:
         missing_runner = MappingRunner(live_payloads())
@@ -909,6 +984,45 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("external-models", "routes", "list", "--json"): routes_list_packet(
                     "wbp-disabled",
                     enabled=False,
+                ),
+                (
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "wbp-disabled",
+                    "--json",
+                ): command_packet(
+                    human_message="Codex Desktop profile contract generated without mutating config.",
+                    data={
+                        "profile_kind": "codex_desktop_openai_compatible",
+                        "route_id": "wbp-disabled",
+                        "base_url": None,
+                        "model": "wbp-disabled",
+                        "api_key_source": "managed_local_token",
+                        "writes_external_config": False,
+                        "profile_ready": False,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "synthetic_endpoint_contract": True,
+                        "prerequisite": "live_listener_contour_required",
+                    },
+                ),
+                (
+                    "external-models",
+                    "evidence",
+                    "capture",
+                    "--route",
+                    "wbp-disabled",
+                    "--json",
+                ): command_packet(
+                    human_message="Local external-models evidence captured from foundation contract.",
+                    changed_files=["/tmp/wbp-evidence/wbp-disabled.json"],
+                    data={
+                        "route_id": "wbp-disabled",
+                        "network_dependent_evidence": False,
+                        "evidence_path": "/tmp/wbp-evidence/wbp-disabled.json",
+                    },
                 ),
             }
         )
@@ -957,6 +1071,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "argv": "external-models routes disable",
             },
         )
+        profile_disabled = run_ui_action(
+            disabled_runner,
+            {"ui_action": "api_route_profile", "route_id": "wbp-disabled"},
+        )
+        evidence_disabled = run_ui_action(
+            disabled_runner,
+            {"ui_action": "api_route_evidence_capture", "route_id": "wbp-disabled"},
+        )
 
         self.assertEqual(missing["result"]["machine_error_code"], "UI_API_ROUTE_ID_REQUIRED")
         self.assertEqual(unsafe["result"]["machine_error_code"], "UI_API_ROUTE_ID_INVALID")
@@ -978,6 +1100,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "UI_API_ROUTE_VALIDATE_ROUTE_LIST_INVALID",
         )
         self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(profile_disabled["status"], "ok")
+        self.assertEqual(evidence_disabled["status"], "ok")
         self.assertEqual(missing_runner.calls, [])
         self.assertEqual(unsafe_runner.calls, [])
         self.assertEqual(
@@ -989,6 +1113,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             [
                 ("external-models", "routes", "list", "--json"),
                 ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "profile", "codex-desktop", "--route", "wbp-disabled", "--json"),
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "evidence", "capture", "--route", "wbp-disabled", "--json"),
             ],
         )
         self.assertEqual(
@@ -1797,6 +1925,37 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 "requested_model": "wbp-deepseek-v3",
                 "effective_model": "deepseek/deepseek-chat",
                 "provider": "openrouter",
+            },
+        ),
+        ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"): command_packet(
+            human_message="Codex Desktop profile contract generated without mutating config.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "profile_kind": "codex_desktop_openai_compatible",
+                "route_id": "wbp-deepseek-v3",
+                "base_url": None,
+                "model": "wbp-deepseek-v3",
+                "api_key_source": "managed_local_token",
+                "writes_external_config": False,
+                "profile_ready": False,
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "synthetic_endpoint_contract": True,
+                "prerequisite": "live_listener_contour_required",
+            },
+        ),
+        ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"): command_packet(
+            human_message="Local external-models evidence captured from foundation contract.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            changed_files=["/tmp/wbp-evidence/wbp-deepseek-v3.json"],
+            data={
+                "route_id": "wbp-deepseek-v3",
+                "network_dependent_evidence": False,
+                "evidence_path": "/tmp/wbp-evidence/wbp-deepseek-v3.json",
             },
         ),
     }

@@ -196,6 +196,22 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("route_id",),
         allowed_args=("route_id",),
     ),
+    "external_models_profile_codex_desktop": CommandSpec(
+        command_id="external_models_profile_codex_desktop",
+        argv_template=("external-models", "profile", "codex-desktop", "--route", "{route_id}", "--json"),
+        category="external_models_support",
+        confirmation_required=True,
+        required_args=("route_id",),
+        allowed_args=("route_id",),
+    ),
+    "external_models_evidence_capture": CommandSpec(
+        command_id="external_models_evidence_capture",
+        argv_template=("external-models", "evidence", "capture", "--route", "{route_id}", "--json"),
+        category="external_models_support",
+        confirmation_required=True,
+        required_args=("route_id",),
+        allowed_args=("route_id",),
+    ),
     "launch_client": CommandSpec(
         command_id="launch_client",
         argv_template=("launch", "client", "--client-path", "{client_path}", "--json"),

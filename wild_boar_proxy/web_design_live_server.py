@@ -64,7 +64,14 @@ ACCOUNT_ID_UI_ACTIONS = frozenset(
     }
 )
 ROUTE_ID_UI_ACTIONS = frozenset(
-    {"api_route_validate", "api_route_check", "api_route_allow", "api_route_disable"}
+    {
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_profile",
+        "api_route_evidence_capture",
+    }
 )
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
@@ -225,6 +232,30 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness",
         "display_name": "Отключить маршрут",
         "human_meaning": "Запросить отключение выбранного маршрута и обновить список маршрутов из канонического JSON.",
+    },
+    "api_route_profile": {
+        "adapter_command_id": "external_models_profile_codex_desktop",
+        "action_role": "api_route_profile_packet",
+        "mutation_class": "api_route_support",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только профильный пакет поддержки; это не Codex config mutation, не listener readiness и не runtime readiness",
+        "display_name": "Показать пакет профиля",
+        "human_meaning": "Показать non-mutating профильный пакет для выбранного маршрута без записи Codex config и без утверждения готовности.",
+    },
+    "api_route_evidence_capture": {
+        "adapter_command_id": "external_models_evidence_capture",
+        "action_role": "api_route_local_evidence_capture",
+        "mutation_class": "api_route_support_artifact",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только локальный support artifact; это не runtime proof и не чтение evidence file из UI",
+        "display_name": "Собрать локальное свидетельство",
+        "human_meaning": "Создать локальный support artifact по выбранному маршруту и показать только метаданные command packet.",
     },
     "sync_runtime": {
         "adapter_command_id": "sync",
@@ -998,6 +1029,10 @@ def _api_route_list_unavailable_code(ui_action: str) -> str:
         return "UI_API_ROUTE_ALLOW_ROUTE_LIST_UNAVAILABLE"
     if ui_action == "api_route_disable":
         return "UI_API_ROUTE_DISABLE_ROUTE_LIST_UNAVAILABLE"
+    if ui_action == "api_route_profile":
+        return "UI_API_ROUTE_PROFILE_ROUTE_LIST_UNAVAILABLE"
+    if ui_action == "api_route_evidence_capture":
+        return "UI_API_ROUTE_EVIDENCE_ROUTE_LIST_UNAVAILABLE"
     return "UI_API_ROUTE_CHECK_ROUTE_LIST_UNAVAILABLE"
 
 
@@ -1008,6 +1043,10 @@ def _api_route_list_invalid_code(ui_action: str) -> str:
         return "UI_API_ROUTE_ALLOW_ROUTE_LIST_INVALID"
     if ui_action == "api_route_disable":
         return "UI_API_ROUTE_DISABLE_ROUTE_LIST_INVALID"
+    if ui_action == "api_route_profile":
+        return "UI_API_ROUTE_PROFILE_ROUTE_LIST_INVALID"
+    if ui_action == "api_route_evidence_capture":
+        return "UI_API_ROUTE_EVIDENCE_ROUTE_LIST_INVALID"
     return "UI_API_ROUTE_CHECK_ROUTE_LIST_INVALID"
 
 
