@@ -237,13 +237,18 @@ class WebDesignUiTests(unittest.TestCase):
         overview = self._section_html(html, "overviewScreen")
         self.assertEqual(html.count('class="button primary live-action overview-only"'), 1)
         self.assertIn('id="launchClientAction" class="button primary live-action overview-only"', html)
+        self.assertIn('aria-label="Запустить клиент"', html)
         self.assertIn('class="button ghost live-action overview-only"', html)
         self.assertIn("secondary-action-tile", overview)
+        self.assertIn("overview-utility-strip", overview)
         self.assertIn("compact-action-panel", overview)
         self.assertLess(overview.find('class="card system-card"'), overview.find('id="actionPanel"'))
         self.assertLess(overview.find('id="eventList"'), overview.find('id="actionPanel"'))
         self.assertIn(".secondary-action-tile", css)
+        self.assertIn(".overview-utility-strip", css)
         self.assertIn(".compact-action-panel", css)
+        self.assertIn("events.slice(0, 2)", (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
+        self.assertIn("log-empty", css + (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
 
     def test_accounts_screen_is_readonly_and_redacted(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

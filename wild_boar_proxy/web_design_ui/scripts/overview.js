@@ -618,7 +618,14 @@ function renderModeSegments(runtime) {
 function renderEvents(events) {
   const list = document.getElementById("eventList");
   list.replaceChildren();
-  for (const event of events.slice(0, 5)) {
+  if (!events.length) {
+    const empty = document.createElement("div");
+    empty.className = "log-empty";
+    empty.textContent = "События не предоставлены текущим JSON-пакетом.";
+    list.append(empty);
+    return;
+  }
+  for (const event of events.slice(0, 2)) {
     const row = document.createElement("div");
     row.className = "log-row";
 

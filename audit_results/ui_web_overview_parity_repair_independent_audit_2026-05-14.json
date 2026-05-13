@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_OVERVIEW_PARITY_REPAIR",
+  "date": "2026-05-14",
+  "auditors": [
+    {
+      "role": "initial_independent_auditor",
+      "result": "FAIL_ADJUDICATED",
+      "findings": [
+        {
+          "id": "known_untracked_external_lab_tail",
+          "status": "out_of_scope_not_staged",
+          "detail": "The auditor flagged old untracked external lab artifacts in the working tree. They are not part of the scoped commit set and are not staged for this UI contour."
+        },
+        {
+          "id": "dedicated_browser_smoke_not_found_during_initial_audit",
+          "status": "resolved",
+          "detail": "The dedicated browser smoke artifact was created after the initial audit snapshot and is now present as ui_web_overview_parity_repair_browser_smoke_2026-05-14.json."
+        },
+        {
+          "id": "ui_action_semantics",
+          "status": "pass",
+          "detail": "The initial auditor confirmed action names and dispatch shape remained unchanged."
+        },
+        {
+          "id": "runtime_server_adapter_changes",
+          "status": "pass",
+          "detail": "The initial auditor found no runtime, server, adapter, or command semantics changes in the tracked diff."
+        }
+      ]
+    },
+    {
+      "role": "scoped_repeat_independent_auditor",
+      "result": "PASS",
+      "checked_scope": [
+        "tracked UI diff",
+        "new overview parity repair audit artifacts",
+        "new overview parity repair screenshots"
+      ],
+      "facts": {
+        "tracked_diff_only_ui_and_test": true,
+        "runtime_py_changed": false,
+        "live_server_changed": false,
+        "command_adapter_changed": false,
+        "ui_action_payload_dispatch_unchanged": true,
+        "dedicated_browser_smoke_json_valid": true,
+        "browser_smoke_result": "PASS",
+        "body_has_horizontal_scroll": false,
+        "action_panel_fits_window": true,
+        "external_reference_trace_in_scoped_files": false,
+        "private_path_trace_in_scoped_text_artifacts": false
+      }
+    }
+  ],
+  "final_audit_result": "PASS",
+  "scoped_commit_rule": "Stage only the UI/test/audit/screenshot files created or modified by this contour. Do not stage the known untracked external lab tail.",
+  "resume_from_here": "Write closeout, run final scans, stage scoped files only, commit, and push."
+}
