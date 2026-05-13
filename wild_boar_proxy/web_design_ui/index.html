@@ -54,30 +54,6 @@
             </svg>
             <span>Настройки</span>
           </a>
-          <a id="setupNav" class="nav-item" href="?screen=setup" data-screen-link="setup">
-            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M5 12h14"></path>
-              <path d="M12 5v14"></path>
-              <circle cx="12" cy="12" r="8"></circle>
-            </svg>
-            <span>Настройка</span>
-          </a>
-          <a id="selectClientNav" class="nav-item" href="?screen=select-client" data-screen-link="select-client">
-            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-              <rect x="4" y="5" width="16" height="11" rx="2"></rect>
-              <path d="M9 20h6"></path>
-              <path d="M12 16v4"></path>
-            </svg>
-            <span>Клиент</span>
-          </a>
-          <a id="importExistingNav" class="nav-item" href="?screen=import-existing" data-screen-link="import-existing">
-            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 3v12"></path>
-              <path d="m7 10 5 5 5-5"></path>
-              <path d="M5 21h14"></path>
-            </svg>
-            <span>Импорт</span>
-          </a>
         </nav>
 
         <div class="sidebar-footer">
@@ -95,8 +71,8 @@
             <h1 id="mainTitle">Обзор</h1>
             <div class="subtitle">
               <span id="subtitleText">
-                Визуальный перенос первого экрана. Данные ниже являются
-                демо-состояниями, а не подтверждённым состоянием runtime.
+                Операторская сводка: фактическое состояние, режим работы,
+                пул аккаунтов и последние события.
               </span>
             </div>
           </div>
@@ -128,25 +104,25 @@
               </svg>
               <span>Обновить демо</span>
             </button>
-            <button id="healthcheckAction" class="button live-action overview-only" type="button" data-ui-action="refresh_health_detail">
+            <button id="healthcheckAction" class="button ghost live-action overview-only" type="button" data-ui-action="refresh_health_detail">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
               <span>Проверка здоровья</span>
             </button>
-            <button id="diagnosticsAction" class="button live-action overview-only" type="button" data-ui-action="export_diagnostics">
+            <button id="diagnosticsAction" class="button ghost live-action overview-only" type="button" data-ui-action="export_diagnostics">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 13h3l3-7 5 13 2-6h3"></path>
               </svg>
               <span>Диагностика</span>
             </button>
-            <button id="repairPlanAction" class="button live-action overview-only" type="button" data-ui-action="stable_repair_plan">
+            <button id="repairPlanAction" class="button ghost live-action overview-only" type="button" data-ui-action="stable_repair_plan">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
               </svg>
               <span>План ремонта</span>
             </button>
-            <button id="managedModeAction" class="button live-action overview-only" type="button" data-ui-action="set_mode_managed">
+            <button id="managedModeAction" class="button ghost live-action overview-only" type="button" data-ui-action="set_mode_managed">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 12h5l2-4 2 8 2-4h5"></path>
               </svg>
@@ -187,28 +163,8 @@
 
         <section id="overviewScreen" class="screen" data-screen="overview">
           <div id="fixtureBanner" class="fixture-banner">
-            Только демо-просмотр. Команды не выполняются, runtime-файлы не читаются.
+            Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.
           </div>
-
-          <section id="actionPanel" class="action-panel neutral" aria-live="polite">
-          <div class="eyebrow">Последнее действие</div>
-          <div class="action-panel-grid">
-            <div>ui_action</div><div id="actionUiAction">нет</div>
-            <div>Роль</div><div id="actionRole">нет</div>
-            <div>Аккаунт</div><div id="actionAccountId">-</div>
-            <div>Статус</div><div id="actionStatus">ожидание</div>
-            <div>Состояние отображения</div><div id="actionDisplayState">неизвестно</div>
-            <div>Машинный код</div><div id="actionMachineCode">-</div>
-            <div>Сообщение</div><div id="actionMessage">Действия ещё не выполнялись.</div>
-            <div>Следующее действие</div><div id="actionNextAction">нет</div>
-            <div>Изменённые файлы</div><div id="actionChangedFiles">0 записей metadata</div>
-            <div>Обновление</div><div id="actionRefreshStatus">не запрашивалось</div>
-            <div>Примечание о подтверждении</div><div id="actionTruthNote">Результат действия ещё не отображался.</div>
-            <div>Итог подключения</div><div id="actionOnboardingOutcome">-</div>
-            <div>Доказательство резерва</div><div id="actionOnboardingReserveProof">-</div>
-            <div>Выбранный backend</div><div id="actionOnboardingBackend">-</div>
-          </div>
-          </section>
 
           <div class="grid overview-top">
           <section class="card system-card">
@@ -234,7 +190,7 @@
               <span id="stableSegment">Стабильный</span>
             </div>
             <div class="action-row">
-              <button id="syncAction" class="action-tile live-action" type="button" data-ui-action="sync_runtime">
+              <button id="syncAction" class="action-tile secondary-action-tile live-action" type="button" data-ui-action="sync_runtime">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M17.5 7.5h3v-3"></path>
                   <path d="M20 7.5A8 8 0 0 0 6.3 5.8"></path>
@@ -243,19 +199,19 @@
                 </svg>
                 <span>Синхронизировать</span>
               </button>
-              <button id="smokeAction" class="action-tile live-action" type="button" data-ui-action="launch_smoke">
+              <button id="smokeAction" class="action-tile secondary-action-tile live-action" type="button" data-ui-action="launch_smoke">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M20 6 9 17l-5-5"></path>
                 </svg>
                 <span>Проверить работу</span>
               </button>
-              <button id="stableModeAction" class="action-tile live-action" type="button" data-ui-action="set_mode_stable">
+              <button id="stableModeAction" class="action-tile secondary-action-tile live-action" type="button" data-ui-action="set_mode_stable">
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
                 </svg>
                 <span>Стабильный режим</span>
               </button>
-              <button class="action-tile" type="button" disabled>
+              <button class="action-tile secondary-action-tile" type="button" disabled>
                 <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                   <path d="M4 13h3l3-7 5 13 2-6h3"></path>
                 </svg>
@@ -303,6 +259,26 @@
           </div>
           <div id="eventList" class="log-list" aria-live="polite"></div>
         </section>
+
+          <section id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite">
+          <div class="eyebrow">Последнее действие</div>
+          <div class="action-panel-grid">
+            <div>ui_action</div><div id="actionUiAction">нет</div>
+            <div>Роль</div><div id="actionRole">нет</div>
+            <div>Аккаунт</div><div id="actionAccountId">-</div>
+            <div>Статус</div><div id="actionStatus">ожидание</div>
+            <div>Состояние отображения</div><div id="actionDisplayState">неизвестно</div>
+            <div>Машинный код</div><div id="actionMachineCode">-</div>
+            <div>Сообщение</div><div id="actionMessage">Действия ещё не выполнялись.</div>
+            <div>Следующее действие</div><div id="actionNextAction">нет</div>
+            <div>Изменённые сведения</div><div id="actionChangedFiles">0 записей сведений</div>
+            <div>Обновление</div><div id="actionRefreshStatus">не запрашивалось</div>
+            <div>Примечание о подтверждении</div><div id="actionTruthNote">Результат действия ещё не отображался.</div>
+            <div>Итог подключения</div><div id="actionOnboardingOutcome">-</div>
+            <div>Доказательство резерва</div><div id="actionOnboardingReserveProof">-</div>
+            <div>Выбранный backend</div><div id="actionOnboardingBackend">-</div>
+          </div>
+          </section>
         </section>
 
         <section id="accountsScreen" class="screen" data-screen="accounts" hidden>

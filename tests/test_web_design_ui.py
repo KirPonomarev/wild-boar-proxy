@@ -215,6 +215,32 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("command_id", js)
         self.assertNotIn("client_path", js)
 
+    def test_overview_nav_and_action_hierarchy_are_product_first(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        nav_match = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', html, re.S)
+        self.assertIsNotNone(nav_match)
+        nav = nav_match.group(1)
+        self.assertIn('data-screen-link="overview"', nav)
+        self.assertIn('data-screen-link="accounts"', nav)
+        self.assertIn('data-screen-link="diagnostics"', nav)
+        self.assertIn('data-screen-link="settings"', nav)
+        self.assertNotIn('data-screen-link="setup"', nav)
+        self.assertNotIn('data-screen-link="select-client"', nav)
+        self.assertNotIn('data-screen-link="import-existing"', nav)
+
+        overview = self._section_html(html, "overviewScreen")
+        self.assertEqual(html.count('class="button primary live-action overview-only"'), 1)
+        self.assertIn('id="launchClientAction" class="button primary live-action overview-only"', html)
+        self.assertIn('class="button ghost live-action overview-only"', html)
+        self.assertIn("secondary-action-tile", overview)
+        self.assertIn("compact-action-panel", overview)
+        self.assertLess(overview.find('class="card system-card"'), overview.find('id="actionPanel"'))
+        self.assertLess(overview.find('id="eventList"'), overview.find('id="actionPanel"'))
+        self.assertIn(".secondary-action-tile", css)
+        self.assertIn(".compact-action-panel", css)
+
     def test_accounts_screen_is_readonly_and_redacted(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -345,9 +371,9 @@ class WebDesignUiTests(unittest.TestCase):
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
-        self.assertIn('data-screen-link="setup"', html)
-        self.assertIn('data-screen-link="select-client"', html)
-        self.assertIn('data-screen-link="import-existing"', html)
+        self.assertNotIn('id="setupNav"', html)
+        self.assertNotIn('id="selectClientNav"', html)
+        self.assertNotIn('id="importExistingNav"', html)
         self.assertIn('id="setupScreen"', html)
         self.assertIn('id="selectClientScreen"', html)
         self.assertIn('id="importExistingScreen"', html)
@@ -391,9 +417,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('"setup"', js)
         self.assertIn('"select-client"', js)
         self.assertIn('"import-existing"', js)
-        self.assertIn('?screen=setup', html)
-        self.assertIn('?screen=select-client', html)
-        self.assertIn('?screen=import-existing', html)
+        self.assertNotIn('?screen=setup', html)
+        self.assertNotIn('?screen=select-client', html)
+        self.assertNotIn('?screen=import-existing', html)
         self.assertNotIn("setup_discovery", html + js)
         self.assertNotIn("verify_path", html + js)
         self.assertNotIn("save_selection", html + js)
@@ -456,7 +482,7 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('id="actionDisplayState"', html)
         self.assertIn('id="actionTruthNote"', html)
-        self.assertIn('id="actionPanel" class="action-panel neutral"', html)
+        self.assertIn('id="actionPanel" class="action-panel neutral compact-action-panel"', html)
         self.assertIn("ACTION_STATUS_VISUAL_CLASS", js)
         self.assertIn('command_error: "red"', js)
         self.assertIn('integration_failure: "red"', js)
@@ -575,13 +601,13 @@ const staleRefresh = render({
   }
 }, "failed");
 
-if (commandError.panel !== "action-panel red" || commandError.status !== "command_error") {
+if (commandError.panel !== "action-panel compact-action-panel red" || commandError.status !== "command_error") {
   throw new Error(`command_error not red: ${JSON.stringify(commandError)}`);
 }
-if (invalidJson.panel !== "action-panel red" || invalidJson.display !== "invalid_json") {
+if (invalidJson.panel !== "action-panel compact-action-panel red" || invalidJson.display !== "invalid_json") {
   throw new Error(`invalid_json not red: ${JSON.stringify(invalidJson)}`);
 }
-if (staleRefresh.panel !== "action-panel amber" || staleRefresh.display !== "stale") {
+if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRefresh.display !== "stale") {
   throw new Error(`failed refresh not stale amber: ${JSON.stringify(staleRefresh)}`);
 }
         if (!commandError.truth.includes("не должен показывать это как успех")) {

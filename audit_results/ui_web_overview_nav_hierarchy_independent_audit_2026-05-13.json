@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_NAV_PRODUCT_HIERARCHY_REALIGNMENT",
+  "created_at": "2026-05-13",
+  "auditor": "independent read-only explorer",
+  "status": "passed",
+  "findings": {
+    "critical": [],
+    "high": [],
+    "medium": [],
+    "low": []
+  },
+  "verified_points": [
+    "Scope is limited to web UI HTML, CSS, JavaScript and UI tests.",
+    "No runtime, adapter or server files are modified.",
+    "Persistent sidebar navigation exposes only overview, accounts, diagnostics and settings.",
+    "Setup, select-client and import-existing remain accepted by direct screen routes and render inert disabled UI.",
+    "Deferred setup/select/import screens do not expose file inputs, data-ui-action controls, live actions or path payloads.",
+    "Overview has one primary overview CTA: launchClientAction.",
+    "Other overview actions are visually ghost or secondary.",
+    "Action panel appears after system, mode, KPI and event sections.",
+    "False-green and error handling remain intact.",
+    "ui_action POST payload, JSON keys, machine codes and allowlist-sensitive server surfaces appear unchanged.",
+    "No private external reference-service traces were found in the tracked diff or contour artifacts."
+  ],
+  "auditor_commands_reported": [
+    "git status --short",
+    "git diff --stat && git diff --name-status",
+    "git diff on modified UI/test files",
+    "rg/sed/nl inspections for nav, route, action, payload and trace surfaces",
+    "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "python3 -m unittest tests.test_web_design_ui -q",
+    "python3 -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+    "git diff --check"
+  ],
+  "auditor_residual_risk": "Audit was static plus lightweight unittest coverage; auditor did not run live browser or pixel verification.",
+  "orchestrator_resolution": "The orchestrator ran system Google Chrome via Playwright against the local fake-runner server and recorded the passing browser smoke artifact."
+}

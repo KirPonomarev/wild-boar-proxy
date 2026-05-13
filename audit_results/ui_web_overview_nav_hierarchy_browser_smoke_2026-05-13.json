@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_OVERVIEW_NAV_PRODUCT_HIERARCHY_REALIGNMENT",
+  "created_at": "2026-05-13",
+  "server": "http://127.0.0.1:8788/?source=live",
+  "browser": "system Google Chrome via Playwright",
+  "viewport": "1600x1000",
+  "runner": "MappingRunner with test live payloads",
+  "passed": true,
+  "checks": [
+    {
+      "name": "persistent nav has only core product sections",
+      "status": "ok"
+    },
+    {
+      "name": "overview has one primary overview CTA and quieter secondary actions",
+      "status": "ok"
+    },
+    {
+      "name": "overview operational cards precede action evidence panel",
+      "status": "ok"
+    },
+    {
+      "name": "setup/select/import remain directly routable and inert",
+      "status": "ok"
+    }
+  ],
+  "limitations": [
+    "Smoke validates key DOM hierarchy and route behavior, not screenshot pixel parity.",
+    "Smoke uses fake command payloads and does not mutate live runtime."
+  ]
+}

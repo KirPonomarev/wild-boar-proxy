@@ -535,7 +535,7 @@ function renderEvents(events) {
 function setSourceCopy(source) {
   const screen = currentScreen();
   const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
-  document.getElementById("sourceFooter").textContent = source === "live"
+  const sourceFooter = source === "live"
     ? (
       screen === "accounts"
         ? "Аккаунты · live только чтение"
@@ -545,46 +545,48 @@ function setSourceCopy(source) {
             : (
               screen === "settings"
                 ? "Настройки · через пакеты команд"
-                : (setupLike ? "Экраны настройки · отложенный каркас" : "Live только чтение · базовые действия")
+                : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
             )
         )
     )
     : "Предпросмотр UI · без live-команд";
-  document.getElementById("subtitleText").textContent = source === "live"
+  const subtitle = source === "live"
     ? (
       screen === "accounts"
-        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия проходят через bounded action gate."
+        ? "Пул аккаунтов отображается из подтверждённого ответа команды. Действия доступны только после проверки допустимости."
         : (
           screen === "diagnostics"
-      ? "Экран диагностики показывает только метаданные диагностического пакета из diagnostics JSON packet. Истина о здоровье runtime остаётся за status/healthcheck."
+            ? "Диагностика показывает сведения пакета поддержки. Фактическое здоровье системы проверяется отдельными командами."
             : (
               screen === "settings"
-                ? "Настройки показывают наблюдаемые status/configuration из JSON packets. Безопасные действия являются запросами, а не сохранёнными preferences."
+                ? "Настройки показывают наблюдаемую конфигурацию только для чтения. Доступные действия являются запросами, а не сохранением параметров."
                 : (
                   setupLike
                     ? "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
-                    : "Первый экран подключен к живым JSON-командам. Базовые действия требуют live-обновления после выполнения."
+                    : "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
                 )
             )
         )
     )
     : (
       screen === "accounts"
-        ? "Визуальный перенос экрана аккаунтов. Данные ниже являются демо-состояниями, а не runtime truth."
+        ? "Демо-просмотр экрана аккаунтов. Данные не являются фактическим состоянием системы."
         : (
           screen === "diagnostics"
-            ? "Визуальный перенос экрана диагностики. Экспорт создаёт диагностический пакет поддержки, но не доказывает runtime health."
+            ? "Демо-просмотр диагностики. Экспорт создаёт пакет поддержки, но не доказывает здоровье системы."
             : (
               screen === "settings"
-                ? "Визуальный перенос экрана настроек. Элементы либо только для чтения, либо отложены, если за ними нет существующего ui_action."
+                ? "Демо-просмотр настроек. Элементы либо только для чтения, либо отложены без безопасного действия."
                 : (
                   setupLike
                     ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
-                    : "Визуальный перенос первого экрана. Данные ниже являются демо-состояниями, а не runtime truth."
+                    : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
                 )
             )
         )
     );
+  document.getElementById("sourceFooter").textContent = sourceFooter;
+  document.getElementById("subtitleText").textContent = subtitle;
 }
 
 function setActionPanel(payload, refreshState = "none") {
@@ -593,7 +595,7 @@ function setActionPanel(payload, refreshState = "none") {
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
   const panel = document.getElementById("actionPanel");
-  panel.className = `action-panel ${display.visualClass}`;
+  panel.className = `action-panel compact-action-panel ${display.visualClass}`;
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || "-");
@@ -1145,8 +1147,8 @@ function renderSnapshot(snapshot) {
   picker.disabled = source === "live";
   document.getElementById("sourcePicker").value = source;
   document.getElementById("brandCaption").textContent = source === "live"
-    ? "live web preview только чтение"
-    : "web preview на демо-состояниях";
+    ? "live только чтение"
+    : "демо-просмотр UI";
   setSourceCopy(source);
   document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
     ? "Обновить live"
