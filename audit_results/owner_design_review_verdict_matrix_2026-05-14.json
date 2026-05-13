@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "contour": "OWNER_DESIGN_REVIEW_VERDICT_INTAKE",
+  "date": "2026-05-14",
+  "input_head": "d3d4fc0",
+  "input_state": "OWNER_DESIGN_REVIEW_PENDING",
+  "source_stop_gate": {
+    "packet": "audit_results/owner_design_review_stop_packet_2026-05-14.md",
+    "matrix": "audit_results/owner_design_review_stop_matrix_2026-05-14.json",
+    "closeout": "audit_results/owner_design_review_stop_closeout_2026-05-14.md",
+    "required_next_step": "explicit owner verdict"
+  },
+  "owner_input": {
+    "latest_instruction": "начинай работу по данному контуру",
+    "verbatim_owner_design_verdict": null,
+    "explicit_desktop_approval": false,
+    "explicit_changes_requested": false,
+    "explicit_design_block": false
+  },
+  "normalization": {
+    "normalized_verdict": "OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW",
+    "reason": "The owner instructed the agent to run the verdict-intake contour but did not provide an explicit design approval, change request, or block verdict.",
+    "desktop_unlocked": false,
+    "implementation_unlocked": false
+  },
+  "allowed_verdicts": [
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_APPROVED",
+      "route": "DESKTOP_RENDERER_ADMISSION",
+      "requires_explicit_owner_text": true
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_CHANGES_REQUESTED",
+      "route": "UI_WEB_OWNER_REVIEW_DESIGN_REPAIR_<scope>",
+      "requires_explicit_owner_text": true
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_BLOCKED",
+      "route": "UI_WEB_IDENTITY_REBASE_DECISION",
+      "requires_explicit_owner_text": true
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW",
+      "route": "OWNER_DESIGN_REVIEW_PENDING",
+      "requires_explicit_owner_text": false
+    }
+  ],
+  "scope_check": {
+    "implementation_changes": false,
+    "ui_changed": false,
+    "backend_changed": false,
+    "live_server_changed": false,
+    "command_adapter_changed": false,
+    "runtime_changed": false,
+    "desktop_started": false,
+    "new_action_surface": false
+  },
+  "routing_decision": {
+    "final_state": "OWNER_DESIGN_REVIEW_PENDING",
+    "next_action": "Wait for explicit owner verdict.",
+    "resume_from_here": "Ask owner for APPROVED, CHANGES_REQUESTED, BLOCKED, or NEEDS_MORE_REVIEW."
+  }
+}

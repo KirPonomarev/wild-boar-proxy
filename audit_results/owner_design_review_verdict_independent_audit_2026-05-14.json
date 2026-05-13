@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "contour": "OWNER_DESIGN_REVIEW_VERDICT_INTAKE",
+  "date": "2026-05-14",
+  "audit_type": "independent factual verification",
+  "auditor": "lightweight independent scanner",
+  "input_head": "d3d4fc0",
+  "auditor_raw_recommendation": "OWNER_DESIGN_REVIEW_BLOCKED",
+  "orchestrator_disposition": {
+    "accepted_factual_findings": true,
+    "accepted_raw_recommendation": false,
+    "reason": "BLOCKED would assert an owner design rejection. The available owner input contains no approval, change request, or rejection. The approved contour plan says ambiguous or missing verdicts normalize to OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW."
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "result": "PASS",
+      "fact": "The prior stop gate is OWNER_DESIGN_REVIEW_PENDING."
+    },
+    {
+      "id": "F2",
+      "result": "PASS",
+      "fact": "No explicit owner design approval was provided in the latest instruction."
+    },
+    {
+      "id": "F3",
+      "result": "PASS",
+      "fact": "Normalizing the latest instruction to OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW does not unlock desktop work."
+    },
+    {
+      "id": "F4",
+      "result": "PASS",
+      "fact": "This contour is artifact-only and does not require production code changes."
+    }
+  ],
+  "final_audit_verdict": "PASS",
+  "final_normalized_verdict": "OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW",
+  "blocked_desktop": true,
+  "recommended_next_action": "Wait for explicit owner verdict."
+}
