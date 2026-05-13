@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT",
+  "generated_at_local_date": "2026-05-13",
+  "packet_type": "web_ui_admission_readiness_recommendation",
+  "repo_state": {
+    "branch": "codex/external-agent-lab-isolated",
+    "base_head": "916ded5",
+    "base_head_subject": "Verify final web UI operator flow"
+  },
+  "recommendation_boundary": {
+    "may_recommend": [
+      "WEB_UI_READY_FOR_DESKTOP_ADMISSION_REVIEW",
+      "STOP_FOR_OWNER_APPROVAL"
+    ],
+    "does_not_claim": [
+      "DESKTOP_APPROVED",
+      "DESKTOP_STARTED",
+      "PILOT_READY",
+      "PRODUCTION_READY",
+      "RUNTIME_READY",
+      "FAILOVER_READY",
+      "PRIMARY_ROUTE_READY",
+      "ACTIVE_TRAFFIC_READY"
+    ],
+    "owner_approval_required_before_desktop": true
+  },
+  "readiness_basis": {
+    "screen_passports_present": true,
+    "surface_registry_present": true,
+    "api_connections_registry_present": true,
+    "final_e2e_operator_flow_closed": true,
+    "final_e2e_commit": "916ded5",
+    "admitted_actions_covered": true,
+    "deferred_and_not_admitted_controls_blocked": true,
+    "strict_json_command_surfaces_only": true,
+    "browser_payload_boundaries_strict": true,
+    "direct_file_truth_absent": true,
+    "desktop_work_absent": true
+  },
+  "remaining_boundaries_after_recommendation": [
+    "owner approval before desktop",
+    "desktop renderer admission must be a separate contour",
+    "route create/update/draft remain not admitted",
+    "runtime/scale/pilot readiness claims remain separate from web UI readiness",
+    "automatic failover and primary route semantics remain deferred"
+  ],
+  "final_verification_status": {
+    "unit_tests": "PASS",
+    "unit_test_count": 97,
+    "artifact_json_checks": "PASS",
+    "closeout_resilience": "PASS",
+    "diff_check": "PASS",
+    "private_reference_trace_scan": "PASS",
+    "overclaim_scan": "PASS_REVIEWED_NEGATIVE_BOUNDARY_TERMS_ONLY",
+    "independent_staged_audit": "PENDING"
+  },
+  "recommendation": [
+    "WEB_UI_READY_FOR_DESKTOP_ADMISSION_REVIEW",
+    "STOP_FOR_OWNER_APPROVAL"
+  ],
+  "recommendation_status": "RECOMMENDED_FOR_OWNER_REVIEW_ONLY"
+}
