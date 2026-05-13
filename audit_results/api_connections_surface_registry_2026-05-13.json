@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "contour_id": "API_CONNECTIONS_ADMISSION_AND_CANON_ALIGNMENT",
+  "generated_at": "2026-05-13",
+  "contour_type": "admission_spec_only",
+  "product_vocabulary": {
+    "api_connections": {
+      "ru": "API-подключения",
+      "meaning": "User-facing sidebar section for configured external API access."
+    },
+    "api_connection": {
+      "ru": "API-подключение",
+      "meaning": "User-facing configured connection/group. Not yet a first-class command object in the current implementation."
+    },
+    "route": {
+      "ru": "маршрут",
+      "meaning": "Technical provider/base_url/model route represented by external-models route registry."
+    },
+    "enabled": {
+      "ru": "разрешен",
+      "meaning": "Route is allowed/enabled in registry. This is not active traffic proof."
+    },
+    "active": {
+      "ru": "активный",
+      "meaning": "Only admissible when an explicit active/primary owner truth exists. Current scan found no first-class active/primary route command."
+    },
+    "fallback_eligible": {
+      "ru": "резервный",
+      "meaning": "Route may be eligible for future fallback policy. This is not automatic failover proof."
+    },
+    "validated": {
+      "ru": "проверено",
+      "meaning": "Route validation/check succeeded within provider-route scope only."
+    },
+    "networks": {
+      "ru": "сетки",
+      "meaning": "Forbidden product term for this UI lane."
+    }
+  },
+  "canon_boundaries": {
+    "control_layer_allowed": [
+      "operator visibility",
+      "safe command dispatch",
+      "route validation visibility",
+      "route enable/disable action when copy says 'разрешить/отключить маршрут'",
+      "future policy display",
+      "future command-owned active selection if an owner command exists"
+    ],
+    "engine_or_adapter_layer": [
+      "low-level request routing",
+      "provider execution",
+      "provider protocol translation",
+      "token stream continuity",
+      "automatic failover request routing"
+    ],
+    "ui_forbidden": [
+      "direct routes.json/state.json/secrets.env truth reads",
+      "raw token or API key browser payload",
+      "raw provider config browser payload",
+      "arbitrary shell/argv/path dispatch",
+      "claiming route validation as runtime readiness",
+      "claiming enabled=true as active traffic",
+      "claiming fallback_eligible=true as automatic failover"
+    ]
+  },
+  "existing_command_surfaces": [
+    {
+      "command": "external-models status --json",
+      "source": "wild_boar_proxy/cli.py:222",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:69",
+      "classification": "admitted_readonly",
+      "ui_label": "Состояние подключений",
+      "scope": "synthetic lifecycle/status only",
+      "not_truth_for": [
+        "runtime readiness",
+        "host-client readiness",
+        "continuous token stream"
+      ]
+    },
+    {
+      "command": "external-models models --json",
+      "source": "wild_boar_proxy/cli.py:224",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:76",
+      "classification": "admitted_readonly",
+      "ui_label": "Модели маршрутов",
+      "scope": "local route registry projection",
+      "not_truth_for": [
+        "active traffic",
+        "runtime readiness"
+      ]
+    },
+    {
+      "command": "external-models routes list --json",
+      "source": "wild_boar_proxy/cli.py:252",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:176",
+      "classification": "admitted_readonly",
+      "ui_label": "Список маршрутов",
+      "scope": "route registry listing",
+      "not_truth_for": [
+        "selected active route",
+        "automatic failover"
+      ]
+    },
+    {
+      "command": "external-models routes enable --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:254",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:184",
+      "classification": "admitted_safe_action_with_precise_copy",
+      "ui_label": "Разрешить маршрут",
+      "scope": "sets route enabled=true",
+      "copy_guard": "Do not label this action as 'Сделать активным' unless a primary/active owner command exists."
+    },
+    {
+      "command": "external-models routes disable --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:257",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:193",
+      "classification": "admitted_safe_action_requires_confirmation_if_route_may_be_used",
+      "ui_label": "Отключить маршрут",
+      "scope": "sets route enabled=false",
+      "copy_guard": "Do not claim this stops currently active traffic unless command packet proves active selection semantics."
+    },
+    {
+      "command": "external-models routes validate --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:260",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:202",
+      "classification": "admitted_safe_action",
+      "ui_label": "Проверить доступность модели",
+      "scope": "provider-route validation",
+      "not_truth_for": [
+        "runtime readiness",
+        "listener readiness",
+        "profile readiness",
+        "continuous token stream"
+      ]
+    },
+    {
+      "command": "external-models check --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:226",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:90",
+      "classification": "admitted_safe_action",
+      "ui_label": "Проверить маршрут запросом",
+      "scope": "provider-route smoke check",
+      "not_truth_for": [
+        "runtime readiness",
+        "listener readiness",
+        "profile readiness",
+        "automatic failover"
+      ]
+    },
+    {
+      "command": "external-models profile codex-desktop --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:264",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:101",
+      "classification": "support_or_contract_preview_only",
+      "ui_label": "Показать профиль",
+      "scope": "non-mutating profile contract packet",
+      "not_truth_for": [
+        "host-client readiness",
+        "runtime readiness"
+      ]
+    },
+    {
+      "command": "external-models evidence capture --json --route <route_id>",
+      "source": "wild_boar_proxy/cli.py:274",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:109",
+      "classification": "support_only_not_first_pass_product_ui",
+      "ui_label": "Собрать свидетельство",
+      "scope": "local evidence artifact",
+      "not_truth_for": [
+        "runtime readiness",
+        "continuous token stream"
+      ]
+    },
+    {
+      "command": "external-models routes add/update/remove --json",
+      "source": "wild_boar_proxy/cli.py:234",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:147",
+      "classification": "deferred_for_product_ui_until_secure_config_contract",
+      "ui_label": "Настройка маршрутов",
+      "scope": "route registry mutation",
+      "blocking_questions": [
+        "secure secret input",
+        "bounded config payload",
+        "confirmation and rollback",
+        "no raw browser token/path/config"
+      ]
+    },
+    {
+      "command": "external-models start/stop --json",
+      "source": "wild_boar_proxy/cli.py:218",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:19",
+      "classification": "deferred_for_product_ui",
+      "ui_label": "Локальный адаптер",
+      "scope": "synthetic adapter lifecycle without listener/runtime readiness claim",
+      "blocking_questions": [
+        "whether operator UI should expose synthetic lifecycle",
+        "how to avoid runtime readiness overclaim"
+      ]
+    }
+  ],
+  "semantic_findings": {
+    "route_schema_fields": {
+      "source": "wild_boar_proxy/external_models/contracts.py:14",
+      "required_fields": [
+        "schema_version",
+        "route_id",
+        "display_name",
+        "provider",
+        "base_url",
+        "endpoint_path",
+        "upstream_model",
+        "compatibility",
+        "auth",
+        "cost_class",
+        "lane_role",
+        "fallback_eligible",
+        "enabled"
+      ]
+    },
+    "active_or_primary_route": {
+      "status": "not_found_as_first_class_owner_truth",
+      "implication": "Do not use 'active' or 'Сделать активным' copy in first-pass UI."
+    },
+    "automatic_failover": {
+      "status": "not_implemented_or_not_proven",
+      "evidence": [
+        "fallback_used is written as false in validate/check paths",
+        "fallback_chain contains only the requested route_id in validate/check paths",
+        "fallback_eligible exists in route schema but is not a failover execution proof"
+      ],
+      "implication": "Separate failover policy decision and implementation contours are required."
+    },
+    "validation_scope": {
+      "status": "provider_route_only",
+      "evidence": [
+        "listener_proven=false",
+        "runtime_claim_blocked=true",
+        "profile_ready=false",
+        "verification_scope=route_provider_only"
+      ],
+      "implication": "UI can say 'маршрут проверен', not 'runtime ready' or 'поток токенов защищен'."
+    }
+  },
+  "future_screen_model": {
+    "sidebar_label": "API-подключения",
+    "header": "API-подключения",
+    "summary_cards": [
+      "Разрешенные маршруты",
+      "Требуют внимания",
+      "Последняя проверка",
+      "Активный маршрут only if owner truth exists"
+    ],
+    "table_columns": [
+      "Название",
+      "Провайдер",
+      "Модель",
+      "Статус",
+      "Роль",
+      "Последняя проверка",
+      "Действия"
+    ],
+    "first_pass_actions": [
+      "Обновить",
+      "Проверить доступность",
+      "Проверить запросом",
+      "Разрешить маршрут",
+      "Отключить маршрут"
+    ],
+    "deferred_controls": [
+      "Сделать активным",
+      "Настроить ключ",
+      "Добавить маршрут",
+      "Удалить маршрут",
+      "Автоматический резерв"
+    ]
+  },
+  "next_contours": [
+    "API_CONNECTIONS_COMMAND_CONTRACT_SPEC",
+    "API_CONNECTIONS_SAFE_BACKEND_SURFACES",
+    "API_CONNECTIONS_WEB_SCREEN_READONLY",
+    "API_CONNECTIONS_WEB_SAFE_ACTIONS",
+    "API_CONNECTIONS_FAILOVER_POLICY_DECISION"
+  ]
+}
