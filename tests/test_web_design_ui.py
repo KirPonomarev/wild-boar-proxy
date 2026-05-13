@@ -175,7 +175,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("overflow-x: hidden;", css)
         self.assertIn("@media (max-width: 1420px)", css)
         self.assertIn('@media (max-width: 1320px)', css)
-        self.assertIn('--font-ui: "IBM Plex Sans"', css)
+        self.assertIn('--font-ui: "SF Mono"', css)
         self.assertIn("font-family: var(--font-ui);", css)
         self.assertNotIn("--preview-scale", css)
         self.assertNotIn("fitPreviewToViewport", js)
