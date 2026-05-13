@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+  "date": "2026-05-14",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "screens": [
+    {
+      "label": "settings_fixture_1600x1000",
+      "path": "audit_results/ui_web_support_settings_setup_repair_screenshots_2026-05-14/settings_fixture_1600x1000.png"
+    },
+    {
+      "label": "setup_fixture_1600x1000",
+      "path": "audit_results/ui_web_support_settings_setup_repair_screenshots_2026-05-14/setup_fixture_1600x1000.png"
+    },
+    {
+      "label": "select-client_fixture_1600x1000",
+      "path": "audit_results/ui_web_support_settings_setup_repair_screenshots_2026-05-14/select_client_fixture_1600x1000.png"
+    },
+    {
+      "label": "import-existing_fixture_1600x1000",
+      "path": "audit_results/ui_web_support_settings_setup_repair_screenshots_2026-05-14/import_existing_fixture_1600x1000.png"
+    }
+  ],
+  "metrics": {
+    "settings": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_has_horizontal_scroll": false,
+      "section_rect": {
+        "top": 185,
+        "left": 373,
+        "right": 1531,
+        "bottom": 1259,
+        "width": 1158,
+        "height": 1074
+      },
+      "visual_reference": "07_settings",
+      "setup_flow_frame": null,
+      "rail_visible": false,
+      "settings_width": 720,
+      "setup_layout_width": null,
+      "data_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "active_controls": [
+        "Запросить стабильный режим",
+        "Запросить управляемый режим",
+        "План ремонта",
+        "Smoke-проверка запуска",
+        "Запросить запуск клиента",
+        "Экспорт диагностики"
+      ],
+      "disabled_button_count": 11,
+      "overflow_cards": 0,
+      "file_inputs": 0,
+      "has_client_path_text": false,
+      "has_sourceDirectory_text": false,
+      "has_commandMarker_text": false,
+      "has_completion_claim": false
+    },
+    "setup": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_has_horizontal_scroll": false,
+      "section_rect": {
+        "top": 185,
+        "left": 373,
+        "right": 1531,
+        "bottom": 993,
+        "width": 1158,
+        "height": 808
+      },
+      "visual_reference": "02_setup_client",
+      "setup_flow_frame": "left-step-rail",
+      "rail_visible": true,
+      "settings_width": null,
+      "setup_layout_width": 1000,
+      "data_actions": [],
+      "active_controls": [],
+      "disabled_button_count": 8,
+      "overflow_cards": 0,
+      "file_inputs": 0,
+      "has_client_path_text": false,
+      "has_sourceDirectory_text": false,
+      "has_commandMarker_text": false,
+      "has_completion_claim": false
+    },
+    "select-client": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_has_horizontal_scroll": false,
+      "section_rect": {
+        "top": 185,
+        "left": 373,
+        "right": 1531,
+        "bottom": 1041,
+        "width": 1158,
+        "height": 856
+      },
+      "visual_reference": "03_select_codex_client",
+      "setup_flow_frame": "left-step-rail",
+      "rail_visible": true,
+      "settings_width": null,
+      "setup_layout_width": 1000,
+      "data_actions": [],
+      "active_controls": [],
+      "disabled_button_count": 10,
+      "overflow_cards": 0,
+      "file_inputs": 0,
+      "has_client_path_text": false,
+      "has_sourceDirectory_text": false,
+      "has_commandMarker_text": false,
+      "has_completion_claim": false
+    },
+    "import-existing": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_has_horizontal_scroll": false,
+      "section_rect": {
+        "top": 185,
+        "left": 373,
+        "right": 1531,
+        "bottom": 1157,
+        "width": 1158,
+        "height": 972
+      },
+      "visual_reference": "08_import_existing",
+      "setup_flow_frame": "left-step-rail",
+      "rail_visible": true,
+      "settings_width": null,
+      "setup_layout_width": 1000,
+      "data_actions": [],
+      "active_controls": [],
+      "disabled_button_count": 11,
+      "overflow_cards": 0,
+      "file_inputs": 0,
+      "has_client_path_text": false,
+      "has_sourceDirectory_text": false,
+      "has_commandMarker_text": false,
+      "has_completion_claim": false
+    }
+  },
+  "failures": [],
+  "result": "PASS",
+  "resume_from_here": "Use this smoke for independent audit and closeout."
+}

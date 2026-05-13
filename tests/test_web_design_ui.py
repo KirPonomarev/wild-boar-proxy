@@ -478,6 +478,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('data-screen-link="settings"', html)
         self.assertIn('id="settingsScreen"', html)
+        self.assertIn('data-visual-reference="07_settings"', html)
+        self.assertIn('data-config-mode="readonly"', html)
         self.assertIn("Наблюдаемая конфигурация и статус", html)
         self.assertIn("Безопасные доступные действия", html)
         self.assertIn("Отложенные элементы настроек", html)
@@ -510,6 +512,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("config.toml", html + js)
         self.assertNotIn("state.json", html + js)
         self.assertNotIn("supervisor-state", html + js)
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        self.assertIn(".settings-layout", css)
+        self.assertIn("max-width: 720px", css)
+        self.assertIn("min-height: 38px", css)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -524,6 +530,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-screen="setup"', html)
         self.assertIn('data-screen="select-client"', html)
         self.assertIn('data-screen="import-existing"', html)
+        self.assertIn('data-setup-flow-frame="left-step-rail"', html)
+        self.assertIn('data-visual-reference="02_setup_client"', html)
+        self.assertIn('data-visual-reference="03_select_codex_client"', html)
+        self.assertIn('data-visual-reference="08_import_existing"', html)
+        self.assertIn("setup-flow-rail", html)
+        self.assertIn("setup-bottom-bar", html)
         self.assertIn("Экраны настройки, выбора и импорта инертны", js)
         self.assertIn("simulated truth нет", js)
         self.assertIn("отправка путей из браузера запрещена", html.lower())
@@ -553,6 +565,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
             self.assertNotIn("Проверка завершена. Импорт можно применить.", section)
             self.assertNotIn("28 accounts", section)
             self.assertNotIn("Применить</button>", section)
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        self.assertIn(".setup-flow-layout", css)
+        self.assertIn("grid-template-columns: 252px minmax(0, 720px)", css)
+        self.assertIn(".setup-flow-rail", css)
+        self.assertIn(".setup-bottom-bar", css)
+        self.assertIn("padding: 24px", css)
 
     def test_setup_select_import_routes_are_static_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

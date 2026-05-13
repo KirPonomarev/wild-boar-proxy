@@ -658,7 +658,7 @@
             Настройки в этом контуре доступны только для чтения. Значения ниже получены из JSON-пакетов, а не прямым чтением config.
           </div>
 
-          <div class="settings-layout">
+          <div class="settings-layout form-wrap" data-visual-reference="07_settings" data-config-mode="readonly">
             <section class="card form-section settings-observed">
               <div class="section-head">
                 <div>
@@ -747,26 +747,30 @@
             Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.
           </div>
 
-          <div class="setup-layout">
-            <section class="card setup-hero">
-              <div class="eyebrow">Поток настройки</div>
-              <div class="section-head">
-                <div>
-                  <h3>Настройка Wild Boar Proxy</h3>
-                  <div class="secondary">Подключение внешнего клиента отложено до обнаружения через command-owned поверхность.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>каркас только чтение</span>
-              </div>
-              <div class="stepper" aria-label="Шаги настройки">
-                <span class="step active">1 Клиент</span>
-                <span class="step muted">2 Данные</span>
-                <span class="step muted">3 Проверка</span>
-                <span class="step muted">4 Готово</span>
-              </div>
-            </section>
+          <div class="setup-flow-layout" data-visual-reference="02_setup_client" data-setup-flow-frame="left-step-rail">
+            <aside class="setup-flow-rail" aria-label="Шаги настройки">
+              <div class="eyebrow">Setup flow</div>
+              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Клиент</strong><small>выбор клиента</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Данные</strong><small>пути и снимки</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Проверка</strong><small>контроль цепочки</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Готово</strong><small>ожидает packet truth</small></span></div>
+              <div class="setup-flow-note">Локальная навигация не доказывает завершение настройки.</div>
+            </aside>
 
-            <div class="setup-grid">
-              <section class="card form-section">
+            <div class="setup-workbench">
+              <section class="card setup-hero">
+                <div class="eyebrow">Клиент</div>
+                <div class="section-head">
+                  <div>
+                    <h3>Настройка Wild Boar Proxy</h3>
+                    <div class="secondary">Подключение внешнего клиента отложено до обнаружения через command-owned поверхность.</div>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>каркас только чтение</span>
+                </div>
+              </section>
+
+              <div class="setup-grid">
+                <section class="card form-section">
                 <div class="section-head">
                   <div>
                     <h3>Найти автоматически</h3>
@@ -778,9 +782,9 @@
                   Этот макетный блок не проверяет файловую систему. Будущий пакет команды должен предоставить найденных кандидатов.
                 </p>
                 <button class="button disabled" type="button" disabled>Отложено: нет команды обнаружения</button>
-              </section>
+                </section>
 
-              <section class="card form-section">
+                <section class="card form-section">
                 <div class="section-head">
                   <div>
                     <h3>Указать вручную</h3>
@@ -792,10 +796,10 @@
                   Отправка путей из браузера запрещена. Будущий ручной выбор относится к допуску desktop/native picker.
                 </p>
                 <button class="button disabled" type="button" disabled>Запрещено в первом web-проходе</button>
-              </section>
-            </div>
+                </section>
+              </div>
 
-            <section class="card form-section">
+              <section class="card form-section">
               <div class="section-head">
                 <div>
                   <h3>Наблюдаемые факты настройки</h3>
@@ -808,7 +812,14 @@
                 <div class="deferred-row"><span>Кандидаты внешнего клиента</span><span>этот UI-каркас ничего не обнаруживает</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 <div class="deferred-row"><span>Продолжить</span><span>только локальная навигация; завершение настройки не заявляется</span><button class="button small disabled" type="button" disabled>Нет команды</button></div>
               </div>
-            </section>
+              </section>
+
+              <div class="setup-bottom-bar" aria-label="Инертные действия настройки">
+                <button class="button small disabled" type="button" disabled>Назад</button>
+                <button class="button small disabled" type="button" disabled>Отмена</button>
+                <button class="button primary small disabled" type="button" disabled>Продолжить после packet truth</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -817,8 +828,18 @@
             Выбор клиента отложен. Строки ниже являются макетными кандидатами, а не найденными приложениями.
           </div>
 
-          <div class="setup-layout">
-            <section class="card form-section">
+          <div class="setup-flow-layout" data-visual-reference="03_select_codex_client" data-setup-flow-frame="left-step-rail">
+            <aside class="setup-flow-rail" aria-label="Шаги выбора клиента">
+              <div class="eyebrow">Setup flow</div>
+              <div class="flow-step done"><span class="flow-step-num">1</span><span><strong>Клиент</strong><small>каркас</small></span></div>
+              <div class="flow-step active"><span class="flow-step-num">2</span><span><strong>Выбор</strong><small>кандидаты отложены</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Проверка</strong><small>нет dispatch</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Сохранить</strong><small>нет command id</small></span></div>
+              <div class="setup-flow-note">Кандидаты ниже не являются найденными приложениями.</div>
+            </aside>
+
+            <div class="setup-workbench">
+              <section class="card form-section">
               <div class="section-head">
                 <div>
                   <h3>Выбор клиента</h3>
@@ -841,9 +862,9 @@
                   <button class="button small disabled" type="button" disabled>Проверка отключена</button>
                 </div>
               </div>
-            </section>
+              </section>
 
-            <section class="card form-section">
+              <section class="card form-section">
               <div class="section-head">
                 <div>
                   <h3>Отключённые действия</h3>
@@ -857,7 +878,14 @@
                 <div class="deferred-row"><span>Сохранить выбор</span><span>нужен command-owned идентификатор кандидата</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 <div class="deferred-row"><span>Показать расположение</span><span>нет support-контракта для открытия расположения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
               </div>
-            </section>
+              </section>
+
+              <div class="setup-bottom-bar" aria-label="Инертные действия выбора клиента">
+                <button class="button small disabled" type="button" disabled>Назад</button>
+                <button class="button small disabled" type="button" disabled>Отмена</button>
+                <button class="button primary small disabled" type="button" disabled>Сохранить после command-owned кандидата</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -866,26 +894,30 @@
             Импорт отложен. Этот экран показывает только структуру: существующая установка здесь не обнаружена, не проверена и не готова к применению.
           </div>
 
-          <div class="setup-layout">
-            <section class="card setup-hero">
-              <div class="eyebrow">Legacy-импорт</div>
-              <div class="section-head">
-                <div>
-                  <h3>Импорт существующей установки</h3>
-                  <div class="secondary">Нужны безопасная медиация исходного расположения, dry-run evidence, подтверждение и refresh.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
-              </div>
-              <div class="stepper" aria-label="Шаги импорта">
-                <span class="step active">1 Найти</span>
-                <span class="step muted">2 Проверить</span>
-                <span class="step muted">3 Снимок</span>
-                <span class="step muted">4 Применить</span>
-              </div>
-            </section>
+          <div class="setup-flow-layout import-flow" data-visual-reference="08_import_existing" data-setup-flow-frame="left-step-rail">
+            <aside class="setup-flow-rail" aria-label="Шаги импорта">
+              <div class="eyebrow">Import flow</div>
+              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Найти</strong><small>отложено</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Проверить</strong><small>dry-run packet</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Снимок</strong><small>нет evidence</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Применить</strong><small>запрещено сейчас</small></span></div>
+              <div class="setup-flow-note">Импорт не выполняется без медиации исходного расположения и strong confirmation.</div>
+            </aside>
 
-            <div class="setup-grid">
-              <section class="card form-section">
+            <div class="setup-workbench">
+              <section class="card setup-hero">
+                <div class="eyebrow">Импорт</div>
+                <div class="section-head">
+                  <div>
+                    <h3>Импорт существующей установки</h3>
+                    <div class="secondary">Нужны безопасная медиация исходного расположения, dry-run evidence, подтверждение и refresh.</div>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>отложено</span>
+                </div>
+              </section>
+
+              <div class="setup-grid">
+                <section class="card form-section">
                 <div class="section-head">
                   <div>
                     <h3>Макет установки</h3>
@@ -898,9 +930,9 @@
                   <div class="deferred-row"><span>План импорта</span><span>количество аккаунтов и активное назначение не заявляются</span><button class="button small disabled" type="button" disabled>Макет</button></div>
                   <div class="deferred-row"><span>Состояние безопасности</span><span>снимок и доступность отката не доказаны</span><button class="button small disabled" type="button" disabled>Нет пакета</button></div>
                 </div>
-              </section>
+                </section>
 
-              <section class="card form-section">
+                <section class="card form-section">
                 <div class="section-head">
                   <div>
                     <h3>Управление импортом</h3>
@@ -915,7 +947,14 @@
                   <div class="deferred-row"><span>Применить</span><span>нет медиации исходного расположения и сильного подтверждения</span><button class="button small disabled" type="button" disabled>Отключено</button></div>
                   <div class="deferred-row"><span>Откат</span><span>нужна command-owned поверхность отката</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 </div>
-              </section>
+                </section>
+              </div>
+
+              <div class="setup-bottom-bar" aria-label="Инертные действия импорта">
+                <button class="button small disabled" type="button" disabled>Найти установку отложено</button>
+                <button class="button small disabled" type="button" disabled>Dry-run недоступен</button>
+                <button class="button primary small disabled" type="button" disabled>Применение отключено</button>
+              </div>
             </div>
           </div>
         </section>
