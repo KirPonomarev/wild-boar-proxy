@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "contour": "OWNER_DESIGN_REVIEW_STOP",
+  "date": "2026-05-14",
+  "state": "OWNER_DESIGN_REVIEW_PENDING",
+  "head": "a9c8ca8",
+  "mode": "owner review / stop gate",
+  "implementation_changes": false,
+  "desktop_started": false,
+  "source_freeze_precheck": {
+    "closeout": "audit_results/ui_web_final_visual_freeze_precheck_closeout_2026-05-14.md",
+    "matrix": "audit_results/ui_web_final_visual_freeze_precheck_matrix_2026-05-14.json",
+    "smoke": "audit_results/ui_web_final_visual_freeze_precheck_browser_smoke_2026-05-14.json",
+    "independent_audit": "audit_results/ui_web_final_visual_freeze_precheck_independent_audit_2026-05-14.json",
+    "final_state": "UI_WEB_FINAL_VISUAL_FREEZE_PRECHECK_PASS_WITH_OWNER_REVIEW_NOTES"
+  },
+  "surfaces": [
+    {
+      "surface": "overview",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/overview_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept compact action label",
+        "accept action row balance"
+      ]
+    },
+    {
+      "surface": "accounts",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/accounts_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept table density",
+        "accept lifecycle action grouping"
+      ]
+    },
+    {
+      "surface": "api-connections",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/api-connections_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept derived screen treatment",
+        "accept route action grouping"
+      ]
+    },
+    {
+      "surface": "diagnostics",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/diagnostics_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept detail and chart direction"
+      ]
+    },
+    {
+      "surface": "settings",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/settings_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept readonly presentation"
+      ]
+    },
+    {
+      "surface": "setup",
+      "status": "ready_for_owner_review_with_deferred_execution",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/setup_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept inert skeleton until desktop/native flow"
+      ]
+    },
+    {
+      "surface": "select-client",
+      "status": "ready_for_owner_review_with_deferred_execution",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/select-client_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept inert skeleton until desktop/native flow"
+      ]
+    },
+    {
+      "surface": "import-existing",
+      "status": "ready_for_owner_review_with_deferred_execution",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/import-existing_fixture_1600x1000.png",
+      "owner_decision_needed": [
+        "accept inert skeleton until desktop/native flow"
+      ]
+    },
+    {
+      "surface": "confirmation-modal",
+      "alias": "confirm-action-modal",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/confirmation_modal_1600x1000.png",
+      "owner_decision_needed": [
+        "accept command request versus runtime truth presentation"
+      ]
+    },
+    {
+      "surface": "onboard-modal",
+      "status": "ready_for_owner_review",
+      "screenshot": "audit_results/ui_web_final_visual_freeze_precheck_screenshots_2026-05-14/onboard_modal_1600x1000.png",
+      "owner_decision_needed": [
+        "accept reserve-first modal framing"
+      ]
+    }
+  ],
+  "stop_gate": {
+    "desktop_blocked_until_owner_approval": true,
+    "runtime_readiness_claim": false,
+    "pilot_readiness_claim": false,
+    "production_readiness_claim": false,
+    "new_action_surface": false,
+    "behavior_change": false
+  },
+  "next_options": [
+    "OWNER_DESIGN_REVIEW_APPROVED -> DESKTOP_RENDERER_ADMISSION",
+    "OWNER_DESIGN_REVIEW_CHANGES_REQUESTED -> UI_WEB_OWNER_REVIEW_DESIGN_REPAIR_<scope>",
+    "OWNER_DESIGN_REVIEW_BLOCKED -> keep desktop forbidden"
+  ],
+  "verification": {
+    "freeze_precheck_artifacts_present": "PASS",
+    "json_validation": "PASS",
+    "closeout_resilience": "PASS",
+    "leak_scan": "PASS",
+    "independent_audit": "PASS"
+  },
+  "resume_from_here": "Wait for owner verdict."
+}
