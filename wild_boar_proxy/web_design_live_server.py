@@ -69,6 +69,7 @@ ROUTE_ID_UI_ACTIONS = frozenset(
         "api_route_check",
         "api_route_allow",
         "api_route_disable",
+        "api_route_remove",
         "api_route_profile",
         "api_route_evidence_capture",
     }
@@ -232,6 +233,18 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness",
         "display_name": "Отключить маршрут",
         "human_meaning": "Запросить отключение выбранного маршрута и обновить список маршрутов из канонического JSON.",
+    },
+    "api_route_remove": {
+        "adapter_command_id": "external_models_routes_remove",
+        "action_role": "api_route_registry_cleanup",
+        "mutation_class": "api_route_registry_cleanup",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только удаление отключённой registry-записи; область действия не шире command packet",
+        "display_name": "Удалить отключённый маршрут",
+        "human_meaning": "Удалить уже отключённую registry-запись маршрута после server preflight и обновить список маршрутов из канонического JSON.",
     },
     "api_route_profile": {
         "adapter_command_id": "external_models_profile_codex_desktop",
@@ -1006,7 +1019,8 @@ def _api_route_action_args(
             f"Цель {ui_action} отсутствует в списке маршрутов.",
             "UI_API_ROUTE_ID_NOT_FOUND",
         )
-    route_enabled = target_route.get("enabled") is True
+    route_enabled_value = target_route.get("enabled")
+    route_enabled = route_enabled_value is True
     if ui_action in {"api_route_validate", "api_route_check", "api_route_disable"} and not route_enabled:
         return None, _unavailable_action(
             ui_action,
@@ -1019,6 +1033,18 @@ def _api_route_action_args(
             "Цель api_route_allow уже разрешена.",
             "UI_API_ROUTE_ALLOW_INELIGIBLE",
         )
+    if ui_action == "api_route_remove" and route_enabled:
+        return None, _unavailable_action(
+            ui_action,
+            "Цель api_route_remove ещё разрешена; удаление доступно только для отключённых маршрутов.",
+            "UI_API_ROUTE_REMOVE_INELIGIBLE",
+        )
+    if ui_action == "api_route_remove" and route_enabled_value is not False:
+        return None, _unavailable_action(
+            ui_action,
+            "Цель api_route_remove не имеет доказанного disabled-состояния.",
+            "UI_API_ROUTE_REMOVE_STATE_UNPROVEN",
+        )
     return {"route_id": route_id}, None
 
 
@@ -1029,6 +1055,8 @@ def _api_route_list_unavailable_code(ui_action: str) -> str:
         return "UI_API_ROUTE_ALLOW_ROUTE_LIST_UNAVAILABLE"
     if ui_action == "api_route_disable":
         return "UI_API_ROUTE_DISABLE_ROUTE_LIST_UNAVAILABLE"
+    if ui_action == "api_route_remove":
+        return "UI_API_ROUTE_REMOVE_ROUTE_LIST_UNAVAILABLE"
     if ui_action == "api_route_profile":
         return "UI_API_ROUTE_PROFILE_ROUTE_LIST_UNAVAILABLE"
     if ui_action == "api_route_evidence_capture":
@@ -1043,6 +1071,8 @@ def _api_route_list_invalid_code(ui_action: str) -> str:
         return "UI_API_ROUTE_ALLOW_ROUTE_LIST_INVALID"
     if ui_action == "api_route_disable":
         return "UI_API_ROUTE_DISABLE_ROUTE_LIST_INVALID"
+    if ui_action == "api_route_remove":
+        return "UI_API_ROUTE_REMOVE_ROUTE_LIST_INVALID"
     if ui_action == "api_route_profile":
         return "UI_API_ROUTE_PROFILE_ROUTE_LIST_INVALID"
     if ui_action == "api_route_evidence_capture":

@@ -277,6 +277,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("api_route_check", js)
         self.assertIn("api_route_allow", js)
         self.assertIn("api_route_disable", js)
+        self.assertIn("api_route_remove", js)
         self.assertIn("api_route_profile", js)
         self.assertIn("api_route_evidence_capture", js)
         self.assertIn("routeActionButtons", js)
@@ -733,6 +734,7 @@ if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport
             "api_route_check",
             "api_route_allow",
             "api_route_disable",
+            "api_route_remove",
             "api_route_profile",
             "api_route_evidence_capture",
         ]:
@@ -743,6 +745,7 @@ if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport
         self.assertIn("api-route-check", js)
         self.assertIn("api-route-allow", js)
         self.assertIn("api-route-disable", js)
+        self.assertIn("api-route-registry-cleanup", js)
         self.assertIn("api-route-profile-packet", js)
         self.assertIn("api-route-local-evidence", js)
         self.assertIn("metadata-fallback", js)
@@ -806,6 +809,18 @@ const allowEnabledRouteButton = {
   disabled: false,
   title: ""
 };
+const removeDisabledRouteButton = {
+  dataset: { uiAction: "api_route_remove", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
+  classList: makeClassList(["api-route-action", "api-route-destructive-action"]),
+  disabled: false,
+  title: ""
+};
+const removeEnabledRouteButton = {
+  dataset: { uiAction: "api_route_remove", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
+  classList: makeClassList(["api-route-action", "api-route-destructive-action"]),
+  disabled: false,
+  title: ""
+};
 const profileDisabledRouteButton = {
   dataset: { uiAction: "api_route_profile", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "any" },
   classList: makeClassList(["api-route-action"]),
@@ -837,6 +852,8 @@ const sandbox = {
           disabledRouteButton,
           allowDisabledRouteButton,
           allowEnabledRouteButton,
+          removeDisabledRouteButton,
+          removeEnabledRouteButton,
           profileDisabledRouteButton,
           evidenceDisabledRouteButton
         ];
@@ -866,6 +883,7 @@ actionMetadata = {
   api_route_validate: { available: true, unavailable_reason: "", ui_action: "api_route_validate" },
   api_route_check: { available: true, unavailable_reason: "", ui_action: "api_route_check" },
   api_route_allow: { available: true, unavailable_reason: "", ui_action: "api_route_allow" },
+  api_route_remove: { available: true, unavailable_reason: "", ui_action: "api_route_remove" },
   api_route_profile: { available: true, unavailable_reason: "", ui_action: "api_route_profile" },
   api_route_evidence_capture: { available: true, unavailable_reason: "", ui_action: "api_route_evidence_capture" },
   launch_client_dispatch: { available: false, unavailable_reason: "server-owned path недоступен", ui_action: "launch_client_dispatch" }
@@ -891,6 +909,12 @@ if (allowDisabledRouteButton.disabled) {
 }
 if (!allowEnabledRouteButton.disabled || !allowEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
+}
+if (removeDisabledRouteButton.disabled) {
+  throw new Error(`remove should be available for disabled route in live source: ${JSON.stringify(removeDisabledRouteButton)}`);
+}
+if (!removeEnabledRouteButton.disabled || !removeEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
+  throw new Error(`remove should be blocked for enabled route: ${JSON.stringify(removeEnabledRouteButton)}`);
 }
 if (profileDisabledRouteButton.disabled) {
   throw new Error(`profile packet should be available for disabled route in live source: ${JSON.stringify(profileDisabledRouteButton)}`);

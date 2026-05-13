@@ -1114,6 +1114,11 @@ button:disabled {
   white-space: nowrap;
 }
 
+.api-route-destructive-action {
+  border-color: #c74747;
+  color: #922626;
+}
+
 .pagination {
   align-items: end;
   border-top: 1px solid var(--border);

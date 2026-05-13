@@ -205,6 +205,18 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(retire.required_args, ("account_id",))
         self.assertEqual(retire.allowed_args, ("account_id",))
 
+    def test_api_route_remove_adapter_spec_uses_exact_argv_template(self) -> None:
+        remove = ALLOWLIST["external_models_routes_remove"]
+
+        self.assertEqual(
+            remove.argv_template,
+            ("external-models", "routes", "remove", "--route", "{route_id}", "--json"),
+        )
+        self.assertEqual(remove.category, "external_models_registry_cleanup")
+        self.assertTrue(remove.confirmation_required)
+        self.assertEqual(remove.required_args, ("route_id",))
+        self.assertEqual(remove.allowed_args, ("route_id",))
+
     def test_live_snapshot_calls_only_readonly_commands_and_maps_shape(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -586,6 +598,20 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertTrue(metadata["actions"]["api_route_disable"]["post_action_refresh_required"])
         self.assertIn("runtime readiness", metadata["actions"]["api_route_disable"]["action_claim_scope"])
+        self.assertIn("api_route_remove", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_remove"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_remove"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_remove"]["affects_primary_truth"])
+        self.assertEqual(
+            metadata["actions"]["api_route_remove"]["action_role"],
+            "api_route_registry_cleanup",
+        )
+        self.assertEqual(
+            metadata["actions"]["api_route_remove"]["mutation_class"],
+            "api_route_registry_cleanup",
+        )
+        self.assertTrue(metadata["actions"]["api_route_remove"]["post_action_refresh_required"])
+        self.assertIn("registry-записи", metadata["actions"]["api_route_remove"]["action_claim_scope"])
         self.assertIn("api_route_profile", metadata["actions"])
         self.assertTrue(metadata["actions"]["api_route_profile"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["api_route_profile"]["mutates_runtime"])
@@ -850,6 +876,20 @@ class WebDesignLiveServerTests(unittest.TestCase):
         disable_runner = MappingRunner(live_payloads())
         profile_runner = MappingRunner(live_payloads())
         evidence_runner = MappingRunner(live_payloads())
+        remove_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("external-models", "routes", "list", "--json"): routes_list_packet(
+                    "wbp-disabled",
+                    enabled=False,
+                ),
+                ("external-models", "routes", "remove", "--route", "wbp-disabled", "--json"): command_packet(
+                    human_message="External-models route removed: wbp-disabled.",
+                    changed_files=["/tmp/routes.json", "/tmp/state.json"],
+                    data={"route_id": "wbp-disabled"},
+                ),
+            }
+        )
 
         validate = run_ui_action(
             validate_runner,
@@ -874,6 +914,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         evidence = run_ui_action(
             evidence_runner,
             {"ui_action": "api_route_evidence_capture", "route_id": "wbp-deepseek-v3"},
+        )
+        remove = run_ui_action(
+            remove_runner,
+            {"ui_action": "api_route_remove", "route_id": "wbp-disabled"},
         )
 
         self.assertEqual(validate["status"], "ok")
@@ -973,6 +1017,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
             ],
         )
+        self.assertEqual(remove["status"], "ok")
+        self.assertEqual(remove["action_role"], "api_route_registry_cleanup")
+        self.assertEqual(remove["mutation_class"], "api_route_registry_cleanup")
+        self.assertFalse(remove["mutates_runtime"])
+        self.assertFalse(remove["affects_primary_truth"])
+        self.assertTrue(remove["confirmation_required"])
+        self.assertTrue(remove["post_action_refresh_required"])
+        self.assertEqual(remove["route_id"], "wbp-disabled")
+        self.assertEqual(remove["result"]["changed_files"], ["/tmp/routes.json", "/tmp/state.json"])
+        self.assertEqual(
+            remove_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "remove", "--route", "wbp-disabled", "--json"),
+            ],
+        )
 
     def test_api_route_actions_reject_bad_targets_without_execution(self) -> None:
         missing_runner = MappingRunner(live_payloads())
@@ -1037,6 +1097,24 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
         )
         extra_runner = MappingRunner(live_payloads())
+        remove_enabled_runner = MappingRunner(live_payloads())
+        remove_unproven_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("external-models", "routes", "list", "--json"): command_packet(
+                    human_message="External-models routes listed from local registry.",
+                    data={
+                        "count": 1,
+                        "routes": [
+                            {
+                                "route_id": "wbp-unproven",
+                                "display_name": "Unproven",
+                            }
+                        ],
+                    },
+                ),
+            }
+        )
 
         missing = run_ui_action(missing_runner, {"ui_action": "api_route_validate"})
         unsafe = run_ui_action(
@@ -1079,6 +1157,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
             disabled_runner,
             {"ui_action": "api_route_evidence_capture", "route_id": "wbp-disabled"},
         )
+        remove_enabled = run_ui_action(
+            remove_enabled_runner,
+            {"ui_action": "api_route_remove", "route_id": "wbp-deepseek-v3"},
+        )
+        remove_extra = run_ui_action(
+            extra_runner,
+            {
+                "ui_action": "api_route_remove",
+                "route_id": "wbp-disabled",
+                "raw_route_json": "{}",
+            },
+        )
+        remove_unproven = run_ui_action(
+            remove_unproven_runner,
+            {"ui_action": "api_route_remove", "route_id": "wbp-unproven"},
+        )
 
         self.assertEqual(missing["result"]["machine_error_code"], "UI_API_ROUTE_ID_REQUIRED")
         self.assertEqual(unsafe["result"]["machine_error_code"], "UI_API_ROUTE_ID_INVALID")
@@ -1102,6 +1196,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
         self.assertEqual(profile_disabled["status"], "ok")
         self.assertEqual(evidence_disabled["status"], "ok")
+        self.assertEqual(
+            remove_enabled["result"]["machine_error_code"],
+            "UI_API_ROUTE_REMOVE_INELIGIBLE",
+        )
+        self.assertEqual(remove_extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(
+            remove_unproven["result"]["machine_error_code"],
+            "UI_API_ROUTE_REMOVE_STATE_UNPROVEN",
+        )
         self.assertEqual(missing_runner.calls, [])
         self.assertEqual(unsafe_runner.calls, [])
         self.assertEqual(
@@ -1121,6 +1224,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(
             allow_enabled_runner.calls,
+            [("external-models", "routes", "list", "--json")],
+        )
+        self.assertEqual(
+            remove_enabled_runner.calls,
+            [("external-models", "routes", "list", "--json")],
+        )
+        self.assertEqual(
+            remove_unproven_runner.calls,
             [("external-models", "routes", "list", "--json")],
         )
         self.assertEqual(

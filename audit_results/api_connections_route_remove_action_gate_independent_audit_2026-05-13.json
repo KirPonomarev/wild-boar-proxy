@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_REMOVE_ACTION_GATE",
+  "date": "2026-05-13",
+  "audit_type": "independent_diff_and_contract_audit",
+  "auditor": {
+    "agent": "Aquinas",
+    "role": "independent implementation auditor",
+    "initial_verdict": "BLOCK",
+    "initial_blocker": "closeout referenced this audit artifact before the file existed",
+    "implementation_verdict": "PASS"
+  },
+  "implementation_checks": [
+    {
+      "check": "browser payload boundary",
+      "verdict": "PASS",
+      "evidence": "overview.js posts ui_action with extraPayload and route buttons pass only route_id"
+    },
+    {
+      "check": "adapter argv",
+      "verdict": "PASS",
+      "evidence": "external_models_routes_remove renders external-models routes remove --route {route_id} --json"
+    },
+    {
+      "check": "structured args",
+      "verdict": "PASS",
+      "evidence": "adapter requires and allows only route_id"
+    },
+    {
+      "check": "server preflight",
+      "verdict": "PASS",
+      "evidence": "server uses external-models routes list --json before execution"
+    },
+    {
+      "check": "disabled-only removal",
+      "verdict": "PASS",
+      "evidence": "server blocks enabled routes and routes without explicit enabled=false"
+    },
+    {
+      "check": "scope creep",
+      "verdict": "PASS",
+      "evidence": "no route create/update/editor path added"
+    },
+    {
+      "check": "secret and path handling",
+      "verdict": "PASS",
+      "evidence": "no credential, secret value, browser file path, or raw route object is accepted"
+    },
+    {
+      "check": "direct file truth",
+      "verdict": "PASS",
+      "evidence": "web layer preflights through command packet data and does not read route/state/secret/evidence files"
+    },
+    {
+      "check": "changed files handling",
+      "verdict": "PASS",
+      "evidence": "changed_files remains command evidence and is not used for route eligibility"
+    },
+    {
+      "check": "runtime scope",
+      "verdict": "PASS",
+      "evidence": "runtime.py is untouched"
+    },
+    {
+      "check": "test coverage",
+      "verdict": "PASS",
+      "evidence": "tests cover exact argv, disabled-only execution, enabled/unproven blocking, UI gating, and confirmation metadata"
+    },
+    {
+      "check": "artifact completeness",
+      "verdict": "PASS_AFTER_FIX",
+      "evidence": "this audit artifact now exists and resolves the initial closeout blocker"
+    }
+  ],
+  "reviewed_scan_exceptions": [
+    {
+      "term": "raw_route_json",
+      "reason": "appears only in a negative test that verifies unsupported browser payload fields are blocked"
+    },
+    {
+      "term": "command_id/argv",
+      "reason": "appears in adapter metadata/spec and tests, not as browser-accepted payload"
+    }
+  ],
+  "final_verdict": "PASS_AFTER_AUDIT_ARTIFACT_CREATED"
+}

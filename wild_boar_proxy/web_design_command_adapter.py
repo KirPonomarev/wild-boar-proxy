@@ -188,6 +188,14 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("route_id",),
         allowed_args=("route_id",),
     ),
+    "external_models_routes_remove": CommandSpec(
+        command_id="external_models_routes_remove",
+        argv_template=("external-models", "routes", "remove", "--route", "{route_id}", "--json"),
+        category="external_models_registry_cleanup",
+        confirmation_required=True,
+        required_args=("route_id",),
+        allowed_args=("route_id",),
+    ),
     "external_models_check": CommandSpec(
         command_id="external_models_check",
         argv_template=("external-models", "check", "--route", "{route_id}", "--json"),

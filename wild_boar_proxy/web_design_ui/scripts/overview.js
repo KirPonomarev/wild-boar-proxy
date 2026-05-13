@@ -159,6 +159,11 @@ const CONFIRMATION_POLICY = {
     policy: "api-route-disable",
     warning: "Это запрашивает отключение маршрута. Подтверждением остаётся ответ сервера плюс обновлённый JSON."
   },
+  api_route_remove: {
+    severity: "critical",
+    policy: "api-route-registry-cleanup",
+    warning: "Это удаляет отключённую registry-запись. Область действия не шире command packet."
+  },
   api_route_profile: {
     severity: "medium",
     policy: "api-route-profile-packet",
@@ -1364,14 +1369,17 @@ function routeActionButtons(route) {
     routeActionButton(route, "api_route_validate", "Проверить"),
     routeActionButton(route, "api_route_check", "Проверить запросом"),
     routeActionButton(route, "api_route_profile", "Пакет профиля"),
-    routeActionButton(route, "api_route_evidence_capture", "Свидетельство")
+    routeActionButton(route, "api_route_evidence_capture", "Свидетельство"),
+    routeActionButton(route, "api_route_remove", "Удалить")
   );
   return group;
 }
 
 function routeActionButton(route, uiAction, label) {
   const button = document.createElement("button");
-  button.className = "button small api-route-action";
+  button.className = uiAction === "api_route_remove"
+    ? "button small api-route-action api-route-destructive-action"
+    : "button small api-route-action";
   button.type = "button";
   button.dataset.uiAction = uiAction;
   button.dataset.routeId = route.route_id || "";
@@ -1384,7 +1392,8 @@ function routeActionButton(route, uiAction, label) {
     api_route_check: "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime.",
     api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime.",
     api_route_profile: "Показать профильный пакет поддержки без настройки Codex config и без runtime readiness.",
-    api_route_evidence_capture: "Собрать локальное свидетельство маршрута. UI не читает evidence file."
+    api_route_evidence_capture: "Собрать локальное свидетельство маршрута. UI не читает evidence file.",
+    api_route_remove: "Удалить отключённую registry-запись после server preflight. Область действия не шире command packet."
   };
   button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
   button.addEventListener("click", () => {
@@ -1394,7 +1403,7 @@ function routeActionButton(route, uiAction, label) {
 }
 
 function apiRouteStateRequirement(uiAction) {
-  if (uiAction === "api_route_allow") {
+  if (uiAction === "api_route_allow" || uiAction === "api_route_remove") {
     return "disabled";
   }
   if (uiAction === "api_route_profile" || uiAction === "api_route_evidence_capture") {

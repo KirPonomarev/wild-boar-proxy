@@ -77,6 +77,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_validate",
             "external_models_routes_enable",
             "external_models_routes_disable",
+            "external_models_routes_remove",
             "external_models_check",
             "external_models_profile_codex_desktop",
             "external_models_evidence_capture",
@@ -369,6 +370,11 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_routes_disable",
             structured_args={"route_id": "wbp-deepseek-v3"},
         )
+        remove = execute_command(
+            runner,
+            "external_models_routes_remove",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
         profile = execute_command(
             runner,
             "external_models_profile_codex_desktop",
@@ -387,6 +393,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "routes", "remove", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
             ],
@@ -395,6 +402,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(check["status"], "ok")
         self.assertEqual(enable["status"], "ok")
         self.assertEqual(disable["status"], "ok")
+        self.assertEqual(remove["status"], "ok")
         self.assertEqual(profile["status"], "ok")
         self.assertEqual(evidence["status"], "ok")
 
@@ -422,6 +430,11 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_evidence_capture",
             structured_args={"route_id": "wbp-deepseek-v3", "evidence_path": "/tmp/evidence.json"},
         )
+        remove_extra = execute_command(
+            runner,
+            "external_models_routes_remove",
+            structured_args={"route_id": "wbp-deepseek-v3", "stdin": "{}"},
+        )
         non_string = execute_command(
             runner,
             "external_models_routes_disable",
@@ -439,6 +452,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("unsupported args", profile_extra["human_message"])
         self.assertEqual(evidence_extra["status"], "integration_failure")
         self.assertIn("unsupported args", evidence_extra["human_message"])
+        self.assertEqual(remove_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", remove_extra["human_message"])
         self.assertEqual(non_string["status"], "integration_failure")
         self.assertIn("non-string args", non_string["human_message"])
 
