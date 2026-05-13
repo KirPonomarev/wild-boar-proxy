@@ -47,6 +47,12 @@ ACCOUNT_ID_SAFE_CHARS = frozenset(
     "0123456789"
     "._-:@"
 )
+ROUTE_ID_SAFE_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789"
+    "._-:@"
+)
 ACCOUNT_ID_UI_ACTIONS = frozenset(
     {
         "validate_account",
@@ -57,6 +63,7 @@ ACCOUNT_ID_UI_ACTIONS = frozenset(
         "release_account",
     }
 )
+ROUTE_ID_UI_ACTIONS = frozenset({"api_route_validate", "api_route_check"})
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -168,6 +175,30 @@ UI_ACTION_ALLOWLIST = {
         "action_claim_scope": "только запрос снятия ручной паузы; подтверждением остаётся обновлённый список аккаунтов",
         "display_name": "Снять аккаунт с паузы",
         "human_meaning": "Снять выбранный аккаунт с manual hold, затем обновить подтверждённый список аккаунтов.",
+    },
+    "api_route_validate": {
+        "adapter_command_id": "external_models_routes_validate",
+        "action_role": "api_route_validation",
+        "mutation_class": "api_route_verification",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только проверка маршрута у провайдера; это не утверждение runtime readiness",
+        "display_name": "Проверить маршрут",
+        "human_meaning": "Проверить доступность маршрута на стороне провайдера и обновить список маршрутов из канонического JSON.",
+    },
+    "api_route_check": {
+        "adapter_command_id": "external_models_check",
+        "action_role": "api_route_smoke_check",
+        "mutation_class": "api_route_verification",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только проверочный запрос маршрута у провайдера; это не утверждение runtime readiness",
+        "display_name": "Проверить запросом",
+        "human_meaning": "Выполнить проверочный запрос через маршрут и обновить список маршрутов из канонического JSON.",
     },
     "sync_runtime": {
         "adapter_command_id": "sync",
@@ -521,6 +552,8 @@ def run_ui_action(
     allowed_payload_keys = {"ui_action"}
     if ui_action in ACCOUNT_ID_UI_ACTIONS:
         allowed_payload_keys.add("account_id")
+    if ui_action in ROUTE_ID_UI_ACTIONS:
+        allowed_payload_keys.add("route_id")
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
         return _blocked_action(ui_action, f"Неподдерживаемые поля UI action: {', '.join(unsupported_keys)}.")
@@ -529,6 +562,10 @@ def run_ui_action(
     allow_disabled = False
     if ui_action in ACCOUNT_ID_UI_ACTIONS:
         structured_args, blocked = _account_action_args(runner, payload, ui_action=ui_action)
+        if blocked is not None:
+            return blocked
+    if ui_action in ROUTE_ID_UI_ACTIONS:
+        structured_args, blocked = _api_route_action_args(runner, payload, ui_action=ui_action)
         if blocked is not None:
             return blocked
     if ui_action == "launch_client_dispatch":
@@ -560,6 +597,7 @@ def run_ui_action(
         "action_claim_scope": action_spec["action_claim_scope"],
         "mutation_class": action_spec.get("mutation_class", ""),
         "account_id": structured_args.get("account_id") if structured_args else "",
+        "route_id": structured_args.get("route_id") if structured_args else "",
         "result": _action_result(result, ui_action=ui_action),
     }
 
@@ -841,6 +879,95 @@ def _account_list_invalid_code(ui_action: str) -> str:
     if ui_action == "validate_account":
         return "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_INVALID"
     return "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID"
+
+
+def _api_route_action_args(
+    runner: CommandRunner,
+    payload: dict[str, Any],
+    *,
+    ui_action: str,
+) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
+    route_id = payload.get("route_id")
+    if not isinstance(route_id, str):
+        return None, _unavailable_action(
+            ui_action,
+            f"{ui_action} требует route_id.",
+            "UI_API_ROUTE_ID_REQUIRED",
+        )
+    route_id = route_id.strip()
+    if (
+        not route_id
+        or route_id in {".", ".."}
+        or len(route_id) > 96
+        or any(char not in ROUTE_ID_SAFE_CHARS for char in route_id)
+    ):
+        return None, _unavailable_action(
+            ui_action,
+            f"{ui_action} получил небезопасный route_id.",
+            "UI_API_ROUTE_ID_INVALID",
+        )
+
+    result = execute_external_command(runner, "external-models", "routes", "list", "--json")
+    if result["status"] != "ok":
+        return None, _unavailable_action(
+            ui_action,
+            "Список маршрутов недоступен; цель действия нельзя проверить.",
+            _api_route_list_unavailable_code(ui_action),
+        )
+    packet = result.get("packet")
+    if not isinstance(packet, dict):
+        return None, _unavailable_action(
+            ui_action,
+            "Пакет маршрутов недействителен; цель действия нельзя проверить.",
+            _api_route_list_invalid_code(ui_action),
+        )
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return None, _unavailable_action(
+            ui_action,
+            "Пакет маршрутов недействителен; цель действия нельзя проверить.",
+            _api_route_list_invalid_code(ui_action),
+        )
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        return None, _unavailable_action(
+            ui_action,
+            "Пакет маршрутов недействителен; цель действия нельзя проверить.",
+            _api_route_list_invalid_code(ui_action),
+        )
+    target_route = next(
+        (
+            route
+            for route in routes
+            if isinstance(route, dict) and str(route.get("route_id", "")) == route_id
+        ),
+        None,
+    )
+    if target_route is None:
+        return None, _unavailable_action(
+            ui_action,
+            f"Цель {ui_action} отсутствует в списке маршрутов.",
+            "UI_API_ROUTE_ID_NOT_FOUND",
+        )
+    if target_route.get("enabled") is not True:
+        return None, _unavailable_action(
+            ui_action,
+            f"Цель {ui_action} отключена; сначала включите маршрут в отдельном контуре.",
+            "UI_API_ROUTE_DISABLED_INELIGIBLE",
+        )
+    return {"route_id": route_id}, None
+
+
+def _api_route_list_unavailable_code(ui_action: str) -> str:
+    if ui_action == "api_route_validate":
+        return "UI_API_ROUTE_VALIDATE_ROUTE_LIST_UNAVAILABLE"
+    return "UI_API_ROUTE_CHECK_ROUTE_LIST_UNAVAILABLE"
+
+
+def _api_route_list_invalid_code(ui_action: str) -> str:
+    if ui_action == "api_route_validate":
+        return "UI_API_ROUTE_VALIDATE_ROUTE_LIST_INVALID"
+    return "UI_API_ROUTE_CHECK_ROUTE_LIST_INVALID"
 
 
 def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool:

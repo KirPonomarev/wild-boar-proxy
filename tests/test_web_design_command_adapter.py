@@ -74,6 +74,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "stable_repair_dry_run",
             "stable_repair_apply",
             "diagnostics_export",
+            "external_models_routes_validate",
+            "external_models_check",
             "launch_client",
         }
 
@@ -162,6 +164,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 "required_args": ["account_id"],
                 "allowed_args": ["account_id"],
                 "argv": ["accounts", "retire", "{account_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_routes_validate",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": ["external-models", "routes", "validate", "--route", "{route_id}", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_check",
+                "category": "external_models_verification",
+                "ui_enabled": True,
+                "confirmation_required": True,
+                "required_args": ["route_id"],
+                "allowed_args": ["route_id"],
+                "argv": ["external-models", "check", "--route", "{route_id}", "--json"],
             },
             allowlist_metadata(),
         )
@@ -277,6 +303,53 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("missing required args", missing["human_message"])
         self.assertEqual(extra["status"], "integration_failure")
         self.assertIn("unsupported args", extra["human_message"])
+
+    def test_external_models_route_checks_run_exact_argv_with_structured_route_id(self) -> None:
+        runner = RecordingRunner()
+
+        validate = execute_command(
+            runner,
+            "external_models_routes_validate",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        check = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+        self.assertEqual(validate["status"], "ok")
+        self.assertEqual(check["status"], "ok")
+
+    def test_external_models_route_checks_require_only_route_id(self) -> None:
+        runner = RecordingRunner()
+
+        missing = execute_command(runner, "external_models_routes_validate")
+        extra = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes disable"},
+        )
+        non_string = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": 123},  # type: ignore[dict-item]
+        )
+
+        self.assertEqual(runner.calls, [])
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertIn("missing required args", missing["human_message"])
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(non_string["status"], "integration_failure")
+        self.assertIn("non-string args", non_string["human_message"])
 
     def test_accounts_onboard_rejects_all_browser_args(self) -> None:
         runner = RecordingRunner()

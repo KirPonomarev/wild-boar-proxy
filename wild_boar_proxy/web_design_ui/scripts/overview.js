@@ -138,6 +138,16 @@ const CONFIRMATION_POLICY = {
     severity: "critical",
     policy: "terminal-account-lifecycle",
     warning: "Это запрашивает терминальный вывод аккаунта из lifecycle. Это не удаление и не путь возврата."
+  },
+  api_route_validate: {
+    severity: "medium",
+    policy: "api-route-validate",
+    warning: "Это проверяет маршрут у провайдера. Это не утверждение готовности runtime."
+  },
+  api_route_check: {
+    severity: "high",
+    policy: "api-route-check",
+    warning: "Это отправляет проверочный запрос через маршрут. Это не утверждение готовности runtime."
   }
 };
 
@@ -416,6 +426,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
     ui_action: uiAction,
     action_role: "running",
     account_id: extraPayload.account_id || "",
+    route_id: extraPayload.route_id || "",
     post_action_refresh_required: false,
     result: {
       status: "running",
@@ -440,7 +451,11 @@ async function runUiAction(uiAction, extraPayload = {}) {
     if (payload.post_action_refresh_required) {
       const refreshTarget = currentScreen() === "accounts"
         ? "accounts"
-        : (currentScreen() === "settings" ? "settings" : "overview");
+        : (
+          currentScreen() === "api-connections"
+            ? "api-connections"
+            : (currentScreen() === "settings" ? "settings" : "overview")
+        );
       text("actionRefreshStatus", `обновление live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       if (refreshed.status === "ok") {
@@ -459,6 +474,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       ui_action: uiAction,
       action_role: "integration_failure",
       account_id: extraPayload.account_id || "",
+      route_id: extraPayload.route_id || "",
       post_action_refresh_required: false,
       result: {
         status: failureStatus,
@@ -474,16 +490,29 @@ async function runUiAction(uiAction, extraPayload = {}) {
 }
 
 function applyActionAvailability() {
-  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = button.classList.contains("account-action") || button.classList.contains("onboard-action");
+    const requiresLive = (
+      button.classList.contains("account-action")
+      || button.classList.contains("onboard-action")
+      || button.classList.contains("api-route-action")
+    );
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
-    const available = metadata.available !== false && (!requiresLive || isLiveSource);
+    const routeEnabled = button.dataset.routeEnabled !== "false";
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeEnabled;
     button.disabled = !available;
     button.dataset.available = available ? "true" : "false";
     button.title = available
       ? ""
-      : (requiresLive && !isLiveSource ? "Переключите Accounts на live-источник перед действиями с аккаунтами." : (metadata.unavailable_reason || "Действие недоступно"));
+      : (
+        !routeEnabled
+          ? "Маршрут отключён. Проверки доступны только для разрешённых маршрутов."
+          : (
+            requiresLive && !isLiveSource
+              ? "Переключите экран на live-источник перед выполнением действий."
+              : (metadata.unavailable_reason || "Действие недоступно")
+          )
+      );
   }
   updateSettingsActionMetadata();
 }
@@ -604,7 +633,7 @@ function setSourceCopy(source) {
         ? "Пул аккаунтов отображается из подтверждённого ответа команды. Действия доступны только после проверки допустимости."
         : (
           screen === "api-connections"
-            ? "Маршруты API-подключений отображаются из пакетов команд. Проверка маршрутов и действия будут добавлены отдельным безопасным контуром."
+            ? "Маршруты API-подключений отображаются из пакетов команд. Разрешены только безопасные проверки маршрутов без мутации конфигурации."
             : (
           screen === "diagnostics"
             ? "Диагностика показывает сведения пакета поддержки. Фактическое здоровье системы проверяется отдельными командами."
@@ -625,7 +654,7 @@ function setSourceCopy(source) {
         ? "Демо-просмотр экрана аккаунтов. Данные не являются фактическим состоянием системы."
         : (
           screen === "api-connections"
-            ? "Демо-просмотр API-подключений. Это только панель маршрутов без действий и без отдельной проверки маршрута."
+            ? "Демо-просмотр API-подключений. Кнопки проверок доступны только в live-режиме."
             : (
           screen === "diagnostics"
             ? "Демо-просмотр диагностики. Экспорт создаёт пакет поддержки, но не доказывает здоровье системы."
@@ -654,7 +683,7 @@ function setActionPanel(payload, refreshState = "none") {
   panel.className = `action-panel compact-action-panel ${display.visualClass}`;
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
-  text("actionAccountId", payload.account_id || "-");
+  text("actionAccountId", payload.account_id || payload.route_id || "-");
   text("actionStatus", display.status);
   text("actionDisplayState", display.displayState);
   text("actionMachineCode", result.machine_error_code || "-");
@@ -751,11 +780,16 @@ function updateSettingsActionMetadata() {
 }
 
 function setActionsBusy(isBusy) {
-  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = button.classList.contains("account-action") || button.classList.contains("onboard-action");
+    const requiresLive = (
+      button.classList.contains("account-action")
+      || button.classList.contains("onboard-action")
+      || button.classList.contains("api-route-action")
+    );
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
-    const available = metadata.available !== false && (!requiresLive || isLiveSource);
+    const routeEnabled = button.dataset.routeEnabled !== "false";
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeEnabled;
     button.disabled = isBusy || !available;
   }
 }
@@ -767,6 +801,7 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
       ui_action: uiAction,
       action_role: "blocked",
       account_id: extraPayload.account_id || "",
+      route_id: extraPayload.route_id || "",
       post_action_refresh_required: false,
       result: {
         status: "integration_failure",
@@ -791,7 +826,7 @@ function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   text("confirmTitle", metadata.display_name || uiAction);
   text("confirmMeaning", metadata.human_meaning || "Подтвердите это действие.");
   text("confirmUiAction", uiAction);
-  text("confirmAccountId", extraPayload.account_id || "-");
+  text("confirmAccountId", extraPayload.account_id || extraPayload.route_id || "-");
   text("confirmSeverity", policy.severity || "critical");
   text("confirmPolicy", policy.policy || "metadata-fallback");
   text("confirmMutation", metadata.mutates_runtime ? "да" : "нет");
@@ -1190,8 +1225,8 @@ function renderApiConnectionsSnapshot(snapshot) {
   const banner = document.getElementById("apiConnectionsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "API-подключения показываются только в режиме чтения. Проверка маршрутов и действия будут добавлены отдельным контуром."
-    : "Демо-представление API-подключений. Маршруты показаны без live-команд и без отдельной проверки маршрута.";
+    ? "API-подключения показываются из пакетов команд. Доступны только безопасные проверки маршрутов; мутации маршрутов отложены."
+    : "Демо-представление API-подключений. Кнопки проверок отключены, пока не включён live-источник.";
 
   const summary = safeSnapshot.summary;
   const latestCheck = summary.latest_check || "Нет данных";
@@ -1202,7 +1237,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   text("apiConnectionsRoutesNote", source === "live" ? "список собран из пакетов команд" : "демо");
   text("apiConnectionsEnabledNote", "только признак разрешения");
   text("apiConnectionsAttentionNote", "только внимание по маршрутам");
-  text("apiConnectionsLatestCheckNote", latestCheck === "Нет данных" ? "нет отдельной проверки маршрута" : "время последней отдельной проверки");
+  text("apiConnectionsLatestCheckNote", latestCheck === "Нет данных" ? "проверка маршрута ещё не запускалась" : "время последней отдельной проверки");
   text(
     "apiConnectionsRegistryStatus",
     `Контур: ${safeSnapshot.adapter.foundation_phase} · models source: ${safeSnapshot.adapter.models_source}`
@@ -1222,7 +1257,7 @@ function renderApiConnectionRows(routes) {
   if (!routes.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = "dash";
     cell.textContent = "API-подключения пока не настроены. Добавление маршрутов будет подключено отдельным безопасным контуром.";
     row.append(cell);
@@ -1238,10 +1273,12 @@ function renderApiConnectionRows(routes) {
       td("", routeStatusChip(route)),
       td("", route.role_label || "Нет данных"),
       td("right mono-value", route.last_checked || "—"),
-      td("", route.note || "—")
+      td("", route.note || "—"),
+      td("", routeActionButtons(route))
     );
     body.append(row);
   }
+  applyActionAvailability();
 }
 
 function routeIdentity(route) {
@@ -1266,6 +1303,33 @@ function routeStatusChip(route) {
   label.textContent = route.status_label || "Нет данных";
   chip.append(dot, label);
   return chip;
+}
+
+function routeActionButtons(route) {
+  const group = document.createElement("div");
+  group.className = "account-action-group";
+  group.append(
+    routeActionButton(route, "api_route_validate", "Проверить"),
+    routeActionButton(route, "api_route_check", "Проверить запросом")
+  );
+  return group;
+}
+
+function routeActionButton(route, uiAction, label) {
+  const button = document.createElement("button");
+  button.className = "button small api-route-action";
+  button.type = "button";
+  button.dataset.uiAction = uiAction;
+  button.dataset.routeId = route.route_id || "";
+  button.dataset.routeEnabled = route.enabled === true ? "true" : "false";
+  button.textContent = label;
+  button.title = uiAction === "api_route_check"
+    ? "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime."
+    : "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime.";
+  button.addEventListener("click", () => {
+    maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId });
+  });
+  return button;
 }
 
 function renderAccountRows(accounts) {

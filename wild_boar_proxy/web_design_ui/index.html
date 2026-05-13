@@ -359,7 +359,7 @@
 
         <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" hidden>
           <div id="apiConnectionsBanner" class="fixture-banner neutral">
-            API-подключения показываются только в режиме чтения. Источник правды остаётся за пакетами команд.
+            API-подключения показываются из пакетов команд. Доступны только безопасные проверки маршрутов; мутации маршрутов отложены.
           </div>
 
           <div class="grid api-connections-summary" aria-label="Сводка API-подключений">
@@ -403,13 +403,14 @@
             </div>
             <table class="table api-connections-table">
               <colgroup>
-                <col style="width:260px">
+                <col style="width:220px">
+                <col style="width:130px">
+                <col style="width:220px">
                 <col style="width:140px">
-                <col style="width:240px">
-                <col style="width:150px">
-                <col style="width:170px">
-                <col style="width:150px">
+                <col style="width:160px">
+                <col style="width:140px">
                 <col>
+                <col style="width:180px">
               </colgroup>
               <thead>
                 <tr>
@@ -420,13 +421,14 @@
                   <th>Роль маршрута</th>
                   <th class="right">Последняя проверка</th>
                   <th>Примечание</th>
+                  <th>Действия</th>
                 </tr>
               </thead>
               <tbody id="apiConnectionsTableBody"></tbody>
             </table>
             <div class="pagination">
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
-              <span>только чтение · без действий с маршрутами</span>
+              <span>разрешены только проверки · мутации маршрутов отложены</span>
             </div>
           </section>
         </section>

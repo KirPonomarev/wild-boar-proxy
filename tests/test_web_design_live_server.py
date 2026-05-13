@@ -516,6 +516,28 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["release_account"]["affects_primary_truth"])
         self.assertEqual(metadata["actions"]["release_account"]["action_role"], "account_lifecycle_release")
         self.assertTrue(metadata["actions"]["release_account"]["post_action_refresh_required"])
+        self.assertIn("api_route_validate", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_validate"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_validate"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_validate"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
+        self.assertEqual(
+            metadata["actions"]["api_route_validate"]["mutation_class"],
+            "api_route_verification",
+        )
+        self.assertTrue(metadata["actions"]["api_route_validate"]["post_action_refresh_required"])
+        self.assertIn("runtime readiness", metadata["actions"]["api_route_validate"]["action_claim_scope"])
+        self.assertIn("api_route_check", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_check"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_check"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_check"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["api_route_check"]["action_role"], "api_route_smoke_check")
+        self.assertEqual(
+            metadata["actions"]["api_route_check"]["mutation_class"],
+            "api_route_verification",
+        )
+        self.assertTrue(metadata["actions"]["api_route_check"]["post_action_refresh_required"])
+        self.assertIn("runtime readiness", metadata["actions"]["api_route_check"]["action_claim_scope"])
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
@@ -732,6 +754,163 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(extra_runner.calls, [])
         for calls in [unsafe_runner.calls, unknown_runner.calls, extra_runner.calls]:
             self.assertNotIn(("accounts", "validate", "acct-active", "--json"), calls)
+
+    def test_api_route_actions_preflight_route_and_execute_exact_commands(self) -> None:
+        validate_runner = MappingRunner(live_payloads())
+        check_runner = MappingRunner(live_payloads())
+
+        validate = run_ui_action(
+            validate_runner,
+            {"ui_action": "api_route_validate", "route_id": "wbp-deepseek-v3"},
+        )
+        check = run_ui_action(
+            check_runner,
+            {"ui_action": "api_route_check", "route_id": "wbp-deepseek-v3"},
+        )
+
+        self.assertEqual(validate["status"], "ok")
+        self.assertEqual(validate["action_role"], "api_route_validation")
+        self.assertEqual(validate["mutation_class"], "api_route_verification")
+        self.assertFalse(validate["mutates_runtime"])
+        self.assertFalse(validate["affects_primary_truth"])
+        self.assertTrue(validate["confirmation_required"])
+        self.assertTrue(validate["post_action_refresh_required"])
+        self.assertEqual(validate["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(
+            validate_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+        self.assertEqual(check["status"], "ok")
+        self.assertEqual(check["action_role"], "api_route_smoke_check")
+        self.assertEqual(check["mutation_class"], "api_route_verification")
+        self.assertFalse(check["mutates_runtime"])
+        self.assertFalse(check["affects_primary_truth"])
+        self.assertTrue(check["confirmation_required"])
+        self.assertTrue(check["post_action_refresh_required"])
+        self.assertEqual(check["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(
+            check_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+
+    def test_api_route_actions_reject_bad_targets_without_execution(self) -> None:
+        missing_runner = MappingRunner(live_payloads())
+        unsafe_runner = MappingRunner(live_payloads())
+        unknown_runner = MappingRunner(live_payloads())
+        disabled_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("external-models", "routes", "list", "--json"): command_packet(
+                    human_message="External-models routes listed from local registry.",
+                    data={
+                        "count": 1,
+                        "routes": [
+                            {
+                                "schema_version": 1,
+                                "route_id": "wbp-disabled",
+                                "display_name": "Disabled route",
+                                "provider": "openrouter",
+                                "base_url": "http://127.0.0.1:54321/v1",
+                                "endpoint_path": "/chat/completions",
+                                "upstream_model": "deepseek/deepseek-chat",
+                                "compatibility": "openai_chat_completions",
+                                "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                                "cost_class": "paid_or_free_limited",
+                                "lane_role": "candidate",
+                                "fallback_eligible": False,
+                                "enabled": False,
+                            }
+                        ],
+                    },
+                ),
+            }
+        )
+        malformed_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("external-models", "routes", "list", "--json"): command_packet(
+                    human_message="External-models routes malformed.",
+                    data={"count": 1, "routes": "not-a-list"},
+                ),
+            }
+        )
+        extra_runner = MappingRunner(live_payloads())
+
+        missing = run_ui_action(missing_runner, {"ui_action": "api_route_validate"})
+        unsafe = run_ui_action(
+            unsafe_runner,
+            {"ui_action": "api_route_validate", "route_id": "../wbp-deepseek-v3"},
+        )
+        unknown = run_ui_action(
+            unknown_runner,
+            {"ui_action": "api_route_validate", "route_id": "wbp-missing"},
+        )
+        disabled = run_ui_action(
+            disabled_runner,
+            {"ui_action": "api_route_check", "route_id": "wbp-disabled"},
+        )
+        malformed = run_ui_action(
+            malformed_runner,
+            {"ui_action": "api_route_validate", "route_id": "wbp-deepseek-v3"},
+        )
+        extra = run_ui_action(
+            extra_runner,
+            {
+                "ui_action": "api_route_check",
+                "route_id": "wbp-deepseek-v3",
+                "argv": "external-models routes disable",
+            },
+        )
+
+        self.assertEqual(missing["result"]["machine_error_code"], "UI_API_ROUTE_ID_REQUIRED")
+        self.assertEqual(unsafe["result"]["machine_error_code"], "UI_API_ROUTE_ID_INVALID")
+        self.assertEqual(unknown["result"]["machine_error_code"], "UI_API_ROUTE_ID_NOT_FOUND")
+        self.assertEqual(
+            disabled["result"]["machine_error_code"],
+            "UI_API_ROUTE_DISABLED_INELIGIBLE",
+        )
+        self.assertEqual(
+            malformed["result"]["machine_error_code"],
+            "UI_API_ROUTE_VALIDATE_ROUTE_LIST_INVALID",
+        )
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(missing_runner.calls, [])
+        self.assertEqual(unsafe_runner.calls, [])
+        self.assertEqual(
+            unknown_runner.calls,
+            [("external-models", "routes", "list", "--json")],
+        )
+        self.assertEqual(
+            disabled_runner.calls,
+            [("external-models", "routes", "list", "--json")],
+        )
+        self.assertEqual(
+            malformed_runner.calls,
+            [("external-models", "routes", "list", "--json")],
+        )
+        self.assertEqual(extra_runner.calls, [])
+        for calls in [
+            missing_runner.calls,
+            unsafe_runner.calls,
+            unknown_runner.calls,
+            disabled_runner.calls,
+            malformed_runner.calls,
+            extra_runner.calls,
+        ]:
+            self.assertNotIn(
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+                calls,
+            )
+            self.assertNotIn(
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                calls,
+            )
 
     def test_hold_release_actions_preflight_eligibility_and_execute_exact_commands(self) -> None:
         hold_runner = MappingRunner(live_payloads())
@@ -1461,6 +1640,42 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                         "enabled": True,
                     }
                 ],
+            },
+        ),
+        ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"): command_packet(
+            human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "validation_kind": "provider_route_validate",
+                "network_dependent": True,
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "verification_scope": "route_provider_only",
+                "route_state": "model_visible",
+                "requested_model": "wbp-deepseek-v3",
+                "effective_model": "deepseek/deepseek-chat",
+                "provider": "openrouter",
+            },
+        ),
+        ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"): command_packet(
+            human_message="External-models route smoke check captured provider evidence without claiming runtime readiness.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "check_kind": "provider_route_smoke",
+                "network_dependent": True,
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "verification_scope": "route_provider_only",
+                "route_state": "verified",
+                "requested_model": "wbp-deepseek-v3",
+                "effective_model": "deepseek/deepseek-chat",
+                "provider": "openrouter",
             },
         ),
     }

@@ -273,6 +273,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("renderApiConnectionsSnapshot", js)
         self.assertIn("apiConnectionsFixtureFromOverview", js)
         self.assertIn("loadApiConnectionsReadonly", js)
+        self.assertIn("api_route_validate", js)
+        self.assertIn("api_route_check", js)
+        self.assertIn("routeActionButtons", js)
+        self.assertIn("routeActionButton", js)
+        self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
 
         api_screen = self._section_html(html, "apiConnectionsScreen")
         self.assertIn("API-подключения пока не настроены", js)
@@ -292,14 +297,16 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("hold_account", js)
         self.assertIn("release_account", js)
         self.assertIn("account_id", js)
+        self.assertIn("route_id", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
         self.assertIn('maybeConfirmAndRun("onboard_account")', js)
-        self.assertIn(".live-action, .account-action, .onboard-action", js)
+        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
         self.assertIn("только сначала в резерв", html)
         self.assertIn("no-new-auth и ambiguous identity требуют действия оператора", html)
         self.assertIn("active routing", html)
         self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
+        self.assertIn("Маршрут отключён. Проверки доступны только для разрешённых маршрутов.", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
@@ -649,7 +656,7 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
-    def test_static_confirmation_policy_covers_risky_actions_without_new_actions(self) -> None:
+    def test_static_confirmation_policy_covers_risky_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
@@ -665,10 +672,14 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
             "hold_account",
             "release_account",
             "retire_account",
+            "api_route_validate",
+            "api_route_check",
         ]:
             self.assertIn(f"{ui_action}:", js)
 
         self.assertIn("terminal-account-lifecycle", js)
+        self.assertIn("api-route-validate", js)
+        self.assertIn("api-route-check", js)
         self.assertIn("metadata-fallback", js)
         self.assertIn("однократная отправка", js)
         self.assertIn("доказательство ёмкости", js)
@@ -691,9 +702,103 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
         self.assertIn("metadata.available !== false", js)
         self.assertIn("metadata.unavailable_reason", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
-        self.assertIn(".live-action, .account-action", js)
+        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
         self.assertIn(".diagnostics-only", js)
         self.assertIn(".settings-only", js)
+
+    def test_api_route_action_buttons_require_live_source_and_enabled_route(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function makeClassList(classes) {
+  return { contains(name) { return classes.includes(name); } };
+}
+
+const settingsLaunchAvailability = { textContent: "" };
+const desktop = { dataset: { source: "fixture", screen: "api-connections" } };
+const enabledButton = {
+  dataset: { uiAction: "api_route_validate", routeEnabled: "true", routeId: "wbp-deepseek-v3" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
+const disabledRouteButton = {
+  dataset: { uiAction: "api_route_check", routeEnabled: "false", routeId: "wbp-disabled" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
+
+const sandbox = {
+  console,
+  Node: function Node() {},
+  document: {
+    getElementById(id) {
+      if (id === "settingsLaunchAvailability") {
+        return settingsLaunchAvailability;
+      }
+      return { textContent: "", className: "", lastElementChild: { textContent: "" } };
+    },
+    addEventListener() {},
+    querySelectorAll(selector) {
+      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
+        return [enabledButton, disabledRouteButton];
+      }
+      return [];
+    },
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return { dataset: { source: "fixture", screen: "overview" } };
+    }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+actionMetadata = {
+  api_route_validate: { available: true, unavailable_reason: "", ui_action: "api_route_validate" },
+  api_route_check: { available: true, unavailable_reason: "", ui_action: "api_route_check" },
+  launch_client_dispatch: { available: false, unavailable_reason: "server-owned path недоступен", ui_action: "launch_client_dispatch" }
+};
+`, sandbox);
+
+desktop.dataset.source = "fixture";
+sandbox.applyActionAvailability();
+if (!enabledButton.disabled || !enabledButton.title.includes("Переключите экран на live-источник")) {
+  throw new Error(`enabled route in fixture source should be blocked: ${JSON.stringify(enabledButton)}`);
+}
+
+desktop.dataset.source = "live";
+sandbox.applyActionAvailability();
+if (enabledButton.disabled) {
+  throw new Error(`enabled route in live source should be available: ${JSON.stringify(enabledButton)}`);
+}
+if (!disabledRouteButton.disabled || !disabledRouteButton.title.includes("Маршрут отключён")) {
+  throw new Error(`disabled route should stay blocked: ${JSON.stringify(disabledRouteButton)}`);
+}
+if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
+  throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_boar_logo_is_sharp_and_transparent(self) -> None:
         logo_path = WEB_DESIGN_UI / "assets" / "boar_mark.png"

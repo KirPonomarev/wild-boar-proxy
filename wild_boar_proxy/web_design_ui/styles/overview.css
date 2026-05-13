@@ -1103,7 +1103,8 @@ button:disabled {
   max-width: 100%;
 }
 
-.account-action {
+.account-action,
+.api-route-action {
   flex: 1 1 78px;
   font-size: 11px;
   height: 30px;
