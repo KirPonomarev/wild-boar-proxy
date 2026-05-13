@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "state_id": "unknown",
-  "fixture_notice": "Fixture preview only. Unknown remains neutral.",
+  "fixture_notice": "Только демо-просмотр. Unknown остаётся нейтральным.",
   "runtime": {
     "visual_state": "unknown",
     "status_label": "Неизвестно",
@@ -9,8 +9,8 @@
     "effective_mode": "unknown",
     "endpoint": "unknown",
     "machine_error_code": "UNKNOWN_FIXTURE",
-    "human_message": "Fixture: no current command packet is available.",
-    "last_error": "no fixture truth",
+    "human_message": "Демо: текущий пакет команды недоступен.",
+    "last_error": "нет подтверждения демо-состояния",
     "observed_at_utc": "2026-05-12T21:00:00Z"
   },
   "pool_summary": {
@@ -26,8 +26,8 @@
   "events": [
     {
       "level": "neutral",
-      "message": "Fixture: состояние неизвестно, success не выводится",
-      "observed_at": "fixture"
+      "message": "Демо: состояние неизвестно, success не выводится",
+      "observed_at": "демо"
     }
   ]
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "state_id": "integration_failure",
-  "fixture_notice": "Fixture preview only. Integration failure is red and recoverable.",
+  "fixture_notice": "Только демо-просмотр. Ошибка интеграции красная и recoverable.",
   "runtime": {
     "visual_state": "integration_failure",
     "status_label": "Ошибка интеграции",
@@ -9,7 +9,7 @@
     "effective_mode": "unknown",
     "endpoint": "unknown",
     "machine_error_code": "INVALID_JSON_FIXTURE",
-    "human_message": "Fixture: command packet could not be parsed.",
+    "human_message": "Демо: пакет команды не удалось разобрать.",
     "last_error": "invalid JSON packet",
     "observed_at_utc": "2026-05-12T21:00:00Z"
   },
@@ -26,13 +26,13 @@
   "events": [
     {
       "level": "red",
-      "message": "Fixture: invalid JSON maps to integration failure, not success",
-      "observed_at": "fixture"
+      "message": "Демо: invalid JSON отображается как ошибка интеграции, а не успех",
+      "observed_at": "демо"
     },
     {
       "level": "amber",
-      "message": "Fixture: previous green state must not be reused",
-      "observed_at": "fixture"
+      "message": "Демо: предыдущее зелёное состояние нельзя переиспользовать",
+      "observed_at": "демо"
     }
   ]
 }

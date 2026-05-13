@@ -91,6 +91,8 @@ class WebDesignUiTests(unittest.TestCase):
             self.assertIsInstance(payload["events"], list, path)
             self.assertTrue(
                 "not runtime truth" in payload["fixture_notice"].lower()
+                or "не является runtime truth" in payload["fixture_notice"].lower()
+                or "не является runtime evidence" in payload["fixture_notice"].lower()
                 or payload["state_id"] != "healthy",
                 path,
             )
@@ -143,7 +145,7 @@ class WebDesignUiTests(unittest.TestCase):
         try:
             base_url = f"http://127.0.0.1:{port}"
             index = self._fetch_with_retry(f"{base_url}/?state=healthy")
-            self.assertIn("Wild Boar Proxy - Overview Design Preview", index)
+            self.assertIn("Wild Boar Proxy - предпросмотр операторского интерфейса", index)
             self.assertIn("sourcePicker", index)
             self.assertIn("statePicker", index)
             self.assertIn("fixtureBanner", index)
@@ -203,7 +205,7 @@ class WebDesignUiTests(unittest.TestCase):
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
-        self.assertIn('<option value="live">live read-only</option>', html)
+        self.assertIn('<option value="live">live только чтение</option>', html)
         self.assertIn('fetch("api/live-readonly"', js)
         self.assertIn('fetch("api/accounts-readonly"', js)
         self.assertIn('fetch("api/actions"', js)
@@ -222,7 +224,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="accountsTableBody"', html)
         self.assertIn("renderAccountsSnapshot", js)
         self.assertIn("accountsFixtureFromOverview", js)
-        self.assertIn("Bulk lifecycle actions are deferred", js)
+        self.assertIn("Массовые lifecycle-действия отложены", js)
         self.assertIn("validate_account", js)
         self.assertIn("promote_account", js)
         self.assertIn("demote_account", js)
@@ -241,10 +243,10 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
         self.assertIn('maybeConfirmAndRun("onboard_account")', js)
         self.assertIn(".live-action, .account-action, .onboard-action", js)
-        self.assertIn("reserve-first only", html)
-        self.assertIn("no-new-auth and ambiguous identity require operator action", html)
+        self.assertIn("только сначала в резерв", html)
+        self.assertIn("no-new-auth и ambiguous identity требуют действия оператора", html)
         self.assertIn("active routing", html)
-        self.assertIn("terminal lifecycle retirement", js)
+        self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
@@ -277,11 +279,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="diagnosticsScreen"', html)
         self.assertIn('class="button primary live-action diagnostics-only"', html)
         self.assertIn('data-ui-action="export_diagnostics"', html)
-        self.assertIn("Diagnostics support artifact", html + js)
-        self.assertIn("Runtime health truth was not changed", js)
-        self.assertIn("metadata only:", js)
-        self.assertIn("Artifact inspection deferred", html)
-        self.assertIn("Raw diagnostic text unavailable", html)
+        self.assertIn("Диагностический пакет поддержки", html + js)
+        self.assertIn("Истина о здоровье runtime не изменялась", js)
+        self.assertIn("только метаданные:", js)
+        self.assertIn("Просмотр артефакта отложен", html)
+        self.assertIn("Сырой текст диагностики недоступен", html)
         self.assertIn(
             'const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
@@ -306,12 +308,12 @@ class WebDesignUiTests(unittest.TestCase):
 
         self.assertIn('data-screen-link="settings"', html)
         self.assertIn('id="settingsScreen"', html)
-        self.assertIn("Observed configuration / status", html)
-        self.assertIn("Safe existing actions", html)
-        self.assertIn("Deferred settings controls", html)
-        self.assertIn("Settings is read-only in this contour", html + js)
-        self.assertIn("Safe actions are requests, not saved preferences", js)
-        self.assertIn("observed, not editable", js)
+        self.assertIn("Наблюдаемая конфигурация и статус", html)
+        self.assertIn("Безопасные доступные действия", html)
+        self.assertIn("Отложенные элементы настроек", html)
+        self.assertIn("Настройки в этом контуре доступны только для чтения", html + js)
+        self.assertIn("Безопасные действия являются запросами", js)
+        self.assertIn("наблюдается, не редактируется", js)
         self.assertIn("renderSettingsSnapshot", js)
         self.assertIn("updateSettingsActionMetadata", js)
         self.assertIn('data-ui-action="set_mode_stable"', html)
@@ -320,11 +322,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('data-ui-action="launch_smoke"', html)
         self.assertIn('data-ui-action="launch_client_dispatch"', html)
         self.assertIn('data-ui-action="export_diagnostics"', html)
-        self.assertIn("browser path submission forbidden", html)
-        self.assertIn("direct filesystem access deferred", html)
-        self.assertIn("runtime config mutation out of scope", html)
-        self.assertIn("policy mutation requires owner command surface", html)
-        self.assertIn("startup policy mutation deferred", html)
+        self.assertIn("браузер не отправляет произвольные пути", html)
+        self.assertIn("прямой доступ к файловой системе отложен", html)
+        self.assertIn("изменение конфигурации runtime вне границ контура", html)
+        self.assertIn("изменение политики требует owner command surface", html)
+        self.assertIn("изменение стартовой политики отложено", html)
         self.assertNotIn("Save settings", html)
         self.assertNotIn("Cancel settings", html)
         self.assertNotIn("Finder", html)
@@ -352,15 +354,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('data-screen="setup"', html)
         self.assertIn('data-screen="select-client"', html)
         self.assertIn('data-screen="import-existing"', html)
-        self.assertIn("Setup/select/import screens are inert in this contour", js)
-        self.assertIn("no simulated truth", js)
-        self.assertIn("browser path submission is forbidden", html.lower())
-        self.assertIn("discovery command missing", html)
-        self.assertIn("future desktop/native picker only", html)
-        self.assertIn("needs command-owned candidate id", html)
-        self.assertIn("needs non-mutating import dry-run packet", html)
-        self.assertIn("source-location mediation and strong confirmation missing", html)
-        self.assertIn("no existing setup is discovered, verified, or ready to apply here", html)
+        self.assertIn("Экраны настройки, выбора и импорта инертны", js)
+        self.assertIn("simulated truth нет", js)
+        self.assertIn("отправка путей из браузера запрещена", html.lower())
+        self.assertIn("нет команды обнаружения", html)
+        self.assertIn("будущий desktop/native picker", html)
+        self.assertIn("нужен command-owned идентификатор кандидата", html)
+        self.assertIn("нужен немутационный dry-run пакет импорта", html)
+        self.assertIn("нет медиации исходного расположения и сильного подтверждения", html)
+        self.assertIn("существующая установка здесь не обнаружена", html)
 
         for screen_id in ["setupScreen", "selectClientScreen", "importExistingScreen"]:
             section = self._section_html(html, screen_id)
@@ -464,10 +466,10 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('unknown: "neutral"', js)
         self.assertIn("payload.status || result.status", js)
         self.assertIn('displayState = "stale"', js)
-        self.assertIn("live refresh failed; state is stale", js)
+        self.assertIn("live-обновление не удалось; состояние устарело", js)
         self.assertIn("UI_ACTION_INVALID_JSON", js)
         self.assertIn("UI_ACTION_TIMEOUT", js)
-        self.assertIn("not success", js)
+        self.assertIn("а не успех", js)
         self.assertIn(".action-panel.green", css)
         self.assertIn(".action-panel.amber", css)
         self.assertIn(".action-panel.red", css)
@@ -582,7 +584,7 @@ if (invalidJson.panel !== "action-panel red" || invalidJson.display !== "invalid
 if (staleRefresh.panel !== "action-panel amber" || staleRefresh.display !== "stale") {
   throw new Error(`failed refresh not stale amber: ${JSON.stringify(staleRefresh)}`);
 }
-if (!commandError.truth.includes("must not render this as success")) {
+        if (!commandError.truth.includes("не должен показывать это как успех")) {
   throw new Error(`missing command_error truth note: ${commandError.truth}`);
 }
 """
@@ -616,9 +618,9 @@ if (!commandError.truth.includes("must not render this as success")) {
 
         self.assertIn("terminal-account-lifecycle", js)
         self.assertIn("metadata-fallback", js)
-        self.assertIn("dispatching once", js)
-        self.assertIn("capacity proof", js)
-        self.assertIn("readiness evidence", js)
+        self.assertIn("однократная отправка", js)
+        self.assertIn("доказательство ёмкости", js)
+        self.assertIn("evidence готовности", js)
         self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertNotIn("stable_repair_apply:", js)
         self.assertNotIn("setup_discovery:", js)

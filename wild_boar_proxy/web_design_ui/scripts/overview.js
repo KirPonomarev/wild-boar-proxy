@@ -13,7 +13,7 @@ const FIXTURE_STATES = [
 const FALLBACK_FIXTURE = {
   schema_version: 1,
   state_id: "unknown",
-  fixture_notice: "Embedded fallback fixture. Not runtime truth.",
+  fixture_notice: "Встроенное резервное демо-состояние. Это не подтверждённое состояние runtime.",
   runtime: {
     visual_state: "unknown",
     status_label: "Неизвестно",
@@ -21,8 +21,8 @@ const FALLBACK_FIXTURE = {
     effective_mode: "unknown",
     endpoint: "unknown",
     machine_error_code: "fixture_fallback",
-    human_message: "Fixture file could not be loaded.",
-    last_error: "fixture fetch failed",
+    human_message: "Файл демо-состояния не удалось загрузить.",
+    last_error: "загрузка демо-состояния не удалась",
     observed_at_utc: "2026-05-12T21:00:00Z"
   },
   pool_summary: {
@@ -38,8 +38,8 @@ const FALLBACK_FIXTURE = {
   events: [
     {
       level: "amber",
-      message: "Fixture fallback loaded; no live command was executed.",
-      observed_at: "fixture"
+      message: "Загружено резервное демо-состояние; live-команды не выполнялись.",
+      observed_at: "демо"
     }
   ]
 };
@@ -87,64 +87,64 @@ const CONFIRMATION_POLICY = {
   sync_runtime: {
     severity: "medium",
     policy: "operator-request",
-    warning: "This requests a bounded sync. The refreshed JSON packet remains truth."
+    warning: "Это запрашивает ограниченную синхронизацию. Подтверждением остаётся обновлённый JSON-пакет."
   },
   set_mode_stable: {
     severity: "medium",
     policy: "mode-request",
-    warning: "This requests desired mode stable. Effective mode must be proven by refreshed JSON."
+    warning: "Это запрашивает желаемый stable mode. Фактический режим должен быть подтверждён обновлённым JSON."
   },
   set_mode_managed: {
     severity: "medium",
     policy: "mode-request",
-    warning: "This requests desired mode managed. Effective mode must be proven by refreshed JSON."
+    warning: "Это запрашивает желаемый managed mode. Фактический режим должен быть подтверждён обновлённым JSON."
   },
   launch_client_dispatch: {
     severity: "high",
     policy: "bounded-dispatch",
-    warning: "This requests server-owned app dispatch only. It does not prove app startup or runtime health."
+    warning: "Это запрашивает только server-owned запуск приложения. Это не доказывает старт приложения или здоровье runtime."
   },
   onboard_account: {
     severity: "high",
     policy: "account-admission",
-    warning: "This may start external auth. Reserve-first success requires command packet proof."
+    warning: "Это может запустить внешнюю авторизацию. Успех с размещением сначала в резерв требует доказательства в пакете команды."
   },
   validate_account: {
     severity: "medium",
     policy: "account-verification",
-    warning: "This verifies one account. Refreshed accounts JSON remains the pool truth."
+    warning: "Это проверяет один аккаунт. Подтверждением пула остаётся обновлённый accounts JSON."
   },
   promote_account: {
     severity: "high",
     policy: "account-placement",
-    warning: "This requests active placement. It is not capacity proof or readiness evidence."
+    warning: "Это запрашивает перевод в active. Это не доказательство ёмкости и не evidence готовности."
   },
   demote_account: {
     severity: "medium",
     policy: "account-placement",
-    warning: "This requests reserve placement. Refreshed accounts JSON remains truth."
+    warning: "Это запрашивает перевод в reserve. Подтверждением остаётся обновлённый accounts JSON."
   },
   hold_account: {
     severity: "medium",
     policy: "account-hold",
-    warning: "This requests manual hold. Refreshed accounts JSON remains truth."
+    warning: "Это запрашивает ручную паузу. Подтверждением остаётся обновлённый accounts JSON."
   },
   release_account: {
     severity: "medium",
     policy: "account-hold",
-    warning: "This requests hold release. Refreshed accounts JSON remains truth."
+    warning: "Это запрашивает снятие ручной паузы. Подтверждением остаётся обновлённый accounts JSON."
   },
   retire_account: {
     severity: "critical",
     policy: "terminal-account-lifecycle",
-    warning: "This requests terminal account retirement. It is not removal or return path."
+    warning: "Это запрашивает терминальный вывод аккаунта из lifecycle. Это не удаление и не путь возврата."
   }
 };
 
 const CONSERVATIVE_CONFIRMATION_POLICY = {
   severity: "critical",
   policy: "metadata-fallback",
-  warning: "Action metadata is incomplete. Treat this as risky and rely only on server response plus refreshed JSON."
+  warning: "Метаданные действия неполные. Считайте действие рискованным и опирайтесь только на ответ сервера плюс обновлённый JSON."
 };
 
 let actionMetadata = {};
@@ -214,20 +214,20 @@ async function loadLiveReadonly() {
       status: "integration_failure",
       ui_state: "integration_failure",
       source: "live_readonly",
-      fixture_notice: `Live read-only request failed: ${error.message}`,
+      fixture_notice: `Live-запрос только для чтения не удался: ${error.message}`,
       runtime: {
         ...FALLBACK_FIXTURE.runtime,
         visual_state: "integration_failure",
         status_label: "Ошибка интеграции",
         machine_error_code: "UI_LIVE_READONLY_FETCH_FAILED",
-        human_message: "Live read-only request failed.",
+        human_message: "Live-запрос только для чтения не удался.",
         last_error: error.message,
         observed_at_utc: "live-readonly"
       },
       events: [
         {
           level: "red",
-          message: "Live read-only request failed.",
+          message: "Live-запрос только для чтения не удался.",
           observed_at: "live-readonly"
         }
       ]
@@ -269,7 +269,7 @@ async function loadAccountsReadonly() {
         down: 0,
         capacity_target: 20,
         visible_count: 0,
-        human_message: "Accounts read-only request failed.",
+        human_message: "Запрос аккаунтов только для чтения не удался.",
         machine_error_code: "UI_ACCOUNTS_READONLY_FETCH_FAILED",
         last_error: error.message
       },
@@ -295,14 +295,14 @@ function metadataFor(uiAction) {
   return actionMetadata[uiAction] || {
     ui_action: uiAction,
     display_name: uiAction,
-    human_meaning: "Action metadata could not be loaded.",
+    human_meaning: "Метаданные действия не удалось загрузить.",
     action_role: "unknown",
     mutates_runtime: true,
     confirmation_required: true,
     post_action_refresh_required: true,
     action_claim_scope: "unknown",
     available: false,
-    unavailable_reason: "Action metadata could not be loaded."
+    unavailable_reason: "Метаданные действия не удалось загрузить."
   };
 }
 
@@ -337,33 +337,33 @@ function actionDisplayState(payload, refreshState = "none") {
 
 function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "running") {
-    return "Action request is in flight. No runtime truth has changed in the UI.";
+    return "Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.";
   }
   if (displayState === "ok" && payload.post_action_refresh_required) {
-    return "Action packet reported ok; canonical runtime truth requires refreshed JSON.";
+    return "Пакет действия сообщил ok; каноническое состояние runtime требует обновлённого JSON.";
   }
   if (displayState === "ok") {
-    return "Action packet reported ok. This ledger is not a separate runtime truth source.";
+    return "Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.";
   }
   if (displayState === "stale" || refreshState === "failed") {
-    return "Post-action refresh failed or stale. Do not treat the previous UI state as green runtime truth.";
+    return "Обновление после действия не удалось или устарело. Не считайте прежнее состояние UI зелёным runtime truth.";
   }
   if (displayState === "timeout") {
-    return "Request timed out. This is a recoverable integration failure, not success.";
+    return "Запрос истёк по времени. Это recoverable ошибка интеграции, а не успех.";
   }
   if (displayState === "invalid_json") {
-    return "Endpoint returned invalid JSON. This is a hard integration failure, not success.";
+    return "Endpoint вернул invalid JSON. Это жёсткая ошибка интеграции, а не успех.";
   }
   if (displayState === "command_error") {
-    return "Strict JSON packet reported command_error. The UI must not render this as success.";
+    return "Строгий JSON-пакет сообщил command_error. UI не должен показывать это как успех.";
   }
   if (displayState === "integration_failure") {
-    return "UI/server integration failure. No command success is inferred.";
+    return "Ошибка интеграции UI/server. Успех команды не выводится по предположению.";
   }
   if (displayState === "degraded" || displayState === "down" || displayState === "unknown") {
-    return `Action ledger is ${displayState}; it is not healthy runtime truth.`;
+    return `Журнал действия в состоянии ${displayState}; это не healthy runtime truth.`;
   }
-  return "Non-ok action state. The UI must not infer success.";
+  return "Состояние действия не ok. UI не должен выводить успех по предположению.";
 }
 
 async function runUiAction(uiAction, extraPayload = {}) {
@@ -376,7 +376,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
     result: {
       status: "running",
       machine_error_code: "RUNNING",
-      human_message: "Action is running.",
+      human_message: "Действие выполняется.",
       next_action: "wait",
       changed_files: []
     }
@@ -397,10 +397,10 @@ async function runUiAction(uiAction, extraPayload = {}) {
       const refreshTarget = currentScreen() === "accounts"
         ? "accounts"
         : (currentScreen() === "settings" ? "settings" : "overview");
-      text("actionRefreshStatus", `refreshing live ${refreshTarget}`);
+      text("actionRefreshStatus", `обновление live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       if (refreshed.status === "ok") {
-        text("actionRefreshStatus", "live refresh ok");
+        text("actionRefreshStatus", "live-обновление выполнено");
       } else {
         setActionPanel(payload, "failed");
       }
@@ -439,7 +439,7 @@ function applyActionAvailability() {
     button.dataset.available = available ? "true" : "false";
     button.title = available
       ? ""
-      : (requiresLive && !isLiveSource ? "Switch Accounts to live source before account actions." : (metadata.unavailable_reason || "Action unavailable"));
+      : (requiresLive && !isLiveSource ? "Переключите Accounts на live-источник перед действиями с аккаунтами." : (metadata.unavailable_reason || "Действие недоступно"));
   }
   updateSettingsActionMetadata();
 }
@@ -467,14 +467,14 @@ function validateSnapshot(snapshot) {
 function snapshotNotice(snapshot) {
   if (snapshot.source === "live_readonly") {
     if (snapshot.status !== "ok") {
-      return "Live read-only integration failure. Previous healthy data was not reused.";
+      return "Ошибка интеграции live only-read. Предыдущие healthy-данные не переиспользуются.";
     }
     if (snapshot.has_warnings) {
-      return `Live read-only preview with warnings. ${warningSummary(snapshot.warnings || [])}`;
+      return `Live-просмотр только для чтения с предупреждениями. ${warningSummary(snapshot.warnings || [])}`;
     }
-    return "Live read-only preview. Runtime truth comes from strict command packets.";
+    return "Live-просмотр только для чтения. Истина runtime приходит из строгих пакетов команд.";
   }
-  return snapshot.fixture_notice || "Fixture preview only. No command execution, no runtime file reads.";
+  return snapshot.fixture_notice || "Только демо-просмотр. Команды не выполняются, runtime-файлы не читаются.";
 }
 
 function warningSummary(warnings) {
@@ -522,7 +522,7 @@ function renderEvents(events) {
     icon.textContent = EVENT_ICON[level] || EVENT_ICON.neutral;
 
     const message = document.createElement("span");
-    message.textContent = event.message || "Fixture event";
+    message.textContent = event.message || "Событие демо-состояния";
 
     const time = document.createElement("time");
     time.textContent = event.observed_at || "fixture";
@@ -538,49 +538,49 @@ function setSourceCopy(source) {
   document.getElementById("sourceFooter").textContent = source === "live"
     ? (
       screen === "accounts"
-        ? "Accounts live read-only"
+        ? "Аккаунты · live только чтение"
         : (
           screen === "diagnostics"
-            ? "Diagnostics support artifact"
+            ? "Диагностика · пакет поддержки"
             : (
               screen === "settings"
-                ? "Settings command-packet bounded"
-                : (setupLike ? "Setup screens · deferred skeleton" : "Live read-only · basic actions")
+                ? "Настройки · через пакеты команд"
+                : (setupLike ? "Экраны настройки · отложенный каркас" : "Live только чтение · базовые действия")
             )
         )
     )
-    : "UI preview · no live commands";
+    : "Предпросмотр UI · без live-команд";
   document.getElementById("subtitleText").textContent = source === "live"
     ? (
       screen === "accounts"
-        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия идут через bounded action gate."
+        ? "Пул аккаунтов читается только из канонического accounts JSON packet. Lifecycle-действия проходят через bounded action gate."
         : (
           screen === "diagnostics"
-            ? "Экран диагностики показывает только support-artifact metadata из diagnostics JSON packet. Runtime health truth остаётся за status/healthcheck."
+      ? "Экран диагностики показывает только метаданные диагностического пакета из diagnostics JSON packet. Истина о здоровье runtime остаётся за status/healthcheck."
             : (
               screen === "settings"
-                ? "Настройки показывают observed status/configuration из JSON packets. Safe actions are requests, not saved preferences."
+                ? "Настройки показывают наблюдаемые status/configuration из JSON packets. Безопасные действия являются запросами, а не сохранёнными preferences."
                 : (
                   setupLike
-                    ? "Setup/select/import screens are inert in this contour. They do not run discovery, selection, or import commands."
-                    : "Первый экран подключен к живым JSON-командам. Basic actions требуют live refresh после выполнения."
+                    ? "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
+                    : "Первый экран подключен к живым JSON-командам. Базовые действия требуют live-обновления после выполнения."
                 )
             )
         )
     )
     : (
       screen === "accounts"
-        ? "Визуальный перенос экрана аккаунтов. Данные ниже являются fixtures, а не runtime truth."
+        ? "Визуальный перенос экрана аккаунтов. Данные ниже являются демо-состояниями, а не runtime truth."
         : (
           screen === "diagnostics"
-            ? "Визуальный перенос diagnostics screen. Экспорт создаёт support artifact, но не доказывает runtime health."
+            ? "Визуальный перенос экрана диагностики. Экспорт создаёт диагностический пакет поддержки, но не доказывает runtime health."
             : (
               screen === "settings"
-                ? "Визуальный перенос settings screen. Controls are read-only or deferred unless backed by existing ui_action."
+                ? "Визуальный перенос экрана настроек. Элементы либо только для чтения, либо отложены, если за ними нет существующего ui_action."
                 : (
                   setupLike
-                    ? "Визуальный перенос setup/select/import skeleton. Все risky controls disabled; no simulated truth."
-                    : "Визуальный перенос первого экрана. Данные ниже являются fixtures, а не runtime truth."
+                    ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
+                    : "Визуальный перенос первого экрана. Данные ниже являются демо-состояниями, а не runtime truth."
                 )
             )
         )
@@ -602,16 +602,16 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionMachineCode", result.machine_error_code || "-");
   text("actionMessage", result.human_message || "-");
   text("actionNextAction", result.next_action || "none");
-  text("actionChangedFiles", `${changedFiles.length} metadata entries`);
+  text("actionChangedFiles", `${changedFiles.length} записей метаданных`);
   text(
     "actionRefreshStatus",
     refreshState === "failed"
-      ? "live refresh failed; state is stale"
-      : (payload.post_action_refresh_required ? "required after action" : "not required")
+      ? "live-обновление не удалось; состояние устарело"
+      : (payload.post_action_refresh_required ? "требуется после действия" : "не требуется")
   );
   text("actionTruthNote", display.truthNote);
   text("actionOnboardingOutcome", onboarding.final_outcome || "-");
-  text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "proven" : (onboarding.ui_state || "-"));
+  text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "доказано" : (onboarding.ui_state || "-"));
   text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
@@ -631,7 +631,7 @@ function renderDiagnosticsAction(payload) {
   }
   chip.className = `chip ${visual}`;
   chip.lastElementChild.textContent = diagnosticsStatusLabel(status);
-  text("diagnosticsMessage", result.human_message || "Diagnostics command returned no message.");
+  text("diagnosticsMessage", result.human_message || "Команда диагностики не вернула сообщение.");
   text("diagnosticsPacketStatus", status);
   text("diagnosticsExitCode", result.exit_code ?? "-");
   text("diagnosticsMachineCode", result.machine_error_code || "-");
@@ -642,25 +642,25 @@ function renderDiagnosticsAction(payload) {
   const banner = document.getElementById("diagnosticsBanner");
   setClassName(banner, "fixture-banner", status === "ok" ? "healthy" : (status === "running" ? "stale" : "integration_failure"));
   banner.textContent = status === "ok"
-    ? "Diagnostics support artifact exported. Runtime health truth was not changed."
-    : "Diagnostics command did not produce a successful support artifact. Runtime health truth was not changed.";
+    ? "Диагностический пакет поддержки экспортирован. Истина о здоровье runtime не изменялась."
+    : "Команда диагностики не создала успешный пакет поддержки. Истина о здоровье runtime не изменялась.";
 }
 
 function diagnosticsStatusLabel(status) {
   return {
-    ok: "Artifact exported",
-    running: "Running",
-    command_error: "Command error",
-    integration_failure: "Integration failure"
-  }[status] || "Unknown";
+    ok: "Артефакт экспортирован",
+    running: "Выполняется",
+    command_error: "Ошибка команды",
+    integration_failure: "Ошибка интеграции"
+  }[status] || "Неизвестно";
 }
 
 function artifactReference(value) {
   if (typeof value !== "string" || !value) {
-    return "not provided";
+    return "не предоставлено";
   }
   const basename = value.split(/[\\/]/).filter(Boolean).pop() || "artifact";
-  return `metadata only: ${basename}`;
+  return `только метаданные: ${basename}`;
 }
 
 function renderSettingsSnapshot(snapshot) {
@@ -668,16 +668,16 @@ function renderSettingsSnapshot(snapshot) {
   const statusLabel = runtime.status_label || "Неизвестно";
   text("settingsDesiredMode", modeLabel(runtime.desired_mode));
   text("settingsEffectiveMode", modeLabel(runtime.effective_mode));
-  text("settingsEndpoint", runtime.endpoint || "not provided by command packet");
-  text("settingsRuntimeStatus", `${statusLabel} · observed, not editable`);
-  text("settingsMachineCode", runtime.machine_error_code || "not provided by command packet");
+  text("settingsEndpoint", runtime.endpoint || "не предоставлен пакетом команды");
+  text("settingsRuntimeStatus", `${statusLabel} · наблюдается, не редактируется`);
+  text("settingsMachineCode", runtime.machine_error_code || "не предоставлен пакетом команды");
   updateSettingsActionMetadata();
 
   const banner = document.getElementById("settingsBanner");
   if (banner) {
     const visualState = runtime.visual_state || snapshot.state_id || "unknown";
     setClassName(banner, "fixture-banner", visualState);
-    banner.textContent = "Settings is read-only in this contour. Safe actions are requests, not saved preferences.";
+    banner.textContent = "Настройки в этом контуре доступны только для чтения. Безопасные действия являются запросами, а не сохранёнными preferences.";
   }
 }
 
@@ -688,8 +688,8 @@ function updateSettingsActionMetadata() {
     return;
   }
   target.textContent = launch.available === false
-    ? `unavailable · ${launch.unavailable_reason || "server-owned path not provided"}`
-    : "available · server-owned bounded dispatch";
+    ? `недоступно · ${launch.unavailable_reason || "server-owned path не предоставлен"}`
+    : "доступно · server-owned bounded dispatch";
 }
 
 function setActionsBusy(isBusy) {
@@ -713,7 +713,7 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
       result: {
         status: "integration_failure",
         machine_error_code: "UI_ACTION_UNAVAILABLE",
-        human_message: metadata.unavailable_reason || "Action unavailable.",
+        human_message: metadata.unavailable_reason || "Действие недоступно.",
         next_action: "user_action",
         changed_files: []
       }
@@ -731,13 +731,13 @@ function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   confirmationInFlight = false;
   pendingConfirmedAction = { uiAction, extraPayload };
   text("confirmTitle", metadata.display_name || uiAction);
-  text("confirmMeaning", metadata.human_meaning || "Confirm this action.");
+  text("confirmMeaning", metadata.human_meaning || "Подтвердите это действие.");
   text("confirmUiAction", uiAction);
   text("confirmAccountId", extraPayload.account_id || "-");
   text("confirmSeverity", policy.severity || "critical");
   text("confirmPolicy", policy.policy || "metadata-fallback");
-  text("confirmMutation", metadata.mutates_runtime ? "true" : "false");
-  text("confirmRefresh", metadata.post_action_refresh_required ? "required" : "not required");
+  text("confirmMutation", metadata.mutates_runtime ? "да" : "нет");
+  text("confirmRefresh", metadata.post_action_refresh_required ? "требуется" : "не требуется");
   text("confirmScope", metadata.action_claim_scope || "unknown");
   text("confirmTruthWarning", policy.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning);
   setConfirmationInFlight(false);
@@ -765,7 +765,7 @@ function setConfirmationInFlight(isInFlight) {
   if (cancelButton) {
     cancelButton.disabled = isInFlight;
   }
-  text("confirmDispatchState", isInFlight ? "dispatching once" : "idle");
+  text("confirmDispatchState", isInFlight ? "однократная отправка" : "ожидание");
 }
 
 async function confirmPendingAction() {
@@ -842,7 +842,7 @@ function setScreen(screen, updateUrl = false) {
               ? "Настройки"
               : (
                 nextScreen === "setup"
-                  ? "Setup"
+                  ? "Настройка"
                   : (
                     nextScreen === "select-client"
                       ? "Выбор клиента"
@@ -868,8 +868,8 @@ function accountsFixtureFromOverview(fixture) {
   const accounts = [
     accountFixture("acct-active-01", "codex-primary@example.com", "active", "healthy", "green", "", "Сегодня, 12:42"),
     accountFixture("acct-reserve-01", "codex-reserve@example.com", "reserve", "healthy", "blue", "", "Сегодня, 11:50"),
-    accountFixture("acct-hold-01", "codex-hold@example.com", "reserve", "healthy", "amber", "manual hold", "Сегодня, 10:48", true),
-    accountFixture("acct-problem-01", "codex-auth@example.com", "retired", "down", problemState, "auth/session error", "Сегодня, 09:44")
+    accountFixture("acct-hold-01", "codex-hold@example.com", "reserve", "healthy", "amber", "ручная пауза", "Сегодня, 10:48", true),
+    accountFixture("acct-problem-01", "codex-auth@example.com", "retired", "down", problemState, "ошибка auth/session", "Сегодня, 09:44")
   ];
   return {
     schema_version: 1,
@@ -897,7 +897,7 @@ function accountsFixtureFromOverview(fixture) {
       down: stateId === "down" ? 2 : 1,
       capacity_target: 20,
       visible_count: accounts.length,
-      human_message: fixture.fixture_notice || "Accounts fixture preview.",
+      human_message: fixture.fixture_notice || "Демо-просмотр аккаунтов.",
       machine_error_code: fixture.runtime?.machine_error_code || "fixture",
       last_error: fixture.runtime?.last_error || ""
     },
@@ -919,10 +919,10 @@ function accountFixture(id, label, pool, status, visualState, lastError, lastSuc
     fail_count: lastError ? 2 : 0,
     success_count: lastError ? 0 : 8,
     last_success: lastSuccess,
-    last_error_class: lastError ? "fixture" : "",
+      last_error_class: lastError ? "демо" : "",
     last_error_summary: lastError,
     cooldown_until: "",
-    notes_summary: "fixture"
+      notes_summary: "демо"
   };
 }
 
@@ -949,7 +949,7 @@ function renderAccountsSnapshot(snapshot) {
     summary: {
       ...accountsFixtureFromOverview(FALLBACK_FIXTURE).summary,
       machine_error_code: "UI_ACCOUNTS_SCHEMA_INVALID",
-      last_error: `Accounts schema invalid: top [${validation.missingTop.join(", ")}], summary [${validation.missingSummary.join(", ")}], registry [${validation.missingRegistry.join(", ")}]`
+      last_error: `Схема accounts недействительна: top [${validation.missingTop.join(", ")}], summary [${validation.missingSummary.join(", ")}], registry [${validation.missingRegistry.join(", ")}]`
     },
     accounts: []
   };
@@ -962,18 +962,18 @@ function renderAccountsSnapshot(snapshot) {
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
   document.getElementById("brandCaption").textContent = source === "live"
-    ? "accounts live read-only"
-    : "accounts fixture preview";
+    ? "аккаунты · live только чтение"
+    : "аккаунты · демо-просмотр";
   document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
     ? "Обновить live"
-    : "Обновить fixture";
+    : "Обновить демо";
   setSourceCopy(source);
 
   const banner = document.getElementById("accountsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "Accounts live mode. Truth comes only from the canonical accounts JSON packet; lifecycle controls are bounded action requests."
-    : "Accounts fixture preview only. Account actions are disabled.";
+    ? "Live-режим аккаунтов. Подтверждение приходит только из канонического accounts JSON packet; lifecycle controls являются bounded action requests."
+    : "Только демо-просмотр аккаунтов. Действия с аккаунтами отключены.";
 
   const summary = safeSnapshot.summary;
   text("accountsActiveChip", `${summary.active} активных`);
@@ -982,7 +982,7 @@ function renderAccountsSnapshot(snapshot) {
   text("accountsProblemChip", `${summary.problem} проблемных`);
   text(
     "accountsRegistryStatus",
-    `registry identity: ${safeSnapshot.registry_identity.status} · ${safeSnapshot.registry_identity.machine_error_code}`
+    `Идентичность registry: ${safeSnapshot.registry_identity.status} · ${safeSnapshot.registry_identity.machine_error_code}`
   );
   text("accountsVisibleCount", `Показано ${safeSnapshot.accounts.length} из ${summary.visible_count}`);
   text("accountsPagination", `Строки ${safeSnapshot.accounts.length ? 1 : 0}-${safeSnapshot.accounts.length} из ${summary.visible_count}`);
@@ -1028,7 +1028,7 @@ function td(className, child) {
 function checkbox() {
   const node = document.createElement("div");
   node.className = "checkbox";
-  node.title = "Bulk lifecycle actions are deferred in this contour.";
+  node.title = "Массовые lifecycle-действия отложены в этом контуре.";
   return node;
 }
 
@@ -1039,7 +1039,7 @@ function accountIdentity(account) {
   main.textContent = account.id || "unknown-account";
   const sub = document.createElement("div");
   sub.className = "account-sub";
-  sub.textContent = redactAccountLabel(account.label || account.id || "redacted account");
+  sub.textContent = redactAccountLabel(account.label || account.id || "редактированный аккаунт");
   wrap.append(main, sub);
   return wrap;
 }
@@ -1062,7 +1062,7 @@ function accountActionButtons(account) {
   group.append(accountActionButton(account, "validate_account", "Проверить"));
   if (account.pool !== "retired") {
     if (account.manual_hold) {
-      group.append(accountActionButton(account, "release_account", "Снять hold"));
+        group.append(accountActionButton(account, "release_account", "Снять паузу"));
     } else {
       if (account.pool === "reserve") {
         group.append(accountActionButton(account, "promote_account", "В актив"));
@@ -1085,8 +1085,8 @@ function accountActionButton(account, uiAction, label) {
   button.dataset.accountId = account.id || "";
   button.textContent = label;
   button.title = uiAction === "retire_account"
-    ? "Request terminal lifecycle retirement. Refreshed accounts list remains truth."
-    : "Run an allowlisted account action. Accounts list refresh remains truth.";
+    ? "Запросить терминальный вывод из lifecycle. Подтверждением остаётся обновлённый список аккаунтов."
+    : "Выполнить allowlisted действие с аккаунтом. Подтверждением остаётся обновлённый список аккаунтов.";
   button.addEventListener("click", () => {
     maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId });
   });
@@ -1130,7 +1130,7 @@ function renderSnapshot(snapshot) {
   const safeSnapshot = validation.ok ? snapshot : {
     ...FALLBACK_FIXTURE,
     state_id: "integration_failure",
-    fixture_notice: `Fixture schema invalid: missing top [${validation.missingTop.join(", ")}], runtime [${validation.missingRuntime.join(", ")}]`
+    fixture_notice: `Схема демо-состояния недействительна: отсутствует top [${validation.missingTop.join(", ")}], runtime [${validation.missingRuntime.join(", ")}]`
   };
 
   const runtime = safeSnapshot.runtime;
@@ -1145,12 +1145,12 @@ function renderSnapshot(snapshot) {
   picker.disabled = source === "live";
   document.getElementById("sourcePicker").value = source;
   document.getElementById("brandCaption").textContent = source === "live"
-    ? "live read-only web preview"
-    : "fixture-backed web preview";
+    ? "live web preview только чтение"
+    : "web preview на демо-состояниях";
   setSourceCopy(source);
   document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
     ? "Обновить live"
-    : "Обновить fixture";
+    : "Обновить демо";
 
   const runtimeChip = document.getElementById("runtimeChip");
   setClassName(runtimeChip, "chip", visualState);

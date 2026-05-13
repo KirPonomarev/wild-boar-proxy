@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_RUSSIAN_OPERATOR_COPY_LOCALIZATION",
+  "created_at": "2026-05-13",
+  "goal": "Professional Russian operator copy for the web UI while preserving strict command and runtime truth boundaries.",
+  "localization_policy": {
+    "translate": [
+      "visible headings",
+      "button labels",
+      "operator explanations",
+      "confirmation warnings",
+      "fixture human messages",
+      "diagnostics and settings helper copy",
+      "test expectations for visible copy"
+    ],
+    "do_not_translate_or_rename": [
+      "ui_action identifiers",
+      "adapter command ids",
+      "JSON keys",
+      "argv templates",
+      "machine_error_code values",
+      "raw lifecycle enum values",
+      "status enum values",
+      "file paths",
+      "URLs",
+      "SPDX and license headers"
+    ],
+    "allowed_technical_tokens": [
+      "Wild Boar Proxy",
+      "UI",
+      "JSON",
+      "runtime",
+      "live",
+      "healthcheck",
+      "status",
+      "allowlist",
+      "bounded",
+      "command-owned",
+      "owner command request",
+      "desktop/native picker",
+      "ui_action",
+      "backend ids",
+      "auth paths",
+      "source dirs",
+      "credentials",
+      "active routing",
+      "no-new-auth",
+      "ambiguous identity",
+      "stable",
+      "managed",
+      "dry-run",
+      "refresh"
+    ]
+  },
+  "term_decisions": [
+    {
+      "source": "Desired mode",
+      "russian": "Желаемый режим",
+      "note": "Visible aria label and operator-facing mode terminology."
+    },
+    {
+      "source": "Runtime truth",
+      "russian": "истина runtime",
+      "note": "Keeps runtime as a project technical term while translating the operator claim."
+    },
+    {
+      "source": "health truth",
+      "russian": "источник истины о здоровье runtime",
+      "note": "Avoids vague English phrase in diagnostics copy."
+    },
+    {
+      "source": "metadata",
+      "russian": "метаданные",
+      "note": "Translated in visible labels; kept in function names and code identifiers."
+    },
+    {
+      "source": "Exit code",
+      "russian": "Код выхода",
+      "note": "Visible diagnostics packet field."
+    },
+    {
+      "source": "filesystem",
+      "russian": "файловая система",
+      "note": "Visible settings/setup boundary copy."
+    },
+    {
+      "source": "browser",
+      "russian": "браузер",
+      "note": "Visible operator copy; kept as code/domain token where embedded in identifiers."
+    },
+    {
+      "source": "discovery",
+      "russian": "обнаружение",
+      "note": "Visible setup/select/import copy."
+    },
+    {
+      "source": "snapshot",
+      "russian": "снимок",
+      "note": "Visible import safety copy."
+    },
+    {
+      "source": "rollback",
+      "russian": "откат",
+      "note": "Visible import safety copy."
+    },
+    {
+      "source": "source-location mediation",
+      "russian": "медиация исходного расположения",
+      "note": "Visible import boundary copy."
+    }
+  ],
+  "changed_files": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/fixtures/degraded.json",
+    "wild_boar_proxy/web_design_ui/fixtures/down.json",
+    "wild_boar_proxy/web_design_ui/fixtures/healthy.json",
+    "wild_boar_proxy/web_design_ui/fixtures/integration_failure.json",
+    "wild_boar_proxy/web_design_ui/fixtures/stale.json",
+    "wild_boar_proxy/web_design_ui/fixtures/unknown.json",
+    "tests/test_web_design_ui.py",
+    "tests/test_web_design_live_server.py"
+  ],
+  "out_of_scope_confirmed": [
+    "no CSS redesign",
+    "no runtime.py changes",
+    "no desktop renderer changes",
+    "no command argv changes",
+    "no browser payload expansion",
+    "no direct state or log reads"
+  ]
+}

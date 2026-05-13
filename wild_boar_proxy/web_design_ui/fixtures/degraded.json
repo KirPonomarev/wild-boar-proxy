@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "state_id": "degraded",
-  "fixture_notice": "Fixture preview only. Degraded remains distinct from healthy.",
+  "fixture_notice": "Только демо-просмотр. Деградация остаётся отдельной от healthy.",
   "runtime": {
     "visual_state": "degraded",
     "status_label": "Деградация",
@@ -9,7 +9,7 @@
     "effective_mode": "managed",
     "endpoint": "127.0.0.1:8320",
     "machine_error_code": "DEGRADED_FIXTURE",
-    "human_message": "Fixture: runtime reachable, but account pool needs attention.",
+    "human_message": "Демо: runtime доступен, но пул аккаунтов требует внимания.",
     "last_error": "2 аккаунта требуют проверки",
     "observed_at_utc": "2026-05-12T21:00:00Z"
   },
@@ -26,17 +26,17 @@
   "events": [
     {
       "level": "amber",
-      "message": "Fixture: healthcheck вернул recoverable degraded",
+      "message": "Демо: healthcheck вернул recoverable degraded",
       "observed_at": "Сегодня, 12:50:12"
     },
     {
       "level": "red",
-      "message": "Fixture: аккаунт #021 не прошел validate",
+      "message": "Демо: аккаунт #021 не прошёл validate",
       "observed_at": "Сегодня, 12:49:44"
     },
     {
       "level": "blue",
-      "message": "Fixture: managed mode остается effective",
+      "message": "Демо: managed mode остаётся effective",
       "observed_at": "Сегодня, 12:48:31"
     }
   ]

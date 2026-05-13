@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "state_id": "healthy",
-  "fixture_notice": "Fixture preview only. Healthy here is not runtime truth or runtime evidence.",
+  "fixture_notice": "Только демо-просмотр. Healthy здесь не является runtime truth или runtime evidence.",
   "runtime": {
     "visual_state": "healthy",
     "status_label": "Работает",
@@ -9,7 +9,7 @@
     "effective_mode": "managed",
     "endpoint": "127.0.0.1:8320",
     "machine_error_code": "OK",
-    "human_message": "Fixture: all primary surfaces are represented as healthy.",
+    "human_message": "Демо: все primary surfaces представлены как healthy.",
     "last_error": "",
     "observed_at_utc": "2026-05-12T21:00:00Z"
   },
@@ -26,27 +26,27 @@
   "events": [
     {
       "level": "green",
-      "message": "Fixture: синхронизация завершена успешно",
+      "message": "Демо: синхронизация завершена успешно",
       "observed_at": "Сегодня, 12:45:02"
     },
     {
       "level": "blue",
-      "message": "Fixture: переключение в управляемый режим выполнено",
+      "message": "Демо: переключение в управляемый режим выполнено",
       "observed_at": "Сегодня, 12:44:10"
     },
     {
       "level": "green",
-      "message": "Fixture: аккаунт #034 переведен в активные",
+      "message": "Демо: аккаунт #034 переведён в активные",
       "observed_at": "Сегодня, 12:42:38"
     },
     {
       "level": "red",
-      "message": "Fixture: ошибка проверки аккаунта #021: недоступен",
+      "message": "Демо: ошибка проверки аккаунта #021: недоступен",
       "observed_at": "Сегодня, 12:38:54"
     },
     {
       "level": "blue",
-      "message": "Fixture: проверка работы завершена: OK",
+      "message": "Демо: проверка работы завершена: OK",
       "observed_at": "Сегодня, 12:36:21"
     }
   ]

@@ -59,9 +59,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": False,
         "post_action_refresh_required": False,
-        "action_claim_scope": "runtime detail refresh only",
-        "display_name": "Healthcheck",
-        "human_meaning": "Refresh runtime health detail without changing runtime state.",
+        "action_claim_scope": "только обновление деталей runtime; состояние runtime не меняется",
+        "display_name": "Проверка здоровья",
+        "human_meaning": "Обновить детали здоровья runtime без изменения runtime state.",
     },
     "export_diagnostics": {
         "adapter_command_id": "diagnostics_export",
@@ -70,9 +70,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": False,
         "post_action_refresh_required": False,
-        "action_claim_scope": "support artifact only",
-        "display_name": "Diagnostics export",
-        "human_meaning": "Create a diagnostics support artifact without making it runtime truth.",
+        "action_claim_scope": "только диагностический пакет поддержки",
+        "display_name": "Экспорт диагностики",
+        "human_meaning": "Создать диагностический пакет поддержки, не превращая его в runtime truth.",
     },
     "stable_repair_plan": {
         "adapter_command_id": "stable_repair_dry_run",
@@ -81,9 +81,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": False,
         "post_action_refresh_required": False,
-        "action_claim_scope": "dry-run recovery planning only",
-        "display_name": "Stable repair dry-run",
-        "human_meaning": "Preview stable repair work without applying changes.",
+        "action_claim_scope": "только dry-run план восстановления",
+        "display_name": "План ремонта stable",
+        "human_meaning": "Показать план stable repair без применения изменений.",
     },
     "onboard_account": {
         "adapter_command_id": "accounts_onboard",
@@ -93,9 +93,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account admission request only; command packet and refreshed accounts list remain truth",
-        "display_name": "Onboard account",
-        "human_meaning": "Request reserve-first account onboarding without browser paths or credentials, then refresh accounts truth.",
+        "action_claim_scope": "только запрос допуска аккаунта; подтверждением остаются пакет команды и обновлённый список аккаунтов",
+        "display_name": "Подключить аккаунт",
+        "human_meaning": "Запросить подключение аккаунта сначала в резерв без browser paths или credentials, затем обновить подтверждённый список аккаунтов.",
     },
     "validate_account": {
         "adapter_command_id": "accounts_validate",
@@ -104,9 +104,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account verification request only; refreshed accounts list remains truth",
-        "display_name": "Validate account",
-        "human_meaning": "Run account verification for the selected account, then refresh accounts truth.",
+        "action_claim_scope": "только запрос проверки аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Проверить аккаунт",
+        "human_meaning": "Запустить проверку выбранного аккаунта, затем обновить подтверждённый список аккаунтов.",
     },
     "promote_account": {
         "adapter_command_id": "accounts_promote",
@@ -115,9 +115,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account promotion request only; refreshed accounts list remains truth",
-        "display_name": "Promote account",
-        "human_meaning": "Request reserve-to-active promotion for the selected account, then refresh accounts truth.",
+        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Перевести аккаунт в active",
+        "human_meaning": "Запросить перевод выбранного аккаунта из reserve в active, затем обновить подтверждённый список аккаунтов.",
     },
     "demote_account": {
         "adapter_command_id": "accounts_demote",
@@ -126,9 +126,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account demotion request only; refreshed accounts list remains truth",
-        "display_name": "Demote account",
-        "human_meaning": "Request active-to-reserve demotion for the selected account, then refresh accounts truth.",
+        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Вернуть аккаунт в reserve",
+        "human_meaning": "Запросить перевод выбранного аккаунта из active в reserve, затем обновить подтверждённый список аккаунтов.",
     },
     "retire_account": {
         "adapter_command_id": "accounts_retire",
@@ -137,9 +137,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "terminal account retirement request only; refreshed accounts list remains truth",
-        "display_name": "Retire account",
-        "human_meaning": "Request terminal lifecycle retirement for the selected account, then refresh accounts truth.",
+        "action_claim_scope": "только терминальный lifecycle-запрос; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Вывести аккаунт",
+        "human_meaning": "Запросить терминальный вывод выбранного аккаунта из lifecycle, затем обновить подтверждённый список аккаунтов.",
     },
     "hold_account": {
         "adapter_command_id": "accounts_hold",
@@ -148,9 +148,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account hold request only; refreshed accounts list remains truth",
-        "display_name": "Hold account",
-        "human_meaning": "Place the selected account on manual hold, then refresh accounts truth.",
+        "action_claim_scope": "только запрос ручной паузы; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Поставить аккаунт на паузу",
+        "human_meaning": "Поставить выбранный аккаунт на manual hold, затем обновить подтверждённый список аккаунтов.",
     },
     "release_account": {
         "adapter_command_id": "accounts_release",
@@ -159,9 +159,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "account release request only; refreshed accounts list remains truth",
-        "display_name": "Release account",
-        "human_meaning": "Release the selected account from manual hold, then refresh accounts truth.",
+        "action_claim_scope": "только запрос снятия ручной паузы; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Снять аккаунт с паузы",
+        "human_meaning": "Снять выбранный аккаунт с manual hold, затем обновить подтверждённый список аккаунтов.",
     },
     "sync_runtime": {
         "adapter_command_id": "sync",
@@ -170,9 +170,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "sync request only; refreshed live overview remains truth",
-        "display_name": "Sync runtime",
-        "human_meaning": "Run managed sync, then refresh the overview from live JSON truth.",
+        "action_claim_scope": "только запрос sync; подтверждением остаётся обновлённый live overview",
+        "display_name": "Синхронизировать runtime",
+        "human_meaning": "Запустить managed sync, затем обновить overview из live JSON truth.",
     },
     "set_mode_stable": {
         "adapter_command_id": "mode_stable",
@@ -181,9 +181,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "mode request only; refreshed live overview remains truth",
-        "display_name": "Set stable mode",
-        "human_meaning": "Request stable mode, then refresh desired/effective mode from live JSON truth.",
+        "action_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview",
+        "display_name": "Запросить stable mode",
+        "human_meaning": "Запросить stable mode, затем обновить desired/effective mode из live JSON truth.",
     },
     "set_mode_managed": {
         "adapter_command_id": "mode_managed",
@@ -192,9 +192,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "mode request only; refreshed live overview remains truth",
-        "display_name": "Set managed mode",
-        "human_meaning": "Request managed mode, then refresh desired/effective mode from live JSON truth.",
+        "action_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview",
+        "display_name": "Запросить managed mode",
+        "human_meaning": "Запросить managed mode, затем обновить desired/effective mode из live JSON truth.",
     },
     "launch_smoke": {
         "adapter_command_id": "smoke",
@@ -203,9 +203,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": False,
         "post_action_refresh_required": True,
-        "action_claim_scope": "runtime smoke check only; not host-client launch success",
-        "display_name": "Launch smoke",
-        "human_meaning": "Run a runtime smoke check without claiming host-client launch success.",
+        "action_claim_scope": "только smoke-проверка runtime; это не успех запуска внешнего клиента",
+        "display_name": "Smoke-проверка запуска",
+        "human_meaning": "Запустить runtime smoke check без заявления об успешном запуске внешнего клиента.",
     },
     "launch_client_dispatch": {
         "adapter_command_id": "launch_client",
@@ -214,9 +214,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "bounded OS dispatch request only; not host-client session success",
-        "display_name": "Launch client",
-        "human_meaning": "Request bounded host-client dispatch, then refresh live overview truth.",
+        "action_claim_scope": "только bounded OS dispatch request; это не успех сессии внешнего клиента",
+        "display_name": "Запустить внешний клиент",
+        "human_meaning": "Запросить bounded запуск внешнего клиента, затем обновить live overview truth.",
     },
 }
 
@@ -228,7 +228,7 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
         commands[command_id] = result
         if result["status"] != "ok":
             return _integration_failure(
-                "Live read-only primary command failed.",
+                "Primary command для live-просмотра только чтение не выполнилась.",
                 str(result["human_message"]),
                 str(result["machine_error_code"]),
                 commands,
@@ -242,7 +242,7 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
         accounts = build_account_pool_snapshot(commands["accounts_list"]["packet"])
     except UiShellError as exc:
         return _integration_failure(
-            "Live read-only packet validation failed.",
+            "Проверка пакета live-просмотра только чтение не прошла.",
             str(exc),
             "UI_LIVE_READONLY_PACKET_INVALID",
             commands,
@@ -290,10 +290,10 @@ def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
             "reserve": accounts.reserve_count,
             "hold": hold_count,
             "problem": problem_count,
-            "active_note": f"{runtime.active_count} active in status packet",
-            "reserve_note": f"{runtime.reserve_count} reserve in status packet",
-            "hold_note": "manual hold accounts",
-            "problem_note": "degraded/down/error accounts",
+            "active_note": f"{runtime.active_count} active в status packet",
+            "reserve_note": f"{runtime.reserve_count} reserve в status packet",
+            "hold_note": "аккаунты на manual hold",
+            "problem_note": "аккаунты degraded/down/error",
         },
         "events": _events_from_commands(commands, visual_state, warnings),
         "commands": _public_command_results(commands),
@@ -305,7 +305,7 @@ def build_accounts_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     commands = {"accounts_list": result}
     if result["status"] != "ok":
         return _accounts_integration_failure(
-            "Accounts read-only command failed.",
+            "Команда аккаунтов только для чтения не выполнилась.",
             str(result["human_message"]),
             str(result["machine_error_code"]),
         )
@@ -315,7 +315,7 @@ def build_accounts_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
         accounts = build_account_pool_snapshot(packet)
     except UiShellError as exc:
         return _accounts_integration_failure(
-            "Accounts read-only packet validation failed.",
+            "Проверка пакета аккаунтов только для чтения не прошла.",
             str(exc),
             "UI_ACCOUNTS_READONLY_PACKET_INVALID",
         )
@@ -350,24 +350,24 @@ def run_ui_action(
     launch_client_path: str | None = None,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        return _blocked_action("unknown", "UI action payload must be an object.")
+        return _blocked_action("unknown", "Payload UI-действия должен быть объектом.")
     if "command_id" in payload:
-        return _blocked_action("unknown", "Browser must submit ui_action, not command_id.")
+        return _blocked_action("unknown", "Browser должен отправлять ui_action, а не command_id.")
 
     ui_action = payload.get("ui_action")
     if not isinstance(ui_action, str):
-        return _blocked_action("unknown", "UI action must be a string.")
+        return _blocked_action("unknown", "UI action должен быть строкой.")
 
     action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
     if action_spec is None:
-        return _blocked_action(ui_action, "UI action is not allowlisted.")
+        return _blocked_action(ui_action, "UI action отсутствует в allowlist.")
 
     allowed_payload_keys = {"ui_action"}
     if ui_action in ACCOUNT_ID_UI_ACTIONS:
         allowed_payload_keys.add("account_id")
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
-        return _blocked_action(ui_action, f"Unsupported UI action fields: {', '.join(unsupported_keys)}.")
+        return _blocked_action(ui_action, f"Неподдерживаемые поля UI action: {', '.join(unsupported_keys)}.")
 
     structured_args: dict[str, str] | None = None
     allow_disabled = False
@@ -379,7 +379,7 @@ def run_ui_action(
         if not launch_client_path:
             return _unavailable_action(
                 ui_action,
-                "Bounded launch client path is unavailable.",
+                "Bounded путь запуска клиента недоступен.",
                 "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
             )
         structured_args = {"client_path": launch_client_path}
@@ -574,7 +574,7 @@ def _account_action_args(
     if not isinstance(account_id, str):
         return None, _unavailable_action(
             ui_action,
-            f"{ui_action} requires account_id.",
+            f"{ui_action} требует account_id.",
             "UI_ACCOUNT_ID_REQUIRED",
         )
     account_id = account_id.strip()
@@ -586,7 +586,7 @@ def _account_action_args(
     ):
         return None, _unavailable_action(
             ui_action,
-            f"{ui_action} got an unsafe account_id.",
+            f"{ui_action} получил небезопасный account_id.",
             "UI_ACCOUNT_ID_INVALID",
         )
 
@@ -594,7 +594,7 @@ def _account_action_args(
     if result["status"] != "ok":
         return None, _unavailable_action(
             ui_action,
-            "Accounts list is unavailable; account action target cannot be verified.",
+            "Список аккаунтов недоступен; цель действия с аккаунтом нельзя проверить.",
             _account_list_unavailable_code(ui_action),
         )
     try:
@@ -602,7 +602,7 @@ def _account_action_args(
     except UiShellError:
         return None, _unavailable_action(
             ui_action,
-            "Accounts packet is invalid; account action target cannot be verified.",
+            "Пакет аккаунтов недействителен; цель действия с аккаунтом нельзя проверить.",
             _account_list_invalid_code(ui_action),
         )
     target_account = next(
@@ -612,7 +612,7 @@ def _account_action_args(
     if target_account is None:
         return None, _unavailable_action(
             ui_action,
-            f"{ui_action} target is not present in accounts list.",
+            f"Цель {ui_action} отсутствует в списке аккаунтов.",
             "UI_ACCOUNT_ID_NOT_FOUND",
         )
     if ui_action in {
@@ -624,49 +624,49 @@ def _account_action_args(
     } and target_account.pool == "retired":
         return None, _unavailable_action(
             ui_action,
-            f"{ui_action} target is already retired; terminal retirement has no automatic return path.",
+            f"Цель {ui_action} уже retired; терминальный вывод не имеет автоматического пути возврата.",
             "UI_ACCOUNT_LIFECYCLE_RETIRED_INELIGIBLE",
         )
     if ui_action == "retire_account" and target_account.pool not in {"active", "reserve"}:
         return None, _unavailable_action(
             ui_action,
-            "retire_account target is not active or reserve.",
+            "Цель retire_account не находится в active или reserve.",
             "UI_ACCOUNT_RETIRE_INELIGIBLE",
         )
     if ui_action == "promote_account" and target_account.pool != "reserve":
         return None, _unavailable_action(
             ui_action,
-            "promote_account target is not in reserve.",
+            "Цель promote_account не находится в reserve.",
             "UI_ACCOUNT_PROMOTE_INELIGIBLE",
         )
     if ui_action == "promote_account" and target_account.manual_hold:
         return None, _unavailable_action(
             ui_action,
-            "promote_account target is on manual hold.",
+            "Цель promote_account находится на manual hold.",
             "UI_ACCOUNT_PROMOTE_INELIGIBLE",
         )
     if ui_action == "demote_account" and target_account.pool != "active":
         return None, _unavailable_action(
             ui_action,
-            "demote_account target is not active.",
+            "Цель demote_account не находится в active.",
             "UI_ACCOUNT_DEMOTE_INELIGIBLE",
         )
     if ui_action == "demote_account" and target_account.manual_hold:
         return None, _unavailable_action(
             ui_action,
-            "demote_account target is on manual hold.",
+            "Цель demote_account находится на manual hold.",
             "UI_ACCOUNT_DEMOTE_INELIGIBLE",
         )
     if ui_action == "hold_account" and target_account.manual_hold:
         return None, _unavailable_action(
             ui_action,
-            "hold_account target is already on manual hold.",
+            "Цель hold_account уже находится на manual hold.",
             "UI_ACCOUNT_HOLD_INELIGIBLE",
         )
     if ui_action == "release_account" and not target_account.manual_hold:
         return None, _unavailable_action(
             ui_action,
-            "release_account target is not on manual hold.",
+            "Цель release_account не находится на manual hold.",
             "UI_ACCOUNT_RELEASE_INELIGIBLE",
         )
     return {"account_id": account_id}, None
@@ -692,7 +692,7 @@ def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool
 
 def _action_unavailable_reason(ui_action: str, *, launch_client_path: str | None) -> str:
     if ui_action == "launch_client_dispatch" and not launch_client_path:
-        return "Bounded launch client path is unavailable."
+        return "Bounded путь запуска клиента недоступен."
     return ""
 
 
@@ -721,7 +721,7 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
             "selected_backend_id": "",
             "reserve_first_proven": False,
             "operator_action_required": True,
-            "reason": "onboarding_result is missing or not an object",
+            "reason": "onboarding_result отсутствует или не является объектом",
         }
 
     final_outcome = str(onboarding_result.get("final_outcome") or "unknown_outcome")
@@ -738,19 +738,19 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
     if command_status != "ok":
         ui_state = "command_error"
         operator_action_required = True
-        reason = "top-level command packet was not ok"
+        reason = "верхнеуровневый пакет команды не сообщил ok"
     elif successful_outcome and reserve_first_proven and selected_backend_id:
         ui_state = "success"
         operator_action_required = False
-        reason = "reserve-first onboarding proof is present"
+        reason = "доказательство подключения сначала в резерв присутствует"
     elif final_outcome in {"no_new_auth_detected", "ambiguous_new_auth_detection"}:
         ui_state = "needs_user_action"
         operator_action_required = True
-        reason = "operator action is required before onboarding can be treated as complete"
+        reason = "нужно действие оператора, прежде чем подключение можно считать завершённым"
     elif final_outcome in {"validate_failed", "sync_failed", "status_failed", "import_failed"}:
         ui_state = "command_error"
         operator_action_required = True
-        reason = "onboarding owner packet reported a failed proof step"
+        reason = "owner packet подключения сообщил сбой на шаге доказательства"
     else:
         ui_state = "unknown_outcome"
         operator_action_required = True
@@ -829,10 +829,10 @@ def _integration_failure(
             "reserve": 0,
             "hold": 0,
             "problem": 0,
-            "active_note": "live read failed",
-            "reserve_note": "live read failed",
-            "hold_note": "live read failed",
-            "problem_note": "live read failed",
+            "active_note": "live-чтение не удалось",
+            "reserve_note": "live-чтение не удалось",
+            "hold_note": "live-чтение не удалось",
+            "problem_note": "live-чтение не удалось",
         },
         "events": [
             {
@@ -989,9 +989,9 @@ def _redact_error(value: str) -> str:
     if not text:
         return ""
     if "HTTP 429" in text or "usage_limit" in text or "quota" in text:
-        return "quota or usage limit"
+        return "квота или usage limit"
     if "HTTP 401" in text or "auth" in text.lower() or "session" in text.lower():
-        return "auth/session error"
+        return "ошибка auth/session"
     if "timeout" in text.lower():
         return "timeout"
     return text

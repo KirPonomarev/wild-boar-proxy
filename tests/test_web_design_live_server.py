@@ -323,7 +323,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["summary"]["reserve"], 1)
         self.assertEqual(snapshot["summary"]["problem"], 1)
         self.assertEqual(snapshot["accounts"][0]["label"], "pri***@***.com")
-        self.assertEqual(snapshot["accounts"][1]["last_error_summary"], "quota or usage limit")
+        self.assertEqual(snapshot["accounts"][1]["last_error_summary"], "квота или usage limit")
         serialized = json.dumps(snapshot)
         self.assertNotIn("auth_ref", serialized)
         self.assertNotIn("/Users/kirill", serialized)
@@ -395,14 +395,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(metadata["actions"]["set_mode_managed"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
-        self.assertIn("not host-client launch", metadata["actions"]["launch_smoke"]["action_claim_scope"])
+        self.assertIn("не успех запуска внешнего клиента", metadata["actions"]["launch_smoke"]["action_claim_scope"])
         self.assertIn("export_diagnostics", metadata["actions"])
         self.assertEqual(metadata["actions"]["export_diagnostics"]["action_role"], "support_artifact")
         self.assertFalse(metadata["actions"]["export_diagnostics"]["mutates_runtime"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["affects_primary_truth"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["post_action_refresh_required"])
-        self.assertIn("support artifact only", metadata["actions"]["export_diagnostics"]["action_claim_scope"])
+        self.assertIn("диагностический пакет поддержки", metadata["actions"]["export_diagnostics"]["action_claim_scope"])
         self.assertIn("onboard_account", metadata["actions"])
         self.assertTrue(metadata["actions"]["onboard_account"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["onboard_account"]["mutates_runtime"])
@@ -410,7 +410,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
         self.assertEqual(metadata["actions"]["onboard_account"]["mutation_class"], "account_admission")
         self.assertIn(
-            "command packet and refreshed accounts list remain truth",
+            "пакет команды и обновлённый список аккаунтов",
             metadata["actions"]["onboard_account"]["action_claim_scope"],
         )
         self.assertTrue(metadata["actions"]["onboard_account"]["post_action_refresh_required"])
@@ -447,7 +447,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "account_lifecycle_retirement",
         )
         self.assertIn(
-            "terminal account retirement request only",
+            "терминальный lifecycle-запрос",
             metadata["actions"]["retire_account"]["action_claim_scope"],
         )
         self.assertTrue(metadata["actions"]["retire_account"]["post_action_refresh_required"])
@@ -466,7 +466,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
-        self.assertIn("unavailable", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+        self.assertIn("недоступен", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
         self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertEqual(bounded_metadata["actions"]["launch_client_dispatch"]["unavailable_reason"], "")
         self.assertNotIn("/Applications/Codex.app", json.dumps(bounded_metadata))
@@ -614,7 +614,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(managed["action_role"], "controlled_mode_mutation")
         self.assertEqual(smoke["action_role"], "runtime_smoke_check")
         self.assertFalse(smoke["mutates_runtime"])
-        self.assertIn("not host-client launch", smoke["action_claim_scope"])
+        self.assertIn("не успех запуска внешнего клиента", smoke["action_claim_scope"])
         self.assertEqual(
             runner.calls[-7:],
             [
@@ -1030,7 +1030,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(dispatched["action_role"], "host_client_dispatch")
         self.assertTrue(dispatched["confirmation_required"])
         self.assertTrue(dispatched["post_action_refresh_required"])
-        self.assertIn("not host-client session success", dispatched["action_claim_scope"])
+        self.assertIn("не успех сессии внешнего клиента", dispatched["action_claim_scope"])
         self.assertEqual(
             runner.calls[-1],
             ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),

@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wild Boar Proxy - Overview Design Preview</title>
+  <title>Wild Boar Proxy - предпросмотр операторского интерфейса</title>
   <link rel="stylesheet" href="styles/overview.css">
 </head>
 <body>
@@ -21,7 +21,7 @@
         <div class="brand">
           <img src="assets/boar_mark.png" alt="Wild Boar Proxy">
           <div class="name">WILD BOAR<br>PROXY</div>
-          <div id="brandCaption" class="caption">fixture-backed web preview</div>
+          <div id="brandCaption" class="caption">демо-просмотр UI</div>
         </div>
 
         <nav class="nav" aria-label="Основная навигация">
@@ -60,7 +60,7 @@
               <path d="M12 5v14"></path>
               <circle cx="12" cy="12" r="8"></circle>
             </svg>
-            <span>Setup</span>
+            <span>Настройка</span>
           </a>
           <a id="selectClientNav" class="nav-item" href="?screen=select-client" data-screen-link="select-client">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -83,9 +83,9 @@
         <div class="sidebar-footer">
           <div class="status-line">
             <span id="sidebarDot" class="dot neutral"></span>
-            <span id="sidebarStatus">Fixture state unknown</span>
+            <span id="sidebarStatus">Демо-состояние неизвестно</span>
           </div>
-          <div id="sourceFooter">UI preview · no live commands</div>
+          <div id="sourceFooter">Предпросмотр UI · без live-команд</div>
         </div>
       </aside>
 
@@ -95,28 +95,28 @@
             <h1 id="mainTitle">Обзор</h1>
             <div class="subtitle">
               <span id="subtitleText">
-                Визуальный перенос первого экрана. Данные ниже являются fixtures,
-                а не runtime truth.
+                Визуальный перенос первого экрана. Данные ниже являются
+                демо-состояниями, а не подтверждённым состоянием runtime.
               </span>
             </div>
           </div>
           <div class="header-actions">
             <label class="input state-picker">
-              <span>Source</span>
-              <select id="sourcePicker" aria-label="Data source">
-                <option value="fixture">fixture</option>
-                <option value="live">live read-only</option>
+              <span>Источник</span>
+              <select id="sourcePicker" aria-label="Источник данных">
+                <option value="fixture">демо</option>
+                <option value="live">live только чтение</option>
               </select>
             </label>
             <label class="input state-picker">
-              <span>Fixture</span>
-              <select id="statePicker" aria-label="Fixture state">
-                <option value="healthy">healthy</option>
-                <option value="degraded">degraded</option>
-                <option value="down">down</option>
-                <option value="stale">stale</option>
-                <option value="unknown">unknown</option>
-                <option value="integration_failure">integration_failure</option>
+              <span>Демо</span>
+              <select id="statePicker" aria-label="Демо-состояние">
+                <option value="healthy">здорово</option>
+                <option value="degraded">деградация</option>
+                <option value="down">недоступно</option>
+                <option value="stale">устарело</option>
+                <option value="unknown">неизвестно</option>
+                <option value="integration_failure">ошибка интеграции</option>
               </select>
             </label>
             <button id="refreshFixture" class="button" type="button">
@@ -126,13 +126,13 @@
                 <path d="M6.5 16.5h-3v3"></path>
                 <path d="M4 16.5a8 8 0 0 0 13.7 1.7"></path>
               </svg>
-              <span>Обновить fixture</span>
+              <span>Обновить демо</span>
             </button>
             <button id="healthcheckAction" class="button live-action overview-only" type="button" data-ui-action="refresh_health_detail">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M20 6 9 17l-5-5"></path>
               </svg>
-              <span>Healthcheck</span>
+              <span>Проверка здоровья</span>
             </button>
             <button id="diagnosticsAction" class="button live-action overview-only" type="button" data-ui-action="export_diagnostics">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -144,13 +144,13 @@
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
               </svg>
-              <span>Dry-run</span>
+              <span>План ремонта</span>
             </button>
             <button id="managedModeAction" class="button live-action overview-only" type="button" data-ui-action="set_mode_managed">
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                 <path d="M4 12h5l2-4 2 8 2-4h5"></path>
               </svg>
-              <span>Managed</span>
+              <span>Управляемый</span>
             </button>
             <button id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch" disabled>
               <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -187,26 +187,26 @@
 
         <section id="overviewScreen" class="screen" data-screen="overview">
           <div id="fixtureBanner" class="fixture-banner">
-            Fixture preview only. No command execution, no runtime file reads.
+            Только демо-просмотр. Команды не выполняются, runtime-файлы не читаются.
           </div>
 
           <section id="actionPanel" class="action-panel neutral" aria-live="polite">
           <div class="eyebrow">Последнее действие</div>
           <div class="action-panel-grid">
-            <div>UI action</div><div id="actionUiAction">none</div>
-            <div>Role</div><div id="actionRole">none</div>
-            <div>Account</div><div id="actionAccountId">-</div>
-            <div>Status</div><div id="actionStatus">idle</div>
-            <div>Display state</div><div id="actionDisplayState">unknown</div>
-            <div>Machine code</div><div id="actionMachineCode">-</div>
-            <div>Message</div><div id="actionMessage">Actions have not run yet.</div>
-            <div>Next action</div><div id="actionNextAction">none</div>
-            <div>Changed files</div><div id="actionChangedFiles">0 metadata entries</div>
-            <div>Refresh</div><div id="actionRefreshStatus">not requested</div>
-            <div>Truth note</div><div id="actionTruthNote">No action result has been rendered.</div>
-            <div>Onboarding outcome</div><div id="actionOnboardingOutcome">-</div>
-            <div>Reserve proof</div><div id="actionOnboardingReserveProof">-</div>
-            <div>Selected backend</div><div id="actionOnboardingBackend">-</div>
+            <div>ui_action</div><div id="actionUiAction">нет</div>
+            <div>Роль</div><div id="actionRole">нет</div>
+            <div>Аккаунт</div><div id="actionAccountId">-</div>
+            <div>Статус</div><div id="actionStatus">ожидание</div>
+            <div>Состояние отображения</div><div id="actionDisplayState">неизвестно</div>
+            <div>Машинный код</div><div id="actionMachineCode">-</div>
+            <div>Сообщение</div><div id="actionMessage">Действия ещё не выполнялись.</div>
+            <div>Следующее действие</div><div id="actionNextAction">нет</div>
+            <div>Изменённые файлы</div><div id="actionChangedFiles">0 записей metadata</div>
+            <div>Обновление</div><div id="actionRefreshStatus">не запрашивалось</div>
+            <div>Примечание о подтверждении</div><div id="actionTruthNote">Результат действия ещё не отображался.</div>
+            <div>Итог подключения</div><div id="actionOnboardingOutcome">-</div>
+            <div>Доказательство резерва</div><div id="actionOnboardingReserveProof">-</div>
+            <div>Выбранный backend</div><div id="actionOnboardingBackend">-</div>
           </div>
           </section>
 
@@ -229,7 +229,7 @@
 
           <section class="card mode-card">
             <div class="eyebrow">Режим работы</div>
-            <div class="segmented" aria-label="Desired mode">
+            <div class="segmented" aria-label="Желаемый режим">
               <span id="managedSegment">Управляемый</span>
               <span id="stableSegment">Стабильный</span>
             </div>
@@ -265,33 +265,33 @@
           </section>
         </div>
 
-        <div class="grid overview-kpis" aria-label="Account pool summary">
+          <div class="grid overview-kpis" aria-label="Сводка пула аккаунтов">
           <section class="card kpi-card green">
             <div class="kpi-head">Активные</div>
             <div>
               <div class="kpi-line"><span id="activeCount" class="kpi-number">0</span><span class="kpi-note">аккаунтов</span></div>
-              <div id="activeNote" class="kpi-note">fixture</div>
+              <div id="activeNote" class="kpi-note">демо</div>
             </div>
           </section>
           <section class="card kpi-card blue">
             <div class="kpi-head">Резерв</div>
             <div>
               <div class="kpi-line"><span id="reserveCount" class="kpi-number">0</span><span class="kpi-note">готовы</span></div>
-              <div id="reserveNote" class="kpi-note">fixture</div>
+              <div id="reserveNote" class="kpi-note">демо</div>
             </div>
           </section>
           <section class="card kpi-card">
             <div class="kpi-head">На удержании</div>
             <div>
               <div class="kpi-line"><span id="holdCount" class="kpi-number">0</span><span class="kpi-note">пауза</span></div>
-              <div id="holdNote" class="kpi-note">fixture</div>
+              <div id="holdNote" class="kpi-note">демо</div>
             </div>
           </section>
           <section class="card kpi-card red">
             <div class="kpi-head">Проблемные</div>
             <div>
               <div class="kpi-line"><span id="problemCount" class="kpi-number">0</span><span class="kpi-note">требуют внимания</span></div>
-              <div id="problemNote" class="kpi-note">fixture</div>
+              <div id="problemNote" class="kpi-note">демо</div>
             </div>
           </section>
         </div>
@@ -307,7 +307,7 @@
 
         <section id="accountsScreen" class="screen" data-screen="accounts" hidden>
           <div id="accountsBanner" class="fixture-banner">
-            Accounts fixture preview only. No lifecycle actions are enabled.
+            Только демо-просмотр аккаунтов. Lifecycle-действия отключены.
           </div>
 
           <div class="filter-row accounts-filter-row">
@@ -319,14 +319,14 @@
                 </svg>
                 <span>Поиск аккаунта</span>
               </div>
-              <div class="filter-seg" aria-label="Account filters">
+              <div class="filter-seg" aria-label="Фильтры аккаунтов">
                 <span class="active">Все</span>
                 <span>Активные</span>
                 <span>Резерв</span>
                 <span>Ошибки</span>
               </div>
             </div>
-            <div class="chips accounts-chips" aria-label="Account summary">
+            <div class="chips accounts-chips" aria-label="Сводка аккаунтов">
               <span class="chip green"><span class="dot"></span><span id="accountsActiveChip">0 активных</span></span>
               <span class="chip blue"><span class="dot"></span><span id="accountsReserveChip">0 резерв</span></span>
               <span class="chip amber"><span class="dot"></span><span id="accountsHoldChip">0 удержание</span></span>
@@ -338,7 +338,7 @@
             <div class="table-top">
               <div>
                 <div class="card-title">Список аккаунтов</div>
-                <div id="accountsRegistryStatus" class="secondary">registry identity: fixture</div>
+                <div id="accountsRegistryStatus" class="secondary">Идентичность registry: демо</div>
               </div>
               <div id="accountsVisibleCount" class="secondary">Показано 0 из 0</div>
             </div>
@@ -367,27 +367,27 @@
             </table>
             <div class="pagination">
               <span id="accountsPagination">Строки 0-0 из 0</span>
-              <span>canonical JSON · gated lifecycle</span>
+              <span>канонический JSON · lifecycle через gate</span>
             </div>
           </section>
         </section>
 
         <section id="diagnosticsScreen" class="screen" data-screen="diagnostics" hidden>
-          <div id="diagnosticsBanner" class="fixture-banner neutral">
-            Diagnostics screen shows support-artifact command metadata only. It is not runtime health truth.
+            <div id="diagnosticsBanner" class="fixture-banner neutral">
+            Экран диагностики показывает только метаданные диагностического пакета. Это не источник истины о здоровье runtime.
           </div>
 
           <div class="diag-layout">
             <section class="card diag-list">
               <div class="diag-controls">
-                <div class="search" aria-label="Diagnostics scope">
+                <div class="search" aria-label="Граница диагностики">
                   <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <circle cx="11" cy="11" r="7"></circle>
                     <path d="m16.5 16.5 4 4"></path>
                   </svg>
-                  <span>Support artifact scope</span>
+                  <span>Граница пакета поддержки</span>
                 </div>
-                <button class="button small disabled" type="button" disabled>Runtime truth is read elsewhere</button>
+                <button class="button small disabled" type="button" disabled>Истина runtime читается отдельно</button>
               </div>
               <div class="diag-buttons">
                 <button class="button small live-action" type="button" data-ui-action="export_diagnostics">
@@ -402,10 +402,10 @@
                   <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M20 6 9 17l-5-5"></path>
                   </svg>
-                  <span>Healthcheck</span>
+                  <span>Проверка здоровья</span>
                 </button>
               </div>
-              <div class="signal-list" aria-label="Diagnostics boundaries">
+              <div class="signal-list" aria-label="Границы диагностики">
                 <div class="signal-item active">
                   <div class="signal-icon blue">
                     <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
@@ -413,11 +413,11 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="signal-title">Diagnostics export</div>
-                    <div class="signal-sub">Creates a bounded support artifact from JSON command output.</div>
+                    <div class="signal-title">Экспорт диагностики</div>
+                    <div class="signal-sub">Создаёт ограниченный пакет поддержки из JSON-вывода команды.</div>
                     <div class="mini-bar"><span style="width:100%"></span></div>
                   </div>
-                  <span class="chip blue"><span class="dot"></span>Support</span>
+                  <span class="chip blue"><span class="dot"></span>Поддержка</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon amber">
@@ -428,11 +428,11 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="signal-title">Not health truth</div>
-                    <div class="signal-sub">Status and health remain owned by status and healthcheck packets.</div>
+                    <div class="signal-title">Не источник здоровья</div>
+                    <div class="signal-sub">Статус и здоровье остаются за пакетами status и healthcheck.</div>
                     <div class="mini-bar"><span style="width:68%"></span></div>
                   </div>
-                  <span class="chip amber"><span class="dot"></span>Bounded</span>
+                  <span class="chip amber"><span class="dot"></span>Ограничено</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon neutral">
@@ -441,16 +441,16 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="signal-title">No direct file reads</div>
-                    <div class="signal-sub">The UI does not inspect artifacts, runtime state, or logs.</div>
+                    <div class="signal-title">Без прямого чтения файлов</div>
+                    <div class="signal-sub">UI не читает артефакты, состояние runtime или логи напрямую.</div>
                     <div class="mini-bar"><span style="width:100%"></span></div>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>Guarded</span>
+                  <span class="chip neutral"><span class="dot"></span>Защищено</span>
                 </div>
               </div>
               <div class="diag-footer">
-                <div>Source: strict JSON command packets only</div>
-                <div>Claim scope: support artifact metadata only</div>
+                <div>Источник: только строгие JSON-пакеты команд</div>
+                <div>Граница утверждения: только метаданные пакета поддержки</div>
               </div>
             </section>
 
@@ -463,66 +463,66 @@
                     </svg>
                   </div>
                   <div>
-                    <div class="object-title">Diagnostics support artifact</div>
-                    <div class="object-sub">Last export command packet</div>
+                    <div class="object-title">Диагностический пакет поддержки</div>
+                    <div class="object-sub">Последний пакет команды export</div>
                   </div>
                 </div>
-                <span id="diagnosticsStatusChip" class="chip neutral"><span class="dot"></span><span>Idle</span></span>
+                <span id="diagnosticsStatusChip" class="chip neutral"><span class="dot"></span><span>Ожидание</span></span>
               </div>
 
               <div class="card pad status-block">
-                <div class="card-title">Command result</div>
-                <p id="diagnosticsMessage">No diagnostics export has run from this UI session.</p>
+                <div class="card-title">Результат команды</div>
+                <p id="diagnosticsMessage">Экспорт диагностики ещё не запускался из этой UI-сессии.</p>
               </div>
 
               <div class="card pad">
-                <div class="card-title">Support artifact chain</div>
+                  <div class="card-title">Цепочка пакета поддержки</div>
                 <div class="chain">
                   <div class="chain-step">
                     <div class="chain-dot blue">1</div>
-                    <span>UI action</span>
-                    <span class="chip blue"><span class="dot"></span>bounded</span>
+                    <span>ui_action</span>
+                    <span class="chip blue"><span class="dot"></span>ограничено</span>
                   </div>
                   <div class="chain-line"></div>
                   <div class="chain-step">
                     <div class="chain-dot blue">2</div>
-                    <span>Adapter</span>
+                    <span>Адаптер</span>
                     <span class="chip blue"><span class="dot"></span>allowlist</span>
                   </div>
                   <div class="chain-line"></div>
                   <div class="chain-step">
                     <div class="chain-dot blue">3</div>
-                    <span>Command</span>
+                    <span>Команда</span>
                     <span class="chip blue"><span class="dot"></span>JSON</span>
                   </div>
                   <div class="chain-line"></div>
                   <div class="chain-step">
                     <div class="chain-dot neutral">4</div>
-                    <span>Artifact</span>
-                    <span class="chip neutral"><span class="dot"></span>metadata</span>
+                    <span>Артефакт</span>
+                    <span class="chip neutral"><span class="dot"></span>метаданные</span>
                   </div>
                 </div>
               </div>
 
               <div class="detail-grid">
                 <div class="card pad tech-log">
-                  <div class="card-title">Packet fields</div>
-                  <div class="tech-row"><span>Status</span><span id="diagnosticsPacketStatus">idle</span></div>
-                  <div class="tech-row"><span>Exit</span><span id="diagnosticsExitCode">-</span></div>
-                  <div class="tech-row"><span>Machine</span><span id="diagnosticsMachineCode">-</span></div>
-                  <div class="tech-row"><span>Next</span><span id="diagnosticsNextAction">none</span></div>
+                  <div class="card-title">Поля пакета</div>
+                  <div class="tech-row"><span>Статус</span><span id="diagnosticsPacketStatus">ожидание</span></div>
+                  <div class="tech-row"><span>Код выхода</span><span id="diagnosticsExitCode">-</span></div>
+                  <div class="tech-row"><span>Машинный код</span><span id="diagnosticsMachineCode">-</span></div>
+                  <div class="tech-row"><span>Следующее действие</span><span id="diagnosticsNextAction">нет</span></div>
                 </div>
                 <div class="card pad">
-                  <div class="card-title">Artifact metadata</div>
+                  <div class="card-title">Метаданные артефакта</div>
                   <div class="kv diag-kv">
-                    <div>Changed entries</div><div id="diagnosticsChangedFiles">0</div>
-                    <div>Artifact ref</div><div id="diagnosticsBundleRef">not provided</div>
-                    <div>UI reads artifact</div><div>never</div>
-                    <div>Runtime truth</div><div>not affected</div>
+                    <div>Изменённые записи</div><div id="diagnosticsChangedFiles">0</div>
+                    <div>Ссылка на артефакт</div><div id="diagnosticsBundleRef">не предоставлена</div>
+                    <div>UI читает артефакт</div><div>никогда</div>
+                    <div>Истина runtime</div><div>не изменяется</div>
                   </div>
                   <div class="action-stack">
-                    <button class="button small disabled" type="button" disabled>Artifact inspection deferred</button>
-                    <button class="button small disabled" type="button" disabled>Raw diagnostic text unavailable</button>
+                    <button class="button small disabled" type="button" disabled>Просмотр артефакта отложен</button>
+                    <button class="button small disabled" type="button" disabled>Сырой текст диагностики недоступен</button>
                   </div>
                 </div>
               </div>
@@ -532,70 +532,70 @@
 
         <section id="settingsScreen" class="screen" data-screen="settings" hidden>
           <div id="settingsBanner" class="fixture-banner neutral">
-            Settings is read-only in this contour. Values below are observed from JSON packets, not direct config reads.
+            Настройки в этом контуре доступны только для чтения. Значения ниже получены из JSON-пакетов, а не прямым чтением config.
           </div>
 
           <div class="settings-layout">
             <section class="card form-section settings-observed">
               <div class="section-head">
                 <div>
-                  <h3>Observed configuration / status</h3>
-                  <div class="secondary">Read-only facts from existing command packets.</div>
+                  <h3>Наблюдаемая конфигурация и статус</h3>
+                  <div class="secondary">Факты только для чтения из существующих пакетов команд.</div>
                 </div>
-                <span class="chip neutral"><span class="dot"></span>read-only</span>
+                <span class="chip neutral"><span class="dot"></span>только чтение</span>
               </div>
-              <div class="form-row"><label>Desired mode</label><div id="settingsDesiredMode">-</div></div>
-              <div class="form-row"><label>Effective mode</label><div id="settingsEffectiveMode">-</div></div>
-              <div class="form-row"><label>Observed endpoint</label><div id="settingsEndpoint" class="mono-value">-</div></div>
-              <div class="form-row"><label>Runtime status</label><div id="settingsRuntimeStatus">-</div></div>
-              <div class="form-row"><label>Machine code</label><div id="settingsMachineCode">-</div></div>
-              <div class="form-row"><label>Launch client</label><div id="settingsLaunchAvailability">metadata unavailable</div></div>
+              <div class="form-row"><label>Желаемый режим</label><div id="settingsDesiredMode">-</div></div>
+              <div class="form-row"><label>Фактический режим</label><div id="settingsEffectiveMode">-</div></div>
+              <div class="form-row"><label>Наблюдаемый endpoint</label><div id="settingsEndpoint" class="mono-value">-</div></div>
+              <div class="form-row"><label>Статус runtime</label><div id="settingsRuntimeStatus">-</div></div>
+              <div class="form-row"><label>Машинный код</label><div id="settingsMachineCode">-</div></div>
+              <div class="form-row"><label>Запуск клиента</label><div id="settingsLaunchAvailability">метаданные недоступны</div></div>
             </section>
 
             <section class="card form-section settings-safe-actions">
               <div class="section-head">
                 <div>
-                  <h3>Safe existing actions</h3>
-                  <div class="secondary">These are action requests, not saved settings.</div>
+                  <h3>Безопасные доступные действия</h3>
+                  <div class="secondary">Это запросы действий, а не сохранённые настройки.</div>
                 </div>
-                <span class="chip blue"><span class="dot"></span>allowlisted</span>
+                <span class="chip blue"><span class="dot"></span>в allowlist</span>
               </div>
               <div class="settings-action-grid">
                 <button class="action-tile live-action" type="button" data-ui-action="set_mode_stable">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
                   </svg>
-                  <span>Request stable mode</span>
+                  <span>Запросить стабильный режим</span>
                 </button>
                 <button class="action-tile live-action" type="button" data-ui-action="set_mode_managed">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M4 12h5l2-4 2 8 2-4h5"></path>
                   </svg>
-                  <span>Request managed mode</span>
+                  <span>Запросить управляемый режим</span>
                 </button>
                 <button class="action-tile live-action" type="button" data-ui-action="stable_repair_plan">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
                   </svg>
-                  <span>Repair dry-run</span>
+                  <span>План ремонта</span>
                 </button>
                 <button class="action-tile live-action" type="button" data-ui-action="launch_smoke">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M20 6 9 17l-5-5"></path>
                   </svg>
-                  <span>Launch smoke</span>
+                  <span>Smoke-проверка запуска</span>
                 </button>
                 <button class="action-tile live-action" type="button" data-ui-action="launch_client_dispatch">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z"></path>
                   </svg>
-                  <span>Dispatch client</span>
+                  <span>Запросить запуск клиента</span>
                 </button>
                 <button class="action-tile live-action" type="button" data-ui-action="export_diagnostics">
                   <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
                     <path d="M4 13h3l3-7 5 13 2-6h3"></path>
                   </svg>
-                  <span>Export diagnostics</span>
+                  <span>Экспорт диагностики</span>
                 </button>
               </div>
             </section>
@@ -603,17 +603,17 @@
             <section class="card form-section settings-deferred">
               <div class="section-head">
                 <div>
-                  <h3>Deferred settings controls</h3>
-                  <div class="secondary">Visible design affordances without safe command surfaces.</div>
+                  <h3>Отложенные элементы настроек</h3>
+                  <div class="secondary">Видимые элементы макета без безопасных командных поверхностей.</div>
                 </div>
-                <span class="chip amber"><span class="dot"></span>deferred</span>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
               </div>
               <div class="deferred-list">
-                <div class="deferred-row"><span>Client selection</span><span>browser path submission forbidden</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Application data directory</span><span>direct filesystem access deferred</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Network host / port</span><span>runtime config mutation out of scope</span><button class="button small disabled" type="button" disabled>Read-only</button></div>
-                <div class="deferred-row"><span>Autorecovery policy</span><span>policy mutation requires owner command surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Startup account checks</span><span>startup policy mutation deferred</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Выбор клиента</span><span>браузер не отправляет произвольные пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Каталог данных приложения</span><span>прямой доступ к файловой системе отложен</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Сетевой host / port</span><span>изменение конфигурации runtime вне границ контура</span><button class="button small disabled" type="button" disabled>Только чтение</button></div>
+                <div class="deferred-row"><span>Политика автовосстановления</span><span>изменение политики требует owner command surface</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Проверки аккаунтов при старте</span><span>изменение стартовой политики отложено</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
               </div>
             </section>
           </div>
@@ -621,20 +621,20 @@
 
         <section id="setupScreen" class="screen setup-screen" data-screen="setup" hidden>
           <div class="fixture-banner amber">
-            Setup screen is a bounded visual skeleton. It does not scan files, submit paths, or mutate configuration.
+            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.
           </div>
 
           <div class="setup-layout">
             <section class="card setup-hero">
-              <div class="eyebrow">Setup flow</div>
+              <div class="eyebrow">Поток настройки</div>
               <div class="section-head">
                 <div>
                   <h3>Настройка Wild Boar Proxy</h3>
-                  <div class="secondary">Подключение host-client остаётся deferred до command-owned discovery.</div>
+                  <div class="secondary">Подключение внешнего клиента отложено до обнаружения через command-owned поверхность.</div>
                 </div>
-                <span class="chip amber"><span class="dot"></span>read-only skeleton</span>
+                <span class="chip amber"><span class="dot"></span>каркас только чтение</span>
               </div>
-              <div class="stepper" aria-label="Setup steps">
+              <div class="stepper" aria-label="Шаги настройки">
                 <span class="step active">1 Клиент</span>
                 <span class="step muted">2 Данные</span>
                 <span class="step muted">3 Проверка</span>
@@ -646,44 +646,44 @@
               <section class="card form-section">
                 <div class="section-head">
                   <div>
-                    <h3>Find automatically</h3>
-                    <div class="secondary">Needs command-owned discovery before it can run.</div>
+                    <h3>Найти автоматически</h3>
+                    <div class="secondary">Для запуска нужно command-owned обнаружение.</div>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>deferred</span>
+                  <span class="chip neutral"><span class="dot"></span>отложено</span>
                 </div>
                 <p class="bounded-copy">
-                  This placeholder does not inspect the filesystem. A future command packet must provide discovered candidates.
+                  Этот макетный блок не проверяет файловую систему. Будущий пакет команды должен предоставить найденных кандидатов.
                 </p>
-                <button class="button disabled" type="button" disabled>Deferred: discovery command missing</button>
+                <button class="button disabled" type="button" disabled>Отложено: нет команды обнаружения</button>
               </section>
 
               <section class="card form-section">
                 <div class="section-head">
                   <div>
-                    <h3>Specify manually</h3>
-                    <div class="secondary">Manual local paths are not accepted from the browser.</div>
+                    <h3>Указать вручную</h3>
+                    <div class="secondary">Браузер не принимает ручные локальные пути.</div>
                   </div>
-                  <span class="chip red"><span class="dot"></span>forbidden</span>
+                  <span class="chip red"><span class="dot"></span>запрещено</span>
                 </div>
                 <p class="bounded-copy">
-                  browser path submission is forbidden. Future manual selection belongs to desktop/native picker admission.
+                  Отправка путей из браузера запрещена. Будущий ручной выбор относится к допуску desktop/native picker.
                 </p>
-                <button class="button disabled" type="button" disabled>Forbidden in web first pass</button>
+                <button class="button disabled" type="button" disabled>Запрещено в первом web-проходе</button>
               </section>
             </div>
 
             <section class="card form-section">
               <div class="section-head">
                 <div>
-                  <h3>Observed setup facts</h3>
-                  <div class="secondary">No real setup status is claimed on this screen.</div>
+                  <h3>Наблюдаемые факты настройки</h3>
+                  <div class="secondary">Этот экран не заявляет реальный статус настройки.</div>
                 </div>
-                <span class="chip neutral"><span class="dot"></span>placeholder</span>
+                <span class="chip neutral"><span class="dot"></span>макет</span>
               </div>
               <div class="deferred-list">
-                <div class="deferred-row"><span>Work/data directory</span><span>display only after command packet exists</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Host-client candidates</span><span>not detected by this UI skeleton</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Continue</span><span>local navigation only; no setup completion claim</span><button class="button small disabled" type="button" disabled>No command</button></div>
+                <div class="deferred-row"><span>Рабочий каталог / каталог данных</span><span>показывается только после появления пакета команды</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Кандидаты внешнего клиента</span><span>этот UI-каркас ничего не обнаруживает</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Продолжить</span><span>только локальная навигация; завершение настройки не заявляется</span><button class="button small disabled" type="button" disabled>Нет команды</button></div>
               </div>
             </section>
           </div>
@@ -691,7 +691,7 @@
 
         <section id="selectClientScreen" class="screen setup-screen" data-screen="select-client" hidden>
           <div class="fixture-banner amber">
-            Client selection is deferred. Rows below are design placeholders, not detected applications.
+            Выбор клиента отложен. Строки ниже являются макетными кандидатами, а не найденными приложениями.
           </div>
 
           <div class="setup-layout">
@@ -699,23 +699,23 @@
               <div class="section-head">
                 <div>
                   <h3>Выбор клиента</h3>
-                  <div class="secondary">Selection needs command-owned candidate ids and a persistence command.</div>
+                  <div class="secondary">Для выбора нужны command-owned идентификаторы кандидатов и команда сохранения.</div>
                 </div>
-                <span class="chip amber"><span class="dot"></span>deferred</span>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
               </div>
-              <div class="search-placeholder">Search by name or path · disabled until discovery packet exists</div>
-              <div class="candidate-list" aria-label="Placeholder candidates">
+              <div class="search-placeholder">Поиск по имени или пути · отключён до появления пакета обнаружения</div>
+              <div class="candidate-list" aria-label="Макетные кандидаты">
                 <div class="candidate-row">
-                  <div><strong>Host Client Custom</strong><span>design placeholder, not detected</span></div>
-                  <button class="button small disabled" type="button" disabled>Select disabled</button>
+                  <div><strong>Внешний клиент Custom</strong><span>макетный кандидат, не обнаружен</span></div>
+                  <button class="button small disabled" type="button" disabled>Выбор отключён</button>
                 </div>
                 <div class="candidate-row">
-                  <div><strong>Host Client Stable</strong><span>design placeholder, not detected</span></div>
-                  <button class="button small disabled" type="button" disabled>Select disabled</button>
+                  <div><strong>Внешний клиент Stable</strong><span>макетный кандидат, не обнаружен</span></div>
+                  <button class="button small disabled" type="button" disabled>Выбор отключён</button>
                 </div>
                 <div class="candidate-row">
-                  <div><strong>Host Client CLI</strong><span>requires future command-owned verification</span></div>
-                  <button class="button small disabled" type="button" disabled>Verify disabled</button>
+                  <div><strong>Внешний клиент CLI</strong><span>требует будущей command-owned проверки</span></div>
+                  <button class="button small disabled" type="button" disabled>Проверка отключена</button>
                 </div>
               </div>
             </section>
@@ -723,16 +723,16 @@
             <section class="card form-section">
               <div class="section-head">
                 <div>
-                  <h3>Disabled actions</h3>
-                  <div class="secondary">Visible affordances without a safe browser contract.</div>
+                  <h3>Отключённые действия</h3>
+                  <div class="secondary">Видимые элементы без безопасного браузерного контракта.</div>
                 </div>
-                <span class="chip red"><span class="dot"></span>not executable</span>
+                <span class="chip red"><span class="dot"></span>не выполняется</span>
               </div>
               <div class="deferred-list">
-                <div class="deferred-row"><span>Choose file</span><span>future desktop/native picker only</span><button class="button small disabled" type="button" disabled>Forbidden</button></div>
-                <div class="deferred-row"><span>Verify path</span><span>bounded dispatch is not path verification</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Save selection</span><span>needs command-owned candidate id</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                <div class="deferred-row"><span>Show location</span><span>support open-location contract missing</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                <div class="deferred-row"><span>Выбрать файл</span><span>только будущий desktop/native picker</span><button class="button small disabled" type="button" disabled>Запрещено</button></div>
+                <div class="deferred-row"><span>Проверить путь</span><span>bounded dispatch не является проверкой пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Сохранить выбор</span><span>нужен command-owned идентификатор кандидата</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Показать расположение</span><span>нет support-контракта для открытия расположения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
               </div>
             </section>
           </div>
@@ -740,20 +740,20 @@
 
         <section id="importExistingScreen" class="screen setup-screen" data-screen="import-existing" hidden>
           <div class="fixture-banner amber">
-            Import is deferred. This screen shows structure only; no existing setup is discovered, verified, or ready to apply here.
+            Импорт отложен. Этот экран показывает только структуру: существующая установка здесь не обнаружена, не проверена и не готова к применению.
           </div>
 
           <div class="setup-layout">
             <section class="card setup-hero">
-              <div class="eyebrow">Legacy import</div>
+              <div class="eyebrow">Legacy-импорт</div>
               <div class="section-head">
                 <div>
                   <h3>Импорт существующей установки</h3>
-                  <div class="secondary">Requires source-location mediation, dry-run evidence, confirmation, and refresh.</div>
+                  <div class="secondary">Нужны безопасная медиация исходного расположения, dry-run evidence, подтверждение и refresh.</div>
                 </div>
-                <span class="chip amber"><span class="dot"></span>deferred</span>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
               </div>
-              <div class="stepper" aria-label="Import steps">
+              <div class="stepper" aria-label="Шаги импорта">
                 <span class="step active">1 Найти</span>
                 <span class="step muted">2 Проверить</span>
                 <span class="step muted">3 Снимок</span>
@@ -765,32 +765,32 @@
               <section class="card form-section">
                 <div class="section-head">
                   <div>
-                    <h3>Installation placeholder</h3>
-                    <div class="secondary">Placeholder only; no discovery command has run.</div>
+                    <h3>Макет установки</h3>
+                    <div class="secondary">Только макет: команда обнаружения не запускалась.</div>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>not detected</span>
+                  <span class="chip neutral"><span class="dot"></span>не обнаружено</span>
                 </div>
                 <div class="deferred-list">
-                  <div class="deferred-row"><span>Installation</span><span>deferred until strict JSON discovery packet exists</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                  <div class="deferred-row"><span>Import plan</span><span>no account counts or active assignment claimed</span><button class="button small disabled" type="button" disabled>Placeholder</button></div>
-                  <div class="deferred-row"><span>Safety state</span><span>snapshot and rollback availability not proven</span><button class="button small disabled" type="button" disabled>No packet</button></div>
+                  <div class="deferred-row"><span>Установка</span><span>отложено до строгого JSON-пакета обнаружения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                  <div class="deferred-row"><span>План импорта</span><span>количество аккаунтов и активное назначение не заявляются</span><button class="button small disabled" type="button" disabled>Макет</button></div>
+                  <div class="deferred-row"><span>Состояние безопасности</span><span>снимок и доступность отката не доказаны</span><button class="button small disabled" type="button" disabled>Нет пакета</button></div>
                 </div>
               </section>
 
               <section class="card form-section">
                 <div class="section-head">
                   <div>
-                    <h3>Import controls</h3>
-                    <div class="secondary">All controls are inert until command contracts exist.</div>
+                    <h3>Управление импортом</h3>
+                    <div class="secondary">Все элементы инертны, пока нет командных контрактов.</div>
                   </div>
-                  <span class="chip red"><span class="dot"></span>not executable</span>
+                  <span class="chip red"><span class="dot"></span>не выполняется</span>
                 </div>
                 <div class="deferred-list">
-                  <div class="deferred-row"><span>Find installation</span><span>needs command-owned discovery</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                  <div class="deferred-row"><span>Create snapshot</span><span>needs command-owned snapshot surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                  <div class="deferred-row"><span>Verify</span><span>needs non-mutating import dry-run packet</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
-                  <div class="deferred-row"><span>Apply</span><span>source-location mediation and strong confirmation missing</span><button class="button small disabled" type="button" disabled>Disabled</button></div>
-                  <div class="deferred-row"><span>Rollback</span><span>needs command-owned rollback surface</span><button class="button small disabled" type="button" disabled>Deferred</button></div>
+                  <div class="deferred-row"><span>Найти установку</span><span>нужно command-owned обнаружение</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                  <div class="deferred-row"><span>Создать снимок</span><span>нужна command-owned поверхность снимка</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                  <div class="deferred-row"><span>Проверить</span><span>нужен немутационный dry-run пакет импорта</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                  <div class="deferred-row"><span>Применить</span><span>нет медиации исходного расположения и сильного подтверждения</span><button class="button small disabled" type="button" disabled>Отключено</button></div>
+                  <div class="deferred-row"><span>Откат</span><span>нужна command-owned поверхность отката</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 </div>
               </section>
             </div>
@@ -800,25 +800,25 @@
 
       <div id="onboardOverlay" class="confirm-overlay" hidden>
         <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle">
-          <div class="eyebrow">Add account</div>
+          <div class="eyebrow">Добавление аккаунта</div>
           <h2 id="onboardTitle">Добавить аккаунт в резерв</h2>
           <p>
-            Onboarding is owned by <span class="mono-value">onboard_account</span>.
-            Browser does not send auth paths, source dirs, credentials, or backend ids.
+            Подключение выполняется через <span class="mono-value">onboard_account</span>.
+            Браузер не отправляет auth paths, source dirs, credentials или backend ids.
           </p>
           <div class="confirm-facts">
-            <div>Placement</div><div>reserve-first only</div>
-            <div>Promotion</div><div>never automatic</div>
-            <div>Truth</div><div>command packet plus refreshed accounts JSON</div>
-            <div>Unavailable outcomes</div><div>no-new-auth and ambiguous identity require operator action</div>
+            <div>Размещение</div><div>только сначала в резерв</div>
+            <div>Повышение</div><div>никогда автоматически</div>
+            <div>Подтверждение</div><div>пакет команды плюс обновлённый accounts JSON</div>
+            <div>Недоступные итоги</div><div>no-new-auth и ambiguous identity требуют действия оператора</div>
           </div>
           <p class="confirm-note">
-            This modal starts a bounded owner command request. It does not scan files,
-            upload credentials, or prove active routing.
+            Это окно запускает ограниченный owner command request. Оно не сканирует файлы,
+            не загружает credentials и не доказывает active routing.
           </p>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
-            <button id="runOnboardAction" class="button primary" type="button">Запустить onboarding</button>
+            <button id="runOnboardAction" class="button primary" type="button">Запустить подключение</button>
           </div>
         </section>
       </div>
@@ -829,17 +829,17 @@
           <h2 id="confirmTitle">Подтвердить действие</h2>
           <p id="confirmMeaning">Действие ожидает подтверждения.</p>
           <div class="confirm-facts">
-            <div>UI action</div><div id="confirmUiAction">-</div>
-            <div>Account</div><div id="confirmAccountId">-</div>
-            <div>Severity</div><div id="confirmSeverity">-</div>
-            <div>Policy</div><div id="confirmPolicy">-</div>
-            <div>Mutation</div><div id="confirmMutation">-</div>
-            <div>Refresh</div><div id="confirmRefresh">-</div>
-            <div>Scope</div><div id="confirmScope">-</div>
-            <div>Dispatch</div><div id="confirmDispatchState">idle</div>
+            <div>ui_action</div><div id="confirmUiAction">-</div>
+            <div>Аккаунт</div><div id="confirmAccountId">-</div>
+            <div>Риск</div><div id="confirmSeverity">-</div>
+            <div>Политика</div><div id="confirmPolicy">-</div>
+            <div>Мутация</div><div id="confirmMutation">-</div>
+            <div>Обновление</div><div id="confirmRefresh">-</div>
+            <div>Граница</div><div id="confirmScope">-</div>
+            <div>Отправка</div><div id="confirmDispatchState">ожидание</div>
           </div>
           <p id="confirmTruthWarning" class="confirm-note">
-            Результат действия не является runtime truth. После выполнения экран
+            Результат действия не является подтверждённым состоянием runtime. После выполнения экран
             обновится только из live JSON-команд.
           </p>
           <div class="confirm-actions">

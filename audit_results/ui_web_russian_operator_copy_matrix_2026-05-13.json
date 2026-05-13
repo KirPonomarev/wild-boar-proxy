@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_RUSSIAN_OPERATOR_COPY_LOCALIZATION",
+  "created_at": "2026-05-13",
+  "scope": "Human-facing Russian localization for the current web-rendered operator UI.",
+  "canon_alignment": [
+    {
+      "canon": "UI is not runtime truth",
+      "result": "preserved",
+      "evidence": "Russian copy continues to state that runtime truth comes from live JSON command packets."
+    },
+    {
+      "canon": "Browser sends only ui_action plus structured payload",
+      "result": "preserved",
+      "evidence": "No JavaScript payload contract changes; tests still assert no command_id and no raw argv."
+    },
+    {
+      "canon": "No direct state or log truth",
+      "result": "preserved",
+      "evidence": "Diagnostics/settings/setup copy says files, logs and artifacts are not read directly."
+    },
+    {
+      "canon": "No runtime work inside UI contour",
+      "result": "preserved",
+      "evidence": "runtime.py and CSS/design files were not changed."
+    },
+    {
+      "canon": "No private external reference traces in repo",
+      "result": "preserved",
+      "evidence": "Changed-file leak scan returned no matches for forbidden reference-service markers."
+    }
+  ],
+  "screen_coverage": [
+    {
+      "screen": "overview",
+      "localized": true,
+      "notes": "Main operator controls, source picker, action ledger and status explanations use Russian copy."
+    },
+    {
+      "screen": "accounts",
+      "localized": true,
+      "notes": "Table labels, lifecycle buttons, readonly/live boundaries and onboard modal copy use Russian copy."
+    },
+    {
+      "screen": "diagnostics",
+      "localized": true,
+      "notes": "Support-artifact boundaries, packet fields and diagnostics helper text use Russian copy."
+    },
+    {
+      "screen": "settings",
+      "localized": true,
+      "notes": "Readonly settings and deferred-control explanations use Russian copy."
+    },
+    {
+      "screen": "setup",
+      "localized": true,
+      "notes": "Inert skeleton explains command-owned discovery and browser path restrictions in Russian."
+    },
+    {
+      "screen": "select-client",
+      "localized": true,
+      "notes": "Candidate selection remains deferred and copy is Russian with technical command-owned terms preserved."
+    },
+    {
+      "screen": "import-existing",
+      "localized": true,
+      "notes": "Import skeleton explains detection, dry-run, snapshot and rollback boundaries in Russian."
+    }
+  ],
+  "verification_completed": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "passed"
+    },
+    {
+      "command": "for f in wild_boar_proxy/web_design_ui/fixtures/*.json; do python3 -m json.tool \"$f\" >/dev/null || exit 1; done",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "status": "passed",
+      "tests": 70
+    },
+    {
+      "command": "rg changed files for forbidden external-reference markers",
+      "status": "passed",
+      "matches": 0
+    },
+    {
+      "command": "git diff -- wild_boar_proxy/web_design_ui/styles/overview.css wild_boar_proxy/runtime.py wild_boar_proxy/web_design_command_adapter.py | wc -l",
+      "status": "passed",
+      "lines": 0
+    }
+  ],
+  "residual_risks": [
+    "Some technical English tokens intentionally remain visible to preserve exact command and runtime meaning.",
+    "This contour does not perform visual redesign or typography changes.",
+    "Full test discovery and independent audit are required before closeout."
+  ]
+}

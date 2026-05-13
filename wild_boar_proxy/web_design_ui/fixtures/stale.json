@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "state_id": "stale",
-  "fixture_notice": "Fixture preview only. Stale is visible and not accepted as current green.",
+  "fixture_notice": "Только демо-просмотр. Устаревшее состояние видно и не принимается как текущий green.",
   "runtime": {
     "visual_state": "stale",
     "status_label": "Устарело",
@@ -9,8 +9,8 @@
     "effective_mode": "managed",
     "endpoint": "127.0.0.1:8320",
     "machine_error_code": "STALE_FIXTURE",
-    "human_message": "Fixture: last packet is stale and must be refreshed before truth claims.",
-    "last_error": "stale packet",
+    "human_message": "Демо: последний пакет устарел; перед truth claims нужен refresh.",
+    "last_error": "устаревший пакет",
     "observed_at_utc": "2026-05-12T20:00:00Z"
   },
   "pool_summary": {
@@ -26,13 +26,13 @@
   "events": [
     {
       "level": "amber",
-      "message": "Fixture: пакет устарел, green не показывается как текущая правда",
+      "message": "Демо: пакет устарел, green не показывается как текущая правда",
       "observed_at": "1 час назад"
     },
     {
       "level": "blue",
-      "message": "Fixture: refresh action disabled in this contour",
-      "observed_at": "fixture"
+      "message": "Демо: refresh action отключён в этом контуре",
+      "observed_at": "демо"
     }
   ]
 }
