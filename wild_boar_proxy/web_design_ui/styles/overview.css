@@ -600,11 +600,11 @@ button:disabled {
 
 .confirm-overlay {
   align-items: center;
-  background: rgba(30, 27, 24, .28);
+  background: rgba(30, 27, 24, .32);
   display: flex;
   inset: 0;
   justify-content: center;
-  padding: 24px;
+  padding: 40px;
   position: absolute;
   z-index: 40;
 }
@@ -616,14 +616,46 @@ button:disabled {
 .confirm-modal {
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
-  box-shadow: var(--window-shadow);
+  border-radius: 24px;
+  box-shadow: 0 32px 96px rgba(30, 27, 24, .18);
   color: var(--secondary);
   max-height: calc(100vh - 96px);
   max-width: 640px;
   overflow: auto;
-  padding: 24px;
+  padding: 32px;
+  position: relative;
   width: min(100%, 640px);
+}
+
+.confirm-modal::before {
+  background: var(--amber);
+  border-radius: 999px;
+  content: "";
+  height: 4px;
+  left: 32px;
+  position: absolute;
+  right: 32px;
+  top: 20px;
+}
+
+.confirm-modal[data-confirm-severity="critical"]::before {
+  background: var(--red);
+}
+
+.confirm-modal[data-confirm-severity="high"]::before {
+  background: var(--amber);
+}
+
+.confirm-modal[data-confirm-severity="medium"]::before {
+  background: var(--blue);
+}
+
+.onboard-modal {
+  width: min(100%, 680px);
+}
+
+.confirm-modal-header {
+  margin: 14px 0 0;
 }
 
 .confirm-modal h2 {
@@ -631,25 +663,50 @@ button:disabled {
   font-size: 22px;
   font-weight: 600;
   line-height: 28px;
-  margin: 10px 0 8px;
+  margin: 10px 0 10px;
 }
 
 .confirm-modal p {
+  font-size: 13px;
+  line-height: 20px;
   margin: 0;
+}
+
+.confirm-boundary {
+  background: var(--surface-muted);
+  border: 1px solid rgba(217, 208, 195, .78);
+  border-radius: 999px;
+  color: var(--secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 8px;
+  line-height: 16px;
+  margin-top: 20px;
+  padding: 6px;
+}
+
+.confirm-boundary span {
+  background: #fffdfa;
+  border: 1px solid rgba(217, 208, 195, .7);
+  border-radius: 999px;
+  color: var(--text);
+  min-width: 0;
+  padding: 4px 10px;
 }
 
 .confirm-facts {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .8);
-  border-radius: 14px;
+  border-radius: 18px;
   display: grid;
   font-size: 12px;
-  gap: 8px 16px;
+  gap: 9px 18px;
   grid-template-columns: minmax(116px, max-content) minmax(0, 1fr);
   line-height: 18px;
-  margin-top: 16px;
+  margin-top: 18px;
   overflow-wrap: anywhere;
-  padding: 14px;
+  padding: 16px;
 }
 
 .confirm-facts div:nth-child(odd) {
@@ -662,17 +719,25 @@ button:disabled {
 }
 
 .confirm-note {
-  color: var(--amber);
+  background: var(--amber-bg);
+  border: 1px solid rgba(168, 106, 16, .22);
+  border-radius: 14px;
+  color: #7b4c08;
   font-size: 12px;
   line-height: 18px;
-  margin-top: 14px !important;
+  margin-top: 16px !important;
+  padding: 12px 14px;
 }
 
 .confirm-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 22px;
+}
+
+.confirm-actions .button {
+  min-width: 132px;
 }
 
 .grid {
@@ -1883,6 +1948,31 @@ button:disabled {
 }
 
 @media (max-width: 1120px) {
+  .confirm-overlay {
+    align-items: flex-start;
+    padding: 24px;
+  }
+
+  .confirm-modal {
+    max-height: calc(100vh - 48px);
+    padding: 26px;
+  }
+
+  .confirm-modal::before {
+    left: 26px;
+    right: 26px;
+    top: 16px;
+  }
+
+  .confirm-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .confirm-actions .button {
+    width: 100%;
+  }
+
   .diag-layout,
   .detail-grid,
   .diagnostics-insight-grid,

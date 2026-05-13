@@ -913,6 +913,10 @@ function maybeConfirmAndRun(uiAction, extraPayload = {}) {
 function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   confirmationInFlight = false;
   pendingConfirmedAction = { uiAction, extraPayload };
+  const confirmModal = document.getElementById("confirmModal");
+  if (confirmModal) {
+    confirmModal.dataset.confirmSeverity = policy.severity || "critical";
+  }
   text("confirmTitle", metadata.display_name || uiAction);
   text("confirmMeaning", metadata.human_meaning || "Подтвердите это действие.");
   text("confirmUiAction", uiAction);

@@ -961,13 +961,20 @@
       </main>
 
       <div id="onboardOverlay" class="confirm-overlay" hidden>
-        <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle">
-          <div class="eyebrow">Добавление аккаунта</div>
-          <h2 id="onboardTitle">Добавить аккаунт в резерв</h2>
-          <p>
-            Подключение выполняется через <span class="mono-value">onboard_account</span>.
-            Браузер не отправляет auth paths, source dirs, credentials или backend ids.
-          </p>
+        <section class="confirm-modal onboard-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" data-modal-surface="onboard-reserve-request">
+          <div class="confirm-modal-header">
+            <div class="eyebrow">Добавление аккаунта</div>
+            <h2 id="onboardTitle">Добавить аккаунт в резерв</h2>
+            <p>
+              Подключение выполняется через <span class="mono-value">onboard_account</span>.
+              Браузер не передаёт секретные значения, исходные расположения или идентификаторы бекенда.
+            </p>
+          </div>
+          <div class="confirm-boundary" aria-label="Граница результата подключения">
+            <span>command request</span>
+            <span>резерв сначала</span>
+            <span>результат только из packet</span>
+          </div>
           <div class="confirm-facts">
             <div>Размещение</div><div>только сначала в резерв</div>
             <div>Повышение</div><div>никогда автоматически</div>
@@ -976,7 +983,7 @@
           </div>
           <p class="confirm-note">
             Это окно запускает ограниченный owner command request. Оно не сканирует файлы,
-            не загружает credentials и не доказывает active routing.
+            не загружает учётные данные и не доказывает включение в рабочий поток.
           </p>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
@@ -986,10 +993,17 @@
       </div>
 
       <div id="confirmOverlay" class="confirm-overlay" hidden>
-        <section class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-          <div class="eyebrow">Подтверждение действия</div>
-          <h2 id="confirmTitle">Подтвердить действие</h2>
-          <p id="confirmMeaning">Действие ожидает подтверждения.</p>
+        <section id="confirmModal" class="confirm-modal action-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" data-modal-surface="action-command-request" data-confirm-severity="critical">
+          <div class="confirm-modal-header">
+            <div class="eyebrow">Подтверждение действия</div>
+            <h2 id="confirmTitle">Подтвердить действие</h2>
+            <p id="confirmMeaning">Действие ожидает подтверждения.</p>
+          </div>
+          <div class="confirm-boundary" aria-label="Граница подтверждения действия">
+            <span>command request</span>
+            <span>не runtime truth</span>
+            <span>нужен JSON refresh</span>
+          </div>
           <div class="confirm-facts">
             <div>ui_action</div><div id="confirmUiAction">-</div>
             <div>Аккаунт</div><div id="confirmAccountId">-</div>

@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_MODAL_CONFIRMATION_PARITY",
+  "date": "2026-05-14",
+  "auditor": "independent read-only subagent plus orchestrator fact correction",
+  "verdict": "PASS",
+  "checks": [
+    {
+      "name": "scope_limited_to_ui_test_artifact",
+      "status": "PASS",
+      "evidence": [
+        "Current diff contains web_design_ui HTML/CSS/JS, tests/test_web_design_ui.py, and contour artifacts.",
+        "No live server, command adapter, runtime, or desktop implementation files are modified."
+      ]
+    },
+    {
+      "name": "no_new_action_surface",
+      "status": "PASS",
+      "evidence": [
+        "HTML changes add data-modal-surface markers only.",
+        "No new data-ui-action attribute is introduced by this contour.",
+        "Static tests assert modal markers and visual tokens rather than new owner actions."
+      ]
+    },
+    {
+      "name": "dispatch_shape_preserved",
+      "status": "PASS",
+      "evidence": [
+        "runUiAction still posts the existing ui_action object plus existing bounded extra payload.",
+        "The only JS behavior change sets confirmModal.dataset.confirmSeverity for visual state."
+      ]
+    },
+    {
+      "name": "browser_smoke_no_final_execution",
+      "status": "PASS",
+      "evidence": [
+        "browser smoke execution_policy.final_confirm_clicked=false",
+        "browser smoke execution_policy.command_request_executed=false",
+        "browser smoke execution_policy.runtime_mutation_attempted=false",
+        "every smoke case reports confirmClickWasNotPressed=true"
+      ]
+    },
+    {
+      "name": "copy_does_not_claim_completed_result",
+      "status": "PASS",
+      "evidence": [
+        "General confirmation boundary says command request, not runtime truth, with JSON refresh required.",
+        "General confirmation note says result is not confirmed runtime state.",
+        "Smoke packet reports hasSuccessClaim=false for all five modal cases."
+      ]
+    },
+    {
+      "name": "onboard_modal_remains_reserve_first",
+      "status": "PASS",
+      "evidence": [
+        "Onboard modal title remains add account to reserve.",
+        "Onboard boundary states reserve first and packet-backed result.",
+        "Onboard warning says it does not scan files, does not load account materials, and does not prove working-flow inclusion."
+      ]
+    },
+    {
+      "name": "screenshots_exist",
+      "status": "PASS",
+      "evidence": [
+        "set_mode_managed_confirmation_1600x1000.png",
+        "promote_account_confirmation_1600x1000.png",
+        "retire_account_confirmation_1600x1000.png",
+        "api_route_remove_confirmation_1600x1000.png",
+        "onboard_account_modal_1600x1000.png"
+      ]
+    },
+    {
+      "name": "tests_and_smoke_match_artifacts",
+      "status": "PASS",
+      "evidence": [
+        "tests.test_web_design_ui contains modal marker and token assertions.",
+        "browser smoke result is PASS and lists the same five screenshot cases.",
+        "matrix verification records node check, UI unittest, targeted suite, and browser smoke as PASS."
+      ]
+    },
+    {
+      "name": "external_reference_trace_absent",
+      "status": "PASS",
+      "evidence": [
+        "Scoped trace scan over contour artifacts and changed production files returned no matches."
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Browser smoke opens modal states through frontend open functions because the static server intentionally lacks live action metadata.",
+    "Native desktop modal behavior remains out of scope until desktop admission."
+  ]
+}
