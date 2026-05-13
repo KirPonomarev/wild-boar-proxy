@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "contour": "OWNER_DESIGN_REVIEW_VERDICT_RESOLUTION",
+  "date": "2026-05-14",
+  "input_head": "42c64e5",
+  "input_state": "OWNER_DESIGN_REVIEW_PENDING",
+  "source_gate": {
+    "stop_packet": "audit_results/owner_design_review_stop_packet_2026-05-14.md",
+    "verdict_intake": "audit_results/owner_design_review_verdict_intake_2026-05-14.md",
+    "verdict_intake_matrix": "audit_results/owner_design_review_verdict_matrix_2026-05-14.json",
+    "verdict_intake_closeout": "audit_results/owner_design_review_verdict_closeout_2026-05-14.md"
+  },
+  "owner_input": {
+    "latest_instruction": "начинай работу по данному контуру",
+    "verbatim_owner_design_verdict": null,
+    "explicit_approved": false,
+    "explicit_changes_requested": false,
+    "explicit_blocked": false,
+    "explicit_needs_more_review": false
+  },
+  "normalization": {
+    "normalized_verdict": "OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW",
+    "reason": "The owner instructed the agent to run this resolution contour but did not explicitly approve, request changes, block, or request more review for the current web UI.",
+    "ambiguous_wording_unlocked_desktop": false
+  },
+  "unlock_state": {
+    "desktop_unlocked": false,
+    "implementation_unlocked": false,
+    "runtime_unlocked": false
+  },
+  "route_matrix": [
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_APPROVED",
+      "future_desktop_route_after_explicit_verdict": true,
+      "future_implementation_route_after_explicit_verdict": false,
+      "next_contour": "DESKTOP_RENDERER_ADMISSION"
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_CHANGES_REQUESTED",
+      "future_desktop_route_after_explicit_verdict": false,
+      "future_implementation_route_after_explicit_verdict": false,
+      "next_contour": "UI_WEB_OWNER_REVIEW_DESIGN_REPAIR_<scope>"
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_BLOCKED",
+      "future_desktop_route_after_explicit_verdict": false,
+      "future_implementation_route_after_explicit_verdict": false,
+      "next_contour": "UI_WEB_IDENTITY_REBASE_DECISION"
+    },
+    {
+      "verdict": "OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW",
+      "future_desktop_route_after_explicit_verdict": false,
+      "future_implementation_route_after_explicit_verdict": false,
+      "next_contour": "OWNER_DESIGN_REVIEW_PENDING"
+    }
+  ],
+  "scope_check": {
+    "artifact_only": true,
+    "ui_changed": false,
+    "backend_changed": false,
+    "live_server_changed": false,
+    "command_adapter_changed": false,
+    "runtime_changed": false,
+    "desktop_started": false,
+    "new_action_surface": false,
+    "external_reference_research_used": false
+  },
+  "final_state": {
+    "state": "OWNER_DESIGN_REVIEW_PENDING",
+    "next_action": "Wait for explicit owner verdict.",
+    "resume_from_here": "Ask owner for OWNER_DESIGN_REVIEW_APPROVED, OWNER_DESIGN_REVIEW_CHANGES_REQUESTED, OWNER_DESIGN_REVIEW_BLOCKED, or OWNER_DESIGN_REVIEW_NEEDS_MORE_REVIEW."
+  }
+}
