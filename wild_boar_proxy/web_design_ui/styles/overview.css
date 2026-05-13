@@ -1110,12 +1110,14 @@ button:disabled {
 }
 
 .accounts-table-card {
-  overflow-x: auto;
+  max-height: calc(100vh - 380px);
+  overflow: auto;
   padding: 18px 20px 14px;
 }
 
 .api-connections-table-card {
-  overflow-x: auto;
+  max-height: calc(100vh - 470px);
+  overflow: auto;
   padding: 18px 20px 14px;
 }
 
@@ -1133,6 +1135,10 @@ button:disabled {
   width: 100%;
 }
 
+.api-connections-table {
+  min-width: 1120px;
+}
+
 .table th {
   border-bottom: 1px solid var(--border);
   color: var(--secondary);
@@ -1143,6 +1149,7 @@ button:disabled {
   line-height: 14px;
   text-align: left;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .table td {
@@ -1150,7 +1157,8 @@ button:disabled {
   font-size: 13px;
   height: 58px;
   line-height: 18px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
   vertical-align: middle;
 }
 
@@ -1200,15 +1208,40 @@ button:disabled {
   max-width: 100%;
 }
 
+.api-route-action-group {
+  min-width: 180px;
+}
+
 .account-action,
 .api-route-action {
-  flex: 1 1 78px;
-  font-size: 11px;
-  height: 30px;
+  flex: 1 1 calc(50% - 4px);
+  font-size: 10px;
   line-height: 14px;
   min-width: 0;
   padding-inline: 8px;
   white-space: nowrap;
+}
+
+.button.small.account-action,
+.button.small.api-route-action {
+  height: 26px;
+  padding-inline: 8px;
+}
+
+.account-action {
+  max-width: calc(50% - 3px);
+}
+
+.api-route-action {
+  max-width: calc(50% - 3px);
+}
+
+.account-action {
+  font-size: 11px;
+}
+
+.account-action-group .api-route-destructive-action {
+  margin-left: auto;
 }
 
 .api-route-destructive-action {

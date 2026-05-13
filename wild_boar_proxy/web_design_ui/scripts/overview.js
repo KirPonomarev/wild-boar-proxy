@@ -142,12 +142,12 @@ const CONFIRMATION_POLICY = {
   api_route_validate: {
     severity: "medium",
     policy: "api-route-validate",
-    warning: "Это проверяет маршрут у провайдера. Это не утверждение готовности runtime."
+    warning: "Это проверяет маршрут у провайдера. Это не утверждение состояния runtime."
   },
   api_route_check: {
     severity: "high",
     policy: "api-route-check",
-    warning: "Это отправляет проверочный запрос через маршрут. Это не утверждение готовности runtime."
+    warning: "Это отправляет проверочный запрос через маршрут. Это не утверждение состояния runtime."
   },
   api_route_allow: {
     severity: "high",
@@ -1094,7 +1094,7 @@ function apiConnectionsFixtureFromOverview(fixture) {
       visual_state: "neutral",
       role_label: "Допустим для резерва",
       last_checked: "",
-      note: "Демо-представление отключённого маршрута. Автопереключение не подтверждено."
+      note: "Демо-представление отключённого маршрута. Резервное использование не подтверждено."
     }
   ];
   return {
@@ -1369,14 +1369,14 @@ function routeStatusChip(route) {
 
 function routeActionButtons(route) {
   const group = document.createElement("div");
-  group.className = "account-action-group";
+  group.className = "account-action-group api-route-action-group";
   group.append(
-    routeActionButton(route, "api_route_allow", "Разрешить маршрут"),
-    routeActionButton(route, "api_route_disable", "Отключить маршрут"),
+    routeActionButton(route, "api_route_allow", "Разрешить"),
+    routeActionButton(route, "api_route_disable", "Отключить"),
     routeActionButton(route, "api_route_validate", "Проверить"),
-    routeActionButton(route, "api_route_check", "Проверить запросом"),
-    routeActionButton(route, "api_route_profile", "Пакет профиля"),
-    routeActionButton(route, "api_route_evidence_capture", "Свидетельство"),
+    routeActionButton(route, "api_route_check", "Запрос"),
+    routeActionButton(route, "api_route_profile", "Профиль"),
+    routeActionButton(route, "api_route_evidence_capture", "Свид-во"),
     routeActionButton(route, "api_route_remove", "Удалить")
   );
   return group;
@@ -1394,12 +1394,12 @@ function routeActionButton(route, uiAction, label) {
   button.dataset.routeStateRequirement = apiRouteStateRequirement(uiAction);
   button.textContent = label;
   const routeActionTitles = {
-    api_route_allow: "Разрешить выбранный маршрут. Это не утверждение готовности runtime.",
-    api_route_disable: "Отключить выбранный маршрут. Это не утверждение готовности runtime.",
-    api_route_check: "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime.",
-    api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime.",
-    api_route_profile: "Показать профильный пакет поддержки без настройки Codex config и без runtime readiness.",
-    api_route_evidence_capture: "Собрать локальное свидетельство маршрута. UI не читает evidence file.",
+    api_route_allow: "Разрешить выбранный маршрут. Это не утверждение состояния runtime.",
+    api_route_disable: "Отключить выбранный маршрут. Это не утверждение состояния runtime.",
+    api_route_check: "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение состояния runtime.",
+    api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение состояния runtime.",
+    api_route_profile: "Пакет профиля поддержки без настройки Codex config и без утверждения состояния runtime.",
+    api_route_evidence_capture: "Свидетельство маршрута: собрать локальный support artifact. UI не читает evidence file.",
     api_route_remove: "Удалить отключённую registry-запись после server preflight. Область действия не шире command packet."
   };
   button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
