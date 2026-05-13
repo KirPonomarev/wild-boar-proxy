@@ -1,0 +1,68 @@
+{
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW",
+  "date": "2026-05-13",
+  "auditor": "independent subagent Aquinas",
+  "status": "PASS",
+  "findings": [
+    {
+      "check": "fake_runner_only",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_web_design_live_server.py:1137 uses MappingRunner(live_payloads())",
+        "tests/test_web_design_live_server.py:1138 starts ThreadingHTTPServer with build_handler(runner=runner)",
+        "tests/test_web_design_live_server.py:1254-1264 asserts forbidden runtime command tuples are absent"
+      ]
+    },
+    {
+      "check": "account_preflight_action_refresh_sequences",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_web_design_live_server.py:1212-1242 checks accounts list -> lifecycle action -> accounts list for validate, hold, release, promote, demote, and retire",
+        "tests/test_web_design_live_server.py:1243-1246 checks accounts onboard -> accounts list",
+        "tests/test_web_design_live_server.py:1247-1249 checks diagnostics export only"
+      ]
+    },
+    {
+      "check": "onboard_and_diagnostics_claim_scope",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_web_design_live_server.py:1202-1208 asserts reserve_only_success and reserve_first_proven for onboarding",
+        "tests/test_web_design_live_server.py:1209-1210 asserts diagnostics is support_artifact and has no post-action refresh",
+        "wild_boar_proxy/web_design_live_server.py:715-765 computes reserve_first_proven from packet fields"
+      ]
+    },
+    {
+      "check": "scope_integrity",
+      "status": "PASS",
+      "evidence": [
+        "git diff --name-only HEAD showed only tests/test_web_design_live_server.py before artifact additions",
+        "no runtime.py, desktop, server allowlist, or adapter argv changes were present"
+      ]
+    },
+    {
+      "check": "repo_safe_artifacts",
+      "status": "PASS",
+      "evidence": [
+        "contour-owned leak scan found no external reference service markers",
+        "contour-owned sensitive marker scan found no matches"
+      ],
+      "residual_note": "workspace-wide token-header strings exist outside this contour in legacy/runtime/tests and are pre-existing"
+    },
+    {
+      "check": "verification_claims",
+      "status": "PASS",
+      "evidence": [
+        "test counts in files match the 70-test targeted suite claim",
+        "repo test count matches the 564-test full-discover claim",
+        "Node check target exists"
+      ]
+    }
+  ],
+  "residual_risks": [
+    {
+      "risk": "browser smoke was initially narrative-only",
+      "disposition": "mitigated by adding audit_results/ui_web_end_to_end_operator_flow_browser_smoke_2026-05-13.json with observed ledger transcript"
+    }
+  ],
+  "decision": "Contour evidence is acceptable for commit and push after final verification."
+}

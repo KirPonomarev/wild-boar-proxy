@@ -1134,6 +1134,135 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
         )
 
+    def test_http_operator_flow_uses_fake_runner_and_canonical_refreshes(self) -> None:
+        runner = MappingRunner(live_payloads())
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            index = fetch(f"{base_url}/?source=live")
+            overview = json.loads(fetch(f"{base_url}/api/live-readonly"))
+            accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+            metadata = json.loads(fetch(f"{base_url}/api/actions"))
+            flow_steps = [
+                ("validate_account", {"account_id": "acct-active"}, "accounts"),
+                ("hold_account", {"account_id": "acct-active"}, "accounts"),
+                ("release_account", {"account_id": "acct-hold"}, "accounts"),
+                ("promote_account", {"account_id": "acct-reserve"}, "accounts"),
+                ("demote_account", {"account_id": "acct-active"}, "accounts"),
+                ("retire_account", {"account_id": "acct-reserve"}, "accounts"),
+                ("onboard_account", {}, "accounts"),
+                ("export_diagnostics", {}, None),
+            ]
+            action_results: dict[str, dict[str, object]] = {}
+            for ui_action, extra_payload, refresh_target in flow_steps:
+                action_results[ui_action] = json.loads(
+                    post_json(
+                        f"{base_url}/api/action",
+                        {"ui_action": ui_action, **extra_payload},
+                    )
+                )
+                if refresh_target == "accounts":
+                    refreshed = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+                    self.assertEqual(refreshed["status"], "ok")
+                    self.assertEqual(refreshed["source"], "accounts_readonly")
+                elif refresh_target == "overview":
+                    refreshed = json.loads(fetch(f"{base_url}/api/live-readonly"))
+                    self.assertEqual(refreshed["status"], "ok")
+                    self.assertEqual(refreshed["source"], "live_readonly")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertIn("sourcePicker", index)
+        self.assertEqual(overview["status"], "ok")
+        self.assertEqual(overview["source"], "live_readonly")
+        self.assertEqual(accounts["status"], "ok")
+        self.assertEqual(accounts["source"], "accounts_readonly")
+        self.assertNotIn("adapter_command_id", json.dumps(metadata))
+        self.assertNotIn("setup_discovery", metadata["actions"])
+        self.assertNotIn("select_client", metadata["actions"])
+        self.assertNotIn("legacy_import", metadata["actions"])
+        for ui_action in [
+            "validate_account",
+            "hold_account",
+            "release_account",
+            "promote_account",
+            "demote_account",
+            "retire_account",
+            "onboard_account",
+            "export_diagnostics",
+        ]:
+            self.assertEqual(action_results[ui_action]["status"], "ok")
+            self.assertEqual(action_results[ui_action]["source"], "ui_action")
+            self.assertFalse(action_results[ui_action]["affects_primary_truth"])
+
+        self.assertEqual(
+            action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
+            "reserve_only_success",
+        )
+        self.assertTrue(
+            action_results["onboard_account"]["result"]["onboarding"]["reserve_first_proven"]
+        )
+        self.assertEqual(action_results["export_diagnostics"]["action_role"], "support_artifact")
+        self.assertFalse(action_results["export_diagnostics"]["post_action_refresh_required"])
+
+        expected_sequences = [
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "validate", "acct-active", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "hold", "acct-active", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "release", "acct-hold", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "promote", "acct-reserve", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "demote", "acct-active", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "retire", "acct-reserve", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("accounts", "onboard", "--json"),
+                ("accounts", "list", "--json"),
+            ],
+            [
+                ("diagnostics", "export", "--json"),
+            ],
+        ]
+        cursor = 0
+        for sequence in expected_sequences:
+            for command in sequence:
+                try:
+                    cursor = runner.calls.index(command, cursor) + 1
+                except ValueError as exc:
+                    raise AssertionError(f"missing command in operator flow: {command}") from exc
+        forbidden_runtime_commands = [
+            ("policy", "stage", "set", "--json"),
+            ("rollout", "stage", "advance", "--json"),
+            ("stable", "repair", "--apply", "--json"),
+        ]
+        for command in forbidden_runtime_commands:
+            self.assertNotIn(command, runner.calls)
+
     def test_server_source_contains_no_direct_runtime_truth_file_reads(self) -> None:
         source = (ROOT / "wild_boar_proxy" / "web_design_live_server.py").read_text()
         forbidden = [
