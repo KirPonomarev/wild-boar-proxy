@@ -18,7 +18,7 @@
     "command_api_override_allowed": false,
     "desktop_approval_granted": false
   },
-  "global_browser_payload_boundary": "ui_action plus structured payload only; browser must not submit command_id, raw argv, shell, arbitrary path, or config mutation",
+  "global_browser_payload_boundary": "ui_action plus structured payload only; browser must not submit command_id, raw argv, shell, arbitrary path, config mutation, raw route JSON, provider config, base_url, endpoint_path, token, secret_ref, or secret value",
   "global_truth_boundary": {
     "direct_file_truth_allowed": false,
     "runtime_truth_claims_from_screenshots_allowed": false,
@@ -46,7 +46,7 @@
       "known_gaps": [
         "No route-level web implementation is required before desktop admission review."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "01_overview_dashboard",
@@ -106,7 +106,7 @@
         "Visual polish and screenshot parity are intentionally deferred.",
         "Action density and Russian copy remain visual-stabilization work."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "02_setup_client",
@@ -146,7 +146,7 @@
         "No command-owned setup discovery contract is admitted yet.",
         "Current route is an inert skeleton and must not imply setup readiness."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "03_select_codex_client",
@@ -185,7 +185,7 @@
       "known_gaps": [
         "No command-owned candidate discovery or persistence surface is admitted."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "04_accounts",
@@ -240,7 +240,7 @@
         "Table overflow and button grouping remain visual-stabilization work.",
         "No bulk account operation is admitted."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "05_add_account_modal",
@@ -285,7 +285,7 @@
         "Full visual parity with source modal remains deferred.",
         "No desktop auth automation has started."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "06_diagnostics",
@@ -328,7 +328,7 @@
       "known_gaps": [
         "Artifact download/open workflows are not admitted."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "07_settings",
@@ -384,7 +384,7 @@
         "Click-through tests are intentionally limited to avoid real runtime mutations.",
         "Deferred settings controls need command contracts before activation."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "08_import_existing",
@@ -426,7 +426,7 @@
       "known_gaps": [
         "No safe source-location mediation is admitted for browser UI."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     },
     {
       "screen_id": "09_confirm_action",
@@ -465,7 +465,108 @@
       "known_gaps": [
         "Modal geometry remains visual-stabilization work."
       ],
-      "next_allowed_contour": "UI_WEB_VISUAL_STABILIZATION_PASS"
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
+    },
+    {
+      "screen_id": "api_connections",
+      "source_render_status": "web_added_not_in_original_render_package",
+      "web_implementation_status": "implemented_bounded_final_scope",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_command_adapter.py"
+      ],
+      "evidence_artifacts": [
+        "audit_results/api_connections_web_readonly_closeout_2026-05-13.md",
+        "audit_results/api_connections_route_availability_gate_closeout_2026-05-13.md",
+        "audit_results/api_connections_support_details_gate_closeout_2026-05-13.md",
+        "audit_results/api_connections_route_remove_action_gate_closeout_2026-05-13.md",
+        "audit_results/api_connections_route_builder_admission_closeout_2026-05-13.md"
+      ],
+      "truth_sources": [
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json",
+        "external-models routes validate --route <route_id> --json",
+        "external-models check --route <route_id> --json",
+        "external-models routes enable --route <route_id> --json",
+        "external-models routes disable --route <route_id> --json",
+        "external-models routes remove --route <route_id> --json",
+        "external-models profile codex-desktop --route <route_id> --json",
+        "external-models evidence capture --route <route_id> --json"
+      ],
+      "actions": {
+        "allowed": [
+          "api_route_validate",
+          "api_route_check",
+          "api_route_allow",
+          "api_route_disable",
+          "api_route_profile",
+          "api_route_evidence_capture",
+          "api_route_remove"
+        ],
+        "deferred": [
+          "selected route semantics",
+          "automatic route switching",
+          "failover policy UI"
+        ],
+        "not_admitted": [
+          "api_route_create",
+          "api_route_update",
+          "api_route_draft"
+        ],
+        "forbidden": [
+          "browser-submitted command_id",
+          "browser-submitted raw argv",
+          "browser-submitted route JSON",
+          "browser-submitted file path",
+          "browser-submitted token or secret",
+          "direct route registry edits",
+          "direct route/state/secret/evidence file truth"
+        ]
+      },
+      "action_classification": {
+        "api_route_remove": "registry_cleanup_only",
+        "api_route_create": "NOT_ADMITTED",
+        "api_route_update": "NOT_ADMITTED",
+        "api_route_draft": "NOT_ADMITTED"
+      },
+      "browser_payload_boundary": {
+        "route_actions_allowed_payload": [
+          "ui_action",
+          "route_id"
+        ],
+        "raw_route_json_allowed": false,
+        "token_or_secret_allowed": false,
+        "file_path_allowed": false
+      },
+      "command_evidence_policy": {
+        "changed_files_is_execution_evidence_only": true,
+        "direct_file_truth_allowed": false
+      },
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_notes": [
+        "API Connections may transfer only as a bounded command-surface screen.",
+        "api_route_remove is registry cleanup only for disabled routes.",
+        "Route create/update/draft are not admitted before desktop transfer."
+      ],
+      "known_gaps": [
+        "No route create/update builder is admitted.",
+        "No selected-route, traffic, failover, or provider-availability claim is admitted.",
+        "Final E2E must verify API route remove and NOT_ADMITTED builder state."
+      ],
+      "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
     }
-  ]
+  ],
+  "final_backfill": {
+    "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+    "updated_at_local_date": "2026-05-13",
+    "reason": "Update UI screen/action truth after API route remove and route builder admission decisions.",
+    "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+    "production_code_changed": false,
+    "desktop_work_started": false
+  }
 }

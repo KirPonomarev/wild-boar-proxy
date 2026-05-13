@@ -108,5 +108,35 @@
   "missing_expected_screens": [],
   "runtime_truth": "not_applicable",
   "live_commands_executed_for_manifest": false,
-  "desktop_work_started": false
+  "desktop_work_started": false,
+  "final_backfill": {
+    "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+    "updated_at_local_date": "2026-05-13",
+    "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+    "reason": "Final UI truth map before end-to-end operator flow."
+  },
+  "web_ui_final_scope": {
+    "api_connections": {
+      "implemented_actions": [
+        "readonly",
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_profile",
+        "api_route_evidence_capture",
+        "api_route_remove"
+      ],
+      "not_admitted_actions": [
+        "api_route_create",
+        "api_route_update",
+        "api_route_draft"
+      ],
+      "next_required_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
+    },
+    "desktop_phase_blocked_until": [
+      "WEB_UI_READY_FOR_DESKTOP_ADMISSION_REVIEW",
+      "STOP_FOR_OWNER_APPROVAL"
+    ]
+  }
 }

@@ -17,40 +17,79 @@
   "truth_surfaces": [
     {
       "adapter_command_id": "status",
-      "argv": ["status", "--json"],
+      "argv": [
+        "status",
+        "--json"
+      ],
       "ui_role": "primary runtime status",
-      "screens": ["overview", "settings"]
+      "screens": [
+        "overview",
+        "settings"
+      ]
     },
     {
       "adapter_command_id": "healthcheck",
-      "argv": ["healthcheck", "--json"],
+      "argv": [
+        "healthcheck",
+        "--json"
+      ],
       "ui_role": "runtime health detail",
-      "screens": ["overview", "diagnostics", "settings"]
+      "screens": [
+        "overview",
+        "diagnostics",
+        "settings"
+      ]
     },
     {
       "adapter_command_id": "mode_get",
-      "argv": ["mode", "get", "--json"],
+      "argv": [
+        "mode",
+        "get",
+        "--json"
+      ],
       "ui_role": "desired and effective mode readout",
-      "screens": ["overview", "settings"]
+      "screens": [
+        "overview",
+        "settings"
+      ]
     },
     {
       "adapter_command_id": "accounts_list",
-      "argv": ["accounts", "list", "--json"],
+      "argv": [
+        "accounts",
+        "list",
+        "--json"
+      ],
       "ui_role": "account pool truth and account action preflight",
-      "screens": ["overview", "accounts", "settings"]
+      "screens": [
+        "overview",
+        "accounts",
+        "settings"
+      ]
     },
     {
       "adapter_command_id": "rollout_rotation_inspect",
-      "argv": ["rollout", "rotation", "inspect", "--json"],
+      "argv": [
+        "rollout",
+        "rotation",
+        "inspect",
+        "--json"
+      ],
       "ui_role": "supporting rotation detail",
-      "screens": ["overview", "settings"]
+      "screens": [
+        "overview",
+        "settings"
+      ]
     }
   ],
   "ui_action_surfaces": [
     {
       "ui_action": "refresh_health_detail",
       "adapter_command_id": "healthcheck",
-      "argv": ["healthcheck", "--json"],
+      "argv": [
+        "healthcheck",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": false,
       "structured_payload": [],
@@ -60,7 +99,11 @@
     {
       "ui_action": "export_diagnostics",
       "adapter_command_id": "diagnostics_export",
-      "argv": ["diagnostics", "export", "--json"],
+      "argv": [
+        "diagnostics",
+        "export",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": false,
       "structured_payload": [],
@@ -70,7 +113,12 @@
     {
       "ui_action": "stable_repair_plan",
       "adapter_command_id": "stable_repair_dry_run",
-      "argv": ["stable", "repair", "--dry-run", "--json"],
+      "argv": [
+        "stable",
+        "repair",
+        "--dry-run",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": false,
       "structured_payload": [],
@@ -80,7 +128,11 @@
     {
       "ui_action": "onboard_account",
       "adapter_command_id": "accounts_onboard",
-      "argv": ["accounts", "onboard", "--json"],
+      "argv": [
+        "accounts",
+        "onboard",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
       "structured_payload": [],
@@ -90,10 +142,17 @@
     {
       "ui_action": "validate_account",
       "adapter_command_id": "accounts_validate",
-      "argv": ["accounts", "validate", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "validate",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "post_action_refresh_required": true,
       "claim_scope": "account verification request only; refreshed accounts list remains truth"
@@ -101,10 +160,17 @@
     {
       "ui_action": "promote_account",
       "adapter_command_id": "accounts_promote",
-      "argv": ["accounts", "promote", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "promote",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "eligibility": "reserve, not manual hold, not retired",
       "post_action_refresh_required": true,
@@ -113,10 +179,17 @@
     {
       "ui_action": "demote_account",
       "adapter_command_id": "accounts_demote",
-      "argv": ["accounts", "demote", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "demote",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "eligibility": "active, not manual hold, not retired",
       "post_action_refresh_required": true,
@@ -125,10 +198,17 @@
     {
       "ui_action": "retire_account",
       "adapter_command_id": "accounts_retire",
-      "argv": ["accounts", "retire", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "retire",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "eligibility": "active or reserve, not already retired",
       "post_action_refresh_required": true,
@@ -137,10 +217,17 @@
     {
       "ui_action": "hold_account",
       "adapter_command_id": "accounts_hold",
-      "argv": ["accounts", "hold", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "hold",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "eligibility": "not retired and not already on manual hold",
       "post_action_refresh_required": true,
@@ -149,10 +236,17 @@
     {
       "ui_action": "release_account",
       "adapter_command_id": "accounts_release",
-      "argv": ["accounts", "release", "{account_id}", "--json"],
+      "argv": [
+        "accounts",
+        "release",
+        "{account_id}",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
-      "structured_payload": ["account_id"],
+      "structured_payload": [
+        "account_id"
+      ],
       "server_preflight": "accounts list --json",
       "eligibility": "manual hold account, not retired",
       "post_action_refresh_required": true,
@@ -161,7 +255,10 @@
     {
       "ui_action": "sync_runtime",
       "adapter_command_id": "sync",
-      "argv": ["sync", "--json"],
+      "argv": [
+        "sync",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
       "structured_payload": [],
@@ -171,7 +268,12 @@
     {
       "ui_action": "set_mode_stable",
       "adapter_command_id": "mode_stable",
-      "argv": ["mode", "set", "stable", "--json"],
+      "argv": [
+        "mode",
+        "set",
+        "stable",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
       "structured_payload": [],
@@ -181,7 +283,12 @@
     {
       "ui_action": "set_mode_managed",
       "adapter_command_id": "mode_managed",
-      "argv": ["mode", "set", "managed", "--json"],
+      "argv": [
+        "mode",
+        "set",
+        "managed",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": true,
       "structured_payload": [],
@@ -191,7 +298,11 @@
     {
       "ui_action": "launch_smoke",
       "adapter_command_id": "smoke",
-      "argv": ["launch", "smoke", "--json"],
+      "argv": [
+        "launch",
+        "smoke",
+        "--json"
+      ],
       "status": "allowed",
       "confirmation_required": false,
       "structured_payload": [],
@@ -201,19 +312,175 @@
     {
       "ui_action": "launch_client_dispatch",
       "adapter_command_id": "launch_client",
-      "argv": ["launch", "client", "--client-path", "{client_path}", "--json"],
+      "argv": [
+        "launch",
+        "client",
+        "--client-path",
+        "{client_path}",
+        "--json"
+      ],
       "status": "bounded_server_owned_only",
       "confirmation_required": true,
       "structured_payload": [],
-      "server_injected_payload": ["client_path"],
+      "server_injected_payload": [
+        "client_path"
+      ],
       "post_action_refresh_required": true,
       "claim_scope": "bounded OS dispatch request only; not host-client session success"
+    },
+    {
+      "ui_action": "api_route_validate",
+      "adapter_command_id": "external_models_routes_validate",
+      "argv": [
+        "external-models",
+        "routes",
+        "validate",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "post_action_refresh_required": true,
+      "claim_scope": "route validation command only; refreshed API Connections command surfaces remain truth"
+    },
+    {
+      "ui_action": "api_route_check",
+      "adapter_command_id": "external_models_check",
+      "argv": [
+        "external-models",
+        "check",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "post_action_refresh_required": true,
+      "claim_scope": "route check command only; refreshed API Connections command surfaces remain truth"
+    },
+    {
+      "ui_action": "api_route_allow",
+      "adapter_command_id": "external_models_routes_enable",
+      "argv": [
+        "external-models",
+        "routes",
+        "enable",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "eligibility": "disabled route only",
+      "post_action_refresh_required": true,
+      "claim_scope": "route registry enable request only; refreshed API Connections command surfaces remain truth"
+    },
+    {
+      "ui_action": "api_route_disable",
+      "adapter_command_id": "external_models_routes_disable",
+      "argv": [
+        "external-models",
+        "routes",
+        "disable",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "eligibility": "enabled route only",
+      "post_action_refresh_required": true,
+      "claim_scope": "route registry disable request only; refreshed API Connections command surfaces remain truth"
+    },
+    {
+      "ui_action": "api_route_profile",
+      "adapter_command_id": "external_models_profile_codex_desktop",
+      "argv": [
+        "external-models",
+        "profile",
+        "codex-desktop",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "post_action_refresh_required": false,
+      "claim_scope": "support profile packet only; not config mutation"
+    },
+    {
+      "ui_action": "api_route_evidence_capture",
+      "adapter_command_id": "external_models_evidence_capture",
+      "argv": [
+        "external-models",
+        "evidence",
+        "capture",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "post_action_refresh_required": false,
+      "claim_scope": "local support artifact command only; UI does not read evidence file"
+    },
+    {
+      "ui_action": "api_route_remove",
+      "adapter_command_id": "external_models_routes_remove",
+      "argv": [
+        "external-models",
+        "routes",
+        "remove",
+        "--route",
+        "{route_id}",
+        "--json"
+      ],
+      "status": "allowed_registry_cleanup_only",
+      "confirmation_required": true,
+      "structured_payload": [
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json",
+      "eligibility": "route enabled value is exactly false",
+      "post_action_refresh_required": true,
+      "claim_scope": "disabled registry entry cleanup only; refreshed API Connections command surfaces remain truth",
+      "changed_files_policy": "execution evidence only, never route truth"
     }
   ],
   "adapter_present_but_ui_deferred": [
     {
       "adapter_command_id": "stable_repair_apply",
-      "argv": ["stable", "repair", "--apply", "--json"],
+      "argv": [
+        "stable",
+        "repair",
+        "--apply",
+        "--json"
+      ],
       "reason": "apply is mutating recovery and is not exposed as a current web UI action"
     }
   ],
@@ -229,7 +496,12 @@
     "browser-submitted command_id",
     "browser-submitted raw argv",
     "browser-submitted local path",
-    "direct config, state, registry, auth, or log mutation"
+    "direct config, state, registry, auth, or log mutation",
+    "api_route_create NOT_ADMITTED",
+    "api_route_update NOT_ADMITTED",
+    "api_route_draft NOT_ADMITTED",
+    "route builder UI before separate admission",
+    "direct route/state/secret/evidence file truth"
   ],
   "implementation_evidence": {
     "server_allowlist": "wild_boar_proxy/web_design_live_server.py",
@@ -239,7 +511,31 @@
     "tests": [
       "tests/test_web_design_ui.py",
       "tests/test_web_design_live_server.py",
-      "tests/test_web_design_command_adapter.py"
+      "tests/test_web_design_command_adapter.py",
+      "tests/test_cli_external_models.py"
     ]
-  }
+  },
+  "final_backfill": {
+    "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+    "updated_at_local_date": "2026-05-13",
+    "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+    "production_code_changed": false
+  },
+  "not_admitted_ui_actions": [
+    {
+      "ui_action": "api_route_create",
+      "status": "NOT_ADMITTED",
+      "reason": "No blocked managed operator workflow; backend add requires full route object via file/stdin and secret-reference policy is not admitted."
+    },
+    {
+      "ui_action": "api_route_update",
+      "status": "NOT_ADMITTED",
+      "reason": "No blocked managed operator workflow; backend update requires full replacement route object and can alter adapter-owned provider/auth/lane fields."
+    },
+    {
+      "ui_action": "api_route_draft",
+      "status": "NOT_ADMITTED",
+      "reason": "Draft-only mode can become a raw route object bypass without server-owned templates and secret-reference admission."
+    }
+  ]
 }

@@ -172,20 +172,6 @@
       ]
     },
     {
-      "command": "external-models routes add/update/remove --json",
-      "source": "wild_boar_proxy/cli.py:234",
-      "handler_source": "wild_boar_proxy/external_models/__init__.py:147",
-      "classification": "deferred_for_product_ui_until_secure_config_contract",
-      "ui_label": "Настройка маршрутов",
-      "scope": "route registry mutation",
-      "blocking_questions": [
-        "secure secret input",
-        "bounded config payload",
-        "confirmation and rollback",
-        "no raw browser token/path/config"
-      ]
-    },
-    {
       "command": "external-models start/stop --json",
       "source": "wild_boar_proxy/cli.py:218",
       "handler_source": "wild_boar_proxy/external_models/__init__.py:19",
@@ -195,6 +181,51 @@
       "blocking_questions": [
         "whether operator UI should expose synthetic lifecycle",
         "how to avoid runtime readiness overclaim"
+      ]
+    },
+    {
+      "command": "external-models routes remove --route <route_id> --json",
+      "source": "wild_boar_proxy/cli.py:249",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:167",
+      "classification": "admitted_registry_cleanup_only",
+      "ui_label": "Удалить отключённый маршрут",
+      "scope": "disabled route registry cleanup only",
+      "browser_payload": [
+        "ui_action",
+        "route_id"
+      ],
+      "server_preflight": "external-models routes list --json; route enabled value must be exactly false",
+      "changed_files_policy": "execution evidence only, never route truth",
+      "not_truth_for": [
+        "system state",
+        "provider state",
+        "secret cleanup"
+      ]
+    },
+    {
+      "command": "external-models routes add --json --file/--stdin",
+      "source": "wild_boar_proxy/cli.py:234",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:147",
+      "classification": "NOT_ADMITTED_FOR_PRODUCT_UI",
+      "ui_label": "Создать маршрут",
+      "scope": "route registry creation through complete route object input",
+      "blocking_reasons": [
+        "no blocked managed operator workflow identified",
+        "browser must not submit raw route JSON, file path, stdin payload, token, secret_ref, or secret value",
+        "secret reference contract is not admitted"
+      ]
+    },
+    {
+      "command": "external-models routes update --json --route <route_id> --file/--stdin",
+      "source": "wild_boar_proxy/cli.py:241",
+      "handler_source": "wild_boar_proxy/external_models/__init__.py:157",
+      "classification": "NOT_ADMITTED_FOR_PRODUCT_UI",
+      "ui_label": "Изменить маршрут",
+      "scope": "route registry replacement through complete route object input",
+      "blocking_reasons": [
+        "no blocked managed operator workflow identified",
+        "browser must not submit raw route JSON, file path, stdin payload, token, secret_ref, or secret value",
+        "update can alter adapter-owned provider/auth/lane fields"
       ]
     }
   ],
@@ -264,14 +295,18 @@
       "Проверить доступность",
       "Проверить запросом",
       "Разрешить маршрут",
-      "Отключить маршрут"
+      "Отключить маршрут",
+      "Удалить отключённый маршрут"
     ],
     "deferred_controls": [
       "Сделать активным",
       "Настроить ключ",
-      "Добавить маршрут",
-      "Удалить маршрут",
       "Автоматический резерв"
+    ],
+    "not_admitted_controls": [
+      "Добавить маршрут",
+      "Изменить маршрут",
+      "Черновик маршрута"
     ]
   },
   "next_contours": [
@@ -279,6 +314,13 @@
     "API_CONNECTIONS_SAFE_BACKEND_SURFACES",
     "API_CONNECTIONS_WEB_SCREEN_READONLY",
     "API_CONNECTIONS_WEB_SAFE_ACTIONS",
-    "API_CONNECTIONS_FAILOVER_POLICY_DECISION"
-  ]
+    "API_CONNECTIONS_FAILOVER_POLICY_DECISION",
+    "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
+  ],
+  "final_backfill": {
+    "contour_id": "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_FINAL_BACKFILL",
+    "updated_at_local_date": "2026-05-13",
+    "reason": "Mirror route remove and route builder NOT_ADMITTED decisions before final E2E.",
+    "next_allowed_contour": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL"
+  }
 }
