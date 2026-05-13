@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_VISUAL_MODEL_AND_DATA_GATE",
+  "date": "2026-05-14",
+  "contract_type": "diagnostics_detail_data_admission",
+  "surfaces": {
+    "diagnostics_export": {
+      "command": "diagnostics export --json",
+      "role": "support_artifact_metadata",
+      "live_admission": "admitted",
+      "may_populate": [
+        "support artifact status",
+        "exit_code",
+        "human_message",
+        "machine_error_code",
+        "next_action",
+        "changed_files_count",
+        "bundle_basename_metadata"
+      ],
+      "must_not_populate": [
+        "runtime health truth",
+        "live history chart",
+        "latest runtime records",
+        "provider or account readiness",
+        "traffic state"
+      ],
+      "path_policy": "basename metadata only; UI must not open, read, parse, upload, or tail the artifact"
+    },
+    "status": {
+      "command": "status --json",
+      "role": "runtime_summary_packet",
+      "live_admission": "partial",
+      "may_populate": [
+        "separately labeled runtime summary"
+      ],
+      "must_not_populate": [
+        "diagnostics export result",
+        "support artifact success"
+      ],
+      "labeling_requirement": "Displayed data must be labeled as status packet summary, not diagnostics output."
+    },
+    "healthcheck": {
+      "command": "healthcheck --json",
+      "role": "runtime_health_owner_packet",
+      "live_admission": "partial",
+      "may_populate": [
+        "separately labeled healthcheck summary",
+        "bounded recovery or attestation fields already present in command packet"
+      ],
+      "must_not_populate": [
+        "diagnostics export result",
+        "fixture history",
+        "synthetic chart trend"
+      ],
+      "labeling_requirement": "Displayed data must be labeled as healthcheck packet summary, not diagnostics output."
+    },
+    "future_diagnostics_history": {
+      "command": "not currently admitted",
+      "role": "future_bounded_redacted_history_packet",
+      "live_admission": "deferred",
+      "required_before_live_use": [
+        "strict JSON command surface",
+        "redacted bounded rows",
+        "freshness fields",
+        "source ownership",
+        "no direct file/log/state reads by UI",
+        "tests proving no raw private material leaks"
+      ],
+      "may_populate_after_future_admission": [
+        "live history chart",
+        "latest records"
+      ]
+    },
+    "fixture_demo": {
+      "command": "none",
+      "role": "visual_fixture_only",
+      "live_admission": "fixture_only",
+      "may_populate": [
+        "history chart placeholder in fixture/demo mode",
+        "latest records placeholder in fixture/demo mode"
+      ],
+      "must_not_populate": [
+        "live mode history",
+        "observed runtime history claim",
+        "support artifact success"
+      ],
+      "labeling_requirement": "Fixture/demo content must not be described as observed runtime data."
+    }
+  },
+  "browser_payload_policy": {
+    "allowed": [
+      "ui_action",
+      "structured payload fields admitted by existing actions"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "file_path",
+      "bundle_path",
+      "log_path",
+      "state_path",
+      "token",
+      "raw command",
+      "raw diagnostics text"
+    ]
+  },
+  "copy_policy": {
+    "required": [
+      "support-artifact metadata is distinct from runtime packet truth",
+      "runtime summary source is labeled when present",
+      "live history is deferred when no bounded command packet exists",
+      "fixture data is not observed runtime data"
+    ],
+    "forbidden": [
+      "diagnostics export is treated as a runtime-health proof",
+      "support package proves readiness",
+      "history is observed without packet proof",
+      "latest records come from raw logs",
+      "artifact was opened or inspected by UI"
+    ]
+  },
+  "implementation_gate": {
+    "next_contour": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+    "admitted_without_new_backend": [
+      "layout repair",
+      "support metadata rendering",
+      "fixture-only chart/latest-record placeholders",
+      "deferred live-state copy",
+      "separately labeled runtime summary from existing readonly packets"
+    ],
+    "requires_separate_future_contour": [
+      "new diagnostics-history command",
+      "live chart data",
+      "live latest records",
+      "new repair or recovery actions",
+      "artifact opening or export browser flow"
+    ]
+  },
+  "final_admission_verdict": "DIAGNOSTICS_DETAIL_MODEL_ADMITTED_WITH_DEFERRED_LIVE_HISTORY",
+  "resume_from_here": "Run independent audit, closeout, final scans, commit, and push."
+}

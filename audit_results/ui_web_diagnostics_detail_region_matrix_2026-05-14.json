@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_VISUAL_MODEL_AND_DATA_GATE",
+  "date": "2026-05-14",
+  "mode": "admission_spec_only",
+  "final_admission_verdict": "DIAGNOSTICS_DETAIL_MODEL_ADMITTED_WITH_DEFERRED_LIVE_HISTORY",
+  "canon_sources": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md"
+  ],
+  "baseline": {
+    "primary_reference": "original diagnostics render package screen",
+    "supplemental_reference": "owner-provided diagnostics detail content/layout supplement",
+    "supplemental_shell_admission": "rejected",
+    "target_shell": "locked Wild Boar left-sidebar shell"
+  },
+  "regions": [
+    {
+      "region": "signal_list",
+      "admission": "static_boundary_admitted",
+      "allowed_sources": [
+        "static boundary labels",
+        "safe command packet status classes"
+      ],
+      "forbidden_sources": [
+        "diagnostics export as runtime health truth",
+        "raw logs",
+        "direct state files"
+      ],
+      "implementation_note": "May show support boundaries and source labels; must not imply live health success from export alone."
+    },
+    {
+      "region": "selected_object_detail",
+      "admission": "metadata_live_admitted_only",
+      "allowed_sources": [
+        "diagnostics export command packet metadata",
+        "stable operator copy"
+      ],
+      "forbidden_sources": [
+        "raw bundle contents",
+        "unredacted artifact paths",
+        "account or backend runtime truth not supplied by canonical command packets"
+      ],
+      "implementation_note": "Represents the support package or selected diagnostic signal, not engine-level runtime ownership."
+    },
+    {
+      "region": "signal_status",
+      "admission": "partial",
+      "allowed_sources": [
+        "diagnostics export status for support-artifact status",
+        "separately labeled status/healthcheck packets for runtime summary"
+      ],
+      "forbidden_sources": [
+        "support-artifact status presented as runtime health",
+        "cached snapshot overriding live packet truth"
+      ],
+      "implementation_note": "Visual status must label whether it is support-artifact metadata or runtime packet summary."
+    },
+    {
+      "region": "command_support_check_chain",
+      "admission": "partial",
+      "allowed_sources": [
+        "ui_action boundary",
+        "server allowlist boundary",
+        "diagnostics export strict JSON command packet",
+        "artifact metadata"
+      ],
+      "forbidden_sources": [
+        "probe chain inferred from logs",
+        "hidden repair",
+        "direct diagnostics bundle parsing"
+      ],
+      "implementation_note": "The current chain may show command-boundary steps; real probe-chain details are deferred until command packets expose them."
+    },
+    {
+      "region": "history_chart_slot",
+      "admission": "fixture_only_deferred_live",
+      "allowed_sources": [
+        "fixture/demo data only"
+      ],
+      "required_future_surface": "bounded redacted diagnostics-history JSON command packet",
+      "forbidden_sources": [
+        "raw log parsing",
+        "direct state/config/evidence reads",
+        "synthetic trend from stale snapshots"
+      ],
+      "implementation_note": "Implementation may reserve the slot and show fixture-only charting; live chart remains deferred."
+    },
+    {
+      "region": "runtime_summary_card",
+      "admission": "separate_runtime_summary_partial",
+      "allowed_sources": [
+        "status --json",
+        "healthcheck --json"
+      ],
+      "forbidden_sources": [
+        "diagnostics export result as runtime summary",
+        "diagnostics bundle contents",
+        "cached snapshot as final truth"
+      ],
+      "implementation_note": "Must be visually and textually separate from diagnostics export output."
+    },
+    {
+      "region": "latest_records",
+      "admission": "fixture_only_deferred_live",
+      "allowed_sources": [
+        "fixture/demo rows only"
+      ],
+      "required_future_surface": "bounded redacted latest-diagnostics-records JSON command packet",
+      "forbidden_sources": [
+        "raw log tail",
+        "support bundle parsing",
+        "direct evidence file reads"
+      ],
+      "implementation_note": "May exist as a fixture-only layout region; live rows are not admitted."
+    },
+    {
+      "region": "recommended_bounded_actions",
+      "admission": "bounded_existing_actions_only",
+      "allowed_sources": [
+        "already admitted allowlisted ui_action values",
+        "current action metadata"
+      ],
+      "forbidden_sources": [
+        "hidden repair",
+        "new runtime mutation",
+        "arbitrary command dispatch",
+        "file path payload",
+        "raw argv payload"
+      ],
+      "implementation_note": "Recommendations are navigation/action affordances only, not hidden execution."
+    }
+  ],
+  "global_forbidden": {
+    "direct_log_reads": true,
+    "direct_state_reads": true,
+    "direct_config_reads": true,
+    "direct_evidence_reads": true,
+    "direct_bundle_reads": true,
+    "browser_file_path_payload": true,
+    "browser_command_id_payload": true,
+    "browser_raw_argv_payload": true,
+    "hidden_repair": true,
+    "diagnostics_export_as_runtime_truth": true
+  },
+  "next_contour": {
+    "id": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+    "allowed": [
+      "implement admitted layout regions",
+      "render support-artifact metadata",
+      "render fixture-only chart/latest-record regions in fixture mode",
+      "render deferred live states for history/latest-record regions",
+      "optionally render separately labeled runtime summary from existing readonly command packets"
+    ],
+    "blocked": [
+      "live history chart",
+      "live latest records",
+      "raw log tail",
+      "support bundle open/read",
+      "new backend command",
+      "runtime.py changes"
+    ]
+  },
+  "resume_from_here": "Run independent audit, closeout, final scans, commit, and push."
+}
