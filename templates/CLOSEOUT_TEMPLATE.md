@@ -16,6 +16,16 @@
 - final verdict:
 - next action:
 
+## Contour Capsule
+
+- goal:
+- branch:
+- head:
+- touched files:
+- tests run:
+- blocked risks:
+- next exact command:
+
 ## Verification
 
 - tests:

@@ -100,8 +100,12 @@ Treat thread context as volatile. Treat repo packets and commits as durable.
   `git diff -- <paths>`, `rg`, `sed -n`, and `jq` selectors.
 - Do not commit raw tool dumps, archived thread extracts, private research
   notes, external-reference artifacts, tokens, logs, or large JSONL extracts.
+- At closeout, include a `Contour Capsule` with goal, branch, head, touched
+  files, tests run, blocked risks, and the next exact command.
 - At closeout, include `resume from here` so a new thread can continue without
   replaying long chat history.
+- Before committing a new or changed closeout artifact, run:
+  `python3 tools/check_closeout_resilience.py`
 
 ## 4. Assumptions Explicit
 

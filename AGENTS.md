@@ -90,6 +90,8 @@ Work is not closed by local intuition alone.
 For any completed contour, require:
 
 - verification
+- `python3 tools/check_closeout_resilience.py` for any new or changed
+  `audit_results/*closeout*.md`
 - scope check
 - atomic commit or logically complete commit set
 - push
