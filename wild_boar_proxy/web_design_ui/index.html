@@ -540,7 +540,7 @@
               </div>
 
               <div class="card pad">
-                  <div class="card-title">Цепочка пакета поддержки</div>
+                <div class="card-title">Цепочка пакета поддержки</div>
                 <div class="chain">
                   <div class="chain-step">
                     <div class="chain-dot blue">1</div>
@@ -564,6 +564,65 @@
                     <div class="chain-dot neutral">4</div>
                     <span>Артефакт</span>
                     <span class="chip neutral"><span class="dot"></span>метаданные</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="diagnostics-insight-grid">
+                <div class="card pad diagnostics-history-card" data-diagnostics-region="history_chart_slot">
+                  <div class="section-head compact-section-head">
+                    <div>
+                      <div class="card-title">История сигнала</div>
+                      <div class="secondary">Live-график отложен до отдельного JSON-пакета истории.</div>
+                    </div>
+                    <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
+                  </div>
+                  <div id="diagnosticsFixtureChart" class="diagnostics-fixture-chart" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
+                    <div class="chart-grid" aria-hidden="true">
+                      <span style="height:36%"></span>
+                      <span style="height:52%"></span>
+                      <span style="height:44%"></span>
+                      <span style="height:68%"></span>
+                      <span style="height:58%"></span>
+                      <span style="height:82%"></span>
+                      <span style="height:46%"></span>
+                    </div>
+                    <div class="chart-caption">fixture/demo-only · не наблюдаемая runtime-история</div>
+                  </div>
+                  <div id="diagnosticsHistoryDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
+                    <span class="chip amber"><span class="dot"></span>отложено</span>
+                    <p>Live-история появится только после bounded redacted JSON command surface. UI не читает логи или state напрямую.</p>
+                  </div>
+                </div>
+
+                <div class="card pad diagnostics-records-card" data-diagnostics-region="latest_records">
+                  <div class="section-head compact-section-head">
+                    <div>
+                      <div class="card-title">Последние записи</div>
+                      <div class="secondary">В live-режиме сырые журналы не открываются.</div>
+                    </div>
+                    <span id="diagnosticsRecordsModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
+                  </div>
+                  <div id="diagnosticsFixtureRecords" class="diagnostics-record-list" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
+                    <div class="diagnostics-record">
+                      <span class="round-icon blue">i</span>
+                      <span>Демо: пакет поддержки сформирован из command packet metadata.</span>
+                      <time>fixture</time>
+                    </div>
+                    <div class="diagnostics-record">
+                      <span class="round-icon amber">!</span>
+                      <span>Демо: live-история ожидает отдельный bounded JSON surface.</span>
+                      <time>fixture</time>
+                    </div>
+                    <div class="diagnostics-record">
+                      <span class="round-icon neutral">·</span>
+                      <span>Демо: artifact contents не читаются UI.</span>
+                      <time>fixture</time>
+                    </div>
+                  </div>
+                  <div id="diagnosticsRecordsDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
+                    <span class="chip amber"><span class="dot"></span>отложено</span>
+                    <p>Live-записи не выводятся из log tail. Нужен отдельный redacted JSON packet.</p>
                   </div>
                 </div>
               </div>

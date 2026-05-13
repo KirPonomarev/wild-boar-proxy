@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+  "date": "2026-05-14",
+  "mode": "implementation_ui_only",
+  "admission_input": "DIAGNOSTICS_DETAIL_MODEL_ADMITTED_WITH_DEFERRED_LIVE_HISTORY",
+  "changed_surfaces": [
+    {
+      "surface": "diagnostics_screen_dom",
+      "files": [
+        "wild_boar_proxy/web_design_ui/index.html"
+      ],
+      "change": "added history chart slot and latest records slot inside existing diagnosticsScreen",
+      "semantic_effect": "visual_detail_only"
+    },
+    {
+      "surface": "diagnostics_source_switch",
+      "files": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js"
+      ],
+      "change": "added fixture/live visibility switch for diagnostics detail slots",
+      "semantic_effect": "source_rendering_only"
+    },
+    {
+      "surface": "diagnostics_detail_styles",
+      "files": [
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "change": "added layout and hidden-state rules for fixture chart, records, and deferred panels",
+      "semantic_effect": "presentation_only"
+    },
+    {
+      "surface": "ui_tests",
+      "files": [
+        "tests/test_web_design_ui.py"
+      ],
+      "change": "added static and JS guard tests for fixture/demo markers and live deferred state",
+      "semantic_effect": "test_guard_only"
+    }
+  ],
+  "implemented_regions": {
+    "signal_list": "preserved_existing_static_boundary",
+    "selected_object_detail": "preserved_existing_metadata_only",
+    "command_support_check_chain": "preserved_existing_command_boundary_chain",
+    "history_chart_slot": "implemented_fixture_demo_only_and_live_deferred",
+    "latest_records": "implemented_fixture_demo_only_and_live_deferred",
+    "recommended_bounded_actions": "preserved_existing_controls_and_disabled_affordances"
+  },
+  "not_implemented_by_design": {
+    "runtime_summary_card": "deferred",
+    "live_history_chart": "deferred_until_bounded_redacted_json_command_surface",
+    "live_latest_records": "deferred_until_bounded_redacted_json_command_surface",
+    "artifact_open_or_read": "forbidden",
+    "new_backend_command": "not_added"
+  },
+  "boundary_checks": {
+    "new_ui_action_added": false,
+    "browser_command_id_payload_added": false,
+    "browser_raw_argv_payload_added": false,
+    "browser_file_or_bundle_path_payload_added": false,
+    "browser_token_payload_added": false,
+    "direct_log_read_added": false,
+    "direct_state_or_config_read_added": false,
+    "direct_evidence_or_bundle_read_added": false,
+    "runtime_file_changed": false,
+    "live_server_semantic_changed": false,
+    "command_adapter_semantic_changed": false,
+    "desktop_file_changed": false
+  },
+  "browser_smoke_summary": {
+    "viewport": "1600x1000",
+    "fixture_mode": "fixture chart and records visible; deferred panels hidden",
+    "live_mode": "fixture chart and records hidden; deferred panels visible",
+    "body_horizontal_scroll": false,
+    "result": "PASS"
+  },
+  "final_verdict": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTED_WITH_DEFERRED_LIVE_HISTORY",
+  "resume_from_here": "Use the implementation closeout as the durable checkpoint after commit and push."
+}

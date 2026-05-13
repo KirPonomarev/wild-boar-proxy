@@ -1375,7 +1375,7 @@ button:disabled {
 .diag-detail {
   display: grid;
   gap: 14px;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   min-width: 0;
 }
 
@@ -1474,6 +1474,93 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+}
+
+.diagnostics-insight-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+
+.compact-section-head {
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.diagnostics-fixture-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnostics-fixture-chart[hidden],
+.diagnostics-record-list[hidden],
+.diagnostics-deferred-state[hidden] {
+  display: none;
+}
+
+.chart-grid {
+  align-items: end;
+  background:
+    linear-gradient(to top, rgba(217, 208, 195, .42) 1px, transparent 1px) 0 0 / 100% 25%,
+    var(--surface);
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(7, 1fr);
+  height: 132px;
+  padding: 14px;
+}
+
+.chart-grid span {
+  background: linear-gradient(180deg, var(--blue), #8fb1ff);
+  border-radius: 999px 999px 4px 4px;
+  min-height: 18px;
+}
+
+.chart-caption {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.diagnostics-deferred-state {
+  background: #fff8ee;
+  border: 1px dashed #dfbd8c;
+  border-radius: 14px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.diagnostics-deferred-state p {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 0;
+}
+
+.diagnostics-record-list {
+  display: grid;
+  gap: 8px;
+}
+
+.diagnostics-record {
+  align-items: center;
+  border-top: 1px solid rgba(217, 208, 195, .62);
+  display: grid;
+  font-size: 12px;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  line-height: 16px;
+  min-height: 38px;
+  padding-top: 8px;
+}
+
+.diagnostics-record time {
+  color: var(--secondary);
+  font-size: 11px;
 }
 
 .diag-detail .card.pad {
@@ -1683,6 +1770,7 @@ button:disabled {
 @media (max-width: 1120px) {
   .diag-layout,
   .detail-grid,
+  .diagnostics-insight-grid,
   .setup-grid,
   .stepper,
   .candidate-row,

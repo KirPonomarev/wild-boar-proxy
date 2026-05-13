@@ -712,6 +712,34 @@ function setSourceCopy(source) {
     );
   document.getElementById("sourceFooter").textContent = sourceFooter;
   document.getElementById("subtitleText").textContent = subtitle;
+  updateDiagnosticsDetailSource(source);
+}
+
+function updateDiagnosticsDetailSource(source) {
+  const fixtureOnly = source !== "live";
+  const fixtureNodes = [
+    document.getElementById("diagnosticsFixtureChart"),
+    document.getElementById("diagnosticsFixtureRecords")
+  ].filter(Boolean);
+  const deferredNodes = [
+    document.getElementById("diagnosticsHistoryDeferred"),
+    document.getElementById("diagnosticsRecordsDeferred")
+  ].filter(Boolean);
+  for (const node of fixtureNodes) {
+    node.hidden = !fixtureOnly;
+  }
+  for (const node of deferredNodes) {
+    node.hidden = fixtureOnly;
+  }
+  const historyChip = document.getElementById("diagnosticsHistoryModeChip");
+  const recordsChip = document.getElementById("diagnosticsRecordsModeChip");
+  for (const chip of [historyChip, recordsChip]) {
+    if (!chip) {
+      continue;
+    }
+    chip.className = fixtureOnly ? "chip blue" : "chip amber";
+    chip.lastElementChild.textContent = fixtureOnly ? "fixture/demo" : "deferred";
+  }
 }
 
 function setActionPanel(payload, refreshState = "none") {

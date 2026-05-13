@@ -361,6 +361,20 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("Диагностический пакет поддержки", html + js)
         self.assertIn("Истина о здоровье runtime не изменялась", js)
         self.assertIn("только метаданные:", js)
+        self.assertIn('data-diagnostics-region="history_chart_slot"', html)
+        self.assertIn('data-diagnostics-region="latest_records"', html)
+        self.assertIn('data-diagnostics-mode="fixture-demo"', html)
+        self.assertIn('data-fixture-only="true"', html)
+        self.assertIn('data-live-state="deferred"', html)
+        self.assertIn("fixture/demo-only", html)
+        self.assertIn("Live-история появится только после bounded redacted JSON command surface", html)
+        self.assertIn("Live-записи не выводятся из log tail", html)
+        self.assertIn("updateDiagnosticsDetailSource", js)
+        self.assertIn('node.hidden = !fixtureOnly', js)
+        self.assertIn('node.hidden = fixtureOnly', js)
+        self.assertIn(".diagnostics-fixture-chart[hidden]", css := (WEB_DESIGN_UI / "styles" / "overview.css").read_text())
+        self.assertIn(".diagnostics-deferred-state[hidden]", css)
+        self.assertNotIn("runtime summary", (html + js).lower())
         self.assertIn("Просмотр артефакта отложен", html)
         self.assertIn("Сырой текст диагностики недоступен", html)
         self.assertIn(
@@ -380,6 +394,83 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("runtime healthy", (html + js).lower())
         self.assertNotIn("pilot", html + js)
         self.assertNotIn("scale proof", html + js)
+
+    def test_diagnostics_detail_switches_fixture_visuals_and_live_deferred_state(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function node(id) {
+  return {
+    id,
+    hidden: false,
+    className: "",
+    lastElementChild: { textContent: "" }
+  };
+}
+
+const nodes = {
+  diagnosticsFixtureChart: node("diagnosticsFixtureChart"),
+  diagnosticsFixtureRecords: node("diagnosticsFixtureRecords"),
+  diagnosticsHistoryDeferred: node("diagnosticsHistoryDeferred"),
+  diagnosticsRecordsDeferred: node("diagnosticsRecordsDeferred"),
+  diagnosticsHistoryModeChip: node("diagnosticsHistoryModeChip"),
+  diagnosticsRecordsModeChip: node("diagnosticsRecordsModeChip")
+};
+
+const sandbox = {
+  console,
+  Node: function Node() {},
+  document: {
+    getElementById(id) {
+      return nodes[id] || { textContent: "", className: "", lastElementChild: { textContent: "" } };
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "diagnostics", source: "fixture" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=diagnostics" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.updateDiagnosticsDetailSource("fixture");
+if (nodes.diagnosticsFixtureChart.hidden || nodes.diagnosticsFixtureRecords.hidden) {
+  throw new Error("fixture diagnostics visuals should be visible in fixture source");
+}
+if (!nodes.diagnosticsHistoryDeferred.hidden || !nodes.diagnosticsRecordsDeferred.hidden) {
+  throw new Error("deferred live states should be hidden in fixture source");
+}
+if (nodes.diagnosticsHistoryModeChip.lastElementChild.textContent !== "fixture/demo") {
+  throw new Error("fixture chip was not marked fixture/demo");
+}
+
+sandbox.updateDiagnosticsDetailSource("live");
+if (!nodes.diagnosticsFixtureChart.hidden || !nodes.diagnosticsFixtureRecords.hidden) {
+  throw new Error("fixture diagnostics visuals should be hidden in live source");
+}
+if (nodes.diagnosticsHistoryDeferred.hidden || nodes.diagnosticsRecordsDeferred.hidden) {
+  throw new Error("deferred live states should be visible in live source");
+}
+if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred") {
+  throw new Error("live chip was not marked deferred");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_settings_screen_is_readonly_with_safe_actions_and_deferred_controls(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

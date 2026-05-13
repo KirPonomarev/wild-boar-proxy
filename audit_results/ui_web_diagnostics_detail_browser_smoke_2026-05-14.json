@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+  "date": "2026-05-14",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "screenshots": [
+    {
+      "label": "diagnostics_fixture_1600x1000",
+      "path": "audit_results/ui_web_diagnostics_detail_screenshots_2026-05-14/diagnostics_fixture_1600x1000.png"
+    },
+    {
+      "label": "diagnostics_live_1600x1000",
+      "path": "audit_results/ui_web_diagnostics_detail_screenshots_2026-05-14/diagnostics_live_1600x1000.png"
+    }
+  ],
+  "metrics": {
+    "diagnostics_fixture_1600x1000": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_scroll_height": 1000,
+      "body_client_height": 1000,
+      "screen_rect": {
+        "top": 193,
+        "left": 373,
+        "right": 1531,
+        "bottom": 1255,
+        "width": 1158,
+        "height": 1062
+      },
+      "insight_rect": {
+        "top": 615,
+        "left": 739,
+        "right": 1531,
+        "bottom": 910,
+        "width": 792,
+        "height": 295
+      },
+      "body_has_horizontal_scroll": false,
+      "fixture_chart_visible": true,
+      "fixture_records_visible": true,
+      "history_deferred_visible": false,
+      "records_deferred_visible": false,
+      "history_chip": "fixture/demo",
+      "records_chip": "fixture/demo",
+      "fixture_marker_count": 2,
+      "deferred_marker_count": 2,
+      "body_text_sample": "Экран диагностики показывает только метаданные диагностического пакета. Это не источник истины о здоровье runtime.\nГраница пакета поддержки\nИстина runtime читается отдельно\nЭкспорт\nПроверка здоровья\nЭкспорт диагностики\nСоздаёт ограниченный пакет поддержки из JSON-вывода команды.\nПоддержка\nНе источник здоровья\nСтатус и здоровье остаются за пакетами status и healthcheck.\nОграничено\nБез прямого чтения файлов\nUI не читает артефакты, состояние runtime или логи напрямую.\nЗащищено\nИсточник: только строгие JSON-пакеты команд\nГраница утверждения: только метаданные пакета поддержки\nДиагностический пакет поддержки\nПоследний пакет команды export\nОжидание\nРезультат команды\n\nЭкспорт диагностики ещё не запускался из этой UI-сессии.\n\nЦепочка пакета поддержки\n1\nui_action\nограничено\n2\nАдаптер\nallowlist\n3\nКоманда\nJSON\n4\nАртефакт\nметаданные\nИстория сигнала\nLive-график отложен до отдельного JSON-пакета истории.\nfixture/demo\nfixture/demo-only · не наблюдаемая runtime-история\nПоследние записи\nВ live-режиме сырые журналы не открываются.\nfixture/demo\ni\nДемо: пакет поддержки сформирован из command packet metadata.\nfixture\n!\nДемо: live-история ожидает отдельный bounded JSON surface.\nfixture\n·\nДемо: artifact "
+    },
+    "diagnostics_live_1600x1000": {
+      "body_scroll_width": 1600,
+      "body_client_width": 1600,
+      "body_scroll_height": 1000,
+      "body_client_height": 1000,
+      "screen_rect": {
+        "top": 203,
+        "left": 373,
+        "right": 1531,
+        "bottom": 1196,
+        "width": 1158,
+        "height": 993
+      },
+      "insight_rect": {
+        "top": 625,
+        "left": 739,
+        "right": 1531,
+        "bottom": 851,
+        "width": 792,
+        "height": 226
+      },
+      "body_has_horizontal_scroll": false,
+      "fixture_chart_visible": false,
+      "fixture_records_visible": false,
+      "history_deferred_visible": true,
+      "records_deferred_visible": true,
+      "history_chip": "deferred",
+      "records_chip": "deferred",
+      "fixture_marker_count": 2,
+      "deferred_marker_count": 2,
+      "body_text_sample": "Экран диагностики показывает только метаданные диагностического пакета. Это не источник истины о здоровье runtime.\nГраница пакета поддержки\nИстина runtime читается отдельно\nЭкспорт\nПроверка здоровья\nЭкспорт диагностики\nСоздаёт ограниченный пакет поддержки из JSON-вывода команды.\nПоддержка\nНе источник здоровья\nСтатус и здоровье остаются за пакетами status и healthcheck.\nОграничено\nБез прямого чтения файлов\nUI не читает артефакты, состояние runtime или логи напрямую.\nЗащищено\nИсточник: только строгие JSON-пакеты команд\nГраница утверждения: только метаданные пакета поддержки\nДиагностический пакет поддержки\nПоследний пакет команды export\nОжидание\nРезультат команды\n\nЭкспорт диагностики ещё не запускался из этой UI-сессии.\n\nЦепочка пакета поддержки\n1\nui_action\nограничено\n2\nАдаптер\nallowlist\n3\nКоманда\nJSON\n4\nАртефакт\nметаданные\nИстория сигнала\nLive-график отложен до отдельного JSON-пакета истории.\ndeferred\nотложено\n\nLive-история появится только после bounded redacted JSON command surface. UI не читает логи или state напрямую.\n\nПоследние записи\nВ live-режиме сырые журналы не открываются.\ndeferred\nотложено\n\nLive-записи не выводятся из log tail. Нужен отдельный redacted JSON packet.\n\nПоля па"
+    }
+  },
+  "failures": [],
+  "result": "PASS",
+  "resume_from_here": "Use this browser smoke for independent audit and closeout."
+}
