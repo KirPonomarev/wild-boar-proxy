@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "contour_id": "API_CONNECTIONS_FIRST_PASS_COMMAND_CONTRACT_SPEC",
+  "generated_at": "2026-05-13",
+  "contour_type": "first_pass_command_contract_spec",
+  "first_pass_decision": {
+    "verdict": "existing_commands_sufficient_for_first_pass",
+    "summary": "The first API-подключения screen can be useful with existing readonly and safe external-models commands. No active/primary route or failover command is required for the first pass.",
+    "hard_blockers": []
+  },
+  "global_copy_rules": {
+    "forbidden_first_pass_button_copy": [
+      "Вкл",
+      "Сделать активным",
+      "Основной",
+      "Использовать для трафика",
+      "Резерв включен",
+      "Непрерывный поток",
+      "Автопереключение"
+    ],
+    "approved_first_pass_button_copy": [
+      "Обновить",
+      "Проверить",
+      "Проверить запросом",
+      "Разрешить",
+      "Отключить"
+    ],
+    "scope_guards": [
+      "enabled=true is allowed/разрешен, not active traffic",
+      "provider-route validation is not runtime readiness",
+      "provider-route smoke check is not continuous token stream proof",
+      "fallback_eligible is not automatic failover proof",
+      "profile packet is not host-client readiness"
+    ]
+  },
+  "readonly_commands": [
+    {
+      "ui_action": "api_connections_refresh",
+      "commands": [
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "browser_payload": {
+        "ui_action": "api_connections_refresh"
+      },
+      "classification": "admitted_first_pass_readonly",
+      "ui_copy": "Обновить",
+      "meaning": "Refresh canonical external-models status, models, and routes packets.",
+      "not_truth_for": [
+        "runtime readiness",
+        "active traffic",
+        "host-client readiness",
+        "continuous token stream"
+      ],
+      "evidence": [
+        "wild_boar_proxy/ui_shell.py:734-739",
+        "wild_boar_proxy/web_ui.py:98-129"
+      ]
+    }
+  ],
+  "safe_actions": [
+    {
+      "ui_action": "api_route_validate",
+      "command": "external-models routes validate --json --route <route_id>",
+      "browser_payload": {
+        "ui_action": "api_route_validate",
+        "route_id": "<safe route id>"
+      },
+      "classification": "admitted_first_pass_safe_action",
+      "ui_copy": "Проверить",
+      "success_copy": "Маршрут проверен.",
+      "meaning": "Provider exposes the requested route model / model visibility check.",
+      "not_truth_for": [
+        "runtime readiness",
+        "listener readiness",
+        "profile readiness",
+        "fallback readiness",
+        "continuous token stream"
+      ],
+      "required_packet_guards": {
+        "verification_scope": "route_provider_only",
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false
+      },
+      "evidence": [
+        "wild_boar_proxy/cli.py:260-262",
+        "wild_boar_proxy/external_models/__init__.py:202-210",
+        "wild_boar_proxy/external_models/validate.py:245-260",
+        "tests/test_cli_external_models.py:473-508"
+      ]
+    },
+    {
+      "ui_action": "api_route_check",
+      "command": "external-models check --json --route <route_id>",
+      "browser_payload": {
+        "ui_action": "api_route_check",
+        "route_id": "<safe route id>"
+      },
+      "classification": "admitted_first_pass_safe_action",
+      "ui_copy": "Проверить запросом",
+      "success_copy": "Маршрут отвечает.",
+      "meaning": "Provider-route smoke check with a bounded test request.",
+      "not_truth_for": [
+        "runtime readiness",
+        "listener readiness",
+        "profile readiness",
+        "fallback readiness",
+        "continuous token stream"
+      ],
+      "required_packet_guards": {
+        "verification_scope": "route_provider_only",
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "profile_ready": false,
+        "fallback_used": false
+      },
+      "evidence": [
+        "wild_boar_proxy/cli.py:226-228",
+        "wild_boar_proxy/external_models/__init__.py:90-98",
+        "wild_boar_proxy/external_models/validate.py:405-420",
+        "tests/test_cli_external_models.py:566-607"
+      ]
+    },
+    {
+      "ui_action": "api_route_enable",
+      "command": "external-models routes enable --json --route <route_id>",
+      "browser_payload": {
+        "ui_action": "api_route_enable",
+        "route_id": "<safe route id>"
+      },
+      "classification": "admitted_first_pass_safe_action",
+      "ui_copy": "Разрешить",
+      "success_copy": "Маршрут разрешен.",
+      "meaning": "Set route enabled=true.",
+      "not_truth_for": [
+        "active traffic",
+        "primary route",
+        "runtime routing change",
+        "fallback readiness"
+      ],
+      "copy_guard": "Never label this action as Вкл or Сделать активным in first pass.",
+      "evidence": [
+        "wild_boar_proxy/cli.py:254-256",
+        "wild_boar_proxy/external_models/__init__.py:184-192",
+        "wild_boar_proxy/external_models/routes.py:265-271"
+      ]
+    },
+    {
+      "ui_action": "api_route_disable",
+      "command": "external-models routes disable --json --route <route_id>",
+      "browser_payload": {
+        "ui_action": "api_route_disable",
+        "route_id": "<safe route id>",
+        "confirmation": "required when currently enabled"
+      },
+      "classification": "admitted_first_pass_safe_action_with_confirmation",
+      "ui_copy": "Отключить",
+      "success_copy": "Маршрут отключен.",
+      "meaning": "Set route enabled=false.",
+      "not_truth_for": [
+        "active traffic stopped",
+        "primary route removed",
+        "fallback switched",
+        "runtime routing change"
+      ],
+      "copy_guard": "Do not claim traffic stopped unless a future runtime owner packet proves it.",
+      "evidence": [
+        "wild_boar_proxy/cli.py:257-259",
+        "wild_boar_proxy/external_models/__init__.py:193-201",
+        "wild_boar_proxy/external_models/routes.py:265-271"
+      ]
+    }
+  ],
+  "support_not_first_pass_product_ui": [
+    {
+      "command": "external-models profile codex-desktop --json --route <route_id>",
+      "reason": "Profile packet is a non-mutating contract preview and currently reports profile_ready=false, listener_proven=false, runtime_claim_blocked=true.",
+      "evidence": [
+        "wild_boar_proxy/cli.py:264-272",
+        "wild_boar_proxy/external_models/routes.py:312-328",
+        "tests/test_cli_external_models.py:297-319"
+      ]
+    },
+    {
+      "command": "external-models evidence capture --json --route <route_id>",
+      "reason": "Support artifact generation, not first-pass product UI.",
+      "evidence": [
+        "wild_boar_proxy/cli.py:274-282",
+        "wild_boar_proxy/external_models/__init__.py:109-125",
+        "tests/test_cli_external_models.py:321-344"
+      ]
+    },
+    {
+      "command": "external-models start/stop --json",
+      "reason": "Synthetic adapter lifecycle may overclaim readiness if surfaced as product control before a separate copy/contract decision.",
+      "evidence": [
+        "wild_boar_proxy/cli.py:218-221",
+        "wild_boar_proxy/external_models/__init__.py:19-68",
+        "tests/test_cli_external_models.py:358-425"
+      ]
+    }
+  ],
+  "deferred_actions": [
+    {
+      "action": "make_active_or_primary",
+      "reason": "No first-class active/primary route owner command found. Enabled is not active.",
+      "future_candidate_only": [
+        "external-models routes primary get --json",
+        "external-models routes primary set --json --route <route_id>"
+      ]
+    },
+    {
+      "action": "automatic_failover",
+      "reason": "fallback_eligible/fallback_chain fields exist, but current validate/check packets set fallback_used=false and fallback_chain=[route_id].",
+      "future_contour": "API_CONNECTIONS_FAILOVER_POLICY_DECISION"
+    },
+    {
+      "action": "configure_api_key",
+      "reason": "Browser token/API key input is forbidden until a secure secret command contract exists."
+    },
+    {
+      "action": "add_edit_remove_route",
+      "reason": "Route config mutation from product UI is deferred until bounded config payload and secret-management contracts exist.",
+      "existing_support_commands": [
+        "external-models routes add --json --file/--stdin",
+        "external-models routes update --json --route <route_id> --file/--stdin",
+        "external-models routes remove --json --route <route_id>"
+      ]
+    }
+  ],
+  "machine_error_mapping": {
+    "OK": {
+      "ui_status": "Проверено / Отвечает",
+      "scope_guard": "within route scope only"
+    },
+    "provider_auth_failed": {
+      "ui_status": "Требует ключ",
+      "operator_action": "user_action",
+      "fallback_claim_allowed": false
+    },
+    "missing_secret": {
+      "ui_status": "Требует ключ",
+      "operator_action": "user_action"
+    },
+    "invalid_secret": {
+      "ui_status": "Требует ключ",
+      "operator_action": "user_action"
+    },
+    "unsafe_secret_permissions": {
+      "ui_status": "Требует ключ",
+      "operator_action": "user_action"
+    },
+    "provider_network_failed": {
+      "ui_status": "Недоступно",
+      "operator_action": "retry",
+      "fallback_claim_allowed": false
+    },
+    "model_not_available": {
+      "ui_status": "Модель недоступна",
+      "operator_action": "user_action"
+    },
+    "paid_route_blocked": {
+      "ui_status": "Заблокировано политикой",
+      "operator_action": "user_action"
+    },
+    "invalid_upstream_response": {
+      "ui_status": "Ошибка ответа",
+      "operator_action": "retry"
+    },
+    "schema_invalid": {
+      "ui_status": "Ошибка настройки",
+      "operator_action": "user_action"
+    },
+    "invalid_request": {
+      "ui_status": "Ошибка настройки",
+      "operator_action": "user_action"
+    },
+    "integration_failure": {
+      "ui_status": "Ошибка интеграции",
+      "operator_action": "retry_or_user_action",
+      "hard_no_green": true
+    },
+    "invalid_json": {
+      "ui_status": "Ошибка интеграции",
+      "hard_no_green": true
+    },
+    "timeout": {
+      "ui_status": "Ошибка интеграции",
+      "operator_action": "retry",
+      "hard_no_green": true
+    }
+  },
+  "next_contour_decision": {
+    "recommended_next": "API_CONNECTIONS_WEB_SCREEN_READONLY",
+    "reason": "No hard blocker was found for a useful first-pass screen on existing commands. Backend surfaces for active/primary/failover/key setup remain deferred."
+  }
+}
