@@ -174,8 +174,30 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("width: min(1544px, calc(100vw - 56px));", css)
         self.assertIn("overflow-x: hidden;", css)
         self.assertIn("@media (max-width: 1420px)", css)
+        self.assertIn('@media (max-width: 1320px)', css)
+        self.assertIn('--font-ui: "IBM Plex Sans"', css)
+        self.assertIn("font-family: var(--font-ui);", css)
         self.assertNotIn("--preview-scale", css)
         self.assertNotIn("fitPreviewToViewport", js)
+
+    def test_visual_stabilization_keeps_layout_guards_css_only(self) -> None:
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn("max-width: min(100%, 840px);", css)
+        self.assertIn("width: min(236px, 100%);", css)
+        self.assertIn("overflow-x: auto;", css)
+        self.assertIn("min-width: 980px;", css)
+        self.assertIn("flex: 1 1 78px;", css)
+        self.assertIn("max-width: 640px;", css)
+        self.assertIn("max-height: calc(100vh - 96px);", css)
+        self.assertIn("grid-template-columns: repeat(3, minmax(150px, 1fr));", css)
+        self.assertIn(".accounts-filter-row", css)
+        self.assertIn(".accounts-chips", css)
+
+        self.assertIn("JSON.stringify({ ui_action: uiAction, ...extraPayload })", js)
+        self.assertNotIn("JSON.stringify({ command_id", js)
+        self.assertNotIn('data-ui-action="stable_repair_apply"', (WEB_DESIGN_UI / "index.html").read_text())
 
     def test_static_preview_can_request_live_readonly_source_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

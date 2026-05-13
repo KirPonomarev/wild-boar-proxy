@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_VISUAL_STABILIZATION_PASS",
+  "artifact_type": "independent_audit",
+  "audited_at_local_date": "2026-05-13",
+  "auditor": "Kuhn",
+  "mode": "read_only",
+  "verdict": "PASS",
+  "blocking_findings": [],
+  "checks": [
+    {
+      "check": "scope_boundary",
+      "result": "pass",
+      "evidence": "diff is limited to web UI CSS, static UI tests, and visual stabilization artifacts"
+    },
+    {
+      "check": "behavior_surfaces_unchanged",
+      "result": "pass",
+      "evidence": "no JS, live server, command adapter, runtime, desktop, or command API files changed"
+    },
+    {
+      "check": "browser_payload_boundary",
+      "result": "pass",
+      "evidence": "overview.js still posts ui_action payloads and no command_id browser path is exposed"
+    },
+    {
+      "check": "forbidden_action_surfaces",
+      "result": "pass",
+      "evidence": "stable_repair_apply, rollout/policy controls, setup/select/import execution surfaces remain absent or inert"
+    },
+    {
+      "check": "artifact_privacy",
+      "result": "pass",
+      "evidence": "no external reference traces, tokens, secrets, or absolute local paths found"
+    },
+    {
+      "check": "staged_state_at_audit_time",
+      "result": "pass",
+      "evidence": "no staged files at audit time"
+    }
+  ],
+  "non_blocking_notes": [
+    {
+      "note": "pre-existing untracked external-agent eval-results tail remains in the working tree",
+      "disposition": "unrelated to this visual contour and must not be staged here"
+    }
+  ]
+}

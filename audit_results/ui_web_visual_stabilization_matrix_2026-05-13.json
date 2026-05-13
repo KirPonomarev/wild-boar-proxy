@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_VISUAL_STABILIZATION_PASS",
+  "date": "2026-05-13",
+  "status": "implemented_pending_final_audit",
+  "scope": "web UI visual stabilization only",
+  "canon_basis": [
+    "CANON.md: no false-green or stale-green; runtime truth is not visual truth",
+    "MASTER_PLAN.md: UI companion, not runtime truth owner",
+    "COMMAND_API.md: command meaning stays in strict JSON command surfaces",
+    "AGENTS.md: no runtime/UI/desktop/release layer mixing",
+    "UI_RENDER_PACKAGE_AND_SCREEN_PASSPORTS_BACKFILL_CLOSED"
+  ],
+  "changed_files": [
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py"
+  ],
+  "unchanged_behavior_surfaces": [
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/runtime.py",
+    "COMMAND_API.md",
+    "desktop files",
+    "external_agent_lab source"
+  ],
+  "visual_changes": [
+    {
+      "area": "typography",
+      "change": "introduced repo-local CSS font variables and switched body to a readable UI sans stack while preserving monospace for mono-value fields",
+      "truth_boundary": "visual only"
+    },
+    {
+      "area": "header actions",
+      "change": "reduced spacing and widened action cluster before wrapping",
+      "truth_boundary": "visual only"
+    },
+    {
+      "area": "accounts table",
+      "change": "added contained horizontal overflow, minimum table width, and tighter readable lifecycle button grouping",
+      "truth_boundary": "no account action semantics changed"
+    },
+    {
+      "area": "modals",
+      "change": "expanded confirmation/onboard modal width and added viewport-bounded scrolling",
+      "truth_boundary": "confirmation copy and dispatch behavior unchanged"
+    },
+    {
+      "area": "diagnostics/settings/setup",
+      "change": "relaxed grid widths for support, settings, and skeleton screens to reduce cramped wrapping",
+      "truth_boundary": "deferred/inert controls remain unchanged"
+    },
+    {
+      "area": "responsive guards",
+      "change": "added a 1320px breakpoint for header and accounts filter wrapping",
+      "truth_boundary": "CSS-only viewport containment"
+    }
+  ],
+  "js_policy": {
+    "js_changed": false,
+    "fetch_changed": false,
+    "action_flow_changed": false,
+    "metadata_changed": false,
+    "eligibility_changed": false,
+    "confirmation_logic_changed": false,
+    "refresh_logic_changed": false,
+    "new_event_behavior_added": false
+  },
+  "action_surface_check": {
+    "new_ui_actions_added": [],
+    "new_command_ids_added": [],
+    "stable_repair_apply_exposed": false,
+    "rollout_policy_controls_exposed": false,
+    "setup_select_import_activated": false,
+    "browser_payload_boundary": "unchanged: ui_action plus structured payload only"
+  },
+  "browser_smoke": {
+    "tool": "Codex in-app browser",
+    "server": "static fixture preview",
+    "viewport": {
+      "width": 1600,
+      "height": 1000
+    },
+    "routes_checked": [
+      "overview",
+      "accounts",
+      "diagnostics",
+      "settings",
+      "setup",
+      "select-client",
+      "import-existing"
+    ],
+    "result": "passed",
+    "observations": [
+      "all routes loaded expected main content",
+      "deferred or disabled states were visible where expected",
+      "accounts fixture actions remained disabled",
+      "no runtime actions were clicked"
+    ],
+    "modal_note": "onboard modal was not opened in fixture browser smoke because the Add Account control is correctly disabled without live action metadata; modal structure remains covered by static tests"
+  },
+  "tests": {
+    "node_check": {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "passed"
+    },
+    "static_ui": {
+      "command": "python3 -m unittest tests.test_web_design_ui",
+      "result": "passed",
+      "tests_run": 20
+    },
+    "targeted_ui_suite": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter",
+      "result": "passed",
+      "tests_run": 69
+    },
+    "full_discover": {
+      "command": "python3 -m unittest discover -s tests -p 'test*.py'",
+      "result": "passed",
+      "tests_run": 563,
+      "duration_seconds": 188.594
+    }
+  },
+  "private_reference_boundary": {
+    "external_reference_service_named": false,
+    "external_reference_artifacts_included": false,
+    "external_screenshots_included": false,
+    "absolute_local_paths_included": false
+  },
+  "independent_audit": {
+    "auditor": "Kuhn",
+    "result": "passed",
+    "blocking_findings": 0
+  },
+  "pending_verification": [
+    "staged allowlist",
+    "leak scan"
+  ]
+}

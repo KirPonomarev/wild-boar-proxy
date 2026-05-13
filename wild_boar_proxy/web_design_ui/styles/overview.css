@@ -21,6 +21,8 @@
   --neutral-bg: #f1ebe3;
   --shadow: 0 1px 2px rgba(30, 27, 24, .04), 0 10px 30px rgba(30, 27, 24, .045);
   --window-shadow: 0 24px 80px rgba(30, 27, 24, .14);
+  --font-ui: "IBM Plex Sans", "Manrope", "Helvetica Neue", "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
 }
 
 * {
@@ -38,7 +40,7 @@ body {
 
 body {
   color: var(--text);
-  font-family: "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
@@ -271,7 +273,7 @@ select {
 .main-header {
   align-items: flex-start;
   display: flex;
-  gap: 24px;
+  gap: 20px;
   justify-content: space-between;
   margin-bottom: 18px;
 }
@@ -295,10 +297,10 @@ h1 {
 .header-actions {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: min(100%, 760px);
+  max-width: min(100%, 840px);
   white-space: nowrap;
 }
 
@@ -317,10 +319,10 @@ h1 {
   font-size: 13px;
   font-weight: 500;
   gap: 9px;
-  height: 40px;
+  height: 38px;
   justify-content: center;
   line-height: 18px;
-  padding: 0 16px;
+  padding: 0 14px;
 }
 
 .button.primary {
@@ -339,9 +341,9 @@ h1 {
 .button.small {
   border-radius: 11px;
   font-size: 12px;
-  height: 36px;
+  height: 34px;
   line-height: 16px;
-  padding: 0 13px;
+  padding: 0 12px;
 }
 
 .disabled,
@@ -364,7 +366,7 @@ button:disabled {
   display: flex;
   font-size: 13px;
   gap: 10px;
-  height: 40px;
+  height: 38px;
   line-height: 18px;
   min-width: 0;
   padding: 0 14px;
@@ -372,7 +374,7 @@ button:disabled {
 
 .state-picker {
   justify-content: space-between;
-  width: min(278px, 100%);
+  width: min(236px, 100%);
 }
 
 .state-picker select {
@@ -462,7 +464,7 @@ button:disabled {
 .filter-row {
   align-items: center;
   display: flex;
-  gap: 20px;
+  gap: 16px;
   justify-content: space-between;
   margin-bottom: 18px;
 }
@@ -483,11 +485,11 @@ button:disabled {
   display: flex;
   font-size: 13px;
   gap: 10px;
-  height: 40px;
+  height: 38px;
   line-height: 18px;
   min-width: 0;
   padding: 0 14px;
-  width: 300px;
+  width: min(300px, 100%);
 }
 
 .filter-seg {
@@ -495,7 +497,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
-  height: 40px;
+  height: 38px;
   padding: 4px;
 }
 
@@ -506,7 +508,7 @@ button:disabled {
   display: flex;
   font-size: 12px;
   justify-content: center;
-  min-width: 88px;
+  min-width: 80px;
 }
 
 .filter-seg span.active {
@@ -528,7 +530,7 @@ button:disabled {
   display: flex;
   inset: 0;
   justify-content: center;
-  padding: 28px;
+  padding: 24px;
   position: absolute;
   z-index: 40;
 }
@@ -543,9 +545,11 @@ button:disabled {
   border-radius: 18px;
   box-shadow: var(--window-shadow);
   color: var(--secondary);
-  max-width: 520px;
+  max-height: calc(100vh - 96px);
+  max-width: 640px;
+  overflow: auto;
   padding: 24px;
-  width: min(100%, 520px);
+  width: min(100%, 640px);
 }
 
 .confirm-modal h2 {
@@ -566,7 +570,7 @@ button:disabled {
   display: grid;
   font-size: 12px;
   gap: 8px 16px;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(116px, max-content) minmax(0, 1fr);
   line-height: 18px;
   margin-top: 16px;
   overflow-wrap: anywhere;
@@ -627,7 +631,7 @@ button:disabled {
 }
 
 .overview-top {
-  grid-template-columns: minmax(390px, 496px) minmax(520px, 1fr);
+  grid-template-columns: minmax(360px, 486px) minmax(500px, 1fr);
 }
 
 .system-card,
@@ -656,6 +660,7 @@ button:disabled {
 }
 
 .mono-value {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -739,7 +744,7 @@ button:disabled {
 
 .action-row {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(4, minmax(118px, 1fr));
 }
 
@@ -751,7 +756,8 @@ button:disabled {
   flex-direction: column;
   font-size: 12px;
   gap: 8px;
-  height: 78px;
+  min-height: 74px;
+  padding: 10px;
   justify-content: center;
   line-height: 16px;
   text-align: center;
@@ -765,15 +771,15 @@ button:disabled {
 
 .overview-kpis {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .kpi-card {
   align-items: flex-start;
   display: flex;
-  height: 112px;
+  min-height: 104px;
   justify-content: space-between;
-  padding: 20px 22px;
+  padding: 18px 20px;
 }
 
 .kpi-head {
@@ -843,6 +849,26 @@ button:disabled {
   }
 }
 
+@media (max-width: 1320px) {
+  .main-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-actions {
+    max-width: 100%;
+  }
+
+  .accounts-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accounts-chips {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 1120px) {
   :root {
     --sidebar-width: 236px;
@@ -906,7 +932,7 @@ button:disabled {
 }
 
 .log-card {
-  margin-top: 24px;
+  margin-top: 20px;
   padding: 22px 24px;
 }
 
@@ -946,6 +972,7 @@ button:disabled {
 }
 
 .accounts-table-card {
+  overflow-x: auto;
   padding: 18px 20px 14px;
 }
 
@@ -958,6 +985,7 @@ button:disabled {
 
 .table {
   border-collapse: collapse;
+  min-width: 980px;
   table-layout: fixed;
   width: 100%;
 }
@@ -1025,12 +1053,17 @@ button:disabled {
 .account-action-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .account-action {
+  flex: 1 1 78px;
+  font-size: 11px;
+  height: 30px;
+  line-height: 14px;
   min-width: 0;
-  padding-inline: 10px;
+  padding-inline: 8px;
   white-space: nowrap;
 }
 
@@ -1048,8 +1081,8 @@ button:disabled {
 
 .diag-layout {
   display: grid;
-  gap: 20px;
-  grid-template-columns: minmax(300px, 368px) minmax(0, 1fr);
+  gap: 18px;
+  grid-template-columns: minmax(280px, 348px) minmax(0, 1fr);
   min-height: 620px;
 }
 
@@ -1258,7 +1291,7 @@ button:disabled {
 .detail-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
 }
 
 .diag-detail .card.pad {
@@ -1296,13 +1329,13 @@ button:disabled {
 .settings-layout {
   display: grid;
   gap: 16px;
-  max-width: 920px;
+  max-width: 1040px;
 }
 
 .setup-layout {
   display: grid;
   gap: 16px;
-  max-width: 980px;
+  max-width: 1040px;
 }
 
 .setup-grid {
@@ -1434,7 +1467,7 @@ button:disabled {
 .settings-action-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
 }
 
 .deferred-list {
@@ -1450,7 +1483,7 @@ button:disabled {
   display: grid;
   font-size: 12px;
   gap: 12px;
-  grid-template-columns: minmax(150px, 1fr) minmax(190px, 1.4fr) auto;
+  grid-template-columns: minmax(132px, .95fr) minmax(170px, 1.35fr) auto;
   line-height: 16px;
   min-height: 48px;
   padding: 8px 12px;
