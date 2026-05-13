@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_CONFIG_BUILDER_ADMISSION",
+  "date": "2026-05-13",
+  "mode": "exploration/admission/spec-only",
+  "final_verdict": "ROUTE_BUILDER_UI_NOT_ADMITTED",
+  "actions": [
+    {
+      "action": "api_route_create",
+      "backend_command": "external-models routes add --json --file/--stdin",
+      "admission": "NOT_ADMITTED",
+      "reason": [
+        "no blocked managed operator workflow identified",
+        "backend requires a complete route object",
+        "authenticated route object requires auth.secret_ref",
+        "browser-owned route object editing would create generic config-editor behavior"
+      ]
+    },
+    {
+      "action": "api_route_update",
+      "backend_command": "external-models routes update --json --route <route_id> --file/--stdin",
+      "admission": "NOT_ADMITTED",
+      "reason": [
+        "no blocked managed operator workflow identified",
+        "backend requires full replacement route object",
+        "payload route_id must match --route",
+        "update can alter provider/model/endpoint/auth/lane fields and therefore duplicates adapter-owned behavior"
+      ]
+    },
+    {
+      "action": "api_route_draft",
+      "backend_command": "none",
+      "admission": "NOT_ADMITTED",
+      "reason": [
+        "draft-only mode could become a raw route object bypass",
+        "safe draft still requires server-owned templates",
+        "safe draft still requires separate secret reference contract"
+      ]
+    }
+  ],
+  "backend_facts": {
+    "input_source": "add/update require exactly one of --file or --stdin",
+    "payload_shape": "complete route JSON object",
+    "route_id_policy": "must start with wbp-; update payload id must match --route",
+    "auth_policy": "auth object required; authenticated routes require auth.secret_ref",
+    "url_policy": "remote route URLs must follow allowed secure scheme policy",
+    "profile_policy": "transform and response profiles are allowlisted",
+    "changed_files_policy": "changed_files is execution evidence only"
+  },
+  "required_reopen_conditions": [
+    "blocked managed operator workflow",
+    "separate secret reference contract admitted",
+    "server-owned versioned route templates",
+    "bounded browser semantic selectors only",
+    "server-side route object construction",
+    "server-side schema validation before execution",
+    "no route object or secret material visible in browser payload"
+  ],
+  "browser_fields": {
+    "currently_admitted": [],
+    "future_possible_after_reopen": [
+      "ui_action",
+      "route_template_id",
+      "display_name",
+      "provider_template_id",
+      "model_template_id",
+      "secret_ref_selector_id",
+      "initial_registry_enabled_flag"
+    ],
+    "forbidden": [
+      "raw_route_json",
+      "file_path",
+      "stdin_payload",
+      "free_text_base_url",
+      "free_text_endpoint_path",
+      "free_text_compatibility",
+      "auth_object",
+      "token",
+      "key",
+      "free_text_secret_reference",
+      "secret_value",
+      "transform_code",
+      "arbitrary_transform_profile",
+      "arbitrary_provider_config"
+    ]
+  },
+  "implementation_allowed_in_this_contour": false,
+  "production_code_changed": false,
+  "closeout_state": "ROUTE_BUILDER_UI_NOT_ADMITTED"
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_CONFIG_BUILDER_ADMISSION",
+  "date": "2026-05-13",
+  "audit_type": "independent_backend_and_canon_admission_audit",
+  "auditors": [
+    {
+      "agent": "Poincare",
+      "role": "backend fact checker",
+      "verdict": "PASS_FOR_NOT_ADMITTED",
+      "findings": [
+        "add/update require --json and exactly one of --file or --stdin",
+        "route input must be a JSON object",
+        "route schema has required provider/model/endpoint/auth/lane fields",
+        "authenticated routes require auth.secret_ref",
+        "update payload route_id must match --route",
+        "changed_files for successful add/update is registry write evidence only"
+      ],
+      "coverage_note": "dedicated CLI update test was not found; update facts are implementation-derived"
+    },
+    {
+      "agent": "Einstein",
+      "role": "canon/admission auditor",
+      "verdict": "BLOCK_ADMISSION",
+      "findings": [
+        "prior route-config admission deferred create/update pending builder and secret reference contract",
+        "master plan forbids universal GUI/config shell drift",
+        "strict JSON command-surface rule blocks raw route object and file/stdin payload admission",
+        "remove-only is the only admitted route config mutation path"
+      ]
+    },
+    {
+      "agent": "Codex local reconciliation",
+      "role": "orchestrator",
+      "verdict": "ROUTE_BUILDER_UI_NOT_ADMITTED",
+      "findings": [
+        "no blocked managed operator workflow was identified",
+        "deferred is weaker than required because no current workflow justifies builder admission",
+        "future reopening requires both workflow proof and separate secret reference admission"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "managed workflow necessity",
+      "verdict": "BLOCK",
+      "reason": "no current managed operator workflow is blocked without create/update in UI"
+    },
+    {
+      "check": "browser payload safety",
+      "verdict": "BLOCK_ADMISSION",
+      "reason": "current backend command shape would require route object/file/stdin handling unless a new builder contract exists"
+    },
+    {
+      "check": "secret reference safety",
+      "verdict": "BLOCK_ADMISSION",
+      "reason": "no non-leaking secret reference selector contract is admitted"
+    },
+    {
+      "check": "layer boundary",
+      "verdict": "PASS_FOR_NOT_ADMITTED",
+      "reason": "not admitting builder preserves adapter/provider ownership"
+    },
+    {
+      "check": "implementation leakage",
+      "verdict": "PASS",
+      "reason": "this contour is spec-only and production code is unchanged"
+    }
+  ],
+  "final_verdict": "PASS_FOR_ROUTE_BUILDER_UI_NOT_ADMITTED"
+}
