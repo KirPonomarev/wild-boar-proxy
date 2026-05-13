@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_DESIGN_BASELINE_LOCK",
+  "artifact_type": "design_baseline_tokens",
+  "date": "2026-05-14",
+  "source_role": "visual_baseline_only",
+  "privacy": {
+    "repo_safe": true,
+    "absolute_private_paths_included": false,
+    "external_reference_service_traces_included": false
+  },
+  "source_inventory": {
+    "primary_package": {
+      "description": "owner-provided source design package",
+      "html_screen_count": 10,
+      "png_screen_count": 10,
+      "screen_ids": [
+        "00_brand_lockup",
+        "01_overview_dashboard",
+        "02_setup_client",
+        "03_select_codex_client",
+        "04_accounts",
+        "05_add_account_modal",
+        "06_diagnostics",
+        "07_settings",
+        "08_import_existing",
+        "09_confirm_action"
+      ],
+      "png_dimensions_px": {
+        "width": 3200,
+        "height": 2000
+      },
+      "contact_sheet_dimensions_px": {
+        "width": 1628,
+        "height": 2841
+      },
+      "working_reference_scale_px": {
+        "width": 1600,
+        "height": 1000
+      }
+    },
+    "secondary_high_resolution_package": {
+      "description": "owner-provided high-resolution design package",
+      "contact_sheet_dimensions_px": {
+        "width": 1148,
+        "height": 2021
+      },
+      "lost_diagnostics_detail_png_dimensions_px": {
+        "width": 1595,
+        "height": 986
+      },
+      "role": "diagnostics detail content/layout supplement"
+    }
+  },
+  "global_visual_direction": {
+    "source_phrase": "warm technical editorial",
+    "canvas": "warm canvas",
+    "sidebar": "large branded left sidebar",
+    "cards": "soft cards",
+    "typography": "mono-first discipline",
+    "status_style": "calm status treatment",
+    "screen_focus": "one main operation per screen"
+  },
+  "color_tokens": {
+    "canvas": "#F6F1EA",
+    "surface": "#FCFAF7",
+    "surface_muted": "#F1EBE3",
+    "border": "#D9D0C3",
+    "border_strong": "#C7BCAE",
+    "text": "#1E1B18",
+    "secondary": "#6E675F",
+    "muted": "#8D857B",
+    "blue": "#315C99",
+    "green": "#2D7A4B",
+    "amber": "#A86A10",
+    "red": "#B6402C",
+    "success_bg": "#EAF3ED",
+    "blue_bg": "#EAF0F8",
+    "amber_bg": "#F7EEE0",
+    "red_bg": "#F7E8E4",
+    "neutral_bg": "#F1EBE3"
+  },
+  "shadow_tokens": {
+    "card_shadow": "0 1px 2px rgba(30,27,24,.04),0 10px 30px rgba(30,27,24,.045)",
+    "window_shadow": "0 24px 80px rgba(30,27,24,.14)",
+    "modal_shadow": "0 32px 96px rgba(30,27,24,.18)"
+  },
+  "typography_tokens": {
+    "source_stack": "\"SF Mono\",\"SFMono-Regular\",ui-monospace,\"Noto Sans Mono\",\"Roboto Mono\",Menlo,Consolas,monospace",
+    "body_px": {
+      "font_size": 14,
+      "line_height": 22,
+      "font_weight": 400
+    },
+    "h1_px": {
+      "font_size": 34,
+      "line_height": 40,
+      "font_weight": 700,
+      "letter_spacing": "-.025em"
+    },
+    "subtitle_px": {
+      "font_size": 13,
+      "line_height": 18
+    },
+    "eyebrow_px": {
+      "font_size": 11,
+      "line_height": 14,
+      "font_weight": 500,
+      "letter_spacing": ".06em"
+    },
+    "owner_review_note": "A separate owner-provided designer package suggests Roboto Mono light weight, but source render package typography remains current authority."
+  },
+  "shell_tokens_px": {
+    "viewport": {
+      "width": 1600,
+      "height": 1000
+    },
+    "desktop": {
+      "width": 1600,
+      "height": 1000,
+      "overflow": "hidden"
+    },
+    "window": {
+      "width": 1544,
+      "height": 944,
+      "border_radius": 24,
+      "overflow": "hidden"
+    },
+    "traffic": {
+      "top": 24,
+      "left": 28,
+      "dot_size": 12,
+      "gap": 10
+    },
+    "sidebar": {
+      "width": 304,
+      "padding_top": 66,
+      "padding_right": 24,
+      "padding_bottom": 28,
+      "padding_left": 24
+    },
+    "main": {
+      "left_offset": 304,
+      "padding_top": 48,
+      "padding_right": 40,
+      "padding_bottom": 36,
+      "padding_left": 40,
+      "overflow": "hidden"
+    }
+  },
+  "brand_tokens_px": {
+    "logo_width": 112,
+    "logo_margin_bottom": 16,
+    "name_font_size": 28,
+    "name_line_height": 32,
+    "name_font_weight": 500,
+    "name_letter_spacing": ".08em",
+    "caption_font_size": 12,
+    "caption_line_height": 16,
+    "caption_margin_top": 10,
+    "caption_letter_spacing": ".04em"
+  },
+  "component_tokens_px": {
+    "nav_item": {
+      "height": 44,
+      "border_radius": 12,
+      "gap": 16,
+      "padding_inline": 16,
+      "font_size": 14,
+      "line_height": 20
+    },
+    "main_header": {
+      "gap": 24,
+      "margin_bottom": 24
+    },
+    "button": {
+      "height": 40,
+      "border_radius": 12,
+      "gap": 9,
+      "padding_inline": 16,
+      "font_size": 13,
+      "line_height": 18,
+      "font_weight": 500
+    },
+    "button_small": {
+      "height": 36,
+      "border_radius": 11,
+      "padding_inline": 13,
+      "font_size": 12,
+      "line_height": 16
+    },
+    "card": {
+      "border_radius": 18
+    },
+    "chip": {
+      "height": 26,
+      "border_radius": 999,
+      "gap": 7,
+      "padding_inline": 10,
+      "font_size": 12,
+      "line_height": 16,
+      "font_weight": 500
+    }
+  },
+  "screen_specific_tokens_px": {
+    "overview": {
+      "top_grid_columns": "496px 1fr",
+      "top_grid_gap": 24,
+      "kpi_columns": "repeat(4,1fr)",
+      "kpi_margin_top": 24,
+      "kpi_card_height": 112,
+      "kpi_card_padding": "20px 22px",
+      "log_card_margin_top": 24,
+      "log_row_height": 44,
+      "log_row_columns": "28px 1fr auto"
+    },
+    "accounts": {
+      "filter_row_height": 48,
+      "filter_row_gap": 20,
+      "filter_row_margin_bottom": 18,
+      "search_width": 300,
+      "filter_segment_height": 40,
+      "filter_segment_min_item_width": 88,
+      "table_card_padding": "18px 20px 14px",
+      "table_header_height": 42,
+      "table_row_height": 58,
+      "pagination_height": 34
+    },
+    "diagnostics_primary": {
+      "layout_columns": "368px minmax(0,1fr)",
+      "layout_gap": 20,
+      "layout_height": 752,
+      "signal_item_height": 76,
+      "signal_item_columns": "38px 1fr auto",
+      "signal_item_gap": 12,
+      "signal_icon_size": 38,
+      "detail_grid_columns": "minmax(0,1fr) 300px"
+    },
+    "setup": {
+      "setup_wrap_max_width": 720,
+      "setup_wrap_margin_top": 96,
+      "setup_card_padding": 24,
+      "bottom_bar_height": 68,
+      "bottom_bar_left_offset": 304,
+      "bottom_bar_padding_inline": 40
+    },
+    "settings": {
+      "form_wrap_max_width": 720,
+      "form_section_padding": 20,
+      "form_row_columns": "190px 1fr",
+      "form_row_min_height": 38,
+      "toggle_width": 42,
+      "toggle_height": 24
+    }
+  },
+  "modal_tokens_px": {
+    "overlay_padding": 40,
+    "modal_border_radius": 24,
+    "modal_padding": 32,
+    "modal_widths": [560, 640, 680],
+    "modal_header_gap": 20,
+    "modal_header_margin_bottom": 22,
+    "modal_title_font_size": 22,
+    "modal_title_line_height": 28,
+    "modal_footer_gap": 12,
+    "modal_footer_margin_top": 22,
+    "candidate_min_height": 82,
+    "candidate_border_radius": 16,
+    "candidate_padding": "14px 16px"
+  },
+  "diagnostics_detail_supplement": {
+    "role": "content_layout_supplement_only",
+    "shell_admission": "rejected",
+    "use_main_left_sidebar_shell": true,
+    "visual_inputs": {
+      "image_width_px": 1595,
+      "image_height_px": 986
+    },
+    "admitted_content_model": [
+      "signal_list",
+      "selected_object_detail",
+      "signal_status",
+      "check_chain",
+      "history_chart_slot",
+      "current_state",
+      "latest_records",
+      "recommended_bounded_actions"
+    ],
+    "data_rule": {
+      "live_charts": "deferred_without_bounded_json_command_packet",
+      "fixture_charts": "allowed_in_fixture_mode_only",
+      "direct_log_state_config_evidence_reads": "forbidden"
+    }
+  },
+  "unknown_or_owner_review_tokens": [
+    {
+      "topic": "global_font_weight",
+      "status": "owner_review",
+      "note": "Do not adopt Roboto Mono light-weight globally until owner explicitly chooses it over source render typography."
+    },
+    {
+      "topic": "diagnostics_history_live_data",
+      "status": "deferred",
+      "note": "Requires a bounded JSON command surface before live chart rendering."
+    },
+    {
+      "topic": "api_connections_source_screen",
+      "status": "derived",
+      "note": "No direct source screen exists; derive from Accounts table geometry and API route command boundaries."
+    }
+  ]
+}

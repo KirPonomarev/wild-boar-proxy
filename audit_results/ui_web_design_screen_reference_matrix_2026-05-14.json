@@ -1,0 +1,338 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_DESIGN_BASELINE_LOCK",
+  "artifact_type": "screen_reference_matrix",
+  "date": "2026-05-14",
+  "source_role": "visual_baseline_only",
+  "privacy": {
+    "repo_safe": true,
+    "absolute_private_paths_included": false,
+    "external_reference_service_traces_included": false
+  },
+  "global_rules": {
+    "canonical_shell": "left_sidebar_source_shell",
+    "runtime_truth_source": "strict_json_command_packets",
+    "visual_reference_cannot_create_runtime_truth": true,
+    "browser_direct_file_reads_for_truth": "forbidden",
+    "desktop_transfer": "blocked_until_explicit_owner_approval"
+  },
+  "source_screens": [
+    {
+      "source_screen_id": "00_brand_lockup",
+      "role": "brand_identity_reference",
+      "layer_kind": "reference_only",
+      "source_file": "00_brand_lockup.html",
+      "png_file": "00_brand_lockup.png",
+      "admission": "admitted_for_identity_only"
+    },
+    {
+      "source_screen_id": "01_overview_dashboard",
+      "role": "overview_primary_reference",
+      "layer_kind": "screen",
+      "source_file": "01_overview_dashboard.html",
+      "png_file": "01_overview_dashboard.png",
+      "admission": "admitted"
+    },
+    {
+      "source_screen_id": "02_setup_client",
+      "role": "setup_flow_reference",
+      "layer_kind": "screen",
+      "source_file": "02_setup_client.html",
+      "png_file": "02_setup_client.png",
+      "admission": "admitted_for_visual_flow_only"
+    },
+    {
+      "source_screen_id": "03_select_codex_client",
+      "role": "select_client_flow_reference",
+      "layer_kind": "modal_or_flow_overlay",
+      "source_file": "03_select_codex_client.html",
+      "png_file": "03_select_codex_client.png",
+      "admission": "admitted_for_visual_flow_only"
+    },
+    {
+      "source_screen_id": "04_accounts",
+      "role": "accounts_table_reference",
+      "layer_kind": "screen",
+      "source_file": "04_accounts.html",
+      "png_file": "04_accounts.png",
+      "admission": "admitted"
+    },
+    {
+      "source_screen_id": "05_add_account_modal",
+      "role": "onboarding_modal_reference",
+      "layer_kind": "modal_overlay",
+      "parent_reference": "04_accounts",
+      "source_file": "05_add_account_modal.html",
+      "png_file": "05_add_account_modal.png",
+      "admission": "admitted_for_modal_geometry"
+    },
+    {
+      "source_screen_id": "06_diagnostics",
+      "role": "diagnostics_primary_reference",
+      "layer_kind": "screen",
+      "source_file": "06_diagnostics.html",
+      "png_file": "06_diagnostics.png",
+      "admission": "admitted"
+    },
+    {
+      "source_screen_id": "07_settings",
+      "role": "settings_form_reference",
+      "layer_kind": "screen",
+      "source_file": "07_settings.html",
+      "png_file": "07_settings.png",
+      "admission": "admitted_for_visual_form_geometry"
+    },
+    {
+      "source_screen_id": "08_import_existing",
+      "role": "import_existing_flow_reference",
+      "layer_kind": "screen",
+      "source_file": "08_import_existing.html",
+      "png_file": "08_import_existing.png",
+      "admission": "admitted_for_visual_flow_only"
+    },
+    {
+      "source_screen_id": "09_confirm_action",
+      "role": "confirmation_modal_reference",
+      "layer_kind": "modal_overlay",
+      "parent_reference": "invoking_screen",
+      "source_file": "09_confirm_action.html",
+      "png_file": "09_confirm_action.png",
+      "admission": "admitted_for_confirmation_geometry"
+    },
+    {
+      "source_screen_id": "lost_diagnostics_detail_high_resolution_png",
+      "role": "diagnostics_detail_content_layout_supplement",
+      "layer_kind": "supplemental_reference_only",
+      "source_file": "high_resolution_diagnostics_detail_png",
+      "png_file": "high_resolution_diagnostics_detail_png",
+      "admission": "admitted_without_shell"
+    }
+  ],
+  "current_web_screens": [
+    {
+      "current_screen": "overview",
+      "current_dom_source": "overviewScreen",
+      "source_reference_screen": "01_overview_dashboard",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "left_sidebar_source_shell",
+      "visual_repair_priority": "P0",
+      "implementation_contour": "UI_WEB_OVERVIEW_PARITY_REPAIR",
+      "data_truth_constraints": [
+        "status, health, mode, accounts, and action result truth remain strict JSON packet truth",
+        "source/live/demo controls are implementation utilities and should not dominate final header",
+        "action ledger must not force viewport clipping"
+      ],
+      "deferred_notes": [
+        "No new actions in baseline lock contour."
+      ]
+    },
+    {
+      "current_screen": "accounts",
+      "current_dom_source": "accountsScreen",
+      "source_reference_screen": "04_accounts",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "left_sidebar_source_shell",
+      "visual_repair_priority": "P0",
+      "implementation_contour": "UI_WEB_TABLE_SCREENS_REPAIR",
+      "data_truth_constraints": [
+        "account list truth remains accounts list JSON packet truth",
+        "lifecycle actions remain bounded ui_action requests with server preflight",
+        "row actions must not visually imply broader authority than command packets"
+      ],
+      "deferred_notes": [
+        "Rare or destructive actions should move to overflow, details, or confirmation treatment."
+      ]
+    },
+    {
+      "current_screen": "api-connections",
+      "current_dom_source": "apiConnectionsScreen",
+      "source_reference_screen": "04_accounts",
+      "source_render_status": "web_added_not_in_original_render_package",
+      "layer_kind": "web_added_screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "left_sidebar_source_shell",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_TABLE_SCREENS_REPAIR",
+      "data_truth_constraints": [
+        "route list truth remains external-models command packet truth",
+        "route actions remain bounded ui_action requests",
+        "no route-selection, traffic-control, resilience, or readiness claims are admitted"
+      ],
+      "deferred_notes": [
+        "This is a derived screen because the source package has no direct API connections screen.",
+        "Derive table density and action grouping from Accounts."
+      ]
+    },
+    {
+      "current_screen": "diagnostics",
+      "current_dom_source": "diagnosticsScreen",
+      "source_reference_screen": "06_diagnostics",
+      "supplemental_reference_screen": "lost_diagnostics_detail_high_resolution_png",
+      "source_render_status": "original_render_package_with_supplemental_detail_reference",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "left_sidebar_source_shell",
+      "required_region_coverage": [
+        "signal_list",
+        "detail_head",
+        "detail_grid",
+        "check_chain",
+        "tech_log_or_latest_records",
+        "action_stack",
+        "history_chart_slot_with_data_gate"
+      ],
+      "visual_repair_priority": "P0",
+      "implementation_contour": "UI_WEB_DIAGNOSTICS_DETAIL_VISUAL_MODEL_AND_DATA_GATE",
+      "data_truth_constraints": [
+        "diagnostics export is support artifact metadata, not runtime health truth",
+        "history charts require bounded JSON command packet truth before live rendering",
+        "fixture chart is allowed only in fixture/demo mode",
+        "UI must not read logs, state, config, or evidence files directly"
+      ],
+      "deferred_notes": [
+        "Admit signal list, check chain, current state, latest records, and action stack as visual/content model.",
+        "Reject alternate tab-bar shell from the supplemental image."
+      ]
+    },
+    {
+      "current_screen": "settings",
+      "current_dom_source": "settingsScreen",
+      "source_reference_screen": "07_settings",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "left_sidebar_source_shell",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+      "data_truth_constraints": [
+        "settings values are read-only unless an allowlisted command surface exists",
+        "visual form controls must not imply direct config writes",
+        "safe actions are requests, not saved settings"
+      ],
+      "deferred_notes": [
+        "Return visual feeling to form rows while preserving readonly/allowlist boundaries."
+      ]
+    },
+    {
+      "current_screen": "setup",
+      "current_dom_source": "setupScreen",
+      "source_reference_screen": "02_setup_client",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented_as_deferred_visual_skeleton",
+      "target_shell": "setup_flow_source_shell_with_left_flow_sidebar",
+      "visual_repair_priority": "P0",
+      "implementation_contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+      "data_truth_constraints": [
+        "no browser arbitrary path submission",
+        "no filesystem scan from UI",
+        "setup completion cannot be claimed without command packet truth"
+      ],
+      "deferred_notes": [
+        "Setup is allowed to use the source setup-flow shell rather than the main dashboard composition."
+      ]
+    },
+    {
+      "current_screen": "select-client",
+      "current_dom_source": "selectClientScreen",
+      "source_reference_screen": "03_select_codex_client",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen_or_flow_overlay",
+      "web_implementation_status": "implemented_as_deferred_visual_skeleton",
+      "target_shell": "setup_flow_source_shell_with_left_flow_sidebar",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+      "data_truth_constraints": [
+        "candidate selection requires command-owned identifiers",
+        "manual local paths remain deferred until an admitted native picker or command surface exists"
+      ],
+      "deferred_notes": [
+        "Keep deferred controls visually intentional rather than broken."
+      ]
+    },
+    {
+      "current_screen": "import-existing",
+      "current_dom_source": "importExistingScreen",
+      "source_reference_screen": "08_import_existing",
+      "source_render_status": "original_render_package",
+      "layer_kind": "screen",
+      "web_implementation_status": "implemented_as_deferred_visual_skeleton",
+      "target_shell": "setup_flow_source_shell_with_left_flow_sidebar",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+      "data_truth_constraints": [
+        "legacy import requires command-owned source and transaction truth",
+        "browser must not submit arbitrary source-dir paths in this web prototype"
+      ],
+      "deferred_notes": [
+        "Use import flow visuals while preserving command-surface admission boundaries."
+      ]
+    },
+    {
+      "current_screen": "onboard-modal",
+      "current_dom_source": "confirmation_and_onboard_modal_surfaces",
+      "source_reference_screen": "05_add_account_modal",
+      "source_render_status": "original_render_package",
+      "layer_kind": "modal_overlay",
+      "parent_reference": "accounts",
+      "web_implementation_status": "implemented",
+      "target_shell": "modal_overlay_on_left_sidebar_source_shell",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_MODAL_CONFIRMATION_PARITY",
+      "data_truth_constraints": [
+        "onboard success requires onboarding_result packet truth",
+        "reserve-first result must not imply auto-promote",
+        "ambiguous or no-new-auth states must not be green success"
+      ],
+      "deferred_notes": [
+        "Modal geometry and result states should follow source modal dimensions."
+      ]
+    },
+    {
+      "current_screen": "confirm-action-modal",
+      "current_dom_source": "confirmOverlay",
+      "source_reference_screen": "09_confirm_action",
+      "source_render_status": "original_render_package",
+      "layer_kind": "modal_overlay",
+      "parent_reference": "invoking_screen",
+      "web_implementation_status": "implemented",
+      "target_shell": "modal_overlay_on_left_sidebar_source_shell",
+      "visual_repair_priority": "P1",
+      "implementation_contour": "UI_WEB_MODAL_CONFIRMATION_PARITY",
+      "data_truth_constraints": [
+        "confirmation copy must not broaden command meaning",
+        "confirmation result is not runtime truth",
+        "double-submit protection remains required"
+      ],
+      "deferred_notes": [
+        "Strong confirmation for risky actions should match source confirmation geometry."
+      ]
+    }
+  ],
+  "repair_order": [
+    "UI_WEB_OVERVIEW_PARITY_REPAIR",
+    "UI_WEB_TABLE_SCREENS_REPAIR",
+    "UI_WEB_DIAGNOSTICS_DETAIL_VISUAL_MODEL_AND_DATA_GATE",
+    "UI_WEB_DIAGNOSTICS_DETAIL_IMPLEMENTATION",
+    "UI_WEB_SUPPORT_SETTINGS_SETUP_REPAIR",
+    "UI_WEB_MODAL_CONFIRMATION_PARITY",
+    "UI_WEB_VISUAL_REGRESSION_HARNESS",
+    "UI_WEB_PRE_DESKTOP_VISUAL_FREEZE_AUDIT"
+  ],
+  "owner_review_items": [
+    {
+      "topic": "global typography",
+      "question": "Whether to override source render package typography with the separate Roboto Mono light-weight direction.",
+      "default_until_decision": "keep source render package mono-first typography"
+    },
+    {
+      "topic": "diagnostics live history",
+      "question": "Whether to introduce a future bounded JSON command surface for live history/chart packets.",
+      "default_until_decision": "fixture-only chart or live deferred state"
+    }
+  ]
+}
