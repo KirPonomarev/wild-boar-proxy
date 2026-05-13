@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+  "generated_at_local_date": "2026-05-13",
+  "audit_mode": "coverage_inspector_plus_final_staged_audit_pending",
+  "coverage_inspector": {
+    "kind": "subagent",
+    "role": "coverage inspector",
+    "model_class": "economy scanner",
+    "agent_name": "Boyle",
+    "edited_files": false,
+    "summary": "Broad lower-level coverage existed; main E2E lacked Overview action sequence, API Connections action sequence, and explicit api_route_create/update/draft blocked-action coverage.",
+    "resolved_by": [
+      "extended tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+      "extended tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions"
+    ]
+  },
+  "local_verification": {
+    "targeted_tests": [
+      {
+        "command": "python3 -m unittest tests.test_web_design_live_server.WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes tests.test_web_design_live_server.WebDesignLiveServerTests.test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions",
+        "status": "PASS"
+      },
+      {
+        "command": "python3 -m unittest tests.test_web_design_live_server",
+        "status": "PASS",
+        "tests_ran": 36
+      },
+      {
+        "command": "python3 -m unittest tests.test_web_design_command_adapter tests.test_web_design_ui tests.test_cli_external_models",
+        "status": "PASS",
+        "tests_ran": 61
+      }
+    ],
+    "json_artifact_checks": "PASS",
+    "json_artifact_commands": [
+      "python3 -m json.tool audit_results/ui_web_end_to_end_operator_flow_final_matrix_2026-05-13.json",
+      "python3 -m json.tool audit_results/ui_web_end_to_end_operator_flow_final_command_sequence_2026-05-13.json",
+      "python3 -m json.tool audit_results/ui_web_end_to_end_operator_flow_final_independent_audit_2026-05-13.json"
+    ],
+    "closeout_resilience_check": "PASS",
+    "closeout_resilience_command": "python3 tools/check_closeout_resilience.py audit_results/ui_web_end_to_end_operator_flow_final_closeout_2026-05-13.md",
+    "diff_check": "PASS",
+    "diff_check_command": "git diff --check",
+    "scope_check": "PASS",
+    "scope_check_command": "changed files limited to tests/test_web_design_live_server.py and this contour's audit_results artifacts",
+    "private_reference_trace_scan": "PASS",
+    "overclaim_scan": "PASS_NO_MATCHES_IN_TEST_DIFF"
+  },
+  "final_staged_audit": {
+    "status": "PASS",
+    "auditor": {
+      "kind": "subagent",
+      "role": "final staged-diff auditor",
+      "model_class": "economy scanner",
+      "agent_name": "Galileo",
+      "edited_files": false
+    },
+    "summary": "Staged diff stayed inside allowed paths, no production/runtime/external_models/desktop edits were found, test changes stayed in fake-runner E2E plus blocked-action checks, api_route_create/update/draft remained not admitted, and api_route_remove remained disabled-route cleanup only.",
+    "required_checks": [
+      "staged diff only",
+      "no staged files outside allowed paths",
+      "no new UI action or backend command surface",
+      "no runtime.py or external_models engine changes",
+      "coverage matrix matches tests and passports",
+      "command sequence uses fake-runner packets only",
+      "api_route_remove remains disabled-only registry cleanup",
+      "api_route_create/update/draft remain NOT_ADMITTED",
+      "no raw browser route JSON/path/token/secret/provider config admitted",
+      "no positive runtime/traffic/failover/primary-route readiness overclaim",
+      "closeout contains Contour Capsule and resume from here"
+    ]
+  },
+  "blocking_findings": []
+}

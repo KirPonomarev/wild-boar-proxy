@@ -155,6 +155,15 @@ def routes_list_packet(route_id: str = "wbp-deepseek-v3", *, enabled: bool = Tru
     )
 
 
+def routes_list_packet_for_operator_flow() -> dict[str, object]:
+    enabled_route = routes_list_packet("wbp-deepseek-v3", enabled=True)["data"]["routes"][0]  # type: ignore[index]
+    disabled_route = routes_list_packet("wbp-disabled", enabled=False)["data"]["routes"][0]  # type: ignore[index]
+    return command_packet(
+        human_message="External-models routes listed from local registry.",
+        data={"count": 2, "routes": [enabled_route, disabled_route]},
+    )
+
+
 class MappingRunner:
     def __init__(self, payloads: dict[tuple[str, ...], dict[str, object]]) -> None:
         self.payloads = payloads
@@ -1628,6 +1637,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
         stable_repair_apply = run_ui_action(runner, {"ui_action": "stable_repair_apply"})
         launch_client = run_ui_action(runner, {"ui_action": "launch_client"})
         account_lifecycle = run_ui_action(runner, {"ui_action": "accounts_promote", "account_id": "acct-active"})
+        route_create = run_ui_action(runner, {"ui_action": "api_route_create", "route_id": "wbp-new"})
+        route_update = run_ui_action(runner, {"ui_action": "api_route_update", "route_id": "wbp-deepseek-v3"})
+        route_draft = run_ui_action(runner, {"ui_action": "api_route_draft", "route_id": "wbp-draft"})
         client_path_payload = run_ui_action(
             runner,
             {"ui_action": "export_diagnostics", "client_path": "/Applications/Codex.app"},
@@ -1647,6 +1659,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
             stable_repair_apply,
             launch_client,
             account_lifecycle,
+            route_create,
+            route_update,
+            route_draft,
             client_path_payload,
             bundle_path_payload,
             log_path_payload,
@@ -1720,8 +1735,30 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
 
     def test_http_operator_flow_uses_fake_runner_and_canonical_refreshes(self) -> None:
-        runner = MappingRunner(live_payloads())
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+        payloads = {
+            **live_payloads(),
+            ("external-models", "routes", "list", "--json"): routes_list_packet_for_operator_flow(),
+            ("external-models", "routes", "enable", "--route", "wbp-disabled", "--json"): command_packet(
+                human_message="External-models route enabled: wbp-disabled.",
+                liveness="not_applicable",
+                severity="recoverable",
+                operator_action="none",
+                data={"route_id": "wbp-disabled", "enabled": True},
+            ),
+            ("external-models", "routes", "remove", "--route", "wbp-disabled", "--json"): command_packet(
+                human_message="External-models route removed: wbp-disabled.",
+                liveness="not_applicable",
+                severity="recoverable",
+                operator_action="none",
+                changed_files=["/tmp/routes.json", "/tmp/state.json"],
+                data={"route_id": "wbp-disabled"},
+            ),
+        }
+        runner = MappingRunner(payloads)
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(runner=runner, launch_client_path="/Applications/Codex.app"),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -1729,8 +1766,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
             index = fetch(f"{base_url}/?source=live")
             overview = json.loads(fetch(f"{base_url}/api/live-readonly"))
             accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+            api_connections = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
             metadata = json.loads(fetch(f"{base_url}/api/actions"))
+            flow_start = len(runner.calls)
             flow_steps = [
+                ("refresh_health_detail", {}, None),
+                ("stable_repair_plan", {}, None),
+                ("sync_runtime", {}, "overview"),
+                ("set_mode_stable", {}, "overview"),
+                ("set_mode_managed", {}, "overview"),
+                ("launch_smoke", {}, "overview"),
+                ("launch_client_dispatch", {}, "overview"),
                 ("validate_account", {"account_id": "acct-active"}, "accounts"),
                 ("hold_account", {"account_id": "acct-active"}, "accounts"),
                 ("release_account", {"account_id": "acct-hold"}, "accounts"),
@@ -1739,6 +1785,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("retire_account", {"account_id": "acct-reserve"}, "accounts"),
                 ("onboard_account", {}, "accounts"),
                 ("export_diagnostics", {}, None),
+                ("api_route_validate", {"route_id": "wbp-deepseek-v3"}, "api_connections"),
+                ("api_route_check", {"route_id": "wbp-deepseek-v3"}, "api_connections"),
+                ("api_route_allow", {"route_id": "wbp-disabled"}, "api_connections"),
+                ("api_route_disable", {"route_id": "wbp-deepseek-v3"}, "api_connections"),
+                ("api_route_profile", {"route_id": "wbp-deepseek-v3"}, None),
+                ("api_route_evidence_capture", {"route_id": "wbp-deepseek-v3"}, None),
+                ("api_route_remove", {"route_id": "wbp-disabled"}, "api_connections"),
             ]
             action_results: dict[str, dict[str, object]] = {}
             for ui_action, extra_payload, refresh_target in flow_steps:
@@ -1756,6 +1809,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     refreshed = json.loads(fetch(f"{base_url}/api/live-readonly"))
                     self.assertEqual(refreshed["status"], "ok")
                     self.assertEqual(refreshed["source"], "live_readonly")
+                elif refresh_target == "api_connections":
+                    refreshed = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
+                    self.assertEqual(refreshed["status"], "ok")
+                    self.assertEqual(refreshed["source"], "api_connections_readonly")
         finally:
             server.shutdown()
             server.server_close()
@@ -1766,11 +1823,23 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(overview["source"], "live_readonly")
         self.assertEqual(accounts["status"], "ok")
         self.assertEqual(accounts["source"], "accounts_readonly")
+        self.assertEqual(api_connections["status"], "ok")
+        self.assertEqual(api_connections["source"], "api_connections_readonly")
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
         self.assertNotIn("setup_discovery", metadata["actions"])
         self.assertNotIn("select_client", metadata["actions"])
         self.assertNotIn("legacy_import", metadata["actions"])
+        self.assertNotIn("api_route_create", metadata["actions"])
+        self.assertNotIn("api_route_update", metadata["actions"])
+        self.assertNotIn("api_route_draft", metadata["actions"])
         for ui_action in [
+            "refresh_health_detail",
+            "stable_repair_plan",
+            "sync_runtime",
+            "set_mode_stable",
+            "set_mode_managed",
+            "launch_smoke",
+            "launch_client_dispatch",
             "validate_account",
             "hold_account",
             "release_account",
@@ -1779,11 +1848,23 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "retire_account",
             "onboard_account",
             "export_diagnostics",
+            "api_route_validate",
+            "api_route_check",
+            "api_route_allow",
+            "api_route_disable",
+            "api_route_profile",
+            "api_route_evidence_capture",
+            "api_route_remove",
         ]:
             self.assertEqual(action_results[ui_action]["status"], "ok")
             self.assertEqual(action_results[ui_action]["source"], "ui_action")
             self.assertFalse(action_results[ui_action]["affects_primary_truth"])
 
+        self.assertTrue(action_results["sync_runtime"]["confirmation_required"])
+        self.assertTrue(action_results["set_mode_stable"]["confirmation_required"])
+        self.assertTrue(action_results["set_mode_managed"]["confirmation_required"])
+        self.assertTrue(action_results["launch_client_dispatch"]["confirmation_required"])
+        self.assertIn("не успех сессии внешнего клиента", action_results["launch_client_dispatch"]["action_claim_scope"])
         self.assertEqual(
             action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
             "reserve_only_success",
@@ -1793,8 +1874,60 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(action_results["export_diagnostics"]["action_role"], "support_artifact")
         self.assertFalse(action_results["export_diagnostics"]["post_action_refresh_required"])
+        self.assertEqual(action_results["api_route_remove"]["action_role"], "api_route_registry_cleanup")
+        self.assertEqual(action_results["api_route_remove"]["route_id"], "wbp-disabled")
+        self.assertFalse(action_results["api_route_profile"]["result"]["data"]["writes_external_config"])
+        self.assertFalse(action_results["api_route_profile"]["result"]["data"]["profile_ready"])
+        self.assertTrue(action_results["api_route_profile"]["result"]["data"]["runtime_claim_blocked"])
+        self.assertFalse(action_results["api_route_evidence_capture"]["result"]["data"]["network_dependent_evidence"])
 
         expected_sequences = [
+            [
+                ("healthcheck", "--json"),
+            ],
+            [
+                ("stable", "repair", "--dry-run", "--json"),
+            ],
+            [
+                ("sync", "--json"),
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
+                ("rollout", "rotation", "inspect", "--json"),
+            ],
+            [
+                ("mode", "set", "stable", "--json"),
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
+                ("rollout", "rotation", "inspect", "--json"),
+            ],
+            [
+                ("mode", "set", "managed", "--json"),
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
+                ("rollout", "rotation", "inspect", "--json"),
+            ],
+            [
+                ("launch", "smoke", "--json"),
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
+                ("rollout", "rotation", "inspect", "--json"),
+            ],
+            [
+                ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+                ("status", "--json"),
+                ("mode", "get", "--json"),
+                ("accounts", "list", "--json"),
+                ("healthcheck", "--json"),
+                ("rollout", "rotation", "inspect", "--json"),
+            ],
             [
                 ("accounts", "list", "--json"),
                 ("accounts", "validate", "acct-active", "--json"),
@@ -1832,8 +1965,51 @@ class WebDesignLiveServerTests(unittest.TestCase):
             [
                 ("diagnostics", "export", "--json"),
             ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "enable", "--route", "wbp-disabled", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "profile", "codex-desktop", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "evidence", "capture", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "remove", "--route", "wbp-disabled", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
         ]
-        cursor = 0
+        cursor = flow_start
         for sequence in expected_sequences:
             for command in sequence:
                 try:

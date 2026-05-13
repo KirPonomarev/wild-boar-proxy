@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "contour_id": "UI_WEB_END_TO_END_OPERATOR_FLOW_FINAL",
+  "generated_at_local_date": "2026-05-13",
+  "source_test": "tests/test_web_design_live_server.py::WebDesignLiveServerTests.test_http_operator_flow_uses_fake_runner_and_canonical_refreshes",
+  "runner_mode": "MappingRunner fake packets through local ThreadingHTTPServer",
+  "real_live_mutation": false,
+  "initial_readonly_sequence": [
+    "GET /?source=live",
+    "GET /api/live-readonly -> status --json",
+    "GET /api/live-readonly -> mode get --json",
+    "GET /api/live-readonly -> accounts list --json",
+    "GET /api/live-readonly -> healthcheck --json",
+    "GET /api/live-readonly -> rollout rotation inspect --json",
+    "GET /api/accounts-readonly -> accounts list --json",
+    "GET /api/api-connections-readonly -> external-models status --json",
+    "GET /api/api-connections-readonly -> external-models models --json",
+    "GET /api/api-connections-readonly -> external-models routes list --json",
+    "GET /api/actions"
+  ],
+  "operator_flow": [
+    {
+      "step": 1,
+      "ui_action": "refresh_health_detail",
+      "browser_payload": {
+        "ui_action": "refresh_health_detail"
+      },
+      "commands": [
+        "healthcheck --json"
+      ]
+    },
+    {
+      "step": 2,
+      "ui_action": "stable_repair_plan",
+      "browser_payload": {
+        "ui_action": "stable_repair_plan"
+      },
+      "commands": [
+        "stable repair --dry-run --json"
+      ]
+    },
+    {
+      "step": 3,
+      "ui_action": "sync_runtime",
+      "browser_payload": {
+        "ui_action": "sync_runtime"
+      },
+      "commands": [
+        "sync --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ]
+    },
+    {
+      "step": 4,
+      "ui_action": "set_mode_stable",
+      "browser_payload": {
+        "ui_action": "set_mode_stable"
+      },
+      "commands": [
+        "mode set stable --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ]
+    },
+    {
+      "step": 5,
+      "ui_action": "set_mode_managed",
+      "browser_payload": {
+        "ui_action": "set_mode_managed"
+      },
+      "commands": [
+        "mode set managed --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ]
+    },
+    {
+      "step": 6,
+      "ui_action": "launch_smoke",
+      "browser_payload": {
+        "ui_action": "launch_smoke"
+      },
+      "commands": [
+        "launch smoke --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ]
+    },
+    {
+      "step": 7,
+      "ui_action": "launch_client_dispatch",
+      "browser_payload": {
+        "ui_action": "launch_client_dispatch"
+      },
+      "server_owned_payload": {
+        "client_path": "/Applications/Codex.app"
+      },
+      "commands": [
+        "launch client --client-path /Applications/Codex.app --json",
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "healthcheck --json",
+        "rollout rotation inspect --json"
+      ],
+      "real_host_client_launch": false
+    },
+    {
+      "step": 8,
+      "ui_action": "validate_account",
+      "browser_payload": {
+        "ui_action": "validate_account",
+        "account_id": "acct-active"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts validate acct-active --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 9,
+      "ui_action": "hold_account",
+      "browser_payload": {
+        "ui_action": "hold_account",
+        "account_id": "acct-active"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts hold acct-active --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 10,
+      "ui_action": "release_account",
+      "browser_payload": {
+        "ui_action": "release_account",
+        "account_id": "acct-hold"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts release acct-hold --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 11,
+      "ui_action": "promote_account",
+      "browser_payload": {
+        "ui_action": "promote_account",
+        "account_id": "acct-reserve"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts promote acct-reserve --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 12,
+      "ui_action": "demote_account",
+      "browser_payload": {
+        "ui_action": "demote_account",
+        "account_id": "acct-active"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts demote acct-active --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 13,
+      "ui_action": "retire_account",
+      "browser_payload": {
+        "ui_action": "retire_account",
+        "account_id": "acct-reserve"
+      },
+      "commands": [
+        "accounts list --json",
+        "accounts retire acct-reserve --json",
+        "accounts list --json"
+      ]
+    },
+    {
+      "step": 14,
+      "ui_action": "onboard_account",
+      "browser_payload": {
+        "ui_action": "onboard_account"
+      },
+      "commands": [
+        "accounts onboard --json",
+        "accounts list --json"
+      ],
+      "reserve_first_asserted": true
+    },
+    {
+      "step": 15,
+      "ui_action": "export_diagnostics",
+      "browser_payload": {
+        "ui_action": "export_diagnostics"
+      },
+      "commands": [
+        "diagnostics export --json"
+      ],
+      "direct_bundle_read": false
+    },
+    {
+      "step": 16,
+      "ui_action": "api_route_validate",
+      "browser_payload": {
+        "ui_action": "api_route_validate",
+        "route_id": "wbp-deepseek-v3"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models routes validate --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ]
+    },
+    {
+      "step": 17,
+      "ui_action": "api_route_check",
+      "browser_payload": {
+        "ui_action": "api_route_check",
+        "route_id": "wbp-deepseek-v3"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models check --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ]
+    },
+    {
+      "step": 18,
+      "ui_action": "api_route_allow",
+      "browser_payload": {
+        "ui_action": "api_route_allow",
+        "route_id": "wbp-disabled"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models routes enable --route wbp-disabled --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ]
+    },
+    {
+      "step": 19,
+      "ui_action": "api_route_disable",
+      "browser_payload": {
+        "ui_action": "api_route_disable",
+        "route_id": "wbp-deepseek-v3"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models routes disable --route wbp-deepseek-v3 --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ]
+    },
+    {
+      "step": 20,
+      "ui_action": "api_route_profile",
+      "browser_payload": {
+        "ui_action": "api_route_profile",
+        "route_id": "wbp-deepseek-v3"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models profile codex-desktop --route wbp-deepseek-v3 --json"
+      ],
+      "writes_external_config": false
+    },
+    {
+      "step": 21,
+      "ui_action": "api_route_evidence_capture",
+      "browser_payload": {
+        "ui_action": "api_route_evidence_capture",
+        "route_id": "wbp-deepseek-v3"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models evidence capture --route wbp-deepseek-v3 --json"
+      ],
+      "direct_evidence_file_read": false
+    },
+    {
+      "step": 22,
+      "ui_action": "api_route_remove",
+      "browser_payload": {
+        "ui_action": "api_route_remove",
+        "route_id": "wbp-disabled"
+      },
+      "commands": [
+        "external-models routes list --json",
+        "external-models routes remove --route wbp-disabled --json",
+        "external-models status --json",
+        "external-models models --json",
+        "external-models routes list --json"
+      ],
+      "disabled_route_required": true,
+      "changed_files_truth": false
+    }
+  ],
+  "blocked_actions_checked": [
+    "command_id payload",
+    "stable_repair_apply",
+    "launch_client raw ui_action",
+    "raw adapter account lifecycle action",
+    "api_route_create",
+    "api_route_update",
+    "api_route_draft",
+    "browser client_path payload",
+    "browser diagnostics bundle_path payload",
+    "browser log_path payload",
+    "unknown policy_stage_set"
+  ],
+  "next_contour": "UI_WEB_PRE_DESKTOP_FREEZE_AND_AUDIT"
+}
