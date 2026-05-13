@@ -86,6 +86,23 @@ Load context in this order:
 Do not flood the agent with entire codebases or entire docs when a small focused
  subset is enough for the task at hand.
 
+### 3.1 Thread / Compaction Resilience
+
+Treat thread context as volatile. Treat repo packets and commits as durable.
+
+- Do not create repo-local thread checkpoint files during normal work.
+- Keep temporary recovery notes outside the repo, for example
+  `/private/tmp/wbp-thread-checkpoints/`.
+- Create repo artifacts only at contour boundaries, and only when the contour or
+  closeout discipline requires them.
+- Prefer bounded, path-scoped tool output:
+  `git status --short --untracked-files=no`, `git diff --stat`,
+  `git diff -- <paths>`, `rg`, `sed -n`, and `jq` selectors.
+- Do not commit raw tool dumps, archived thread extracts, private research
+  notes, external-reference artifacts, tokens, logs, or large JSONL extracts.
+- At closeout, include `resume from here` so a new thread can continue without
+  replaying long chat history.
+
 ## 4. Assumptions Explicit
 
 State key assumptions before work begins, especially when they affect:

@@ -31,7 +31,7 @@
 - `rg -n "Вкл|Сделать активным|Основной|Непрерывный поток|сетки|Сетки" wild_boar_proxy/web_design_ui --glob '!**/*.png'`
 - `rg -n "command_id|argv|shell|raw_argv" wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/index.html`
 - `rg -n "routes\.json|state\.json|secrets\.env" wild_boar_proxy/web_design_ui wild_boar_proxy/web_design_live_server.py`
-- `rg -n "lazyweb|www\.lazyweb\.com|mcp-install|lazyweb_mcp_token|api/mcp/install-token" /Volumes/Work/wild-boar-proxy --hidden --glob '!**/.git/**'`
+- private external reference service trace scan across the repo
 
 ## Visual Smoke
 

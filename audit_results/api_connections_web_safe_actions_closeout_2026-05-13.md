@@ -50,7 +50,7 @@ Commands executed:
 rg -n "Вкл|Сделать активным|Основной|Непрерывный поток|сетки|Сетки" wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css
 rg -n "command_id|argv|shell|raw_argv" wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js
 rg -n "routes\.json|state\.json|secrets\.env" wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js
-git diff -- wild_boar_proxy/web_design_command_adapter.py wild_boar_proxy/web_design_live_server.py wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css tests/test_web_design_command_adapter.py tests/test_web_design_live_server.py tests/test_web_design_ui.py | rg -n "lazyweb|www\.lazyweb\.com|mcp-install|lazyweb_mcp_token|api/mcp/install-token|Bearer"
+private external reference service trace scan against the changed API screen files
 ```
 
 Result:

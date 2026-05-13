@@ -44,4 +44,5 @@
 
 - blockers encountered:
 - follow-up contour:
+- resume from here: CLOSED / [exact next contour or command]
 ```
