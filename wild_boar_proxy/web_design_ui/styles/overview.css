@@ -927,16 +927,21 @@ button:disabled {
 
 .secondary-action-tile {
   flex-direction: row;
-  gap: 10px;
+  gap: 6px;
   justify-content: flex-start;
-  min-height: 44px;
-  padding: 0 14px;
+  min-height: 46px;
+  padding: 0 10px;
   text-align: left;
 }
 
 .secondary-action-tile .tile-icon {
   height: 18px;
   width: 18px;
+}
+
+.secondary-action-tile span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .tile-icon {
@@ -1201,7 +1206,7 @@ button:disabled {
 }
 
 .api-connections-table {
-  min-width: 1120px;
+  min-width: 1112px;
 }
 
 .table th {
