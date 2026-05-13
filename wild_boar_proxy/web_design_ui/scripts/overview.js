@@ -74,7 +74,7 @@ const ACTION_STATUS_VISUAL_CLASS = {
   unknown: "neutral"
 };
 
-const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const SCREENS = ["overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -274,6 +274,50 @@ async function loadAccountsReadonly() {
         last_error: error.message
       },
       accounts: []
+    };
+  }
+}
+
+async function loadApiConnectionsReadonly() {
+  try {
+    const response = await fetch("api/api-connections-readonly", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`api-connections http ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    return {
+      schema_version: 1,
+      status: "integration_failure",
+      source: "api_connections_readonly",
+      primary_truth_ok: false,
+      privacy: {
+        redacted: true,
+        raw_command_packet_included: false,
+        forbidden_fields_excluded: ["secret_references", "tokens", "raw_paths", "raw_logs"]
+      },
+      summary: {
+        routes_count: 0,
+        enabled_count: 0,
+        attention_count: 0,
+        latest_check: "",
+        human_message: "Не удалось загрузить API-подключения только для чтения.",
+        machine_error_code: "UI_API_CONNECTIONS_FETCH_FAILED",
+        last_error: error.message
+      },
+      adapter: {
+        foundation_phase: "unknown",
+        adapter_runtime_available: false,
+        lifecycle_mode: "unknown",
+        adapter_state: "unknown",
+        listener_proven: false,
+        runtime_claim_blocked: true,
+        profile_ready: false,
+        local_token_present: false,
+        observed_routes_count: 0,
+        models_source: "integration_failure"
+      },
+      routes: []
     };
   }
 }
@@ -540,12 +584,16 @@ function setSourceCopy(source) {
       screen === "accounts"
         ? "Аккаунты · live только чтение"
         : (
+          screen === "api-connections"
+            ? "API-подключения · список маршрутов"
+            : (
           screen === "diagnostics"
             ? "Диагностика · пакет поддержки"
             : (
               screen === "settings"
                 ? "Настройки · через пакеты команд"
                 : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
+            )
             )
         )
     )
@@ -555,6 +603,9 @@ function setSourceCopy(source) {
       screen === "accounts"
         ? "Пул аккаунтов отображается из подтверждённого ответа команды. Действия доступны только после проверки допустимости."
         : (
+          screen === "api-connections"
+            ? "Маршруты API-подключений отображаются из пакетов команд. Проверка маршрутов и действия будут добавлены отдельным безопасным контуром."
+            : (
           screen === "diagnostics"
             ? "Диагностика показывает сведения пакета поддержки. Фактическое здоровье системы проверяется отдельными командами."
             : (
@@ -566,12 +617,16 @@ function setSourceCopy(source) {
                     : "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
                 )
             )
+            )
         )
     )
     : (
       screen === "accounts"
         ? "Демо-просмотр экрана аккаунтов. Данные не являются фактическим состоянием системы."
         : (
+          screen === "api-connections"
+            ? "Демо-просмотр API-подключений. Это только панель маршрутов без действий и без отдельной проверки маршрута."
+            : (
           screen === "diagnostics"
             ? "Демо-просмотр диагностики. Экспорт создаёт пакет поддержки, но не доказывает здоровье системы."
             : (
@@ -582,6 +637,7 @@ function setSourceCopy(source) {
                     ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
                     : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
                 )
+            )
             )
         )
     );
@@ -837,6 +893,9 @@ function setScreen(screen, updateUrl = false) {
     nextScreen === "accounts"
       ? "Аккаунты"
       : (
+        nextScreen === "api-connections"
+          ? "API-подключения"
+          : (
         nextScreen === "diagnostics"
           ? "Диагностика"
           : (
@@ -851,6 +910,7 @@ function setScreen(screen, updateUrl = false) {
                       : (nextScreen === "import-existing" ? "Импорт" : "Обзор")
                   )
               )
+          )
           )
       )
   );
@@ -907,6 +967,76 @@ function accountsFixtureFromOverview(fixture) {
   };
 }
 
+function apiConnectionsFixtureFromOverview(fixture) {
+  const integrationFailure = fixture.state_id === "integration_failure";
+  const degraded = fixture.state_id === "degraded";
+  const routes = integrationFailure ? [] : [
+    {
+      route_id: "wbp-openrouter-primary",
+      display_name: "OpenRouter рабочий маршрут",
+      provider: "openrouter",
+      upstream_model: "deepseek/deepseek-chat",
+      enabled: true,
+      status_code: degraded ? "missing_secret" : "enabled",
+      status_label: degraded ? "Требует ключ" : "Разрешён",
+      visual_state: degraded ? "amber" : "blue",
+      role_label: "Кандидат",
+      last_checked: "",
+      note: degraded
+        ? "Демо-предупреждение: ключ не подтверждён, отдельная проверка маршрута не выполнялась."
+        : "Демо-представление registry-пакета без отдельной проверки маршрута."
+    },
+    {
+      route_id: "wbp-openrouter-reserve",
+      display_name: "OpenRouter резервный маршрут",
+      provider: "openrouter",
+      upstream_model: "deepseek/deepseek-chat",
+      enabled: false,
+      status_code: "disabled",
+      status_label: "Отключён",
+      visual_state: "neutral",
+      role_label: "Допустим для резерва",
+      last_checked: "",
+      note: "Демо-представление отключённого маршрута. Автопереключение не подтверждено."
+    }
+  ];
+  return {
+    schema_version: 1,
+    status: integrationFailure ? "integration_failure" : "ok",
+    source: "api_connections_fixture",
+    primary_truth_ok: false,
+    privacy: {
+      redacted: true,
+      raw_command_packet_included: false,
+      forbidden_fields_excluded: ["secret_references", "tokens", "raw_paths", "raw_logs"]
+    },
+    summary: {
+      routes_count: routes.length,
+      enabled_count: routes.filter((route) => route.enabled).length,
+      attention_count: routes.filter((route) => route.status_code === "missing_secret").length,
+      latest_check: "",
+      human_message: integrationFailure
+        ? "Демо API-подключений не удалось собрать."
+        : "Демо-представление API-подключений без live-команд.",
+      machine_error_code: integrationFailure ? "UI_API_CONNECTIONS_FIXTURE_INVALID" : "fixture",
+      last_error: integrationFailure ? "демо-состояние не прошло проверку" : ""
+    },
+    adapter: {
+      foundation_phase: "fixture",
+      adapter_runtime_available: false,
+      lifecycle_mode: "synthetic",
+      adapter_state: "stopped",
+      listener_proven: false,
+      runtime_claim_blocked: true,
+      profile_ready: false,
+      local_token_present: !degraded,
+      observed_routes_count: 0,
+      models_source: "fixture"
+    },
+    routes
+  };
+}
+
 function accountFixture(id, label, pool, status, visualState, lastError, lastSuccess, manualHold = false) {
   return {
     id,
@@ -939,6 +1069,38 @@ function validateAccountsSnapshot(snapshot) {
     missingTop,
     missingSummary,
     missingRegistry
+  };
+}
+
+function validateApiConnectionsSnapshot(snapshot) {
+  const summary = snapshot.summary || {};
+  const adapter = snapshot.adapter || {};
+  const missingTop = ["schema_version", "status", "source", "summary", "routes"].filter((key) => !(key in snapshot));
+  const missingSummary = [
+    "routes_count",
+    "enabled_count",
+    "attention_count",
+    "latest_check",
+    "human_message",
+    "machine_error_code"
+  ].filter((key) => !(key in summary));
+  const missingAdapter = [
+    "foundation_phase",
+    "adapter_runtime_available",
+    "lifecycle_mode",
+    "adapter_state",
+    "listener_proven",
+    "runtime_claim_blocked",
+    "profile_ready",
+    "local_token_present",
+    "observed_routes_count",
+    "models_source"
+  ].filter((key) => !(key in adapter));
+  return {
+    ok: missingTop.length === 0 && missingSummary.length === 0 && missingAdapter.length === 0 && Array.isArray(snapshot.routes),
+    missingTop,
+    missingSummary,
+    missingAdapter
   };
 }
 
@@ -993,6 +1155,117 @@ function renderAccountsSnapshot(snapshot) {
   const sidebarDot = document.getElementById("sidebarDot");
   setClassName(sidebarDot, "dot", visualState);
   text("sidebarStatus", summary.human_message || "Accounts read-only");
+}
+
+function renderApiConnectionsSnapshot(snapshot) {
+  const validation = validateApiConnectionsSnapshot(snapshot);
+  const safeSnapshot = validation.ok ? snapshot : {
+    ...apiConnectionsFixtureFromOverview(FALLBACK_FIXTURE),
+    status: "integration_failure",
+    source: "api_connections_fixture_invalid",
+    summary: {
+      ...apiConnectionsFixtureFromOverview(FALLBACK_FIXTURE).summary,
+      machine_error_code: "UI_API_CONNECTIONS_SCHEMA_INVALID",
+      human_message: "Схема API-подключений недействительна.",
+      last_error: `Схема API-подключений недействительна: top [${validation.missingTop.join(", ")}], summary [${validation.missingSummary.join(", ")}], adapter [${validation.missingAdapter.join(", ")}]`
+    },
+    routes: []
+  };
+
+  const source = safeSnapshot.source === "api_connections_readonly" ? "live" : "fixture";
+  const visualState = safeSnapshot.status === "ok" ? "healthy" : "integration_failure";
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.fixtureState = visualState;
+  desktop.dataset.source = source;
+  document.getElementById("sourcePicker").value = source;
+  document.getElementById("statePicker").disabled = source === "live";
+  document.getElementById("brandCaption").textContent = source === "live"
+    ? "API-подключения · список маршрутов"
+    : "API-подключения · демо";
+  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
+    ? "Обновить live"
+    : "Обновить демо";
+  setSourceCopy(source);
+
+  const banner = document.getElementById("apiConnectionsBanner");
+  setClassName(banner, "fixture-banner", visualState);
+  banner.textContent = source === "live"
+    ? "API-подключения показываются только в режиме чтения. Проверка маршрутов и действия будут добавлены отдельным контуром."
+    : "Демо-представление API-подключений. Маршруты показаны без live-команд и без отдельной проверки маршрута.";
+
+  const summary = safeSnapshot.summary;
+  const latestCheck = summary.latest_check || "Нет данных";
+  text("apiConnectionsRoutesCount", summary.routes_count);
+  text("apiConnectionsEnabledCount", summary.enabled_count);
+  text("apiConnectionsAttentionCount", summary.attention_count);
+  text("apiConnectionsLatestCheck", latestCheck);
+  text("apiConnectionsRoutesNote", source === "live" ? "список собран из пакетов команд" : "демо");
+  text("apiConnectionsEnabledNote", "только признак разрешения");
+  text("apiConnectionsAttentionNote", "только внимание по маршрутам");
+  text("apiConnectionsLatestCheckNote", latestCheck === "Нет данных" ? "нет отдельной проверки маршрута" : "время последней отдельной проверки");
+  text(
+    "apiConnectionsRegistryStatus",
+    `Контур: ${safeSnapshot.adapter.foundation_phase} · models source: ${safeSnapshot.adapter.models_source}`
+  );
+  text("apiConnectionsVisibleCount", `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
+  text("apiConnectionsPagination", `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
+  renderApiConnectionRows(safeSnapshot.routes);
+
+  const sidebarDot = document.getElementById("sidebarDot");
+  setClassName(sidebarDot, "dot", visualState);
+  text("sidebarStatus", summary.human_message || "API-подключения только для чтения");
+}
+
+function renderApiConnectionRows(routes) {
+  const body = document.getElementById("apiConnectionsTableBody");
+  body.replaceChildren();
+  if (!routes.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 7;
+    cell.className = "dash";
+    cell.textContent = "API-подключения пока не настроены. Добавление маршрутов будет подключено отдельным безопасным контуром.";
+    row.append(cell);
+    body.append(row);
+    return;
+  }
+  for (const route of routes.slice(0, 12)) {
+    const row = document.createElement("tr");
+    row.append(
+      td("", routeIdentity(route)),
+      td("", route.provider || "—"),
+      td("", route.upstream_model || "—"),
+      td("", routeStatusChip(route)),
+      td("", route.role_label || "Нет данных"),
+      td("right mono-value", route.last_checked || "—"),
+      td("", route.note || "—")
+    );
+    body.append(row);
+  }
+}
+
+function routeIdentity(route) {
+  const wrap = document.createElement("div");
+  const main = document.createElement("div");
+  main.className = "account-main";
+  main.textContent = route.display_name || route.route_id || "unknown-route";
+  const sub = document.createElement("div");
+  sub.className = "account-sub";
+  sub.textContent = route.route_id || "route-id unavailable";
+  wrap.append(main, sub);
+  return wrap;
+}
+
+function routeStatusChip(route) {
+  const chip = document.createElement("span");
+  const visual = ACCOUNT_VISUAL_CLASS[route.visual_state] || "neutral";
+  chip.className = `chip ${visual}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const label = document.createElement("span");
+  label.textContent = route.status_label || "Нет данных";
+  chip.append(dot, label);
+  return chip;
 }
 
 function renderAccountRows(accounts) {
@@ -1201,6 +1474,8 @@ async function setFixtureState(stateId, updateUrl = false) {
   }
   if (currentScreen() === "accounts") {
     renderAccountsSnapshot(accountsFixtureFromOverview(fixture));
+  } else if (currentScreen() === "api-connections") {
+    renderApiConnectionsSnapshot(apiConnectionsFixtureFromOverview(fixture));
   } else {
     renderSnapshot(fixture);
   }
@@ -1210,7 +1485,7 @@ async function setLiveReadonly(updateUrl = false) {
   setSourceCopy("live");
   const snapshot = currentScreen() === "accounts"
     ? await loadAccountsReadonly()
-    : await loadLiveReadonly();
+    : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly());
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("source", "live");
@@ -1218,6 +1493,8 @@ async function setLiveReadonly(updateUrl = false) {
   }
   if (currentScreen() === "accounts") {
     renderAccountsSnapshot(snapshot);
+  } else if (currentScreen() === "api-connections") {
+    renderApiConnectionsSnapshot(snapshot);
   } else {
     renderSnapshot(snapshot);
   }

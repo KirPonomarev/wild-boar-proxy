@@ -18,6 +18,7 @@ from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
     UiShellError,
     build_account_pool_snapshot,
+    build_external_models_snapshot,
     build_runtime_snapshot,
 )
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
@@ -35,6 +36,11 @@ READONLY_COMMAND_IDS = (
 PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
+API_CONNECTIONS_READONLY_COMMAND_IDS = (
+    "external_models_status",
+    "external_models_models",
+    "external_models_routes_list",
+)
 ACCOUNT_ID_SAFE_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -343,6 +349,156 @@ def build_accounts_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     }
 
 
+def execute_external_command(runner: CommandRunner, *argv: str) -> dict[str, Any]:
+    try:
+        result = runner.run(*argv)
+        payload = result.payload
+    except (UiShellError, OSError, ValueError) as exc:
+        return {
+            "status": "integration_failure",
+            "ui_state": "integration_failure",
+            "machine_error_code": "UI_COMMAND_INTEGRATION_FAILURE",
+            "human_message": str(exc),
+            "exit_code": 1,
+            "changed_files": [],
+            "next_action": "retry",
+            "packet": {},
+        }
+
+    required = (
+        "status",
+        "exit_code",
+        "human_message",
+        "machine_error_code",
+        "changed_files",
+        "next_action",
+    )
+    if not isinstance(payload, dict) or any(key not in payload for key in required):
+        return {
+            "status": "integration_failure",
+            "ui_state": "integration_failure",
+            "machine_error_code": "UI_COMMAND_PACKET_INVALID",
+            "human_message": "Пакет команды external-models недействителен.",
+            "exit_code": 1,
+            "changed_files": [],
+            "next_action": "retry",
+            "packet": payload if isinstance(payload, dict) else {},
+        }
+
+    ok = (
+        payload.get("status") == "ok"
+        and payload.get("exit_code") == 0
+        and payload.get("machine_error_code") == "OK"
+    )
+    return {
+        "status": "ok" if ok else "command_error",
+        "ui_state": "success" if ok else "error",
+        "machine_error_code": payload["machine_error_code"],
+        "human_message": payload["human_message"],
+        "exit_code": payload["exit_code"],
+        "changed_files": payload["changed_files"] if isinstance(payload["changed_files"], list) else [],
+        "next_action": payload["next_action"],
+        "packet": payload,
+    }
+
+
+def build_api_connections_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
+    commands = {
+        "external_models_status": execute_external_command(
+            runner,
+            "external-models",
+            "status",
+            "--json",
+        ),
+        "external_models_models": execute_external_command(
+            runner,
+            "external-models",
+            "models",
+            "--json",
+        ),
+        "external_models_routes_list": execute_external_command(
+            runner,
+            "external-models",
+            "routes",
+            "list",
+            "--json",
+        ),
+    }
+    for command_id in API_CONNECTIONS_READONLY_COMMAND_IDS:
+        result = commands[command_id]
+        if result["status"] != "ok":
+            return _api_connections_integration_failure(
+                "Команда API-подключений только для чтения не выполнилась.",
+                str(result["human_message"]),
+                str(result["machine_error_code"]),
+                commands,
+            )
+
+    try:
+        external_models = build_external_models_snapshot(
+            status_payload=commands["external_models_status"]["packet"],
+            models_payload=commands["external_models_models"]["packet"],
+            routes_payload=commands["external_models_routes_list"]["packet"],
+        )
+    except UiShellError as exc:
+        return _api_connections_integration_failure(
+            "Проверка пакетов API-подключений только для чтения не прошла.",
+            str(exc),
+            "UI_API_CONNECTIONS_PACKET_INVALID",
+            commands,
+        )
+
+    rows = _api_connection_rows(external_models)
+    latest_check = max(
+        (str(row["last_checked"]) for row in rows if str(row["last_checked"])),
+        default="",
+    )
+    attention_count = sum(
+        1
+        for row in rows
+        if row["status_code"] in {"missing_secret", "integration_failure"}
+    )
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "source": "api_connections_readonly",
+        "primary_truth_ok": True,
+        "privacy": {
+            "redacted": True,
+            "raw_command_packet_included": False,
+            "forbidden_fields_excluded": [
+                "secret_references",
+                "tokens",
+                "raw_paths",
+                "raw_logs",
+            ],
+        },
+        "summary": {
+            "routes_count": external_models.routes_count,
+            "enabled_count": sum(1 for row in rows if row["enabled"]),
+            "attention_count": attention_count,
+            "latest_check": latest_check,
+            "human_message": "Список API-подключений собран из пакетов команд.",
+            "machine_error_code": "OK",
+            "last_error": external_models.integration_error,
+        },
+        "adapter": {
+            "foundation_phase": external_models.foundation_phase,
+            "adapter_runtime_available": external_models.adapter_runtime_available,
+            "lifecycle_mode": external_models.lifecycle_mode,
+            "adapter_state": external_models.adapter_state,
+            "listener_proven": external_models.listener_proven,
+            "runtime_claim_blocked": external_models.runtime_claim_blocked,
+            "profile_ready": external_models.profile_ready,
+            "local_token_present": external_models.local_token_present,
+            "observed_routes_count": external_models.observed_routes_count,
+            "models_source": external_models.models_source,
+        },
+        "routes": rows,
+        "commands": _public_command_results(commands),
+    }
+
+
 def run_ui_action(
     runner: CommandRunner,
     payload: dict[str, Any],
@@ -453,6 +609,9 @@ def build_handler(
                 return
             if parsed.path == "/api/accounts-readonly":
                 self._send_json(build_accounts_readonly_snapshot(command_runner))
+                return
+            if parsed.path == "/api/api-connections-readonly":
+                self._send_json(build_api_connections_readonly_snapshot(command_runner))
                 return
             if parsed.path == "/api/actions":
                 self._send_json(ui_action_metadata(launch_client_path=launch_client_path))
@@ -885,6 +1044,53 @@ def _accounts_integration_failure(
     }
 
 
+def _api_connections_integration_failure(
+    human_message: str,
+    last_error: str,
+    machine_error_code: str,
+    commands: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "api_connections_readonly",
+        "primary_truth_ok": False,
+        "privacy": {
+            "redacted": True,
+            "raw_command_packet_included": False,
+            "forbidden_fields_excluded": [
+                "secret_references",
+                "tokens",
+                "raw_paths",
+                "raw_logs",
+            ],
+        },
+        "summary": {
+            "routes_count": 0,
+            "enabled_count": 0,
+            "attention_count": 0,
+            "latest_check": "",
+            "human_message": human_message,
+            "machine_error_code": machine_error_code,
+            "last_error": last_error,
+        },
+        "adapter": {
+            "foundation_phase": "unknown",
+            "adapter_runtime_available": False,
+            "lifecycle_mode": "unknown",
+            "adapter_state": "unknown",
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "profile_ready": False,
+            "local_token_present": False,
+            "observed_routes_count": 0,
+            "models_source": "integration_failure",
+        },
+        "routes": [],
+        "commands": _public_command_results(commands),
+    }
+
+
 def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
         command_id: {
@@ -898,6 +1104,72 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
         }
         for command_id, result in commands.items()
     }
+
+
+def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for model in external_models.models:
+        status_code, status_label, visual_state, note = _api_connection_status(
+            model,
+            local_token_present=external_models.local_token_present,
+        )
+        rows.append(
+            {
+                "route_id": _safe_short_text(model.route_id, max_length=64),
+                "display_name": _safe_short_text(model.display_name, max_length=72),
+                "provider": _safe_short_text(model.provider, max_length=32),
+                "upstream_model": _safe_short_text(model.upstream_model, max_length=72),
+                "enabled": model.enabled,
+                "status_code": status_code,
+                "status_label": status_label,
+                "visual_state": visual_state,
+                "role_label": _api_connection_role_label(
+                    lane_role=model.lane_role,
+                    fallback_eligible=model.fallback_eligible,
+                ),
+                "last_checked": "",
+                "note": note,
+            }
+        )
+    return rows
+
+
+def _api_connection_status(
+    model: Any,
+    *,
+    local_token_present: bool,
+) -> tuple[str, str, str, str]:
+    if not model.enabled:
+        return (
+            "disabled",
+            "Отключён",
+            "neutral",
+            "Маршрут отключён в registry-пакете.",
+        )
+    if not local_token_present:
+        return (
+            "missing_secret",
+            "Требует ключ",
+            "amber",
+            "Локальный ключ не подтверждён; маршрут нельзя считать готовым к проверочному запросу.",
+        )
+    return (
+        "enabled",
+        "Разрешён",
+        "blue",
+        "Маршрут показан по registry-пакету. Отдельная проверка запроса ещё не выполнялась.",
+    )
+
+
+def _api_connection_role_label(*, lane_role: str, fallback_eligible: bool) -> str:
+    safe_role = _safe_short_text(lane_role, max_length=32) or "не указана"
+    if fallback_eligible:
+        return "Допустим для резерва"
+    return {
+        "candidate": "Кандидат",
+        "verification": "Маршрут проверки",
+        "diagnostic": "Маршрут проверки",
+    }.get(safe_role, safe_role)
 
 
 def _account_rows(accounts: tuple[Any, ...], packet: dict[str, Any]) -> list[dict[str, Any]]:

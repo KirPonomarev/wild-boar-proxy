@@ -41,6 +41,15 @@
             </svg>
             <span>Аккаунты</span>
           </a>
+          <a id="apiConnectionsNav" class="nav-item" href="?screen=api-connections" data-screen-link="api-connections">
+            <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M4 8h16"></path>
+              <path d="M4 16h16"></path>
+              <circle cx="8" cy="8" r="2"></circle>
+              <circle cx="16" cy="16" r="2"></circle>
+            </svg>
+            <span>API-подключения</span>
+          </a>
           <a id="diagnosticsNav" class="nav-item" href="?screen=diagnostics" data-screen-link="diagnostics">
             <svg class="ui-icon nav-icon" aria-hidden="true" viewBox="0 0 24 24">
               <path d="M4 13h3l3-7 5 13 2-6h3"></path>
@@ -344,6 +353,80 @@
             <div class="pagination">
               <span id="accountsPagination">Строки 0-0 из 0</span>
               <span>канонический JSON · lifecycle через gate</span>
+            </div>
+          </section>
+        </section>
+
+        <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" hidden>
+          <div id="apiConnectionsBanner" class="fixture-banner neutral">
+            API-подключения показываются только в режиме чтения. Источник правды остаётся за пакетами команд.
+          </div>
+
+          <div class="grid api-connections-summary" aria-label="Сводка API-подключений">
+            <section class="card kpi-card blue">
+              <div class="kpi-head">Маршрутов</div>
+              <div>
+                <div class="kpi-line"><span id="apiConnectionsRoutesCount" class="kpi-number">0</span><span class="kpi-note">в списке</span></div>
+                <div id="apiConnectionsRoutesNote" class="kpi-note">демо</div>
+              </div>
+            </section>
+            <section class="card kpi-card green">
+              <div class="kpi-head">Разрешены</div>
+              <div>
+                <div class="kpi-line"><span id="apiConnectionsEnabledCount" class="kpi-number">0</span><span class="kpi-note">маршрутов</span></div>
+                <div id="apiConnectionsEnabledNote" class="kpi-note">демо</div>
+              </div>
+            </section>
+            <section class="card kpi-card amber">
+              <div class="kpi-head">Требуют внимания</div>
+              <div>
+                <div class="kpi-line"><span id="apiConnectionsAttentionCount" class="kpi-number">0</span><span class="kpi-note">маршрутов</span></div>
+                <div id="apiConnectionsAttentionNote" class="kpi-note">демо</div>
+              </div>
+            </section>
+            <section class="card kpi-card">
+              <div class="kpi-head">Последняя проверка</div>
+              <div>
+                <div class="kpi-line"><span id="apiConnectionsLatestCheck" class="kpi-number api-kpi-copy">-</span></div>
+                <div id="apiConnectionsLatestCheckNote" class="kpi-note">нет отдельной проверки маршрута</div>
+              </div>
+            </section>
+          </div>
+
+          <section class="card table-card api-connections-table-card">
+            <div class="table-top">
+              <div>
+                <div class="card-title">Маршруты API-подключений</div>
+                <div id="apiConnectionsRegistryStatus" class="secondary">список собран из пакетов команд</div>
+              </div>
+              <div id="apiConnectionsVisibleCount" class="secondary">Показано 0 из 0</div>
+            </div>
+            <table class="table api-connections-table">
+              <colgroup>
+                <col style="width:260px">
+                <col style="width:140px">
+                <col style="width:240px">
+                <col style="width:150px">
+                <col style="width:170px">
+                <col style="width:150px">
+                <col>
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Название</th>
+                  <th>Провайдер</th>
+                  <th>Модель</th>
+                  <th>Статус</th>
+                  <th>Роль маршрута</th>
+                  <th class="right">Последняя проверка</th>
+                  <th>Примечание</th>
+                </tr>
+              </thead>
+              <tbody id="apiConnectionsTableBody"></tbody>
+            </table>
+            <div class="pagination">
+              <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
+              <span>только чтение · без действий с маршрутами</span>
             </div>
           </section>
         </section>

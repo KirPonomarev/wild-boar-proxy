@@ -15,7 +15,9 @@ from wild_boar_proxy.ui_shell import CommandResult
 from wild_boar_proxy.web_design_command_adapter import ALLOWLIST
 from wild_boar_proxy.web_design_live_server import (
     ACCOUNTS_READONLY_COMMAND_IDS,
+    API_CONNECTIONS_READONLY_COMMAND_IDS,
     READONLY_COMMAND_IDS,
+    build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
     build_handler,
     build_live_readonly_snapshot,
@@ -350,6 +352,54 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["summary"]["machine_error_code"], "UI_ACCOUNTS_READONLY_PACKET_INVALID")
         self.assertEqual(snapshot["accounts"], [])
 
+    def test_api_connections_readonly_calls_only_external_packets_and_redacts_secret_refs(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        snapshot = build_api_connections_readonly_snapshot(runner)
+
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+        self.assertEqual(tuple(snapshot["commands"]), API_CONNECTIONS_READONLY_COMMAND_IDS)
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["source"], "api_connections_readonly")
+        self.assertTrue(snapshot["privacy"]["redacted"])
+        self.assertFalse(snapshot["privacy"]["raw_command_packet_included"])
+        self.assertEqual(snapshot["summary"]["routes_count"], 1)
+        self.assertEqual(snapshot["summary"]["enabled_count"], 1)
+        self.assertEqual(snapshot["summary"]["attention_count"], 1)
+        self.assertEqual(snapshot["routes"][0]["status_label"], "Требует ключ")
+        serialized = json.dumps(snapshot)
+        self.assertNotIn("OPENROUTER_API_KEY", serialized)
+        self.assertNotIn('"secret_ref"', serialized)
+        self.assertNotIn("/Users/", serialized)
+
+    def test_api_connections_readonly_invalid_packet_becomes_integration_failure(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External models malformed.",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": "not-a-list",
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_api_connections_readonly_snapshot(runner)
+
+        self.assertEqual(snapshot["status"], "integration_failure")
+        self.assertEqual(snapshot["source"], "api_connections_readonly")
+        self.assertEqual(snapshot["summary"]["machine_error_code"], "UI_API_CONNECTIONS_PACKET_INVALID")
+        self.assertEqual(snapshot["routes"], [])
+
     def test_http_server_serves_static_index_and_readonly_api(self) -> None:
         runner = MappingRunner(live_payloads())
         server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
@@ -360,6 +410,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             index = fetch(f"{base_url}/?source=live")
             api = json.loads(fetch(f"{base_url}/api/live-readonly?command_id=sync"))
             accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly?command_id=sync"))
+            api_connections = json.loads(fetch(f"{base_url}/api/api-connections-readonly?command_id=sync"))
         finally:
             server.shutdown()
             server.server_close()
@@ -369,6 +420,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(api["status"], "ok")
         self.assertEqual(accounts["status"], "ok")
         self.assertEqual(accounts["source"], "accounts_readonly")
+        self.assertEqual(api_connections["status"], "ok")
+        self.assertEqual(api_connections["source"], "api_connections_readonly")
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
@@ -1321,6 +1374,94 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ),
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."
+        ),
+        ("external-models", "status", "--json"): command_packet(
+            human_message="External-models synthetic lifecycle status collected without live runtime claims.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "foundation_phase": "C3",
+                "adapter_runtime_available": False,
+                "lifecycle_mode": "synthetic",
+                "adapter_state": "stopped",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "routes_count": 1,
+                "observed_routes_count": 0,
+                "adapter": {
+                    "state": "stopped",
+                    "lifecycle_mode": "synthetic",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "base_url": None,
+                    "host": "127.0.0.1",
+                    "port": None,
+                    "started_at_utc": None,
+                    "last_transition": "init",
+                },
+                "local_auth": {
+                    "token_ref": "managed_local_token",
+                    "token_present": False,
+                    "token_created_at_utc": None,
+                },
+            },
+        ),
+        ("external-models", "models", "--json"): command_packet(
+            human_message="External-models route models listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "openrouter",
+                        "base_url": "http://127.0.0.1:54321/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek/deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        ),
+        ("external-models", "routes", "list", "--json"): command_packet(
+            human_message="External-models routes listed from local registry.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "openrouter",
+                        "base_url": "http://127.0.0.1:54321/v1",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek/deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                    }
+                ],
+            },
         ),
     }
 

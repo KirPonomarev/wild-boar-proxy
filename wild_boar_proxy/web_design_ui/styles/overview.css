@@ -294,6 +294,12 @@ h1 {
   max-width: 660px;
 }
 
+.secondary {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 .header-actions {
   align-items: center;
   display: flex;
@@ -795,6 +801,11 @@ button:disabled {
   margin-top: 24px;
 }
 
+.api-connections-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 24px;
+}
+
 .kpi-card {
   align-items: flex-start;
   display: flex;
@@ -822,6 +833,11 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   line-height: 32px;
+}
+
+.api-kpi-copy {
+  font-size: 18px;
+  line-height: 24px;
 }
 
 .kpi-note {
@@ -862,6 +878,10 @@ button:disabled {
   }
 
   .overview-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .api-connections-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -993,6 +1013,11 @@ button:disabled {
 }
 
 .accounts-table-card {
+  overflow-x: auto;
+  padding: 18px 20px 14px;
+}
+
+.api-connections-table-card {
   overflow-x: auto;
   padding: 18px 20px 14px;
 }

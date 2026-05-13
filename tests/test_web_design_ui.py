@@ -116,6 +116,8 @@ class WebDesignUiTests(unittest.TestCase):
             "accounts list --json",
             "rollout rotation inspect --json",
             "state.json",
+            "routes.json",
+            "secrets.env",
             "supervisor-state",
             ".codex-custom-cli",
             ".cli-proxy-api",
@@ -208,6 +210,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('<option value="live">live только чтение</option>', html)
         self.assertIn('fetch("api/live-readonly"', js)
         self.assertIn('fetch("api/accounts-readonly"', js)
+        self.assertIn('fetch("api/api-connections-readonly"', js)
         self.assertIn('fetch("api/actions"', js)
         self.assertIn('snapshot.source === "live_readonly"', js)
         self.assertIn('safeSnapshot.source === "accounts_readonly"', js)
@@ -224,6 +227,7 @@ class WebDesignUiTests(unittest.TestCase):
         nav = nav_match.group(1)
         self.assertIn('data-screen-link="overview"', nav)
         self.assertIn('data-screen-link="accounts"', nav)
+        self.assertIn('data-screen-link="api-connections"', nav)
         self.assertIn('data-screen-link="diagnostics"', nav)
         self.assertIn('data-screen-link="settings"', nav)
         self.assertNotIn('data-screen-link="setup"', nav)
@@ -258,6 +262,28 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("onboard_account", html + js)
         self.assertIn('id="accountAddAction" class="button primary accounts-only onboard-action"', html)
         self.assertIn('data-ui-action="onboard_account"', html)
+
+    def test_api_connections_screen_is_readonly_and_product_safe(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('data-screen-link="api-connections"', html)
+        self.assertIn('id="apiConnectionsScreen"', html)
+        self.assertIn('id="apiConnectionsTableBody"', html)
+        self.assertIn("renderApiConnectionsSnapshot", js)
+        self.assertIn("apiConnectionsFixtureFromOverview", js)
+        self.assertIn("loadApiConnectionsReadonly", js)
+
+        api_screen = self._section_html(html, "apiConnectionsScreen")
+        self.assertIn("API-подключения пока не настроены", js)
+        self.assertIn("Разрешён", api_screen + js)
+        self.assertIn("Отключён", api_screen + js)
+        self.assertNotIn('data-ui-action=', api_screen)
+        self.assertNotIn("Вкл", api_screen + js)
+        self.assertNotIn("Сделать активным", api_screen + js)
+        self.assertNotIn("Основной", api_screen + js)
+        self.assertNotIn("Непрерывный поток", api_screen + js)
+        self.assertNotIn("Сетка", api_screen + js)
         self.assertIn('id="onboardOverlay"', html)
         self.assertIn('id="runOnboardAction"', html)
         self.assertIn('id="actionOnboardingOutcome"', html)
@@ -311,7 +337,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("Просмотр артефакта отложен", html)
         self.assertIn("Сырой текст диагностики недоступен", html)
         self.assertIn(
-            'const SCREENS = ["overview", "accounts", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            'const SCREENS = ["overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
         )
         self.assertIn("renderDiagnosticsAction", js)
