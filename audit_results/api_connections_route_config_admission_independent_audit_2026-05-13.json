@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_CONFIG_ADMISSION",
+  "date": "2026-05-13",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Chandrasekhar",
+      "role": "backend fact checker",
+      "finding": "create and update require full route objects and should be deferred pending secret/reference contract; remove requires disabled route precondition"
+    },
+    {
+      "agent": "Hubble",
+      "role": "canon/admission auditor",
+      "finding": "route config mutation is high risk and must not become generic UI config editing"
+    },
+    {
+      "agent": "Codex local verification",
+      "role": "repo evidence reconciliation",
+      "finding": "later API Connections contours already admitted safe strict UI actions, so a narrow remove-only future action can be admitted without admitting route editor behavior"
+    },
+    {
+      "agent": "Singer",
+      "role": "post-artifact independent auditor",
+      "finding": "admission logic passed, but the first closeout draft was blocked because it used pending commit/push wording; closeout wording was corrected before commit"
+    }
+  ],
+  "evidence": [
+    {
+      "source": "wild_boar_proxy/cli.py",
+      "fact": "routes add/update accept --file or --stdin; routes remove accepts --route"
+    },
+    {
+      "source": "wild_boar_proxy/external_models/routes.py",
+      "fact": "add/update validate full route schema; authenticated routes require auth.secret_ref"
+    },
+    {
+      "source": "wild_boar_proxy/external_models/routes.py",
+      "fact": "remove requires route.enabled=false and may change registry and observed route state files"
+    },
+    {
+      "source": "audit_results/api_connections_admission_2026-05-13.md",
+      "fact": "route add/update/remove were deferred before this dedicated admission review"
+    },
+    {
+      "source": "audit_results/api_connections_route_availability_gate_closeout_2026-05-13.md",
+      "fact": "safe route allow/disable actions were admitted through strict server-side UI actions"
+    }
+  ],
+  "checks": [
+    {
+      "check": "browser payload minimality",
+      "verdict": "PASS",
+      "reason": "future remove payload is limited to ui_action and route_id"
+    },
+    {
+      "check": "raw config editing avoided",
+      "verdict": "PASS",
+      "reason": "create/update are deferred; remove does not accept route object data"
+    },
+    {
+      "check": "secret handling",
+      "verdict": "PASS",
+      "reason": "no credential entry or secret value display is admitted"
+    },
+    {
+      "check": "layer boundary",
+      "verdict": "PASS",
+      "reason": "UI may call only server allowlisted command action in a future implementation contour"
+    },
+    {
+      "check": "implementation leakage",
+      "verdict": "PASS",
+      "reason": "this contour changes admission artifacts only"
+    },
+    {
+      "check": "copy overclaim",
+      "verdict": "PASS",
+      "reason": "remove copy is limited to disabled registry entry removal"
+    },
+    {
+      "check": "identity preservation",
+      "verdict": "PASS",
+      "reason": "external references are restricted to interaction patterns only"
+    },
+    {
+      "check": "post-artifact independent audit",
+      "verdict": "PASS_AFTER_CLOSEOUT_WORDING_FIX",
+      "reason": "auditor confirmed remove-only admission and create/update deferral; blocked only the initial pending closeout wording"
+    }
+  ],
+  "blocking_conditions_for_future_implementation": [
+    "browser payload includes raw route object data",
+    "browser payload includes file path or stdin contents",
+    "browser payload includes credential or secret value",
+    "server preflight does not prove route exists and is disabled",
+    "UI code reads route, state, secret, or evidence files directly",
+    "copy claims anything beyond disabled registry entry removal"
+  ],
+  "final_audit_verdict": "PASS_FOR_SPEC_ONLY_REMOVE_ONLY_ADMISSION"
+}
