@@ -148,6 +148,16 @@ const CONFIRMATION_POLICY = {
     severity: "high",
     policy: "api-route-check",
     warning: "Это отправляет проверочный запрос через маршрут. Это не утверждение готовности runtime."
+  },
+  api_route_allow: {
+    severity: "high",
+    policy: "api-route-allow",
+    warning: "Это запрашивает разрешение маршрута. Подтверждением остаётся ответ сервера плюс обновлённый JSON."
+  },
+  api_route_disable: {
+    severity: "high",
+    policy: "api-route-disable",
+    warning: "Это запрашивает отключение маршрута. Подтверждением остаётся ответ сервера плюс обновлённый JSON."
   }
 };
 
@@ -499,14 +509,22 @@ function applyActionAvailability() {
     );
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
     const routeEnabled = button.dataset.routeEnabled !== "false";
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeEnabled;
+    const routeStateRequirement = button.dataset.routeStateRequirement || "any";
+    const routeStateAllowed = routeStateRequirement === "disabled"
+      ? !routeEnabled
+      : (routeStateRequirement === "enabled" ? routeEnabled : true);
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed;
     button.disabled = !available;
     button.dataset.available = available ? "true" : "false";
     button.title = available
       ? ""
       : (
-        !routeEnabled
-          ? "Маршрут отключён. Проверки доступны только для разрешённых маршрутов."
+        !routeStateAllowed
+          ? (
+            routeStateRequirement === "disabled"
+              ? "Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов."
+              : "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+          )
           : (
             requiresLive && !isLiveSource
               ? "Переключите экран на live-источник перед выполнением действий."
@@ -1309,6 +1327,8 @@ function routeActionButtons(route) {
   const group = document.createElement("div");
   group.className = "account-action-group";
   group.append(
+    routeActionButton(route, "api_route_allow", "Разрешить маршрут"),
+    routeActionButton(route, "api_route_disable", "Отключить маршрут"),
     routeActionButton(route, "api_route_validate", "Проверить"),
     routeActionButton(route, "api_route_check", "Проверить запросом")
   );
@@ -1322,10 +1342,15 @@ function routeActionButton(route, uiAction, label) {
   button.dataset.uiAction = uiAction;
   button.dataset.routeId = route.route_id || "";
   button.dataset.routeEnabled = route.enabled === true ? "true" : "false";
+  button.dataset.routeStateRequirement = uiAction === "api_route_allow" ? "disabled" : "enabled";
   button.textContent = label;
-  button.title = uiAction === "api_route_check"
-    ? "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime."
-    : "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime.";
+  const routeActionTitles = {
+    api_route_allow: "Разрешить выбранный маршрут. Это не утверждение готовности runtime.",
+    api_route_disable: "Отключить выбранный маршрут. Это не утверждение готовности runtime.",
+    api_route_check: "Проверочный запрос к провайдеру для выбранного маршрута. Это не утверждение готовности runtime.",
+    api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение готовности runtime."
+  };
+  button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
   button.addEventListener("click", () => {
     maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId });
   });

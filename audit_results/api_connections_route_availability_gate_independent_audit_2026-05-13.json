@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "contour": "API_CONNECTIONS_ROUTE_AVAILABILITY_GATE",
+  "audit_date": "2026-05-13",
+  "verdict": "pass",
+  "facts": [
+    {
+      "claim": "web command adapter allowlists route enable and disable with structured route_id only",
+      "evidence": [
+        "wild_boar_proxy/web_design_command_adapter.py: external_models_routes_enable",
+        "wild_boar_proxy/web_design_command_adapter.py: external_models_routes_disable",
+        "tests/test_web_design_command_adapter.py: exact argv and unsupported-arg coverage"
+      ],
+      "result": "pass"
+    },
+    {
+      "claim": "live server exposes api_route_allow and api_route_disable only through ui_action allowlist",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py: UI_ACTION_ALLOWLIST entries",
+        "tests/test_web_design_live_server.py: metadata assertions"
+      ],
+      "result": "pass"
+    },
+    {
+      "claim": "server-side preflight uses external-models routes list --json before lifecycle execution",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py: _api_route_action_args",
+        "tests/test_web_design_live_server.py: expected call order includes routes list before enable/disable"
+      ],
+      "result": "pass"
+    },
+    {
+      "claim": "ineligible route states are blocked before execution",
+      "evidence": [
+        "api_route_allow is blocked when route.enabled is true",
+        "api_route_disable, api_route_validate, and api_route_check are blocked when route.enabled is not true",
+        "tests/test_web_design_live_server.py: reject_bad_targets_without_execution"
+      ],
+      "result": "pass"
+    },
+    {
+      "claim": "UI copy avoids runtime readiness and primary/failover overclaim",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/scripts/overview.js: lifecycle wording and explicit non-runtime-readiness caveats",
+        "copy scan found no exact prohibited strings in API UI files"
+      ],
+      "result": "pass"
+    },
+    {
+      "claim": "scope excludes runtime.py and external_lab artifacts",
+      "evidence": [
+        "changed files do not include runtime.py",
+        "untracked external_lab artifacts remain unmodified and unstaged"
+      ],
+      "result": "pass"
+    }
+  ],
+  "verification": [
+    "python3 -m unittest tests.test_web_design_command_adapter",
+    "python3 -m unittest tests.test_web_design_live_server",
+    "python3 -m unittest tests.test_web_design_ui",
+    "python3 -m unittest tests.test_web_ui tests.test_cli_external_models tests.test_external_models",
+    "browser smoke: http://127.0.0.1:8765/?source=fixture&screen=api-connections rendered allow/disable buttons with zero console errors",
+    "git diff --check",
+    "changed-file external reference trace scan",
+    "API UI prohibited overclaim copy scan"
+  ],
+  "residual_risk": [
+    "No live provider mutation was executed outside test fixtures; lifecycle behavior is verified through command wiring and existing CLI command tests."
+  ]
+}

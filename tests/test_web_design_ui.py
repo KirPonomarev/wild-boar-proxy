@@ -275,6 +275,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("loadApiConnectionsReadonly", js)
         self.assertIn("api_route_validate", js)
         self.assertIn("api_route_check", js)
+        self.assertIn("api_route_allow", js)
+        self.assertIn("api_route_disable", js)
         self.assertIn("routeActionButtons", js)
         self.assertIn("routeActionButton", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
@@ -306,7 +308,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("active routing", html)
         self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
-        self.assertIn("Маршрут отключён. Проверки доступны только для разрешённых маршрутов.", js)
+        self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
+        self.assertIn("Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов.", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
@@ -674,12 +677,16 @@ if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRef
             "retire_account",
             "api_route_validate",
             "api_route_check",
+            "api_route_allow",
+            "api_route_disable",
         ]:
             self.assertIn(f"{ui_action}:", js)
 
         self.assertIn("terminal-account-lifecycle", js)
         self.assertIn("api-route-validate", js)
         self.assertIn("api-route-check", js)
+        self.assertIn("api-route-allow", js)
+        self.assertIn("api-route-disable", js)
         self.assertIn("metadata-fallback", js)
         self.assertIn("однократная отправка", js)
         self.assertIn("доказательство ёмкости", js)
@@ -718,13 +725,25 @@ function makeClassList(classes) {
 const settingsLaunchAvailability = { textContent: "" };
 const desktop = { dataset: { source: "fixture", screen: "api-connections" } };
 const enabledButton = {
-  dataset: { uiAction: "api_route_validate", routeEnabled: "true", routeId: "wbp-deepseek-v3" },
+  dataset: { uiAction: "api_route_validate", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "enabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const disabledRouteButton = {
-  dataset: { uiAction: "api_route_check", routeEnabled: "false", routeId: "wbp-disabled" },
+  dataset: { uiAction: "api_route_check", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "enabled" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
+const allowDisabledRouteButton = {
+  dataset: { uiAction: "api_route_allow", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
+  classList: makeClassList(["api-route-action"]),
+  disabled: false,
+  title: ""
+};
+const allowEnabledRouteButton = {
+  dataset: { uiAction: "api_route_allow", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
@@ -743,7 +762,7 @@ const sandbox = {
     addEventListener() {},
     querySelectorAll(selector) {
       if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
-        return [enabledButton, disabledRouteButton];
+        return [enabledButton, disabledRouteButton, allowDisabledRouteButton, allowEnabledRouteButton];
       }
       return [];
     },
@@ -769,6 +788,7 @@ vm.runInContext(`
 actionMetadata = {
   api_route_validate: { available: true, unavailable_reason: "", ui_action: "api_route_validate" },
   api_route_check: { available: true, unavailable_reason: "", ui_action: "api_route_check" },
+  api_route_allow: { available: true, unavailable_reason: "", ui_action: "api_route_allow" },
   launch_client_dispatch: { available: false, unavailable_reason: "server-owned path недоступен", ui_action: "launch_client_dispatch" }
 };
 `, sandbox);
@@ -786,6 +806,12 @@ if (enabledButton.disabled) {
 }
 if (!disabledRouteButton.disabled || !disabledRouteButton.title.includes("Маршрут отключён")) {
   throw new Error(`disabled route should stay blocked: ${JSON.stringify(disabledRouteButton)}`);
+}
+if (allowDisabledRouteButton.disabled) {
+  throw new Error(`allow should be available for disabled route in live source: ${JSON.stringify(allowDisabledRouteButton)}`);
+}
+if (!allowEnabledRouteButton.disabled || !allowEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
+  throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
 }
 if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);

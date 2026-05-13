@@ -129,6 +129,32 @@ def account(
     return payload
 
 
+def routes_list_packet(route_id: str = "wbp-deepseek-v3", *, enabled: bool = True) -> dict[str, object]:
+    return command_packet(
+        human_message="External-models routes listed from local registry.",
+        data={
+            "count": 1,
+            "routes": [
+                {
+                    "schema_version": 1,
+                    "route_id": route_id,
+                    "display_name": "DeepSeek V3",
+                    "provider": "openrouter",
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "endpoint_path": "/chat/completions",
+                    "upstream_model": "deepseek/deepseek-chat",
+                    "compatibility": "openai_chat_completions",
+                    "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                    "cost_class": "paid_or_free_limited",
+                    "lane_role": "candidate",
+                    "fallback_eligible": False,
+                    "enabled": enabled,
+                }
+            ],
+        },
+    )
+
+
 class MappingRunner:
     def __init__(self, payloads: dict[tuple[str, ...], dict[str, object]]) -> None:
         self.payloads = payloads
@@ -538,6 +564,28 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertTrue(metadata["actions"]["api_route_check"]["post_action_refresh_required"])
         self.assertIn("runtime readiness", metadata["actions"]["api_route_check"]["action_claim_scope"])
+        self.assertIn("api_route_allow", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_allow"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_allow"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_allow"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["api_route_allow"]["action_role"], "api_route_lifecycle_allow")
+        self.assertEqual(
+            metadata["actions"]["api_route_allow"]["mutation_class"],
+            "api_route_lifecycle",
+        )
+        self.assertTrue(metadata["actions"]["api_route_allow"]["post_action_refresh_required"])
+        self.assertIn("runtime readiness", metadata["actions"]["api_route_allow"]["action_claim_scope"])
+        self.assertIn("api_route_disable", metadata["actions"])
+        self.assertTrue(metadata["actions"]["api_route_disable"]["confirmation_required"])
+        self.assertFalse(metadata["actions"]["api_route_disable"]["mutates_runtime"])
+        self.assertFalse(metadata["actions"]["api_route_disable"]["affects_primary_truth"])
+        self.assertEqual(metadata["actions"]["api_route_disable"]["action_role"], "api_route_lifecycle_disable")
+        self.assertEqual(
+            metadata["actions"]["api_route_disable"]["mutation_class"],
+            "api_route_lifecycle",
+        )
+        self.assertTrue(metadata["actions"]["api_route_disable"]["post_action_refresh_required"])
+        self.assertIn("runtime readiness", metadata["actions"]["api_route_disable"]["action_claim_scope"])
         self.assertIn("launch_client_dispatch", metadata["actions"])
         self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
@@ -758,6 +806,20 @@ class WebDesignLiveServerTests(unittest.TestCase):
     def test_api_route_actions_preflight_route_and_execute_exact_commands(self) -> None:
         validate_runner = MappingRunner(live_payloads())
         check_runner = MappingRunner(live_payloads())
+        allow_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("external-models", "routes", "list", "--json"): routes_list_packet(
+                    "wbp-disabled",
+                    enabled=False,
+                ),
+                ("external-models", "routes", "enable", "--route", "wbp-disabled", "--json"): command_packet(
+                    human_message="External-models route enabled: wbp-disabled.",
+                    data={"route_id": "wbp-disabled", "enabled": True},
+                ),
+            }
+        )
+        disable_runner = MappingRunner(live_payloads())
 
         validate = run_ui_action(
             validate_runner,
@@ -766,6 +828,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         check = run_ui_action(
             check_runner,
             {"ui_action": "api_route_check", "route_id": "wbp-deepseek-v3"},
+        )
+        allow = run_ui_action(
+            allow_runner,
+            {"ui_action": "api_route_allow", "route_id": "wbp-disabled"},
+        )
+        disable = run_ui_action(
+            disable_runner,
+            {"ui_action": "api_route_disable", "route_id": "wbp-deepseek-v3"},
         )
 
         self.assertEqual(validate["status"], "ok")
@@ -798,6 +868,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
             ],
         )
+        self.assertEqual(allow["status"], "ok")
+        self.assertEqual(allow["action_role"], "api_route_lifecycle_allow")
+        self.assertEqual(allow["mutation_class"], "api_route_lifecycle")
+        self.assertFalse(allow["mutates_runtime"])
+        self.assertFalse(allow["affects_primary_truth"])
+        self.assertTrue(allow["confirmation_required"])
+        self.assertTrue(allow["post_action_refresh_required"])
+        self.assertEqual(allow["route_id"], "wbp-disabled")
+        self.assertEqual(
+            allow_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "enable", "--route", "wbp-disabled", "--json"),
+            ],
+        )
+        self.assertEqual(disable["status"], "ok")
+        self.assertEqual(disable["action_role"], "api_route_lifecycle_disable")
+        self.assertEqual(disable["mutation_class"], "api_route_lifecycle")
+        self.assertFalse(disable["mutates_runtime"])
+        self.assertFalse(disable["affects_primary_truth"])
+        self.assertTrue(disable["confirmation_required"])
+        self.assertTrue(disable["post_action_refresh_required"])
+        self.assertEqual(disable["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(
+            disable_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
 
     def test_api_route_actions_reject_bad_targets_without_execution(self) -> None:
         missing_runner = MappingRunner(live_payloads())
@@ -806,31 +906,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         disabled_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("external-models", "routes", "list", "--json"): command_packet(
-                    human_message="External-models routes listed from local registry.",
-                    data={
-                        "count": 1,
-                        "routes": [
-                            {
-                                "schema_version": 1,
-                                "route_id": "wbp-disabled",
-                                "display_name": "Disabled route",
-                                "provider": "openrouter",
-                                "base_url": "http://127.0.0.1:54321/v1",
-                                "endpoint_path": "/chat/completions",
-                                "upstream_model": "deepseek/deepseek-chat",
-                                "compatibility": "openai_chat_completions",
-                                "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
-                                "cost_class": "paid_or_free_limited",
-                                "lane_role": "candidate",
-                                "fallback_eligible": False,
-                                "enabled": False,
-                            }
-                        ],
-                    },
+                ("external-models", "routes", "list", "--json"): routes_list_packet(
+                    "wbp-disabled",
+                    enabled=False,
                 ),
             }
         )
+        allow_enabled_runner = MappingRunner(live_payloads())
         malformed_runner = MappingRunner(
             {
                 **live_payloads(),
@@ -855,6 +937,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             disabled_runner,
             {"ui_action": "api_route_check", "route_id": "wbp-disabled"},
         )
+        allow_enabled = run_ui_action(
+            allow_enabled_runner,
+            {"ui_action": "api_route_allow", "route_id": "wbp-deepseek-v3"},
+        )
+        disable_disabled = run_ui_action(
+            disabled_runner,
+            {"ui_action": "api_route_disable", "route_id": "wbp-disabled"},
+        )
         malformed = run_ui_action(
             malformed_runner,
             {"ui_action": "api_route_validate", "route_id": "wbp-deepseek-v3"},
@@ -876,6 +966,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "UI_API_ROUTE_DISABLED_INELIGIBLE",
         )
         self.assertEqual(
+            allow_enabled["result"]["machine_error_code"],
+            "UI_API_ROUTE_ALLOW_INELIGIBLE",
+        )
+        self.assertEqual(
+            disable_disabled["result"]["machine_error_code"],
+            "UI_API_ROUTE_DISABLED_INELIGIBLE",
+        )
+        self.assertEqual(
             malformed["result"]["machine_error_code"],
             "UI_API_ROUTE_VALIDATE_ROUTE_LIST_INVALID",
         )
@@ -888,6 +986,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(
             disabled_runner.calls,
+            [
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+        self.assertEqual(
+            allow_enabled_runner.calls,
             [("external-models", "routes", "list", "--json")],
         )
         self.assertEqual(
@@ -900,6 +1005,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             unsafe_runner.calls,
             unknown_runner.calls,
             disabled_runner.calls,
+            allow_enabled_runner.calls,
             malformed_runner.calls,
             extra_runner.calls,
         ]:
@@ -909,6 +1015,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             self.assertNotIn(
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                calls,
+            )
+            self.assertNotIn(
+                ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
+                calls,
+            )
+            self.assertNotIn(
+                ("external-models", "routes", "disable", "--route", "wbp-disabled", "--json"),
                 calls,
             )
 
@@ -1659,6 +1773,13 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
                 "effective_model": "deepseek/deepseek-chat",
                 "provider": "openrouter",
             },
+        ),
+        ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"): command_packet(
+            human_message="External-models route disabled: wbp-deepseek-v3.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={"route_id": "wbp-deepseek-v3", "enabled": False},
         ),
         ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"): command_packet(
             human_message="External-models route smoke check captured provider evidence without claiming runtime readiness.",

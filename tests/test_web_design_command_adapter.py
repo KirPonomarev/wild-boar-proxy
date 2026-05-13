@@ -75,6 +75,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "stable_repair_apply",
             "diagnostics_export",
             "external_models_routes_validate",
+            "external_models_routes_enable",
+            "external_models_routes_disable",
             "external_models_check",
             "launch_client",
         }
@@ -317,16 +319,30 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_check",
             structured_args={"route_id": "wbp-deepseek-v3"},
         )
+        enable = execute_command(
+            runner,
+            "external_models_routes_enable",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
+        disable = execute_command(
+            runner,
+            "external_models_routes_disable",
+            structured_args={"route_id": "wbp-deepseek-v3"},
+        )
 
         self.assertEqual(
             runner.calls,
             [
                 ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
                 ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "routes", "enable", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "routes", "disable", "--route", "wbp-deepseek-v3", "--json"),
             ],
         )
         self.assertEqual(validate["status"], "ok")
         self.assertEqual(check["status"], "ok")
+        self.assertEqual(enable["status"], "ok")
+        self.assertEqual(disable["status"], "ok")
 
     def test_external_models_route_checks_require_only_route_id(self) -> None:
         runner = RecordingRunner()
@@ -337,9 +353,14 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "external_models_check",
             structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes disable"},
         )
+        enable_extra = execute_command(
+            runner,
+            "external_models_routes_enable",
+            structured_args={"route_id": "wbp-deepseek-v3", "argv": "external-models routes add"},
+        )
         non_string = execute_command(
             runner,
-            "external_models_check",
+            "external_models_routes_disable",
             structured_args={"route_id": 123},  # type: ignore[dict-item]
         )
 
@@ -348,6 +369,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertIn("missing required args", missing["human_message"])
         self.assertEqual(extra["status"], "integration_failure")
         self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(enable_extra["status"], "integration_failure")
+        self.assertIn("unsupported args", enable_extra["human_message"])
         self.assertEqual(non_string["status"], "integration_failure")
         self.assertIn("non-string args", non_string["human_message"])
 
