@@ -288,6 +288,231 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('id="accountAddAction" class="button primary accounts-only onboard-action"', html)
         self.assertIn('data-ui-action="onboard_account"', html)
 
+    def test_account_detail_drawer_projects_accounts_snapshot_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        self.assertIn('id="accountDetailOverlay"', html)
+        self.assertIn('id="accountDetailDrawer"', html)
+        self.assertIn('id="accountDetailActions"', html)
+        self.assertIn("currentAccountsSnapshot", js)
+        self.assertIn("selectedAccountId", js)
+        self.assertIn("function openAccountDrawer", js)
+        self.assertIn("function renderAccountDetailDrawer", js)
+        self.assertIn("function renderMissingAccountDrawer", js)
+        self.assertIn("account_missing_after_refresh", html + js)
+        self.assertIn("Открыть drawer. Данные берутся только из текущего accounts JSON.", js)
+        self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
+        self.assertNotIn("localStorage", js)
+        self.assertNotIn("sessionStorage", js)
+        self.assertIn(".account-detail-drawer", css)
+        self.assertIn(".account-detail-action-group", css)
+
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      },
+      toggle: () => {}
+    };
+  }
+  append(...nodes) {
+    for (const node of nodes) {
+      if (node) {
+        node.parentNode = this;
+        this.children.push(node);
+        allNodes.push(node);
+        this.lastElementChild = node;
+      }
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  focus() {}
+  remove() {
+    if (!this.parentNode) {
+      return;
+    }
+    this.parentNode.children = this.parentNode.children.filter((child) => child !== this);
+  }
+  querySelector(selector) {
+    const className = selector.startsWith(".") ? selector.slice(1) : "";
+    return this.children.find((child) => child.classList?.contains(className)) || null;
+  }
+}
+
+const allNodes = [];
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+    allNodes.push(nodes[id]);
+  }
+  return nodes[id];
+}
+
+for (const id of [
+  "sourcePicker", "statePicker", "brandCaption", "refreshFixture", "accountsBanner",
+  "accountsActiveChip", "accountsReserveChip", "accountsHoldChip", "accountsProblemChip",
+  "accountsRegistryStatus", "accountsVisibleCount", "accountsPagination",
+  "accountsTableBody", "sidebarDot", "sidebarStatus", "sourceFooter", "subtitleText",
+  "diagnosticsFixtureChart", "diagnosticsFixtureRecords", "diagnosticsHistoryDeferred",
+  "diagnosticsRecordsDeferred", "diagnosticsHistoryModeChip", "diagnosticsRecordsModeChip",
+  "accountDetailOverlay", "accountDetailBackdrop", "accountDetailDrawer", "accountDetailClose",
+  "accountDetailMissing", "accountDetailTitle", "accountDetailSubtitle",
+  "accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip",
+  "accountDetailId", "accountDetailLabel", "accountDetailEnabled", "accountDetailSuccess",
+  "accountDetailFail", "accountDetailLastSuccess", "accountDetailCooldown",
+  "accountDetailError", "accountDetailNotes", "accountDetailActions", "settingsLaunchAvailability"
+]) {
+  node(id);
+}
+node("refreshFixture").lastElementChild = { textContent: "" };
+for (const id of ["accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip", "diagnosticsHistoryModeChip", "diagnosticsRecordsModeChip"]) {
+  node(id).lastElementChild = { textContent: "" };
+}
+node("accountDetailOverlay").hidden = true;
+
+const desktop = new Node();
+desktop.dataset = { screen: "accounts", source: "live" };
+allNodes.push(desktop);
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) {
+      const created = new Node(tag);
+      allNodes.push(created);
+      return created;
+    },
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector.includes(".account-action")) {
+        return allNodes.filter((item) => item.classList?.contains("account-action"));
+      }
+      return [];
+    }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=accounts&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.actionMetadata = {
+  validate_account: { available: true },
+  demote_account: { available: true },
+  hold_account: { available: true },
+  retire_account: { available: true }
+};
+
+const snapshot = {
+  schema_version: 1,
+  status: "ok",
+  source: "accounts_readonly",
+  registry_identity: { status: "ok", machine_error_code: "OK", next_action: "none" },
+  summary: {
+    active: 1,
+    reserve: 0,
+    retired: 0,
+    hold: 0,
+    problem: 0,
+    visible_count: 1,
+    human_message: "Accounts listed.",
+    machine_error_code: "OK"
+  },
+  accounts: [{
+    id: "backend-a",
+    label: "operator@example.com",
+    pool: "active",
+    pool_label: "Активные",
+    status: "healthy",
+    status_label: "Работает",
+    visual_state: "green",
+    manual_hold: false,
+    enabled: true,
+    fail_count: 0,
+    success_count: 3,
+    last_success: "Сегодня, 12:00",
+    last_error_summary: "",
+    cooldown_until: "",
+    notes_summary: "snapshot note"
+  }]
+};
+
+sandbox.renderAccountsSnapshot(snapshot);
+sandbox.openAccountDrawer("backend-a");
+if (node("accountDetailOverlay").hidden) {
+  throw new Error("drawer should open");
+}
+if (node("accountDetailId").textContent !== "backend-a") {
+  throw new Error(`drawer did not render selected account id: ${node("accountDetailId").textContent}`);
+}
+if (!node("accountDetailSubtitle").textContent.includes("ope***@***.com")) {
+  throw new Error(`drawer label was not redacted: ${node("accountDetailSubtitle").textContent}`);
+}
+const actionButtons = node("accountDetailActions").children.filter((child) => child.dataset?.accountId === "backend-a");
+if (!actionButtons.length || actionButtons.some((child) => child.dataset.uiAction === undefined)) {
+  throw new Error("drawer did not reuse bounded account action buttons");
+}
+
+sandbox.renderAccountsSnapshot({ ...snapshot, accounts: [], summary: { ...snapshot.summary, visible_count: 0 } });
+if (node("accountDetailMissing").hidden) {
+  throw new Error("missing account state should be visible after refresh");
+}
+if (node("accountDetailLabel").textContent !== "account_missing_after_refresh") {
+  throw new Error("missing state did not replace stale account values");
+}
+if (!node("accountDetailActions").children[0].disabled) {
+  throw new Error("missing account state should disable lifecycle actions");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_api_connections_screen_is_readonly_and_product_safe(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()

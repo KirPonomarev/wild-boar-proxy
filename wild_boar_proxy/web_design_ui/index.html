@@ -358,6 +358,50 @@
               <span>канонический JSON · lifecycle через gate</span>
             </div>
           </section>
+
+          <div id="accountDetailOverlay" class="account-detail-overlay" hidden>
+            <button id="accountDetailBackdrop" class="account-detail-backdrop" type="button" aria-label="Закрыть детали аккаунта"></button>
+            <aside id="accountDetailDrawer" class="account-detail-drawer" aria-label="Детали аккаунта" aria-live="polite">
+              <div class="drawer-head">
+                <div>
+                  <div class="eyebrow">Детали аккаунта</div>
+                  <h2 id="accountDetailTitle">Аккаунт не выбран</h2>
+                  <div id="accountDetailSubtitle" class="secondary">Данные берутся только из accounts JSON.</div>
+                </div>
+                <button id="accountDetailClose" class="button small" type="button" aria-label="Закрыть детали аккаунта">Закрыть</button>
+              </div>
+
+              <div id="accountDetailMissing" class="fixture-banner amber account-detail-missing" hidden>
+                account_missing_after_refresh: выбранный аккаунт отсутствует в обновлённом accounts JSON. Действия отключены.
+              </div>
+
+              <div class="account-detail-summary">
+                <span id="accountDetailStatusChip" class="chip neutral"><span class="dot"></span><span>Неизвестно</span></span>
+                <span id="accountDetailPoolChip" class="chip neutral"><span class="dot"></span><span>Пул неизвестен</span></span>
+                <span id="accountDetailHoldChip" class="chip neutral"><span class="dot"></span><span>Без удержания</span></span>
+              </div>
+
+              <div class="account-detail-grid">
+                <div>Идентификатор</div><div id="accountDetailId" class="mono-value">-</div>
+                <div>Метка</div><div id="accountDetailLabel">-</div>
+                <div>Разрешён</div><div id="accountDetailEnabled">-</div>
+                <div>Успешных проверок</div><div id="accountDetailSuccess">0</div>
+                <div>Ошибок</div><div id="accountDetailFail">0</div>
+                <div>Последняя проверка</div><div id="accountDetailLastSuccess">-</div>
+                <div>Cooldown</div><div id="accountDetailCooldown">-</div>
+                <div>Последняя ошибка</div><div id="accountDetailError">-</div>
+                <div>Заметка</div><div id="accountDetailNotes">-</div>
+              </div>
+
+              <div class="account-detail-actions">
+                <div>
+                  <div class="card-title">Lifecycle actions</div>
+                  <div class="secondary">Те же admitted действия, что и в таблице. Payload: ui_action + account_id.</div>
+                </div>
+                <div id="accountDetailActions" class="account-action-group account-detail-action-group"></div>
+              </div>
+            </aside>
+          </div>
         </section>
 
         <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" hidden>

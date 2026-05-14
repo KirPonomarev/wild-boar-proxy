@@ -273,7 +273,9 @@ select {
 .overview-only[hidden],
 .accounts-only[hidden],
 .diagnostics-only[hidden],
-.settings-only[hidden] {
+.settings-only[hidden],
+.account-detail-overlay[hidden],
+.account-detail-missing[hidden] {
   display: none !important;
 }
 
@@ -1366,6 +1368,118 @@ button:disabled {
 .api-route-destructive-action {
   border-color: #c74747;
   color: #922626;
+}
+
+.account-detail-trigger {
+  flex: 1 1 calc(50% - 4px);
+  font-size: 11px;
+  height: 26px;
+  line-height: 14px;
+  max-width: calc(50% - 3px);
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+.account-detail-overlay {
+  align-items: stretch;
+  display: flex;
+  inset: 0;
+  justify-content: flex-end;
+  position: fixed;
+  z-index: 60;
+}
+
+.account-detail-backdrop {
+  background: rgba(30, 27, 24, .18);
+  border: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+}
+
+.account-detail-drawer {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -24px 0 72px rgba(30, 27, 24, .16);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: min(520px, 100vw);
+  min-width: min(520px, 100vw);
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.drawer-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.drawer-head h2 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 34px;
+  margin: 6px 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.account-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-detail-grid {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  display: grid;
+  font-size: 13px;
+  gap: 0;
+  grid-template-columns: minmax(128px, auto) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.account-detail-grid > div {
+  border-bottom: 1px solid rgba(217, 208, 195, .62);
+  line-height: 18px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.account-detail-grid > div:nth-child(odd) {
+  background: #f8f3ee;
+  color: var(--secondary);
+}
+
+.account-detail-grid > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.account-detail-actions {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.account-detail-action-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.account-detail-action-group .account-action,
+.account-detail-disabled-action {
+  max-width: none;
+  width: 100%;
+}
+
+.account-detail-missing {
+  margin: 0;
 }
 
 .pagination {

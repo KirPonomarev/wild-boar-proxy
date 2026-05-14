@@ -185,6 +185,8 @@ const CONSERVATIVE_CONFIRMATION_POLICY = {
 let actionMetadata = {};
 let pendingConfirmedAction = null;
 let confirmationInFlight = false;
+let currentAccountsSnapshot = null;
+let selectedAccountId = "";
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -991,6 +993,9 @@ function setScreen(screen, updateUrl = false) {
   const nextScreen = SCREENS.includes(screen) ? screen : "overview";
   const desktop = document.querySelector(".desktop");
   desktop.dataset.screen = nextScreen;
+  if (nextScreen !== "accounts") {
+    closeAccountDrawer();
+  }
 
   for (const node of document.querySelectorAll(".screen")) {
     node.hidden = node.dataset.screen !== nextScreen;
@@ -1279,7 +1284,9 @@ function renderAccountsSnapshot(snapshot) {
   );
   text("accountsVisibleCount", `Показано ${safeSnapshot.accounts.length} из ${summary.visible_count}`);
   text("accountsPagination", `Строки ${safeSnapshot.accounts.length ? 1 : 0}-${safeSnapshot.accounts.length} из ${summary.visible_count}`);
+  currentAccountsSnapshot = safeSnapshot;
   renderAccountRows(safeSnapshot.accounts);
+  renderAccountDetailDrawer();
 
   const sidebarDot = document.getElementById("sidebarDot");
   setClassName(sidebarDot, "dot", visualState);
@@ -1465,6 +1472,7 @@ function renderAccountRows(accounts) {
       td("right mono-value", account.last_success || account.cooldown_until || "—"),
       td("", accountActionButtons(account))
     );
+    row.dataset.accountId = account.id || "";
     body.append(row);
   }
   applyActionAvailability();
@@ -1517,6 +1525,7 @@ function statusChip(account) {
 function accountActionButtons(account) {
   const group = document.createElement("div");
   group.className = "account-action-group";
+  group.append(accountDetailButton(account));
   group.append(accountActionButton(account, "validate_account", "Проверить"));
   if (account.pool !== "retired") {
     if (account.manual_hold) {
@@ -1535,6 +1544,19 @@ function accountActionButtons(account) {
   return group;
 }
 
+function accountDetailButton(account) {
+  const button = document.createElement("button");
+  button.className = "button small account-detail-trigger";
+  button.type = "button";
+  button.dataset.accountId = account.id || "";
+  button.textContent = "Детали";
+  button.title = "Открыть drawer. Данные берутся только из текущего accounts JSON.";
+  button.addEventListener("click", () => {
+    openAccountDrawer(button.dataset.accountId);
+  });
+  return button;
+}
+
 function accountActionButton(account, uiAction, label) {
   const button = document.createElement("button");
   button.className = "button small account-action";
@@ -1549,6 +1571,100 @@ function accountActionButton(account, uiAction, label) {
     maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId });
   });
   return button;
+}
+
+function openAccountDrawer(accountId) {
+  selectedAccountId = String(accountId || "");
+  const overlay = document.getElementById("accountDetailOverlay");
+  overlay.hidden = false;
+  renderAccountDetailDrawer();
+  document.getElementById("accountDetailClose").focus();
+}
+
+function closeAccountDrawer() {
+  const overlay = document.getElementById("accountDetailOverlay");
+  if (overlay) {
+    overlay.hidden = true;
+  }
+}
+
+function selectedAccountFromSnapshot() {
+  const accounts = currentAccountsSnapshot?.accounts || [];
+  return accounts.find((account) => account.id === selectedAccountId) || null;
+}
+
+function renderAccountDetailDrawer() {
+  const overlay = document.getElementById("accountDetailOverlay");
+  if (!overlay || overlay.hidden || !selectedAccountId) {
+    return;
+  }
+  const account = selectedAccountFromSnapshot();
+  if (!account) {
+    renderMissingAccountDrawer();
+    return;
+  }
+
+  document.getElementById("accountDetailMissing").hidden = true;
+  text("accountDetailTitle", account.id || "unknown-account");
+  text("accountDetailSubtitle", redactAccountLabel(account.label || account.id || "редактированный аккаунт"));
+  text("accountDetailId", account.id || "unknown-account");
+  text("accountDetailLabel", redactAccountLabel(account.label || account.id || "редактированный аккаунт"));
+  text("accountDetailEnabled", account.enabled === true ? "да" : (account.enabled === false ? "нет" : "не указано"));
+  text("accountDetailSuccess", account.success_count ?? 0);
+  text("accountDetailFail", account.fail_count ?? 0);
+  text("accountDetailLastSuccess", account.last_success || "—");
+  text("accountDetailCooldown", account.cooldown_until || "—");
+  text("accountDetailError", account.last_error_summary || "—");
+  text("accountDetailNotes", account.notes_summary || "—");
+
+  const status = document.getElementById("accountDetailStatusChip");
+  status.className = `chip ${ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral"}`;
+  status.lastElementChild.textContent = account.status_label || statusLabel(account.status);
+
+  const pool = document.getElementById("accountDetailPoolChip");
+  pool.className = account.pool === "active" ? "chip green" : (account.pool === "reserve" ? "chip blue" : "chip neutral");
+  pool.lastElementChild.textContent = account.pool_label || poolLabel(account.pool);
+
+  const hold = document.getElementById("accountDetailHoldChip");
+  hold.className = account.manual_hold ? "chip amber" : "chip neutral";
+  hold.lastElementChild.textContent = account.manual_hold ? "На удержании" : "Без удержания";
+
+  const actions = document.getElementById("accountDetailActions");
+  actions.replaceChildren();
+  const group = accountActionButtons(account);
+  group.querySelector(".account-detail-trigger")?.remove();
+  actions.append(...Array.from(group.children));
+  applyActionAvailability();
+}
+
+function renderMissingAccountDrawer() {
+  document.getElementById("accountDetailMissing").hidden = false;
+  text("accountDetailTitle", selectedAccountId || "Аккаунт отсутствует");
+  text("accountDetailSubtitle", "Выбранный аккаунт не найден после обновления accounts JSON.");
+  text("accountDetailId", selectedAccountId || "-");
+  text("accountDetailLabel", "account_missing_after_refresh");
+  text("accountDetailEnabled", "-");
+  text("accountDetailSuccess", "-");
+  text("accountDetailFail", "-");
+  text("accountDetailLastSuccess", "-");
+  text("accountDetailCooldown", "-");
+  text("accountDetailError", "Действия отключены до выбора существующего аккаунта.");
+  text("accountDetailNotes", "-");
+
+  for (const chipId of ["accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip"]) {
+    const chip = document.getElementById(chipId);
+    chip.className = "chip amber";
+    chip.lastElementChild.textContent = "не подтверждено";
+  }
+
+  const actions = document.getElementById("accountDetailActions");
+  actions.replaceChildren();
+  const disabled = document.createElement("button");
+  disabled.className = "button small account-detail-disabled-action";
+  disabled.type = "button";
+  disabled.disabled = true;
+  disabled.textContent = "Действия отключены";
+  actions.append(disabled);
 }
 
 function poolLabel(pool) {
@@ -1717,6 +1833,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
   document.getElementById("accountAddAction").addEventListener("click", () => openOnboardModal());
+  document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
+  document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeAccountDrawer();
+    }
+  });
   document.getElementById("cancelOnboardAction").addEventListener("click", () => closeOnboardModal());
   document.getElementById("runOnboardAction").addEventListener("click", () => runOnboardFromModal());
   document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
