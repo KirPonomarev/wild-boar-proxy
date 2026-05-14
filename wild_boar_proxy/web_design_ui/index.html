@@ -108,13 +108,13 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
               <span>Добавить аккаунт</span>
             </button>
-            <button id="diagnosticsExportAction" class="button primary live-action diagnostics-only" type="button" data-ui-action="export_diagnostics" hidden>
-              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M12 3v12"></path>
-                <path d="m7 10 5 5 5-5"></path>
-                <path d="M5 21h14"></path>
-              </svg>
-              <span>Экспортировать артефакт</span>
+            <button id="diagnosticsExportAction" class="button live-action diagnostics-only" type="button" data-ui-action="export_diagnostics" hidden>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
+              <span>Экспорт</span>
+            </button>
+            <button id="diagnosticsFullCheckAction" class="button primary diagnostics-only" type="button" disabled title="Полная проверка требует отдельной admitted command surface." hidden>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+              <span>Полная проверка</span>
             </button>
           </div>
         </div>
@@ -496,84 +496,83 @@
         </section>
 
         <section id="diagnosticsScreen" class="screen" data-screen="diagnostics" hidden>
-            <div id="diagnosticsBanner" class="fixture-banner neutral">
-            Экран диагностики показывает только метаданные диагностического пакета. Это не источник истины о здоровье runtime.
+          <div id="diagnosticsBanner" class="fixture-banner neutral">
+            Демо-режим диагностики. Сигналы и шкала являются bounded fixture view, не runtime truth.
           </div>
 
           <div class="diag-layout">
             <section class="card diag-list">
               <div class="diag-controls">
-                <div class="search" aria-label="Граница диагностики">
-                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <circle cx="11" cy="11" r="7"></circle>
-                    <path d="m16.5 16.5 4 4"></path>
-                  </svg>
-                  <span>Граница пакета поддержки</span>
+                <div class="search" aria-label="Найти аккаунт или сигнал">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/magnifying-glass.png" alt="" aria-hidden="true">
+                  <span>Найти аккаунт или сигнал</span>
                 </div>
-                <button class="button small disabled" type="button" disabled>Истина runtime читается отдельно</button>
+                <div class="filter-seg diag-filter-seg" aria-label="Фильтры сигналов">
+                  <span class="active">Все</span>
+                  <span>Ошибки</span>
+                  <span>Активные</span>
+                </div>
               </div>
-              <div class="diag-buttons">
-                <button class="button small live-action" type="button" data-ui-action="export_diagnostics">
-                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 3v12"></path>
-                    <path d="m7 10 5 5 5-5"></path>
-                    <path d="M5 21h14"></path>
-                  </svg>
-                  <span>Экспорт</span>
-                </button>
-                <button class="button primary small live-action" type="button" data-ui-action="refresh_health_detail">
-                  <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M20 6 9 17l-5-5"></path>
-                  </svg>
-                  <span>Проверка здоровья</span>
-                </button>
-              </div>
-              <div class="signal-list" aria-label="Границы диагностики">
+              <div class="signal-list" aria-label="Сигналы диагностики">
                 <div class="signal-item active">
                   <div class="signal-icon blue">
-                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M4 13h3l3-7 5 13 2-6h3"></path>
-                    </svg>
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/user.png" alt="" aria-hidden="true">
                   </div>
                   <div>
-                    <div class="signal-title">Экспорт диагностики</div>
-                    <div class="signal-sub">Создаёт ограниченный пакет поддержки из JSON-вывода команды.</div>
-                    <div class="mini-bar"><span style="width:100%"></span></div>
+                    <div class="signal-title">acc-021</div>
+                    <div class="signal-sub">Codex account</div>
+                    <div class="signal-meta">Последний сигнал: 12:38</div>
                   </div>
-                  <span class="chip blue"><span class="dot"></span>Поддержка</span>
+                  <span class="chip red"><span class="dot"></span>Ошибка</span>
+                </div>
+                <div class="signal-item">
+                  <div class="signal-icon green">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                  </div>
+                  <div>
+                    <div class="signal-title">proxy.local</div>
+                    <div class="signal-sub">Proxy process</div>
+                    <div class="signal-meta">Последний сигнал: 12:38</div>
+                  </div>
+                  <span class="chip green"><span class="dot"></span>OK</span>
+                </div>
+                <div class="signal-item">
+                  <div class="signal-icon green">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
+                  </div>
+                  <div>
+                    <div class="signal-title">client.codex</div>
+                    <div class="signal-sub">Codex client route</div>
+                    <div class="signal-meta">Последний сигнал: 12:37</div>
+                  </div>
+                  <span class="chip green"><span class="dot"></span>OK</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon amber">
-                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M12 9v4"></path>
-                      <path d="M12 17h.01"></path>
-                      <path d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>
-                    </svg>
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
                   </div>
                   <div>
-                    <div class="signal-title">Не источник здоровья</div>
-                    <div class="signal-sub">Статус и здоровье остаются за пакетами status и healthcheck.</div>
-                    <div class="mini-bar"><span style="width:68%"></span></div>
+                    <div class="signal-title">sync.pool</div>
+                    <div class="signal-sub">Pool synchronization</div>
+                    <div class="signal-meta">Последний сигнал: 12:34</div>
                   </div>
-                  <span class="chip amber"><span class="dot"></span>Ограничено</span>
+                  <span class="chip amber"><span class="dot"></span>Stale</span>
                 </div>
                 <div class="signal-item">
-                  <div class="signal-icon neutral">
-                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
-                    </svg>
+                  <div class="signal-icon red">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/git-branch.png" alt="" aria-hidden="true">
                   </div>
                   <div>
-                    <div class="signal-title">Без прямого чтения файлов</div>
-                    <div class="signal-sub">UI не читает артефакты, состояние runtime или логи напрямую.</div>
-                    <div class="mini-bar"><span style="width:100%"></span></div>
+                    <div class="signal-title">auth.route</div>
+                    <div class="signal-sub">Account auth segment</div>
+                    <div class="signal-meta">Последний сигнал: 12:38</div>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>Защищено</span>
+                  <span class="chip red"><span class="dot"></span>Ошибка</span>
                 </div>
               </div>
               <div class="diag-footer">
-                <div>Источник: только строгие JSON-пакеты команд</div>
-                <div>Граница утверждения: только метаданные пакета поддержки</div>
+                <div>Источник: bounded JSON-представление</div>
+                <div>Диагностический пакет поддержки не доказывает здоровье runtime</div>
               </div>
             </section>
 
@@ -581,48 +580,53 @@
               <div class="card detail-head">
                 <div class="detail-object">
                   <div class="avatar">
-                    <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                      <path d="M4 13h3l3-7 5 13 2-6h3"></path>
-                    </svg>
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/user.png" alt="" aria-hidden="true">
                   </div>
                   <div>
-                    <div class="object-title">Диагностический пакет поддержки</div>
-                    <div class="object-sub">Последний пакет команды export</div>
+                    <div class="object-title">acc-021</div>
+                    <div class="object-sub">Ошибка проверки аккаунта</div>
                   </div>
                 </div>
-                <span id="diagnosticsStatusChip" class="chip neutral"><span class="dot"></span><span>Ожидание</span></span>
+                <span id="diagnosticsStatusChip" class="chip red"><span class="dot"></span><span>Недоступен</span></span>
               </div>
 
-              <div class="card pad status-block">
-                <div class="card-title">Результат команды</div>
-                <p id="diagnosticsMessage">Экспорт диагностики ещё не запускался из этой UI-сессии.</p>
+              <div class="card pad diagnostics-facts-card">
+                <div class="diagnostics-facts">
+                  <div><span>Тип</span><strong>Codex account</strong></div>
+                  <div><span>Маршрут</span><strong>proxy -> codex -> account</strong></div>
+                  <div><span>Последняя проверка</span><strong>Сегодня, 12:38:54</strong></div>
+                </div>
+                <p id="diagnosticsMessage">Account auth не прошёл проверку. Live health truth остаётся за отдельными command packets.</p>
               </div>
 
               <div class="card pad">
-                <div class="card-title">Цепочка пакета поддержки</div>
-                <div class="chain">
-                  <div class="chain-step">
-                    <div class="chain-dot blue">1</div>
-                    <span>ui_action</span>
-                    <span class="chip blue"><span class="dot"></span>ограничено</span>
+                <div class="section-head compact-section-head">
+                  <div>
+                    <div class="card-title">Проверочная цепочка</div>
+                    <div class="secondary">Показывает место сбоя без чтения сырых журналов.</div>
                   </div>
-                  <div class="chain-line"></div>
-                  <div class="chain-step">
-                    <div class="chain-dot blue">2</div>
-                    <span>Адаптер</span>
-                    <span class="chip blue"><span class="dot"></span>allowlist</span>
+                  <span class="chip red"><span class="dot"></span>Account auth</span>
+                </div>
+                <div class="check-chain">
+                  <div class="check-chain-step success">
+                    <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
+                    <strong>Proxy process</strong>
+                    <span>OK</span>
                   </div>
-                  <div class="chain-line"></div>
-                  <div class="chain-step">
-                    <div class="chain-dot blue">3</div>
-                    <span>Команда</span>
-                    <span class="chip blue"><span class="dot"></span>JSON</span>
+                  <div class="check-chain-step success">
+                    <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
+                    <strong>Local address</strong>
+                    <span>OK</span>
                   </div>
-                  <div class="chain-line"></div>
-                  <div class="chain-step">
-                    <div class="chain-dot neutral">4</div>
-                    <span>Артефакт</span>
-                    <span class="chip neutral"><span class="dot"></span>метаданные</span>
+                  <div class="check-chain-step success">
+                    <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
+                    <strong>Codex client</strong>
+                    <span>OK</span>
+                  </div>
+                  <div class="check-chain-step failure">
+                    <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                    <strong>Account auth</strong>
+                    <span>AUTH_UNAVAILABLE</span>
                   </div>
                 </div>
               </div>
@@ -631,64 +635,43 @@
                 <div class="card pad diagnostics-history-card" data-diagnostics-region="history_chart_slot">
                   <div class="section-head compact-section-head">
                     <div>
-                      <div class="card-title">История сигнала</div>
-                      <div class="secondary">Live-график отложен до отдельного JSON-пакета истории.</div>
+                      <div class="card-title">Шкала сигнала</div>
+                      <div class="secondary">Последние 48 минут · bounded fixture history.</div>
                     </div>
                     <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
                   </div>
                   <div id="diagnosticsFixtureChart" class="diagnostics-fixture-chart" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
-                    <div class="diagnostics-line-chart" role="img" aria-label="Демо-график истории сигнала: сбои и успешные попытки за семь дней">
-                      <div class="chart-legend" aria-hidden="true">
-                        <span><i class="legend-line failure"></i>Сбои</span>
-                        <span><i class="legend-line success"></i>Успешные попытки</span>
+                    <div class="telemetry-summary" aria-label="Сводка шкалы сигнала">
+                      <span><strong>42</strong> success</span>
+                      <span><strong>6</strong> failures</span>
+                      <span><strong>3</strong> stale</span>
+                    </div>
+                    <div class="diagnostics-line-chart" role="img" aria-label="Детальная шкала сигнала: success, failure, stale и no data">
+                      <div class="telemetry-scale" aria-hidden="true">
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span>
+                        <span class="tick success"></span><span class="tick failure"></span><span class="tick failure"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span><span class="tick success"></span>
+                        <span class="tick no-data"></span><span class="tick success"></span><span class="tick failure"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
+                        <span class="tick stale"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
                       </div>
-                      <svg class="chart-svg" viewBox="0 0 640 236" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-                        <defs>
-                          <linearGradient id="diagnosticsFailureFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stop-color="#ef4444" stop-opacity=".22"></stop>
-                            <stop offset="72%" stop-color="#ef4444" stop-opacity=".05"></stop>
-                            <stop offset="100%" stop-color="#ef4444" stop-opacity="0"></stop>
-                          </linearGradient>
-                          <linearGradient id="diagnosticsSuccessFill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stop-color="#2563eb" stop-opacity=".16"></stop>
-                            <stop offset="74%" stop-color="#2563eb" stop-opacity=".04"></stop>
-                            <stop offset="100%" stop-color="#2563eb" stop-opacity="0"></stop>
-                          </linearGradient>
-                        </defs>
-                        <g class="chart-grid-lines">
-                          <line x1="54" y1="28" x2="612" y2="28"></line>
-                          <line x1="54" y1="70" x2="612" y2="70"></line>
-                          <line x1="54" y1="112" x2="612" y2="112"></line>
-                          <line x1="54" y1="154" x2="612" y2="154"></line>
-                          <line x1="54" y1="196" x2="612" y2="196"></line>
-                        </g>
-                        <g class="chart-y-labels">
-                          <text x="8" y="32">100%</text>
-                          <text x="18" y="74">75%</text>
-                          <text x="18" y="116">50%</text>
-                          <text x="18" y="158">25%</text>
-                          <text x="24" y="200">0%</text>
-                        </g>
-                        <path class="chart-area failure" d="M54 152 C78 136, 96 120, 122 124 S164 132, 190 118 S232 68, 260 74 S302 24, 334 40 S380 82, 416 94 S468 114, 500 128 S560 156, 612 166 L612 196 L54 196 Z"></path>
-                        <path class="chart-area success" d="M54 178 C86 178, 102 180, 130 172 S182 148, 210 154 S248 180, 282 172 S326 172, 356 160 S398 182, 430 178 S486 166, 520 172 S572 184, 612 182 L612 196 L54 196 Z"></path>
-                        <path class="chart-line failure" d="M54 152 C78 136, 96 120, 122 124 S164 132, 190 118 S232 68, 260 74 S302 24, 334 40 S380 82, 416 94 S468 114, 500 128 S560 156, 612 166"></path>
-                        <path class="chart-line success" d="M54 178 C86 178, 102 180, 130 172 S182 148, 210 154 S248 180, 282 172 S326 172, 356 160 S398 182, 430 178 S486 166, 520 172 S572 184, 612 182"></path>
-                        <g class="chart-x-labels">
-                          <text x="50" y="226">26 мая</text>
-                          <text x="132" y="226">27 мая</text>
-                          <text x="214" y="226">28 мая</text>
-                          <text x="296" y="226">29 мая</text>
-                          <text x="378" y="226">30 мая</text>
-                          <text x="462" y="226">31 мая</text>
-                          <text x="552" y="226">2 июн.</text>
-                        </g>
-                      </svg>
+                      <div class="telemetry-legend">
+                        <span><i class="tick success"></i>success</span>
+                        <span><i class="tick failure"></i>failure</span>
+                        <span><i class="tick stale"></i>stale</span>
+                        <span><i class="tick no-data"></i>no data</span>
+                      </div>
                     </div>
                     <div class="chart-caption">fixture/demo-only · не наблюдаемая runtime-история</div>
                   </div>
                   <div id="diagnosticsHistoryDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
-                    <span class="chip amber"><span class="dot"></span>отложено</span>
-                    <p>Live-история появится только после bounded redacted JSON command surface. UI не читает логи или state напрямую.</p>
+                    <span class="chip amber"><span class="dot"></span>history unavailable</span>
+                    <div class="telemetry-scale no-data-scale" aria-hidden="true">
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                    </div>
+                    <p>Live-история появится только после bounded redacted JSON command surface. UI не читает журналы или state напрямую.</p>
                   </div>
                 </div>
 
@@ -702,48 +685,65 @@
                   </div>
                   <div id="diagnosticsFixtureRecords" class="diagnostics-record-list" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
                     <div class="diagnostics-record">
-                      <span class="round-icon blue">i</span>
-                      <span>Демо: пакет поддержки сформирован из command packet metadata.</span>
-                      <time>fixture</time>
+                      <span class="round-icon red">!</span>
+                      <span>auth unavailable</span>
+                      <code>AUTH_UNAVAILABLE</code>
+                      <time>12:38:54</time>
+                    </div>
+                    <div class="diagnostics-record">
+                      <span class="round-icon green">✓</span>
+                      <span>client route resolved</span>
+                      <code>OK</code>
+                      <time>12:38:50</time>
+                    </div>
+                    <div class="diagnostics-record">
+                      <span class="round-icon green">✓</span>
+                      <span>proxy health OK</span>
+                      <code>OK</code>
+                      <time>12:38:47</time>
                     </div>
                     <div class="diagnostics-record">
                       <span class="round-icon amber">!</span>
-                      <span>Демо: live-история ожидает отдельный bounded JSON surface.</span>
-                      <time>fixture</time>
-                    </div>
-                    <div class="diagnostics-record">
-                      <span class="round-icon neutral">·</span>
-                      <span>Демо: artifact contents не читаются UI.</span>
-                      <time>fixture</time>
+                      <span>pool sync stale</span>
+                      <code>SYNC_STALE</code>
+                      <time>12:34:12</time>
                     </div>
                   </div>
                   <div id="diagnosticsRecordsDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
-                    <span class="chip amber"><span class="dot"></span>отложено</span>
-                    <p>Live-записи не выводятся из log tail. Нужен отдельный redacted JSON packet.</p>
+                    <span class="chip amber"><span class="dot"></span>records unavailable</span>
+                    <p>Live-записи не выводятся из журнального потока. Нужен отдельный redacted JSON packet.</p>
                   </div>
                 </div>
               </div>
 
               <div class="detail-grid">
                 <div class="card pad tech-log">
-                  <div class="card-title">Поля пакета</div>
+                  <div class="card-title">Поля пакета поддержки</div>
                   <div class="tech-row"><span>Статус</span><span id="diagnosticsPacketStatus">ожидание</span></div>
-                  <div class="tech-row"><span>Код выхода</span><span id="diagnosticsExitCode">-</span></div>
+                  <div class="tech-row compact-hidden"><span>Код выхода</span><span id="diagnosticsExitCode">-</span></div>
                   <div class="tech-row"><span>Машинный код</span><span id="diagnosticsMachineCode">-</span></div>
-                  <div class="tech-row"><span>Следующее действие</span><span id="diagnosticsNextAction">нет</span></div>
+                  <div class="tech-row compact-hidden"><span>Следующее действие</span><span id="diagnosticsNextAction">нет</span></div>
                 </div>
                 <div class="card pad">
-                  <div class="card-title">Метаданные артефакта</div>
-                  <div class="kv diag-kv">
-                    <div>Изменённые записи</div><div id="diagnosticsChangedFiles">0</div>
-                    <div>Метка артефакта</div><div id="diagnosticsBundleRef">не предоставлена</div>
-                    <div>UI читает артефакт</div><div>никогда</div>
-                    <div>Истина runtime</div><div>не изменяется</div>
+                  <div class="card-title">Действия</div>
+                  <div class="action-summary">
+                    <span>Изменённые записи: <strong id="diagnosticsChangedFiles">0</strong></span>
+                    <span>Метка артефакта: <strong id="diagnosticsBundleRef">не предоставлена</strong></span>
                   </div>
                   <div class="action-stack">
-                    <button class="button small disabled" type="button" disabled>Просмотр артефакта отложен</button>
-                    <button class="button small disabled" type="button" disabled>Сырой текст диагностики недоступен</button>
+                    <button class="button small live-action" type="button" data-ui-action="export_diagnostics">
+                      <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
+                      <span>Экспорт</span>
+                    </button>
+                    <button class="button small disabled" type="button" disabled title="Full check requires a separate admitted command surface.">Повторить проверку</button>
+                    <button class="button small disabled" type="button" disabled title="Account lifecycle actions are handled by the Accounts screen command mapping.">Перевести в резерв</button>
+                    <button class="button small disabled" type="button" disabled title="Human-open support action is not admitted in this contour.">Открыть журнал</button>
+                    <button class="button small danger disabled" type="button" disabled title="Danger action is not admitted from Diagnostics in this contour.">
+                      <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+                      <span>Вывести из пула</span>
+                    </button>
                   </div>
+                  <div class="action-note">Просмотр артефакта отложен · Сырой текст диагностики недоступен · Истина runtime не изменяется</div>
                 </div>
               </div>
             </section>

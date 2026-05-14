@@ -705,7 +705,7 @@ function setSourceCopy(source) {
             ? "API-подключения · список маршрутов"
             : (
           screen === "diagnostics"
-            ? "Диагностика · пакет поддержки"
+            ? "Диагностика · detail screen"
             : (
               screen === "settings"
                 ? "Настройки · через пакеты команд"
@@ -724,7 +724,7 @@ function setSourceCopy(source) {
             ? "Маршруты API-подключений отображаются из пакетов команд. Разрешены только безопасные проверки маршрутов без мутации конфигурации."
             : (
           screen === "diagnostics"
-            ? "Диагностика показывает сведения пакета поддержки. Фактическое здоровье системы проверяется отдельными командами."
+            ? "Проверка цепочки подключения, аккаунтов и режима прокси."
             : (
               screen === "settings"
                 ? "Настройки показывают наблюдаемую конфигурацию только для чтения. Доступные действия являются запросами, а не сохранением параметров."
@@ -745,7 +745,7 @@ function setSourceCopy(source) {
             ? "Демо-просмотр API-подключений. Кнопки проверок доступны только в live-режиме."
             : (
           screen === "diagnostics"
-            ? "Демо-просмотр диагностики. Экспорт создаёт пакет поддержки, но не доказывает здоровье системы."
+            ? "Проверка цепочки подключения, аккаунтов и режима прокси."
             : (
               screen === "settings"
                 ? "Демо-просмотр настроек. Элементы либо только для чтения, либо отложены без безопасного действия."
@@ -770,6 +770,8 @@ function setSourceCopy(source) {
 
 function updateDiagnosticsDetailSource(source) {
   const fixtureOnly = source !== "live";
+  const desktop = document.querySelector(".desktop");
+  const fixtureState = desktop?.dataset?.fixtureState || "unknown";
   const fixtureNodes = [
     document.getElementById("diagnosticsFixtureChart"),
     document.getElementById("diagnosticsFixtureRecords")
@@ -792,6 +794,22 @@ function updateDiagnosticsDetailSource(source) {
     }
     chip.className = fixtureOnly ? "chip blue" : "chip amber";
     chip.lastElementChild.textContent = fixtureOnly ? "fixture/demo" : "deferred";
+  }
+  const banner = document.getElementById("diagnosticsBanner");
+  if (banner) {
+    const fixtureCopy = {
+      healthy: ["blue", "Демо-режим диагностики. Сигналы и шкала являются bounded fixture view, не runtime truth."],
+      degraded: ["amber", "Демо-режим диагностики показывает деградацию сигнала без claims о runtime truth."],
+      down: ["red", "Демо-режим диагностики показывает недоступный сигнал без live-подтверждения."],
+      stale: ["amber", "Данные диагностики устарели. Stale не считается healthy."],
+      integration_failure: ["red", "Ошибка интеграции preview. Зелёная история не используется как fallback."],
+      unknown: ["neutral", "Демо-режим диагностики. Источник сигнала не подтверждён."]
+    };
+    const [visual, copy] = fixtureOnly
+      ? (fixtureCopy[fixtureState] || fixtureCopy.unknown)
+      : ["red", "Live-readonly диагностики недоступен для истории сигналов. Предыдущие healthy-данные не используются."];
+    banner.className = `fixture-banner ${visual}`;
+    banner.textContent = copy;
   }
 }
 
