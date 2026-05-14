@@ -192,7 +192,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("border-radius: var(--radius-button);", css)
         self.assertIn("border-radius: var(--radius-chip);", css)
         self.assertIn("line-height: 20px;", css)
-        self.assertIn("line-height: 34px;", css)
+        self.assertIn("line-height: 28px;", css)
         self.assertIn("overflow-x: hidden;", css)
         self.assertIn("@media (max-width: 1420px)", css)
         self.assertIn('@media (max-width: 1320px)', css)
@@ -304,13 +304,27 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("function openAccountDrawer", js)
         self.assertIn("function renderAccountDetailDrawer", js)
         self.assertIn("function renderMissingAccountDrawer", js)
+        self.assertIn("function renderAccountDetailTimeline", js)
+        self.assertIn("function renderAccountDetailActions", js)
+        self.assertIn("function renderAccountDetailLastCommand", js)
+        self.assertIn("function isInteractiveAccountRowTarget", js)
         self.assertIn("account_missing_after_refresh", html + js)
         self.assertIn("Открыть drawer. Данные берутся только из текущего accounts JSON.", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
+        self.assertIn('row.addEventListener("click"', js)
+        self.assertIn('id="accountDetailDangerActions"', html)
+        self.assertIn('id="accountDetailTimeline"', html)
+        self.assertIn('id="accountDetailLastCommandChip"', html)
+        self.assertIn("Payload только ui_action + account_id", html)
+        self.assertIn("Command result не является состоянием аккаунта до refresh", html)
         self.assertNotIn("localStorage", js)
         self.assertNotIn("sessionStorage", js)
+        self.assertNotIn('type="file"', html)
+        self.assertNotIn("readAsText", js)
         self.assertIn(".account-detail-drawer", css)
         self.assertIn(".account-detail-action-group", css)
+        self.assertIn(".account-detail-timeline", css)
+        self.assertIn(".account-detail-danger", css)
 
         script = r"""
 const fs = require("fs");
@@ -388,14 +402,18 @@ for (const id of [
   "accountDetailOverlay", "accountDetailBackdrop", "accountDetailDrawer", "accountDetailClose",
   "accountDetailMissing", "accountDetailTitle", "accountDetailSubtitle",
   "accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip",
-  "accountDetailId", "accountDetailLabel", "accountDetailEnabled", "accountDetailSuccess",
-  "accountDetailFail", "accountDetailLastSuccess", "accountDetailCooldown",
-  "accountDetailError", "accountDetailNotes", "accountDetailActions", "settingsLaunchAvailability"
+  "accountDetailTruthChip", "accountDetailId", "accountDetailLabel", "accountDetailPoolValue",
+  "accountDetailLifecycle", "accountDetailHoldValue", "accountDetailEnabled",
+  "accountDetailChecks24h", "accountDetailFail", "accountDetailLatency", "accountDetailRecovery",
+  "accountDetailLastSuccess", "accountDetailError", "accountDetailCounterNote",
+  "accountDetailTimeline", "accountDetailActions", "accountDetailDangerActions",
+  "accountDetailLastCommandChip", "accountDetailLastCommandAction", "accountDetailLastCommandCode",
+  "accountDetailLastCommandNext", "accountDetailLastCommandRefresh", "settingsLaunchAvailability"
 ]) {
   node(id);
 }
 node("refreshFixture").lastElementChild = { textContent: "" };
-for (const id of ["accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip", "diagnosticsHistoryModeChip", "diagnosticsRecordsModeChip"]) {
+for (const id of ["accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip", "accountDetailTruthChip", "accountDetailLastCommandChip", "diagnosticsHistoryModeChip", "diagnosticsRecordsModeChip"]) {
   node(id).lastElementChild = { textContent: "" };
 }
 node("accountDetailOverlay").hidden = true;
@@ -491,9 +509,26 @@ if (node("accountDetailId").textContent !== "backend-a") {
 if (!node("accountDetailSubtitle").textContent.includes("ope***@***.com")) {
   throw new Error(`drawer label was not redacted: ${node("accountDetailSubtitle").textContent}`);
 }
+if (node("accountDetailLifecycle").textContent !== "available") {
+  throw new Error(`drawer did not derive bounded lifecycle: ${node("accountDetailLifecycle").textContent}`);
+}
+if (node("accountDetailChecks24h").textContent !== "3") {
+  throw new Error(`drawer did not render bounded checks: ${node("accountDetailChecks24h").textContent}`);
+}
+if (!node("accountDetailTimeline").children.length) {
+  throw new Error("drawer timeline should render bounded fixture/check summary");
+}
 const actionButtons = node("accountDetailActions").children.filter((child) => child.dataset?.accountId === "backend-a");
 if (!actionButtons.length || actionButtons.some((child) => child.dataset.uiAction === undefined)) {
   throw new Error("drawer did not reuse bounded account action buttons");
+}
+const disabledRoutine = node("accountDetailActions").children.filter((child) => child.disabled);
+if (!disabledRoutine.length) {
+  throw new Error("drawer should show disabled routine actions with reasons");
+}
+const dangerButtons = node("accountDetailDangerActions").children.filter((child) => child.dataset?.uiAction === "retire_account");
+if (dangerButtons.length !== 1 || dangerButtons[0].dataset.accountId !== "backend-a") {
+  throw new Error("drawer did not isolate retire action in danger zone");
 }
 
 sandbox.renderAccountsSnapshot({ ...snapshot, accounts: [], summary: { ...snapshot.summary, visible_count: 0 } });
@@ -505,6 +540,9 @@ if (node("accountDetailLabel").textContent !== "account_missing_after_refresh") 
 }
 if (!node("accountDetailActions").children[0].disabled) {
   throw new Error("missing account state should disable lifecycle actions");
+}
+if (!node("accountDetailDangerActions").children[0].disabled) {
+  throw new Error("missing account state should disable danger actions");
 }
 """
         result = subprocess.run(

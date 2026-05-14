@@ -393,12 +393,15 @@
             <button id="accountDetailBackdrop" class="account-detail-backdrop" type="button" aria-label="Закрыть детали аккаунта"></button>
             <aside id="accountDetailDrawer" class="account-detail-drawer" aria-label="Детали аккаунта" aria-live="polite">
               <div class="drawer-head">
+                <span class="account-detail-avatar"><img class="ui-icon" src="assets/icons/phosphor/user.png" alt="" aria-hidden="true"></span>
                 <div>
                   <div class="eyebrow">Детали аккаунта</div>
                   <h2 id="accountDetailTitle">Аккаунт не выбран</h2>
                   <div id="accountDetailSubtitle" class="secondary">Данные берутся только из accounts JSON.</div>
                 </div>
-                <button id="accountDetailClose" class="button small" type="button" aria-label="Закрыть детали аккаунта">Закрыть</button>
+                <button id="accountDetailClose" class="button icon-button" type="button" aria-label="Закрыть детали аккаунта">
+                  <img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
+                </button>
               </div>
 
               <div id="accountDetailMissing" class="fixture-banner amber account-detail-missing" hidden>
@@ -411,25 +414,82 @@
                 <span id="accountDetailHoldChip" class="chip neutral"><span class="dot"></span><span>Без удержания</span></span>
               </div>
 
-              <div class="account-detail-grid">
-                <div>Идентификатор</div><div id="accountDetailId" class="mono-value">-</div>
-                <div>Метка</div><div id="accountDetailLabel">-</div>
-                <div>Разрешён</div><div id="accountDetailEnabled">-</div>
-                <div>Успешных проверок</div><div id="accountDetailSuccess">0</div>
-                <div>Ошибок</div><div id="accountDetailFail">0</div>
-                <div>Последняя проверка</div><div id="accountDetailLastSuccess">-</div>
-                <div>Cooldown</div><div id="accountDetailCooldown">-</div>
-                <div>Последняя ошибка</div><div id="accountDetailError">-</div>
-                <div>Заметка</div><div id="accountDetailNotes">-</div>
-              </div>
+              <section class="account-detail-section">
+                <div class="account-detail-section-head">
+                  <div>
+                    <div class="card-title">Состояние аккаунта</div>
+                    <div class="secondary">Bounded facts из текущего accounts JSON.</div>
+                  </div>
+                  <span id="accountDetailTruthChip" class="mini-pill neutral">readonly packet</span>
+                </div>
+                <div class="account-detail-grid">
+                  <div>Идентификатор</div><div id="accountDetailId" class="mono-value">-</div>
+                  <div>Метка</div><div id="accountDetailLabel">-</div>
+                  <div>Пул</div><div id="accountDetailPoolValue">-</div>
+                  <div>Lifecycle</div><div id="accountDetailLifecycle">unknown</div>
+                  <div>Hold</div><div id="accountDetailHoldValue">unknown</div>
+                  <div>Разрешён</div><div id="accountDetailEnabled">-</div>
+                  <div>Последняя проверка</div><div id="accountDetailLastSuccess">нет данных</div>
+                  <div>Последняя ошибка</div><div id="accountDetailError">—</div>
+                </div>
+              </section>
+
+              <section class="account-detail-section">
+                <div class="account-detail-section-head">
+                  <div>
+                    <div class="card-title">Проверки и счётчики</div>
+                    <div class="secondary">Нет packet-поля — показываем нет данных.</div>
+                  </div>
+                </div>
+                <div class="account-detail-stat-grid">
+                  <div><span>Checks 24h</span><strong id="accountDetailChecks24h">нет данных</strong></div>
+                  <div><span>Failures</span><strong id="accountDetailFail">нет данных</strong></div>
+                  <div><span>Last latency</span><strong id="accountDetailLatency">нет данных</strong></div>
+                  <div><span>Recovery attempts</span><strong id="accountDetailRecovery">нет данных</strong></div>
+                </div>
+                <div id="accountDetailCounterNote" class="account-detail-note">Счётчики не являются runtime truth без bounded packet.</div>
+              </section>
+
+              <section id="accountDetailTimelineSection" class="account-detail-section">
+                <div class="account-detail-section-head">
+                  <div>
+                    <div class="card-title">Lifecycle timeline</div>
+                    <div class="secondary">Только bounded history packet или безопасная fixture-сводка.</div>
+                  </div>
+                </div>
+                <div id="accountDetailTimeline" class="account-detail-timeline"></div>
+              </section>
 
               <div class="account-detail-actions">
                 <div>
-                  <div class="card-title">Lifecycle actions</div>
-                  <div class="secondary">Те же admitted действия, что и в таблице. Payload: ui_action + account_id.</div>
+                  <div class="card-title">Доступные действия</div>
+                  <div class="secondary">Payload только ui_action + account_id. Disabled actions не dispatch.</div>
                 </div>
                 <div id="accountDetailActions" class="account-action-group account-detail-action-group"></div>
+                <div class="account-detail-danger">
+                  <div>
+                    <div class="card-title">Danger zone</div>
+                    <div class="secondary">Терминальное действие отдельно и только через confirmation.</div>
+                  </div>
+                  <div id="accountDetailDangerActions" class="account-detail-action-group"></div>
+                </div>
               </div>
+
+              <section id="accountDetailLastCommandSection" class="account-detail-section account-detail-command">
+                <div class="account-detail-section-head">
+                  <div>
+                    <div class="card-title">Последнее действие</div>
+                    <div class="secondary">Command result не является состоянием аккаунта до refresh.</div>
+                  </div>
+                  <span id="accountDetailLastCommandChip" class="chip neutral"><span class="dot"></span><span>нет</span></span>
+                </div>
+                <div class="account-detail-grid">
+                  <div>ui_action</div><div id="accountDetailLastCommandAction" class="mono-value">нет</div>
+                  <div>machine_code</div><div id="accountDetailLastCommandCode">-</div>
+                  <div>next_action</div><div id="accountDetailLastCommandNext">-</div>
+                  <div>refresh</div><div id="accountDetailLastCommandRefresh">нет данных</div>
+                </div>
+              </section>
             </aside>
           </div>
         </section>

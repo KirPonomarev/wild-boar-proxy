@@ -934,6 +934,7 @@ function setActionPanel(payload, refreshState = "none") {
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
+  renderAccountDetailDrawer();
 }
 
 function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") {
@@ -2023,11 +2024,39 @@ function renderAccountRows(accounts) {
       td("account-actions-cell", accountActionButtons(account, { rowMenu: true }))
     );
     row.dataset.accountId = accountId;
+    row.tabIndex = 0;
+    row.title = "Открыть детали аккаунта. Это UI-only действие без command dispatch.";
+    row.addEventListener("click", (event) => {
+      if (isInteractiveAccountRowTarget(event.target)) {
+        return;
+      }
+      openAccountDrawer(accountId);
+    });
+    row.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && !isInteractiveAccountRowTarget(event.target)) {
+        event.preventDefault();
+        openAccountDrawer(accountId);
+      }
+    });
     row.classList.toggle("selected", selectedAccountIds.has(accountId));
     body.append(row);
   }
   updateAccountsSelectionUi();
   applyActionAvailability();
+}
+
+function isInteractiveAccountRowTarget(target) {
+  let node = target;
+  while (node) {
+    if (["BUTTON", "A", "SUMMARY", "DETAILS", "INPUT", "SELECT", "TEXTAREA"].includes(node.tagName)) {
+      return true;
+    }
+    if (node.classList?.contains("account-action-menu")) {
+      return true;
+    }
+    node = node.parentNode;
+  }
+  return false;
 }
 
 function td(className, child) {
@@ -2165,7 +2194,7 @@ function accountActionButton(account, uiAction, label, options = {}) {
   const button = document.createElement("button");
   button.className = options.menuItem
     ? `button small account-action account-menu-item${options.danger ? " danger" : ""}`
-    : "button small account-action";
+    : `button small account-action${options.danger ? " danger" : ""}`;
   button.type = "button";
   button.dataset.uiAction = uiAction;
   button.dataset.accountId = account.id || "";
@@ -2269,13 +2298,22 @@ function renderAccountDetailDrawer() {
   text("accountDetailSubtitle", redactAccountLabel(account.label || account.id || "редактированный аккаунт"));
   text("accountDetailId", account.id || "unknown-account");
   text("accountDetailLabel", redactAccountLabel(account.label || account.id || "редактированный аккаунт"));
+  text("accountDetailPoolValue", account.pool_label || poolLabel(account.pool));
+  text("accountDetailLifecycle", accountLifecycleLabel(account));
+  text("accountDetailHoldValue", account.manual_hold ? "yes" : "no");
   text("accountDetailEnabled", account.enabled === true ? "да" : (account.enabled === false ? "нет" : "не указано"));
-  text("accountDetailSuccess", account.success_count ?? 0);
-  text("accountDetailFail", account.fail_count ?? 0);
   text("accountDetailLastSuccess", account.last_success || "—");
-  text("accountDetailCooldown", account.cooldown_until || "—");
   text("accountDetailError", account.last_error_summary || "—");
-  text("accountDetailNotes", account.notes_summary || "—");
+  text("accountDetailChecks24h", accountChecksLabel(account));
+  text("accountDetailFail", boundedNumberLabel(account.fail_count));
+  text("accountDetailLatency", account.last_latency_ms ? `${account.last_latency_ms} ms` : "нет данных");
+  text("accountDetailRecovery", boundedNumberLabel(account.recovery_attempts));
+  text(
+    "accountDetailCounterNote",
+    account.checks_24h !== undefined || account.success_count !== undefined || account.fail_count !== undefined
+      ? "Счётчики взяты из bounded accounts packet и не расширяются UI-слоем."
+      : "Счётчики недоступны: нужен bounded account telemetry packet."
+  );
 
   const status = document.getElementById("accountDetailStatusChip");
   status.className = `chip ${ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral"}`;
@@ -2289,11 +2327,14 @@ function renderAccountDetailDrawer() {
   hold.className = account.manual_hold ? "chip amber" : "chip neutral";
   hold.lastElementChild.textContent = account.manual_hold ? "На удержании" : "Без удержания";
 
-  const actions = document.getElementById("accountDetailActions");
-  actions.replaceChildren();
-  const group = accountActionButtons(account);
-  group.querySelector(".account-detail-trigger")?.remove();
-  actions.append(...Array.from(group.children));
+  setMiniPill(
+    "accountDetailTruthChip",
+    currentAccountsSnapshot?.source === "accounts_readonly" ? "accounts readonly" : "bounded fixture",
+    currentAccountsSnapshot?.source === "accounts_readonly" ? "blue" : "neutral"
+  );
+  renderAccountDetailTimeline(account);
+  renderAccountDetailActions(account);
+  renderAccountDetailLastCommand();
   applyActionAvailability();
 }
 
@@ -2303,13 +2344,17 @@ function renderMissingAccountDrawer() {
   text("accountDetailSubtitle", "Выбранный аккаунт не найден после обновления accounts JSON.");
   text("accountDetailId", selectedAccountId || "-");
   text("accountDetailLabel", "account_missing_after_refresh");
+  text("accountDetailPoolValue", "нет данных");
+  text("accountDetailLifecycle", "account_missing_after_refresh");
+  text("accountDetailHoldValue", "нет данных");
   text("accountDetailEnabled", "-");
-  text("accountDetailSuccess", "-");
+  text("accountDetailChecks24h", "нет данных");
   text("accountDetailFail", "-");
+  text("accountDetailLatency", "нет данных");
+  text("accountDetailRecovery", "нет данных");
   text("accountDetailLastSuccess", "-");
-  text("accountDetailCooldown", "-");
   text("accountDetailError", "Действия отключены до выбора существующего аккаунта.");
-  text("accountDetailNotes", "-");
+  text("accountDetailCounterNote", "Счётчики недоступны: выбранного аккаунта нет в обновлённом accounts JSON.");
 
   for (const chipId of ["accountDetailStatusChip", "accountDetailPoolChip", "accountDetailHoldChip"]) {
     const chip = document.getElementById(chipId);
@@ -2319,12 +2364,249 @@ function renderMissingAccountDrawer() {
 
   const actions = document.getElementById("accountDetailActions");
   actions.replaceChildren();
-  const disabled = document.createElement("button");
-  disabled.className = "button small account-detail-disabled-action";
-  disabled.type = "button";
-  disabled.disabled = true;
-  disabled.textContent = "Действия отключены";
-  actions.append(disabled);
+  actions.append(disabledAccountActionButton("Действия отключены", "account_missing_after_refresh"));
+  document.getElementById("accountDetailDangerActions").replaceChildren(
+    disabledAccountActionButton("Вывести из пула", "account_missing_after_refresh")
+  );
+  setMiniPill("accountDetailTruthChip", "missing", "amber");
+  renderAccountDetailTimeline(null);
+  renderAccountDetailLastCommand();
+}
+
+function accountLifecycleLabel(account) {
+  if (!account) {
+    return "unknown";
+  }
+  if (account.pool === "retired") {
+    return "retired";
+  }
+  if (account.manual_hold) {
+    return "held";
+  }
+  if (account.enabled === false) {
+    return "disabled";
+  }
+  if (account.last_error_summary || ["down", "degraded"].includes(account.status)) {
+    return "blocked";
+  }
+  if (account.pool === "active" || account.pool === "reserve") {
+    return "available";
+  }
+  return "unknown";
+}
+
+function boundedNumberLabel(value) {
+  return Number.isFinite(Number(value)) ? String(value) : "нет данных";
+}
+
+function accountChecksLabel(account) {
+  if (Number.isFinite(Number(account?.checks_24h))) {
+    return String(account.checks_24h);
+  }
+  if (Number.isFinite(Number(account?.success_count)) || Number.isFinite(Number(account?.fail_count))) {
+    return String(Number(account.success_count || 0) + Number(account.fail_count || 0));
+  }
+  return "нет данных";
+}
+
+function renderAccountDetailTimeline(account) {
+  const list = document.getElementById("accountDetailTimeline");
+  if (!list || typeof list.replaceChildren !== "function") {
+    return;
+  }
+  list.replaceChildren();
+  const rows = boundedAccountTimeline(account);
+  if (!rows.length) {
+    list.append(accountTimelineEmpty());
+    return;
+  }
+  for (const row of rows.slice(0, 4)) {
+    const item = document.createElement("div");
+    item.className = `account-detail-timeline-row ${row.visual || "neutral"}`;
+    const icon = document.createElement("span");
+    icon.className = `round-icon ${row.visual || "neutral"}`;
+    const img = document.createElement("img");
+    img.className = "ui-icon";
+    img.src = row.icon || "assets/icons/phosphor/info.png";
+    img.alt = "";
+    setNodeAttribute(img, "aria-hidden", "true");
+    icon.append(img);
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = row.message;
+    const meta = document.createElement("small");
+    meta.textContent = row.at || "bounded packet";
+    body.append(title, meta);
+    item.append(icon, body);
+    list.append(item);
+  }
+}
+
+function boundedAccountTimeline(account) {
+  if (!account) {
+    return [];
+  }
+  if (Array.isArray(account.timeline)) {
+    return account.timeline.map((row) => ({
+      at: row.at || row.observed_at || "bounded packet",
+      message: row.message || row.event || "Событие аккаунта",
+      visual: ACCOUNT_VISUAL_CLASS[row.visual_state] || row.visual || "neutral",
+      icon: row.icon || "assets/icons/phosphor/info.png"
+    }));
+  }
+  const rows = [];
+  if (account.last_error_summary) {
+    rows.push({
+      at: account.last_success || "нет времени",
+      message: account.last_error_summary,
+      visual: "red",
+      icon: "assets/icons/phosphor/x-circle.png"
+    });
+  } else if (account.last_success) {
+    rows.push({
+      at: account.last_success,
+      message: "Последняя проверка OK",
+      visual: "green",
+      icon: "assets/icons/phosphor/check-circle.png"
+    });
+  }
+  if (account.manual_hold) {
+    rows.push({
+      at: "bounded accounts packet",
+      message: "Аккаунт удержан оператором",
+      visual: "amber",
+      icon: "assets/icons/phosphor/pause-circle.png"
+    });
+  }
+  if (currentAccountsSnapshot?.source === "accounts_readonly" && rows.length <= 1) {
+    return rows;
+  }
+  if (currentAccountsSnapshot?.source !== "accounts_readonly") {
+    rows.push({
+      at: "fixture summary",
+      message: `${poolLabel(account.pool)} · ${accountLifecycleLabel(account)}`,
+      visual: ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral",
+      icon: "assets/icons/phosphor/info.png"
+    });
+  }
+  return rows;
+}
+
+function accountTimelineEmpty() {
+  const empty = document.createElement("div");
+  empty.className = "account-detail-empty";
+  empty.textContent = "История недоступна. Нужен bounded history packet.";
+  return empty;
+}
+
+function renderAccountDetailActions(account) {
+  const routine = document.getElementById("accountDetailActions");
+  const danger = document.getElementById("accountDetailDangerActions");
+  routine.replaceChildren();
+  danger.replaceChildren();
+  for (const spec of accountActionEligibility(account).filter((item) => !item.danger)) {
+    routine.append(accountDetailEligibilityButton(account, spec));
+  }
+  for (const spec of accountActionEligibility(account).filter((item) => item.danger)) {
+    danger.append(accountDetailEligibilityButton(account, spec));
+  }
+}
+
+function accountActionEligibility(account) {
+  const retired = account.pool === "retired";
+  const held = account.manual_hold === true;
+  return [
+    { uiAction: "validate_account", label: "Проверить", enabled: !retired, reason: retired ? "аккаунт выведен из пула" : "", icon: "assets/icons/phosphor/shield-check.png" },
+    { uiAction: "release_account", label: "Снять удержание", enabled: held && !retired, reason: held ? "" : "аккаунт не на удержании", icon: "assets/icons/phosphor/play.png" },
+    { uiAction: "hold_account", label: "Удержать", enabled: !held && !retired, reason: held ? "аккаунт уже удержан" : (retired ? "аккаунт выведен из пула" : ""), icon: "assets/icons/phosphor/pause-circle.png" },
+    { uiAction: "promote_account", label: "Перевести в активные", enabled: account.pool === "reserve" && !held, reason: account.pool === "active" ? "аккаунт уже активен" : (held ? "сначала снимите удержание" : "доступно только из резерва"), icon: "assets/icons/phosphor/play.png" },
+    { uiAction: "demote_account", label: "Перевести в резерв", enabled: account.pool === "active" && !held, reason: account.pool === "reserve" ? "аккаунт уже в резерве" : (held ? "сначала снимите удержание" : "доступно только из active"), icon: "assets/icons/phosphor/arrows-clockwise.png" },
+    { uiAction: "retire_account", label: "Вывести из пула", enabled: !retired, reason: retired ? "аккаунт уже выведен" : "", icon: "assets/icons/phosphor/trash.png", danger: true }
+  ];
+}
+
+function accountDetailEligibilityButton(account, spec) {
+  if (!spec.enabled) {
+    return disabledAccountActionButton(spec.label, spec.reason, spec.danger);
+  }
+  const button = accountActionButton(account, spec.uiAction, spec.label, { danger: spec.danger });
+  button.classList.add("account-detail-action");
+  prependNode(button, actionIcon(spec.icon));
+  return button;
+}
+
+function disabledAccountActionButton(label, reason, danger = false) {
+  const button = document.createElement("button");
+  button.className = `button small account-detail-disabled-action${danger ? " danger" : ""}`;
+  button.type = "button";
+  button.disabled = true;
+  button.title = reason || "Действие недоступно.";
+  button.append(actionIcon("assets/icons/phosphor/info.png"));
+  const textNode = document.createElement("span");
+  textNode.textContent = label;
+  const reasonNode = document.createElement("small");
+  reasonNode.textContent = reason || "недоступно";
+  button.append(textNode, reasonNode);
+  return button;
+}
+
+function actionIcon(src) {
+  const img = document.createElement("img");
+  img.className = "ui-icon button-icon";
+  img.src = src;
+  img.alt = "";
+  setNodeAttribute(img, "aria-hidden", "true");
+  return img;
+}
+
+function prependNode(parent, child) {
+  if (typeof parent.prepend === "function") {
+    parent.prepend(child);
+  } else if (typeof parent.append === "function") {
+    parent.append(child);
+  }
+}
+
+function renderAccountDetailLastCommand() {
+  const entry = actionLedger.find((item) => item.target === selectedAccountId) || null;
+  const drawer = document.getElementById("accountDetailDrawer");
+  const section = document.getElementById("accountDetailLastCommandSection");
+  const chip = document.getElementById("accountDetailLastCommandChip");
+  if (!entry) {
+    if (drawer) {
+      if (drawer.classList && typeof drawer.classList.remove === "function") {
+        drawer.classList.remove("last-command-visible");
+      } else {
+        drawer.className = String(drawer.className || "").replace(/\blast-command-visible\b/g, "").trim();
+      }
+    }
+    if (section) {
+      section.hidden = true;
+    }
+    chip.className = "chip neutral";
+    chip.lastElementChild.textContent = "нет";
+    text("accountDetailLastCommandAction", "нет");
+    text("accountDetailLastCommandCode", "-");
+    text("accountDetailLastCommandNext", "-");
+    text("accountDetailLastCommandRefresh", "нет данных");
+    return;
+  }
+  if (drawer) {
+    if (drawer.classList && typeof drawer.classList.add === "function") {
+      drawer.classList.add("last-command-visible");
+    } else if (!String(drawer.className || "").includes("last-command-visible")) {
+      drawer.className = `${drawer.className || ""} last-command-visible`.trim();
+    }
+  }
+  if (section) {
+    section.hidden = false;
+  }
+  chip.className = `chip ${entry.visualClass || "neutral"}`;
+  chip.lastElementChild.textContent = entry.displayState || entry.status || "unknown";
+  text("accountDetailLastCommandAction", entry.uiAction);
+  text("accountDetailLastCommandCode", entry.machineCode);
+  text("accountDetailLastCommandNext", entry.nextAction);
+  text("accountDetailLastCommandRefresh", entry.refreshStatus);
 }
 
 function poolLabel(pool) {

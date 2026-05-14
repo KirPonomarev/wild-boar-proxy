@@ -2273,7 +2273,7 @@ button:disabled {
 }
 
 .account-detail-backdrop {
-  background: rgba(30, 27, 24, .18);
+  background: rgba(30, 27, 24, .08);
   border: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -2286,27 +2286,55 @@ button:disabled {
   box-shadow: -24px 0 72px rgba(30, 27, 24, .16);
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: min(520px, 100vw);
-  min-width: min(520px, 100vw);
+  gap: 9px;
+  max-width: min(560px, 100vw);
+  min-width: min(548px, 100vw);
   overflow-y: auto;
-  padding: 32px;
+  padding: 20px 26px;
 }
 
 .drawer-head {
   align-items: flex-start;
-  display: flex;
-  gap: 18px;
-  justify-content: space-between;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 42px minmax(0, 1fr) 38px;
 }
 
 .drawer-head h2 {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: 0;
-  line-height: 34px;
-  margin: 6px 0 4px;
+  line-height: 28px;
+  margin: 2px 0;
   overflow-wrap: anywhere;
+}
+
+.account-detail-avatar {
+  align-items: center;
+  background: var(--blue-bg);
+  border-radius: 14px;
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.icon-button {
+  align-items: center;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  max-width: 36px;
+  min-width: 36px;
+  overflow: hidden;
+  padding: 0;
+  width: 36px;
+}
+
+.icon-button .ui-icon,
+.account-detail-avatar .ui-icon {
+  height: 18px;
+  width: 18px;
 }
 
 .account-detail-summary {
@@ -2315,22 +2343,50 @@ button:disabled {
   gap: 8px;
 }
 
-.account-detail-grid {
+.account-detail-section {
+  background: #fffdfa;
   border: 1px solid var(--border);
   border-radius: 16px;
   display: grid;
-  font-size: 13px;
+  gap: 10px;
+  padding: 12px;
+}
+
+#accountDetailLastCommandSection[hidden],
+.account-detail-drawer.last-command-visible #accountDetailTimelineSection {
+  display: none;
+}
+
+.account-detail-section-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.account-detail-section-head .secondary,
+.account-detail-actions > div > .secondary,
+.account-detail-note,
+.account-detail-danger > div {
+  display: none;
+}
+
+.account-detail-grid {
+  border: 1px solid rgba(217, 208, 195, .78);
+  border-radius: 12px;
+  display: grid;
+  font-size: 11px;
   gap: 0;
-  grid-template-columns: minmax(128px, auto) minmax(0, 1fr);
+  grid-template-columns: minmax(116px, auto) minmax(0, 1fr);
   overflow: hidden;
 }
 
 .account-detail-grid > div {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
-  line-height: 18px;
+  line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
-  padding: 12px 14px;
+  padding: 5px 8px;
 }
 
 .account-detail-grid > div:nth-child(odd) {
@@ -2343,25 +2399,137 @@ button:disabled {
 }
 
 .account-detail-actions {
-  border-top: 1px solid var(--border);
+  background: #fffdfa;
+  border: 1px solid var(--border);
+  border-radius: 16px;
   display: grid;
-  gap: 14px;
-  padding-top: 18px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .account-detail-action-group {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .account-detail-action-group .account-action,
 .account-detail-disabled-action {
+  flex: 1 1 calc(50% - 4px);
+  justify-content: flex-start;
   max-width: none;
-  width: 100%;
+  min-height: 30px;
+  min-width: 0;
 }
 
 .account-detail-missing {
   margin: 0;
+}
+
+.account-detail-stat-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.account-detail-stat-grid > div {
+  background: #f8f3ee;
+  border: 1px solid rgba(217, 208, 195, .68);
+  border-radius: 12px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.account-detail-stat-grid span,
+.account-detail-stat-grid strong {
+  display: block;
+}
+
+.account-detail-stat-grid span {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.account-detail-stat-grid strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 16px;
+  margin-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+.account-detail-note,
+.account-detail-empty {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.account-detail-timeline {
+  display: grid;
+  gap: 7px;
+}
+
+.account-detail-timeline-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+.account-detail-timeline-row strong,
+.account-detail-timeline-row small {
+  display: block;
+}
+
+.account-detail-timeline-row strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 15px;
+  overflow-wrap: anywhere;
+}
+
+.account-detail-timeline-row small {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 13px;
+}
+
+.account-detail-danger {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.account-detail-disabled-action {
+  display: grid;
+  gap: 2px 7px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  height: auto;
+  justify-items: start;
+  padding: 6px 8px;
+  white-space: normal;
+}
+
+.account-detail-disabled-action small {
+  color: var(--secondary);
+  display: block;
+  font-size: 10px;
+  grid-column: 2;
+  line-height: 13px;
+  text-align: left;
+}
+
+.account-detail-action {
+  gap: 6px;
+}
+
+.account-detail-action.danger,
+.account-detail-disabled-action.danger {
+  border-color: rgba(182, 64, 44, .28);
+  color: var(--red);
 }
 
 .pagination {
