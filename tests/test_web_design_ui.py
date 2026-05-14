@@ -594,8 +594,12 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn('id="onboardingResultSelected"', html)
         self.assertIn('id="onboardingResultReserveChip"', html)
         self.assertIn('id="onboardingResultNextAction"', html)
-        self.assertIn("Result flow после onboarding", html)
-        self.assertIn("Автоповышение запрещено", js)
+        self.assertIn("Итог onboarding", html)
+        self.assertIn("Аккаунт добавлен в резерв", js)
+        self.assertIn('class="onboard-stepper"', html)
+        self.assertIn('class="onboard-source-card"', html)
+        self.assertIn('id="onboardingResultStatusProofChip"', html)
+        self.assertIn('id="onboardingResultPoolChip"', html)
         self.assertIn("hold_account", js)
         self.assertIn("release_account", js)
         self.assertIn("account_id", js)
@@ -1237,13 +1241,19 @@ const ids = [
   "actionLedgerList",
   "onboardingResultFlow",
   "onboardingResultModeChip",
+  "onboardingResultTitle",
+  "onboardingResultSummary",
+  "onboardingResultSummaryNote",
   "onboardingResultBanner",
   "onboardingResultNewIds",
   "onboardingResultSelected",
   "onboardingResultSelectionChip",
+  "onboardingResultPoolChip",
   "onboardingResultReserveChip",
   "onboardingResultValidateChip",
   "onboardingResultSyncChip",
+  "onboardingResultStatusProofChip",
+  "onboardingResultRefreshChip",
   "onboardingResultNextAction"
 ];
 const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
@@ -1290,7 +1300,7 @@ sandbox.setActionPanel({
       changed_files: [],
       onboarding: {
         ui_state: "success",
-      final_outcome: "admitted",
+      final_outcome: "reserve_only_success",
       selected_backend_id: "acct-new",
       new_backend_ids: ["acct-new"],
       reserve_first_proven: true,
@@ -1298,7 +1308,8 @@ sandbox.setActionPanel({
       pool_after_onboarding: "reserve",
       active_routing_changed: false,
       validate_outcome: "ok",
-      sync_outcome: "ok"
+      sync_outcome: "ok",
+      status_observed: { command_status: "ok" }
     }
   }
 });
@@ -1310,14 +1321,23 @@ if (elements.onboardingResultFlow.hidden !== false) {
 if (elements.onboardingResultBanner.className !== "onboarding-result-banner green") {
   throw new Error(`success banner must be green: ${elements.onboardingResultBanner.className}`);
 }
-if (!elements.onboardingResultBanner.textContent.includes("аккаунт добавлен в резерв")) {
+if (elements.actionPanel.className !== "action-panel compact-action-panel green") {
+  throw new Error(`success panel must be green: ${elements.actionPanel.className}`);
+}
+if (!elements.onboardingResultBanner.textContent.includes("Аккаунт добавлен в резерв")) {
   throw new Error(`reserve-first success copy missing: ${elements.onboardingResultBanner.textContent}`);
 }
 if (elements.onboardingResultSelected.textContent !== "acct-new") {
   throw new Error(`safe selected backend id missing: ${elements.onboardingResultSelected.textContent}`);
 }
-if (elements.onboardingResultReserveChip.textContent !== "true") {
+if (elements.onboardingResultReserveChip.textContent !== "доказано") {
   throw new Error(`reserve proof chip missing: ${elements.onboardingResultReserveChip.textContent}`);
+}
+if (elements.onboardingResultStatusProofChip.textContent !== "confirmed") {
+  throw new Error(`status proof chip missing: ${elements.onboardingResultStatusProofChip.textContent}`);
+}
+if (elements.onboardingResultPoolChip.textContent !== "Резерв") {
+  throw new Error(`pool chip must show reserve: ${elements.onboardingResultPoolChip.textContent}`);
 }
 if (!elements.onboardingResultNextAction.textContent.includes("отдельным действием оператора")) {
   throw new Error(`next action must keep promotion separate: ${elements.onboardingResultNextAction.textContent}`);
@@ -1349,11 +1369,99 @@ sandbox.setActionPanel({
 if (elements.onboardingResultBanner.className !== "onboarding-result-banner amber") {
   throw new Error(`needs_user_action must be amber: ${elements.onboardingResultBanner.className}`);
 }
+if (elements.actionPanel.className === "action-panel compact-action-panel green") {
+  throw new Error("no-new-auth outer panel must not be green");
+}
 if (elements.onboardingResultSelected.textContent !== "-") {
   throw new Error("non-success onboarding must not show selected backend");
 }
-if (!elements.onboardingResultBanner.textContent.includes("не считается успешным")) {
+if (!elements.onboardingResultBanner.textContent.includes("не добавило аккаунт")) {
   throw new Error(`non-success copy must not be green: ${elements.onboardingResultBanner.textContent}`);
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account",
+  action_role: "account_onboarding",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "Onboarding owner packet emitted.",
+    next_action: "operator_action",
+    changed_files: [],
+    onboarding: {
+      ui_state: "needs_user_action",
+      final_outcome: "ambiguous_new_auth_detection",
+      selected_backend_id: "acct-hidden",
+      reserve_first_proven: false,
+      selection_status: "ambiguous"
+    }
+  }
+});
+if (elements.onboardingResultSelected.textContent !== "-") {
+  throw new Error("ambiguous onboarding must hide selected backend");
+}
+if (!elements.onboardingResultBanner.textContent.includes("Требуется действие оператора")) {
+  throw new Error(`ambiguous copy must require operator action: ${elements.onboardingResultBanner.textContent}`);
+}
+if (elements.actionPanel.className === "action-panel compact-action-panel green") {
+  throw new Error("ambiguous outer panel must not be green");
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account",
+  action_role: "account_onboarding",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "Onboarding owner packet emitted.",
+    next_action: "retry",
+    changed_files: [],
+    onboarding: {
+      ui_state: "success",
+      final_outcome: "reserve_only_success",
+      selected_backend_id: "acct-leaky",
+      new_backend_ids: ["acct-leaky"],
+      reserve_first_proven: true,
+      selection_status: "selected_unique_backend",
+      pool_after_onboarding: "active",
+      active_routing_changed: true,
+      validate_outcome: "ok",
+      sync_outcome: "ok",
+      status_observed: { command_status: "ok" }
+    }
+  }
+});
+if (elements.onboardingResultBanner.className === "onboarding-result-banner green") {
+  throw new Error("active routing change must not be rendered green");
+}
+if (elements.actionPanel.className === "action-panel compact-action-panel green") {
+  throw new Error("active routing contradiction must not keep outer panel green");
+}
+if (elements.onboardingResultSelected.textContent !== "-") {
+  throw new Error("selected backend must be hidden when reserve proof contradicts pool");
+}
+
+sandbox.setActionPanel({
+  ui_action: "onboard_account",
+  action_role: "integration_failure",
+  post_action_refresh_required: false,
+  result: {
+    status: "invalid_json",
+    machine_error_code: "UI_ACTION_INVALID_JSON",
+    human_message: "invalid json",
+    next_action: "retry",
+    changed_files: []
+  }
+});
+if (elements.onboardingResultBanner.className !== "onboarding-result-banner red") {
+  throw new Error(`onboarding invalid_json banner must be red: ${elements.onboardingResultBanner.className}`);
+}
+if (elements.actionPanel.className !== "action-panel compact-action-panel red") {
+  throw new Error(`onboarding invalid_json outer panel must be red: ${elements.actionPanel.className}`);
 }
 """
         result = subprocess.run(

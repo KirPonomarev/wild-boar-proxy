@@ -247,35 +247,46 @@
           </div>
           <section id="onboardingResultFlow" class="onboarding-result-flow" aria-label="Result flow добавления аккаунта" hidden>
             <div class="onboarding-result-head">
+              <span class="onboarding-result-icon"><img class="ui-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true"></span>
               <div>
                 <div class="eyebrow">Добавление аккаунта</div>
-                <h3>Result flow после onboarding</h3>
-                <p>Отображается только из результата <span class="mono-value">onboard_account</span>; автоповышение не выполняется.</p>
+                <h3 id="onboardingResultTitle">Итог onboarding</h3>
+                <p id="onboardingResultSubtitle">Отображается только из результата <span class="mono-value">onboard_account</span>; автоповышение не выполняется.</p>
               </div>
               <span id="onboardingResultModeChip" class="chip neutral"><span class="dot"></span><span>reserve-first</span></span>
             </div>
             <div id="onboardingResultBanner" class="onboarding-result-banner neutral">
               Результат подключения ещё не получен.
             </div>
+            <section class="onboarding-summary-card">
+              <div>
+                <div class="eyebrow">Краткий итог</div>
+                <strong id="onboardingResultSummary">Ожидается packet результата.</strong>
+                <span id="onboardingResultSummaryNote">UI не достраивает success без reserve-first proof.</span>
+              </div>
+              <span id="onboardingResultPoolChip" class="mini-pill neutral">pool unknown</span>
+            </section>
             <div class="onboarding-result-grid">
               <section class="onboarding-result-card">
-                <div class="eyebrow">Итог выполнения</div>
+                <div class="eyebrow">Packet proof</div>
                 <div class="onboarding-result-kv">
                   <div>new_backend_ids</div><div id="onboardingResultNewIds">-</div>
                   <div>selected_backend_id</div><div id="onboardingResultSelected">-</div>
                   <div>selection_status</div><div><span id="onboardingResultSelectionChip" class="mini-pill neutral">-</span></div>
-                  <div>reserve_first_enforced</div><div><span id="onboardingResultReserveChip" class="mini-pill neutral">-</span></div>
+                  <div>reserve-first proof</div><div><span id="onboardingResultReserveChip" class="mini-pill neutral">-</span></div>
                   <div>validate outcome</div><div><span id="onboardingResultValidateChip" class="mini-pill neutral">-</span></div>
                   <div>sync outcome</div><div><span id="onboardingResultSyncChip" class="mini-pill neutral">-</span></div>
+                  <div>status proof</div><div><span id="onboardingResultStatusProofChip" class="mini-pill neutral">-</span></div>
+                  <div>refresh state</div><div><span id="onboardingResultRefreshChip" class="mini-pill neutral">pending</span></div>
                 </div>
               </section>
               <section class="onboarding-result-card">
-                <div class="eyebrow">Другие состояния</div>
+                <div class="eyebrow">Non-success states</div>
                 <div class="onboarding-state-stack">
-                  <div class="onboarding-state-row neutral"><span class="round-icon neutral">i</span><div><strong>no_new_auth_detected</strong><small>не success</small></div><span class="mini-pill neutral">neutral</span></div>
-                  <div class="onboarding-state-row amber"><span class="round-icon amber">!</span><div><strong>ambiguous</strong><small>требует оператора</small></div><span class="mini-pill amber">warning</span></div>
-                  <div class="onboarding-state-row red"><span class="round-icon red">!</span><div><strong>validation failed</strong><small>не active routing</small></div><span class="mini-pill red">failed</span></div>
-                  <div class="onboarding-state-row red"><span class="round-icon red">!</span><div><strong>status proof failed</strong><small>не зелёный результат</small></div><span class="mini-pill red">blocked</span></div>
+                  <div class="onboarding-state-row neutral"><span class="round-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span><div><strong>no_new_auth_detected</strong><small>не success, backend не выбран</small></div><span class="mini-pill neutral">not success</span></div>
+                  <div class="onboarding-state-row amber"><span class="round-icon amber"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span><div><strong>ambiguous_new_auth_detection</strong><small>требует действия оператора</small></div><span class="mini-pill amber">operator</span></div>
+                  <div class="onboarding-state-row red"><span class="round-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span><div><strong>validation_failed</strong><small>не используется для маршрутизации</small></div><span class="mini-pill red">failed</span></div>
+                  <div class="onboarding-state-row amber"><span class="round-icon amber"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span><div><strong>sync_skipped / status_proof_failed</strong><small>нужен refresh или сверка</small></div><span class="mini-pill amber">proof</span></div>
                 </div>
               </section>
             </div>
@@ -284,7 +295,11 @@
                 <div class="eyebrow">Следующее действие</div>
                 <p id="onboardingResultNextAction">Аккаунт находится в резервном пуле.</p>
               </div>
-              <button class="button small disabled" type="button" disabled>Проверка отдельным действием</button>
+              <div class="onboarding-result-actions" aria-label="Доступные следующие действия">
+                <button class="button small disabled" type="button" disabled>Проверить аккаунт · отдельное действие</button>
+                <button class="button small disabled" type="button" disabled>Открыть аккаунт · после refresh</button>
+                <button class="button small" type="button">Закрыть</button>
+              </div>
             </div>
           </section>
           <div class="action-ledger-head">
@@ -1262,11 +1277,17 @@
         <section class="confirm-modal onboard-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" data-modal-surface="onboard-reserve-request">
           <div class="confirm-modal-header">
             <div class="eyebrow">Добавление аккаунта</div>
-            <h2 id="onboardTitle">Добавить аккаунт в резерв</h2>
+            <h2 id="onboardTitle">Добавление аккаунта</h2>
             <p>
-              Подключение выполняется через <span class="mono-value">onboard_account</span>.
-              Браузер не передаёт секретные значения, исходные расположения или идентификаторы бекенда.
+              Добавьте аккаунт в резервный пул через безопасный onboarding command.
+              Браузер не передаёт секреты, исходные расположения или идентификаторы бекенда.
             </p>
+          </div>
+          <div class="onboard-stepper" aria-label="Шаги onboarding">
+            <div class="onboard-step active"><span>1</span><strong>Источник</strong><small>command-owned</small></div>
+            <div class="onboard-step"><span>2</span><strong>Резерв</strong><small>reserve-first</small></div>
+            <div class="onboard-step"><span>3</span><strong>Проверка</strong><small>packet proof</small></div>
+            <div class="onboard-step"><span>4</span><strong>Результат</strong><small>no optimistic success</small></div>
           </div>
           <div class="confirm-boundary" aria-label="Граница результата подключения">
             <span>command request</span>
@@ -1274,16 +1295,27 @@
             <span>результат только из packet</span>
             <span>автоповышения нет</span>
           </div>
+          <section class="onboard-source-card" aria-label="Источник onboarding">
+            <span class="onboard-source-icon"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+            <div>
+              <div class="eyebrow">Источник auth</div>
+              <strong>command-owned onboarding surface</strong>
+              <p>Ручной выбор файла доступен только в desktop/native flow; web не принимает путь и не читает файлы.</p>
+            </div>
+            <span class="mini-pill amber">desktop/native only</span>
+          </section>
           <div class="confirm-facts">
+            <div>Запуск</div><div><span class="mono-value">onboard_account</span> без browser args</div>
             <div>Размещение</div><div>только сначала в резерв</div>
             <div>Повышение</div><div>никогда автоматически</div>
-            <div>Подтверждение</div><div>пакет команды плюс обновлённый accounts JSON</div>
+            <div>Подтверждение</div><div>packet результата плюс обновлённый accounts JSON</div>
             <div>Недоступные итоги</div><div>no-new-auth и ambiguous identity требуют действия оператора</div>
           </div>
           <div class="modal-state-list" aria-label="Состояния результата подключения">
             <div class="modal-state-row success"><span>reserve-only success</span><strong>показать результат, затем обновить accounts JSON</strong></div>
             <div class="modal-state-row neutral"><span>no-new-auth</span><strong>не считать успехом и не включать в рабочий поток</strong></div>
             <div class="modal-state-row amber"><span>ambiguous identity</span><strong>остановить и запросить действие оператора</strong></div>
+            <div class="modal-state-row red"><span>validation/status failed</span><strong>не показывать зелёный результат</strong></div>
           </div>
           <p class="confirm-note">
             Это окно запускает ограниченный owner command request. Оно не сканирует файлы,
@@ -1291,7 +1323,7 @@
           </p>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
-            <button id="runOnboardAction" class="button primary" type="button">Запустить подключение</button>
+            <button id="runOnboardAction" class="button primary" type="button">Добавить в резерв</button>
           </div>
         </section>
       </div>

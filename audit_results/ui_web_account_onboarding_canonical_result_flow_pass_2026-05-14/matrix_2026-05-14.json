@@ -1,0 +1,106 @@
+{
+  "contour": "UI_WEB_ACCOUNT_ONBOARDING_CANONICAL_RESULT_FLOW_PASS",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head": "7705343",
+  "scope": {
+    "ui_files_changed": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "wild_boar_proxy/web_design_ui/styles/overview.css"
+    ],
+    "test_files_changed": [
+      "tests/test_web_design_ui.py"
+    ],
+    "runtime_files_changed": [],
+    "command_adapter_files_changed": [],
+    "desktop_files_changed": []
+  },
+  "acceptance": {
+    "modal_has_no_browser_file_or_path_input": "pass",
+    "onboard_payload_stays_command_owned": "pass",
+    "green_success_requires_reserve_first_packet_proof": "pass",
+    "selected_backend_hidden_on_non_success": "pass",
+    "selected_backend_hidden_on_contradicted_reserve_proof": "pass",
+    "no_new_auth_not_green": "pass",
+    "ambiguous_not_green": "pass",
+    "validation_failed_not_green": "pass",
+    "status_proof_failed_not_green": "pass",
+    "command_error_not_green": "pass",
+    "invalid_json_not_green": "pass",
+    "no_auto_promote_or_active_routing_success_copy": "pass",
+    "no_runtime_adapter_allowlist_or_desktop_scope_creep": "pass"
+  },
+  "visual_states": {
+    "initial_modal": {
+      "screenshot": "screenshots/after/initial_modal.png",
+      "target_height": 755,
+      "target_bottom": 878,
+      "inputs": 0,
+      "file_inputs": 0,
+      "visible_svg_icons": 0,
+      "overflows": 0
+    },
+    "reserve_only_success": {
+      "screenshot": "screenshots/after/reserve_only_success.png",
+      "banner_class": "onboarding-result-banner green",
+      "selected_backend": "acct-new",
+      "reserve_proof": "доказано",
+      "status_proof": "confirmed",
+      "overflows": 0
+    },
+    "no_new_auth": {
+      "screenshot": "screenshots/after/no_new_auth.png",
+      "banner_class": "onboarding-result-banner amber",
+      "selected_backend": "-",
+      "overflows": 0
+    },
+    "ambiguous": {
+      "screenshot": "screenshots/after/ambiguous.png",
+      "banner_class": "onboarding-result-banner amber",
+      "selected_backend": "-",
+      "overflows": 0
+    },
+    "validation_failed": {
+      "screenshot": "screenshots/after/validation_failed.png",
+      "banner_class": "onboarding-result-banner red",
+      "selected_backend": "-",
+      "overflows": 0
+    },
+    "sync_skipped": {
+      "screenshot": "screenshots/after/sync_skipped.png",
+      "banner_class": "onboarding-result-banner green",
+      "selected_backend": "acct-sync",
+      "note": "green applies to reserve placement proof; sync chip and next action still require separate sync"
+    },
+    "status_proof_failed": {
+      "screenshot": "screenshots/after/status_proof_failed.png",
+      "banner_class": "onboarding-result-banner red",
+      "selected_backend": "-",
+      "overflows": 0
+    },
+    "command_error": {
+      "screenshot": "screenshots/after/command_error.png",
+      "banner_class": "onboarding-result-banner red",
+      "selected_backend": "-",
+      "overflows": 0
+    },
+    "invalid_json_timeout": {
+      "screenshot": "screenshots/after/invalid_json_timeout.png",
+      "banner_class": "onboarding-result-banner red",
+      "selected_backend": "-",
+      "overflows": 0
+    }
+  },
+  "verification": {
+    "node_check": "pass",
+    "unittest_suite": {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "pass",
+      "tests": 87
+    },
+    "diff_check": "pass",
+    "json_metrics_valid": "pass",
+    "private_reference_trace_scan": "pass"
+  }
+}

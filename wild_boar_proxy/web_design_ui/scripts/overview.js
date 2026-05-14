@@ -510,6 +510,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       const refreshed = await setLiveReadonly(false);
       if (refreshed.status === "ok") {
         text("actionRefreshStatus", "live-обновление выполнено");
+        setMiniPill("onboardingResultRefreshChip", "refresh complete", "green");
       } else {
         setActionPanel(payload, "failed");
       }
@@ -900,10 +901,14 @@ function updateDiagnosticsDetailSource(source) {
 function setActionPanel(payload, refreshState = "none") {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
+  const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
   const panel = document.getElementById("actionPanel");
-  panel.className = `action-panel compact-action-panel ${display.visualClass}`;
+  const panelVisualClass = payload.ui_action === "onboard_account"
+    ? onboardingModel.visual
+    : display.visualClass;
+  panel.className = `action-panel compact-action-panel ${panelVisualClass}`;
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || payload.route_id || "-");
@@ -921,88 +926,201 @@ function setActionPanel(payload, refreshState = "none") {
       : (payload.post_action_refresh_required ? "требуется после действия" : "не требуется")
   );
   text("actionTruthNote", display.truthNote);
-  text("actionOnboardingOutcome", onboarding.final_outcome || "-");
-  text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "доказано" : (onboarding.ui_state || "-"));
-  text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
-  renderOnboardingResultFlow(payload, onboarding);
+  text("actionOnboardingOutcome", onboardingModel.finalOutcome || "-");
+  text("actionOnboardingReserveProof", onboardingModel.reserveFirst);
+  text("actionOnboardingBackend", onboardingModel.selectedBackendId);
+  renderOnboardingResultFlow(payload, onboarding, refreshState);
   recordActionLedgerEntry(payload, refreshState, display, changedFiles);
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
 }
 
-function renderOnboardingResultFlow(payload, onboarding) {
+function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") {
   const flow = document.getElementById("onboardingResultFlow");
   if (!flow) {
     return;
   }
   const isOnboarding = payload.ui_action === "onboard_account";
   flow.hidden = !isOnboarding;
+  const panel = document.getElementById("actionPanel");
+  if (panel && panel.classList && typeof panel.classList.toggle === "function") {
+    panel.classList.toggle("onboarding-result-expanded", isOnboarding);
+  }
   if (!isOnboarding) {
     return;
   }
 
-  const model = onboardingResultModel(onboarding);
+  const model = onboardingResultModel(onboarding, payload, refreshState);
   const chip = document.getElementById("onboardingResultModeChip");
   chip.className = `chip ${model.visual}`;
   chip.lastElementChild.textContent = model.modeLabel;
+  text("onboardingResultTitle", model.title);
+  text("onboardingResultSummary", model.summary);
+  text("onboardingResultSummaryNote", model.summaryNote);
   const banner = document.getElementById("onboardingResultBanner");
   banner.className = `onboarding-result-banner ${model.visual}`;
   banner.textContent = model.banner;
   text("onboardingResultNewIds", model.newBackendIds);
   text("onboardingResultSelected", model.selectedBackendId);
   setMiniPill("onboardingResultSelectionChip", model.selectionStatus, model.selectionVisual);
+  setMiniPill("onboardingResultPoolChip", model.poolLabel, model.poolVisual);
   setMiniPill("onboardingResultReserveChip", model.reserveFirst, model.reserveVisual);
   setMiniPill("onboardingResultValidateChip", model.validateOutcome, model.validateVisual);
   setMiniPill("onboardingResultSyncChip", model.syncOutcome, model.syncVisual);
+  setMiniPill("onboardingResultStatusProofChip", model.statusProof, model.statusProofVisual);
+  setMiniPill("onboardingResultRefreshChip", model.refreshState, model.refreshVisual);
   text("onboardingResultNextAction", model.nextAction);
 }
 
-function onboardingResultModel(onboarding) {
+function onboardingResultModel(onboarding, payload = {}, refreshState = "none") {
   const uiState = onboarding.ui_state || "unknown_outcome";
   const finalOutcome = onboarding.final_outcome || "unknown_outcome";
+  const successfulOutcome = [
+    "reserve_only_success",
+    "explicit_auth_imported_to_reserve"
+  ].includes(finalOutcome);
   const reserveFirst = onboarding.reserve_first_proven === true;
-  const selectedBackendId = onboarding.selected_backend_id || "-";
-  const success = uiState === "success" && finalOutcome === "admitted" && reserveFirst && selectedBackendId !== "-";
+  const rawSelectedBackendId = onboarding.selected_backend_id || "";
+  const poolAfter = onboarding.pool_after_onboarding || "";
+  const poolOk = poolAfter === "reserve";
+  const activeRoutingUnchanged = onboarding.active_routing_changed === false;
+  const validateOk = onboarding.validate_outcome === "ok";
+  const statusProofOk = onboardingStatusProofOk(onboarding);
+  const success = uiState === "success"
+    && successfulOutcome
+    && reserveFirst
+    && rawSelectedBackendId
+    && poolOk
+    && activeRoutingUnchanged
+    && validateOk
+    && statusProofOk;
+  const selectedBackendId = success ? rawSelectedBackendId : "-";
+  const integrationStatus = payload.status || payload.result?.status || "";
+  const integrationVisual = integrationStatus === "timeout"
+    ? "amber"
+    : (["invalid_json", "integration_failure"].includes(integrationStatus) ? "red" : "");
   const newBackendIds = Array.isArray(onboarding.new_backend_ids) && onboarding.new_backend_ids.length
     ? `[${onboarding.new_backend_ids.join(", ")}]`
     : `[${selectedBackendId}]`;
   const visual = success
     ? "green"
-    : (uiState === "needs_user_action" ? "amber" : (uiState === "command_error" ? "red" : "neutral"));
+    : (integrationVisual || (uiState === "needs_user_action" ? "amber" : (uiState === "command_error" ? "red" : "neutral")));
   const banner = success
-    ? "Reserve-only success: аккаунт добавлен в резерв. Автоповышение запрещено."
+    ? "Аккаунт добавлен в резерв. Активная маршрутизация не изменялась."
     : onboardingResultBanner(uiState, finalOutcome);
+  const syncSkipped = String(onboarding.sync_outcome || "").includes("skipped");
   return {
+    finalOutcome,
     visual,
-    modeLabel: success ? "reserve-first" : uiStateLabel(uiState),
+    title: success ? "Аккаунт добавлен в резерв" : onboardingResultTitle(uiState, finalOutcome),
+    summary: success ? "Reserve-first proof принят" : onboardingResultSummary(uiState, finalOutcome),
+    summaryNote: success
+      ? "Выбранный backend показан только из доказанного packet результата."
+      : "UI не показывает selected backend и не достраивает success.",
+    modeLabel: success ? "reserve-first proof" : uiStateLabel(uiState),
     banner,
     newBackendIds: success ? newBackendIds : "-",
     selectedBackendId,
     selectionStatus: onboarding.selection_status || "-",
     selectionVisual: success ? "green" : (uiState === "needs_user_action" ? "amber" : "neutral"),
-    reserveFirst: reserveFirst ? "true" : "false",
+    poolLabel: success ? "Резерв" : (poolAfter || "pool unknown"),
+    poolVisual: success ? "green" : "neutral",
+    reserveFirst: reserveFirst ? "доказано" : "не доказано",
     reserveVisual: reserveFirst ? "green" : "amber",
     validateOutcome: onboarding.validate_outcome || "-",
     validateVisual: onboarding.validate_outcome === "ok" ? "green" : (onboarding.validate_outcome ? "amber" : "neutral"),
     syncOutcome: onboarding.sync_outcome || "-",
     syncVisual: onboarding.sync_outcome === "ok" ? "green" : (onboarding.sync_outcome ? "blue" : "neutral"),
-    nextAction: onboardingNextAction(uiState, finalOutcome, success)
+    statusProof: statusProofOk ? "confirmed" : "not confirmed",
+    statusProofVisual: statusProofOk ? "green" : "amber",
+    refreshState: onboardingRefreshLabel(payload, refreshState),
+    refreshVisual: refreshState === "failed" ? "red" : (payload.post_action_refresh_required ? "amber" : "neutral"),
+    nextAction: onboardingNextAction(uiState, finalOutcome, success, syncSkipped)
   };
 }
 
 function onboardingResultBanner(uiState, finalOutcome) {
   if (uiState === "needs_user_action") {
+    if (finalOutcome === "no_new_auth_detected") {
+      return "Новых auth-данных не найдено. Действие не добавило аккаунт.";
+    }
+    if (finalOutcome === "ambiguous_new_auth_detection") {
+      return "Требуется действие оператора: найдено несколько возможных кандидатов.";
+    }
     return `${finalOutcome}: подключение не считается успешным без действия оператора.`;
   }
   if (uiState === "command_error") {
+    if (["validate_failed", "validation_failed"].includes(finalOutcome)) {
+      return "Проверка не пройдена. Аккаунт не используется для маршрутизации.";
+    }
+    if (finalOutcome === "status_failed") {
+      return "Статус не подтверждён. Результат onboarding не считается runtime truth.";
+    }
     return `${finalOutcome}: команда не дала безопасный reserve-first успех.`;
   }
   return "Результат подключения недостаточен для зелёного вывода; UI не достраивает успех.";
 }
 
-function onboardingNextAction(uiState, finalOutcome, success) {
+function onboardingResultTitle(uiState, finalOutcome) {
+  if (finalOutcome === "no_new_auth_detected") {
+    return "Новых auth-данных не найдено";
+  }
+  if (finalOutcome === "ambiguous_new_auth_detection") {
+    return "Требуется действие оператора";
+  }
+  if (["validate_failed", "validation_failed"].includes(finalOutcome)) {
+    return "Проверка не пройдена";
+  }
+  if (finalOutcome === "status_failed") {
+    return "Статус не подтверждён";
+  }
+  if (uiState === "command_error") {
+    return "Onboarding не завершён";
+  }
+  return "Итог не подтверждён";
+}
+
+function onboardingResultSummary(uiState, finalOutcome) {
+  if (finalOutcome === "no_new_auth_detected") {
+    return "Новый backend не появился";
+  }
+  if (finalOutcome === "ambiguous_new_auth_detection") {
+    return "Нужен выбор оператора";
+  }
+  if (["validate_failed", "validation_failed"].includes(finalOutcome)) {
+    return "Validation proof отсутствует";
+  }
+  if (finalOutcome === "status_failed") {
+    return "Status proof отсутствует";
+  }
+  if (uiState === "command_error") {
+    return "Команда не дала admitted result";
+  }
+  return "Требуется новый packet truth";
+}
+
+function onboardingStatusProofOk(onboarding) {
+  const observed = onboarding.status_observed;
+  return Boolean(
+    observed
+    && typeof observed === "object"
+    && observed.command_status === "ok"
+  );
+}
+
+function onboardingRefreshLabel(payload, refreshState) {
+  if (refreshState === "failed") {
+    return "refresh failed";
+  }
+  return payload.post_action_refresh_required ? "refresh pending" : "refresh not required";
+}
+
+function onboardingNextAction(uiState, finalOutcome, success, syncSkipped = false) {
   if (success) {
+    if (syncSkipped) {
+      return "Аккаунт находится в резерве. Следующее действие: запустить сверку отдельной командой.";
+    }
     return "Аккаунт находится в резервном пуле. Проверка или продвижение возможны только отдельным действием оператора.";
   }
   if (uiState === "needs_user_action") {
@@ -1345,7 +1463,7 @@ async function confirmPendingAction() {
 
 function openOnboardModal() {
   document.getElementById("onboardOverlay").hidden = false;
-  document.getElementById("runOnboardAction").focus();
+  document.getElementById("runOnboardAction").focus({ preventScroll: true });
 }
 
 function closeOnboardModal() {
