@@ -308,10 +308,14 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("function renderAccountDetailActions", js)
         self.assertIn("function renderAccountDetailLastCommand", js)
         self.assertIn("function isInteractiveAccountRowTarget", js)
+        self.assertIn("function safeAccountDetailText", js)
+        self.assertIn("function redactUiSensitiveText", js)
+        self.assertIn("accountActionEligibility(account).filter((item) => item.enabled)", js)
         self.assertIn("account_missing_after_refresh", html + js)
         self.assertIn("Открыть drawer. Данные берутся только из текущего accounts JSON.", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
         self.assertIn('row.addEventListener("click"', js)
+        self.assertIn("Открыть детали", js)
         self.assertIn('id="accountDetailDangerActions"', html)
         self.assertIn('id="accountDetailTimeline"', html)
         self.assertIn('id="accountDetailLastCommandChip"', html)
@@ -529,6 +533,36 @@ if (!disabledRoutine.length) {
 const dangerButtons = node("accountDetailDangerActions").children.filter((child) => child.dataset?.uiAction === "retire_account");
 if (dangerButtons.length !== 1 || dangerButtons[0].dataset.accountId !== "backend-a") {
   throw new Error("drawer did not isolate retire action in danger zone");
+}
+
+sandbox.renderAccountsSnapshot({
+  ...snapshot,
+  accounts: [{
+    ...snapshot.accounts[0],
+    last_error_summary: "/Users/kirill/.codex auth_token=SECRET123",
+    timeline: [{
+      at: "/Volumes/Work/private-state.json",
+      message: "secret=VERYSECRET path=/tmp/private-state.json",
+      visual_state: "red"
+    }]
+  }]
+});
+sandbox.openAccountDrawer("backend-a");
+function collectText(item) {
+  if (!item) {
+    return "";
+  }
+  return [
+    item.textContent || "",
+    ...((item.children || []).map((child) => collectText(child)))
+  ].join(" ");
+}
+const sensitiveDrawerText = [
+  collectText(node("accountDetailError")),
+  collectText(node("accountDetailTimeline"))
+].join(" ");
+if (sensitiveDrawerText.includes("/Users/") || sensitiveDrawerText.includes("/Volumes/") || sensitiveDrawerText.includes("/tmp/private-state") || sensitiveDrawerText.includes("SECRET123") || sensitiveDrawerText.includes("VERYSECRET")) {
+  throw new Error(`drawer leaked sensitive account text: ${sensitiveDrawerText}`);
 }
 
 sandbox.renderAccountsSnapshot({ ...snapshot, accounts: [], summary: { ...snapshot.summary, visible_count: 0 } });
@@ -1149,6 +1183,11 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("confirmPolicy", html)
         self.assertIn("confirmTruthWarning", html)
         self.assertIn("confirmDispatchState", html)
+        self.assertIn("accountActionPreflight", html)
+        self.assertIn("Account action summary", html)
+        self.assertIn("Current pool", html)
+        self.assertIn("Requested action", html)
+        self.assertIn("Подтверждением результата остаётся command packet плюс canonical refresh.", html)
         self.assertIn("apiRouteRemovePreflight", html)
         self.assertIn("Route exists", html)
         self.assertIn("remove registry route", html)
@@ -1167,6 +1206,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("runUiAction(pending.uiAction, pending.extraPayload);", js)
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
+        self.assertIn("ACCOUNT_UI_ACTIONS", js)
+        self.assertIn("renderAccountActionPreflight", js)
+        self.assertIn("findAccountById", js)
+        self.assertIn("confirmationReadyLabel", js)
         self.assertIn("renderApiRouteRemovePreflight", js)
         self.assertIn("apiRouteRemoveRefreshState", js)
         self.assertIn("apiRoutePresentInSnapshot", js)

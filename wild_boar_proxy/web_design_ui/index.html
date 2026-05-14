@@ -1418,6 +1418,18 @@
             <div>Граница</div><div id="confirmScope">-</div>
             <div>Отправка</div><div id="confirmDispatchState">ожидание</div>
           </div>
+          <section id="accountActionPreflight" class="account-action-preflight" aria-label="Preflight действия аккаунта" hidden>
+            <div class="eyebrow">Account action summary</div>
+            <div class="confirm-facts">
+              <div>Account id</div><div id="accountActionPreflightId">-</div>
+              <div>Current pool</div><div id="accountActionPreflightPool">-</div>
+              <div>Requested action</div><div id="accountActionPreflightAction">-</div>
+              <div>Expected refresh</div><div id="accountActionPreflightRefresh">required</div>
+            </div>
+            <p class="confirm-note">
+              Эти факты взяты только из выбранного accounts JSON. Подтверждением результата остаётся command packet плюс canonical refresh.
+            </p>
+          </section>
           <section id="apiRouteRemovePreflight" class="api-route-remove-preflight" aria-label="Preflight удаления disabled route" hidden>
             <div class="eyebrow">Preflight summary</div>
             <div class="confirm-facts">

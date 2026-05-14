@@ -93,6 +93,14 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
+const ACCOUNT_UI_ACTIONS = new Set([
+  "validate_account",
+  "promote_account",
+  "demote_account",
+  "hold_account",
+  "release_account",
+  "retire_account"
+]);
 
 const CONFIRMATION_POLICY = {
   sync_runtime: {
@@ -1676,14 +1684,46 @@ function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   text("confirmRefresh", metadata.post_action_refresh_required ? "требуется" : "не требуется");
   text("confirmScope", metadata.action_claim_scope || "unknown");
   text("confirmTruthWarning", policy.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning);
+  renderAccountActionPreflight(uiAction, extraPayload, metadata);
   renderApiRouteRemovePreflight(uiAction, extraPayload);
   const confirmButton = document.getElementById("confirmAction");
   if (confirmButton) {
-    confirmButton.dataset.readyLabel = uiAction === "api_route_remove" ? "Удалить route" : "Подтвердить";
+    confirmButton.dataset.readyLabel = confirmationReadyLabel(uiAction);
   }
   setConfirmationInFlight(false);
   document.getElementById("confirmOverlay").hidden = false;
   document.getElementById("confirmAction").focus();
+}
+
+function confirmationReadyLabel(uiAction) {
+  if (uiAction === "api_route_remove") {
+    return "Удалить route";
+  }
+  if (uiAction === "retire_account") {
+    return "Вывести из пула";
+  }
+  return "Подтвердить";
+}
+
+function renderAccountActionPreflight(uiAction, extraPayload = {}, metadata = {}) {
+  const block = document.getElementById("accountActionPreflight");
+  if (!block) {
+    return;
+  }
+  const isAccountAction = ACCOUNT_UI_ACTIONS.has(uiAction);
+  block.hidden = !isAccountAction;
+  if (!isAccountAction) {
+    return;
+  }
+  const accountId = extraPayload.account_id || "";
+  const account = findAccountById(accountId);
+  text("accountActionPreflightId", accountId || "-");
+  text(
+    "accountActionPreflightPool",
+    account ? `${account.pool_label || poolLabel(account.pool)} · ${accountLifecycleLabel(account)}` : "account_missing_after_refresh"
+  );
+  text("accountActionPreflightAction", metadata.display_name || uiAction);
+  text("accountActionPreflightRefresh", metadata.post_action_refresh_required ? "required" : "not required");
 }
 
 function renderApiRouteRemovePreflight(uiAction, extraPayload = {}) {
@@ -1707,6 +1747,13 @@ function renderApiRouteRemovePreflight(uiAction, extraPayload = {}) {
   text("apiRouteRemovePreflightMutation", "remove registry route");
   text("apiRouteRemovePreflightWrite", "command-owned");
   text("apiRouteRemovePreflightRefresh", "required");
+}
+
+function findAccountById(accountId) {
+  const accounts = Array.isArray(currentAccountsSnapshot?.accounts)
+    ? currentAccountsSnapshot.accounts
+    : [];
+  return accounts.find((account) => account?.id === accountId) || null;
 }
 
 function findApiRouteById(routeId) {
@@ -2429,20 +2476,8 @@ function accountActionButtons(account, options = {}) {
   const group = document.createElement("div");
   group.className = "account-action-group";
   group.append(accountDetailButton(account));
-  group.append(accountActionButton(account, "validate_account", "Проверить"));
-  if (account.pool !== "retired") {
-    if (account.manual_hold) {
-        group.append(accountActionButton(account, "release_account", "Снять паузу"));
-    } else {
-      if (account.pool === "reserve") {
-        group.append(accountActionButton(account, "promote_account", "В актив"));
-      }
-      if (account.pool === "active") {
-        group.append(accountActionButton(account, "demote_account", "В резерв"));
-      }
-      group.append(accountActionButton(account, "hold_account", "Удержать"));
-    }
-    group.append(accountActionButton(account, "retire_account", "Вывести"));
+  for (const spec of accountActionEligibility(account).filter((item) => item.enabled)) {
+    group.append(accountActionButton(account, spec.uiAction, compactAccountActionLabel(spec), { danger: spec.danger }));
   }
   return group;
 }
@@ -2464,28 +2499,34 @@ function accountActionMenu(account) {
   const list = document.createElement("div");
   list.className = "account-action-menu-list";
   list.append(accountDetailButton(account, { menuItem: true }));
-  list.append(accountActionButton(account, "validate_account", "Проверить", { menuItem: true }));
 
-  if (account.pool !== "retired") {
-    if (account.manual_hold) {
-      list.append(accountActionButton(account, "release_account", "Снять удержание", { menuItem: true }));
-    } else {
-      if (account.pool === "reserve") {
-        list.append(accountActionButton(account, "promote_account", "Перевести в активные", { menuItem: true }));
-      }
-      if (account.pool === "active") {
-        list.append(accountActionButton(account, "demote_account", "Перевести в резерв", { menuItem: true }));
-      }
-      list.append(accountActionButton(account, "hold_account", "Удержать", { menuItem: true }));
-    }
+  const availableSpecs = accountActionEligibility(account).filter((item) => item.enabled);
+  for (const spec of availableSpecs.filter((item) => !item.danger)) {
+    list.append(accountActionButton(account, spec.uiAction, spec.label, { menuItem: true }));
+  }
+  const dangerSpecs = availableSpecs.filter((item) => item.danger);
+  if (dangerSpecs.length) {
     const divider = document.createElement("div");
     divider.className = "account-action-menu-divider";
     list.append(divider);
-    list.append(accountActionButton(account, "retire_account", "Вывести из пула", { menuItem: true, danger: true }));
+    for (const spec of dangerSpecs) {
+      list.append(accountActionButton(account, spec.uiAction, spec.label, { menuItem: true, danger: true }));
+    }
   }
 
   menu.append(summary, list);
   return menu;
+}
+
+function compactAccountActionLabel(spec) {
+  return {
+    validate_account: "Проверить",
+    release_account: "Снять паузу",
+    hold_account: "Удержать",
+    promote_account: "В актив",
+    demote_account: "В резерв",
+    retire_account: "Вывести"
+  }[spec.uiAction] || spec.label;
 }
 
 function accountDetailButton(account, options = {}) {
@@ -2495,7 +2536,7 @@ function accountDetailButton(account, options = {}) {
     : "button small account-detail-trigger";
   button.type = "button";
   button.dataset.accountId = account.id || "";
-  button.textContent = "Детали";
+  button.textContent = "Открыть детали";
   button.title = "Открыть drawer. Данные берутся только из текущего accounts JSON.";
   button.addEventListener("click", () => {
     openAccountDrawer(button.dataset.accountId);
@@ -2615,8 +2656,8 @@ function renderAccountDetailDrawer() {
   text("accountDetailLifecycle", accountLifecycleLabel(account));
   text("accountDetailHoldValue", account.manual_hold ? "yes" : "no");
   text("accountDetailEnabled", account.enabled === true ? "да" : (account.enabled === false ? "нет" : "не указано"));
-  text("accountDetailLastSuccess", account.last_success || "—");
-  text("accountDetailError", account.last_error_summary || "—");
+  text("accountDetailLastSuccess", safeAccountDetailText(account.last_success, "—"));
+  text("accountDetailError", safeAccountDetailText(account.last_error_summary, "—"));
   text("accountDetailChecks24h", accountChecksLabel(account));
   text("accountDetailFail", boundedNumberLabel(account.fail_count));
   text("accountDetailLatency", account.last_latency_ms ? `${account.last_latency_ms} ms` : "нет данных");
@@ -2761,8 +2802,8 @@ function boundedAccountTimeline(account) {
   }
   if (Array.isArray(account.timeline)) {
     return account.timeline.map((row) => ({
-      at: row.at || row.observed_at || "bounded packet",
-      message: row.message || row.event || "Событие аккаунта",
+      at: safeAccountDetailText(row.at || row.observed_at, "bounded packet"),
+      message: safeAccountDetailText(row.message || row.event, "Событие аккаунта"),
       visual: ACCOUNT_VISUAL_CLASS[row.visual_state] || row.visual || "neutral",
       icon: row.icon || "assets/icons/phosphor/info.png"
     }));
@@ -2770,14 +2811,14 @@ function boundedAccountTimeline(account) {
   const rows = [];
   if (account.last_error_summary) {
     rows.push({
-      at: account.last_success || "нет времени",
-      message: account.last_error_summary,
+      at: safeAccountDetailText(account.last_success, "нет времени"),
+      message: safeAccountDetailText(account.last_error_summary, "Ошибка аккаунта"),
       visual: "red",
       icon: "assets/icons/phosphor/x-circle.png"
     });
   } else if (account.last_success) {
     rows.push({
-      at: account.last_success,
+      at: safeAccountDetailText(account.last_success, "bounded packet"),
       message: "Последняя проверка OK",
       visual: "green",
       icon: "assets/icons/phosphor/check-circle.png"
@@ -2803,6 +2844,23 @@ function boundedAccountTimeline(account) {
     });
   }
   return rows;
+}
+
+function safeAccountDetailText(value, fallback = "нет данных") {
+  const textValue = String(value || "").trim();
+  if (!textValue) {
+    return fallback;
+  }
+  return redactUiSensitiveText(textValue);
+}
+
+function redactUiSensitiveText(value) {
+  return String(value || "")
+    .replace(/\/Users\/[^ \n\t,;:)]*/g, "[redacted-path]")
+    .replace(/\/Volumes\/[^ \n\t,;:)]*/g, "[redacted-path]")
+    .replace(/\/private\/tmp\/[^ \n\t,;:)]*/g, "[redacted-path]")
+    .replace(/\/tmp\/[^ \n\t,;:)]*/g, "[redacted-path]")
+    .replace(/\b(token|secret|password|auth[_-]?token)\s*[:=]\s*[^ \n\t,;)]*/gi, "$1=[redacted]");
 }
 
 function accountTimelineEmpty() {

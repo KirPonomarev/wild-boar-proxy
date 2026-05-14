@@ -1585,6 +1585,7 @@ button:disabled {
   word-break: break-word;
 }
 
+.account-action-preflight,
 .api-route-remove-preflight {
   background: rgba(255, 250, 246, .72);
   border: 1px solid rgba(193, 68, 45, .18);
@@ -1593,16 +1594,19 @@ button:disabled {
   padding: 14px;
 }
 
+.account-action-preflight[hidden],
 .api-route-remove-preflight[hidden] {
   display: none;
 }
 
+.account-action-preflight .confirm-facts,
 .api-route-remove-preflight .confirm-facts {
   background: #fffdfa;
   margin-top: 8px;
   padding: 12px;
 }
 
+.account-action-preflight .confirm-note,
 .api-route-remove-preflight .confirm-note {
   margin-top: 10px;
 }
