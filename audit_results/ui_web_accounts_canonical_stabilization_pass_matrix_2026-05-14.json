@@ -1,0 +1,122 @@
+{
+  "contour": "UI_WEB_ACCOUNTS_CANONICAL_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "base_head": "697ce50",
+  "scope": {
+    "modified_files": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "wild_boar_proxy/web_design_ui/styles/overview.css"
+    ],
+    "added_icons": [
+      "wild_boar_proxy/web_design_ui/assets/icons/phosphor/dots-three.png",
+      "wild_boar_proxy/web_design_ui/assets/icons/phosphor/magnifying-glass.png",
+      "wild_boar_proxy/web_design_ui/assets/icons/phosphor/pause-circle.png",
+      "wild_boar_proxy/web_design_ui/assets/icons/phosphor/plus.png",
+      "wild_boar_proxy/web_design_ui/assets/icons/phosphor/user-plus.png"
+    ],
+    "forbidden_scope_changed": false
+  },
+  "state_matrix": [
+    {
+      "name": "fixture_healthy",
+      "url": "http://127.0.0.1:8787/?state=healthy&source=fixture&screen=accounts",
+      "baseline_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/baseline_accounts_fixture_healthy_1600x1000.png",
+      "after_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/after_accounts_fixture_healthy_1600x1000.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "accounts_screen_bottom": 667,
+      "accounts_visible_svg": 0,
+      "row_menus": 4,
+      "table_rows": 4,
+      "bulk_bar_hidden": true,
+      "header_validate_disabled": true
+    },
+    {
+      "name": "fixture_degraded",
+      "url": "http://127.0.0.1:8787/?state=degraded&source=fixture&screen=accounts",
+      "baseline_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/baseline_accounts_fixture_degraded_1600x1000.png",
+      "after_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/after_accounts_fixture_degraded_1600x1000.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "accounts_screen_bottom": 667,
+      "accounts_visible_svg": 0,
+      "row_menus": 4,
+      "table_rows": 4,
+      "bulk_bar_hidden": true,
+      "header_validate_disabled": true
+    },
+    {
+      "name": "fixture_down",
+      "url": "http://127.0.0.1:8787/?state=down&source=fixture&screen=accounts",
+      "baseline_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/baseline_accounts_fixture_down_1600x1000.png",
+      "after_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/after_accounts_fixture_down_1600x1000.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "accounts_screen_bottom": 667,
+      "accounts_visible_svg": 0,
+      "row_menus": 4,
+      "table_rows": 4,
+      "bulk_bar_hidden": true,
+      "header_validate_disabled": true
+    },
+    {
+      "name": "fixture_stale",
+      "url": "http://127.0.0.1:8787/?state=stale&source=fixture&screen=accounts",
+      "baseline_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/baseline_accounts_fixture_stale_1600x1000.png",
+      "after_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/after_accounts_fixture_stale_1600x1000.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "accounts_screen_bottom": 667,
+      "accounts_visible_svg": 0,
+      "row_menus": 4,
+      "table_rows": 4,
+      "bulk_bar_hidden": true,
+      "header_validate_disabled": true
+    },
+    {
+      "name": "live_readonly_failure",
+      "url": "http://127.0.0.1:8787/?source=live&screen=accounts",
+      "baseline_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/baseline_accounts_live_readonly_failure_1600x1000.png",
+      "after_screenshot": "audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/after_accounts_live_readonly_failure_1600x1000.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000,
+      "document_scroll_width": 1600,
+      "document_scroll_height": 1000,
+      "main_scroll_height": 942,
+      "main_client_height": 942,
+      "accounts_screen_bottom": 436,
+      "accounts_visible_svg": 0,
+      "row_menus": 0,
+      "table_rows": 0,
+      "bulk_bar_hidden": true,
+      "header_validate_disabled": true,
+      "chips_show_no_data": true
+    }
+  ],
+  "checks": {
+    "node_check_overview_js": "passed",
+    "unittest_web_design_ui_live_server_command_adapter": "passed: Ran 87 tests",
+    "git_diff_check": "passed",
+    "raw_account_command_scan": "passed",
+    "forbidden_reference_trace_scan": "passed",
+    "screenshots": "passed"
+  }
+}

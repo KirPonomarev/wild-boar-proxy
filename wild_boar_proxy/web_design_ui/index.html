@@ -92,6 +92,10 @@
           </div>
           <div class="header-actions">
             <span id="sourcePill" class="source-pill">Demo</span>
+            <button id="accountValidateSelectedAction" class="button accounts-only" type="button" disabled hidden>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+              <span>Проверить выбранные</span>
+            </button>
             <button id="refreshFixture" class="button" type="button">
               <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
               <span>Обновить</span>
@@ -100,20 +104,8 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
               <span>Запустить клиент</span>
             </button>
-            <button id="accountValidateSelectedAction" class="button accounts-only" type="button" disabled hidden>
-              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
-                <path d="m9 12 2 2 4-5"></path>
-              </svg>
-              <span>Проверить выбранные</span>
-            </button>
             <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account" hidden>
-              <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                <circle cx="9" cy="8" r="4"></circle>
-                <path d="M2 20c1.5-4 3.8-6 7-6"></path>
-                <path d="M18 10v8"></path>
-                <path d="M14 14h8"></path>
-              </svg>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
               <span>Добавить аккаунт</span>
             </button>
             <button id="diagnosticsExportAction" class="button primary live-action diagnostics-only" type="button" data-ui-action="export_diagnostics" hidden>
@@ -317,10 +309,7 @@
           <div class="filter-row accounts-filter-row">
             <div class="left-filters">
               <div class="search" aria-label="Поиск аккаунта">
-                <svg class="ui-icon button-icon" aria-hidden="true" viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="7"></circle>
-                  <path d="m16.5 16.5 4 4"></path>
-                </svg>
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/magnifying-glass.png" alt="" aria-hidden="true">
                 <span>Поиск аккаунта</span>
               </div>
               <div class="filter-seg" aria-label="Фильтры аккаунтов">
@@ -339,6 +328,16 @@
           </div>
 
           <section class="card table-card accounts-table-card">
+            <div id="accountsBulkBar" class="accounts-bulk-bar" hidden>
+              <span id="accountsSelectedCount">Выбрано: 0</span>
+              <button id="accountsBulkValidateAction" class="button small" type="button" disabled title="Массовая проверка будет добавлена отдельным контуром.">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Проверить выбранные</span>
+              </button>
+              <button id="accountsClearSelectionAction" class="button small ghost" type="button">
+                <span>Снять выделение</span>
+              </button>
+            </div>
             <div class="table-top">
               <div>
                 <div class="card-title">Список аккаунтов</div>
@@ -354,7 +353,7 @@
                 <col style="width:140px">
                 <col>
                 <col style="width:140px">
-                <col style="width:210px">
+                <col style="width:74px">
               </colgroup>
               <thead>
                 <tr>

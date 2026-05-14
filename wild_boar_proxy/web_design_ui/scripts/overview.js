@@ -189,6 +189,7 @@ let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
 let selectedAccountId = "";
+let selectedAccountIds = new Set();
 let actionLedger = [];
 
 function text(id, value) {
@@ -197,6 +198,14 @@ function text(id, value) {
 
 function setClassName(node, base, visualState) {
   node.className = `${base} ${VISUAL_CLASS[visualState] || "neutral"}`;
+}
+
+function setNodeAttribute(node, name, value) {
+  if (typeof node.setAttribute === "function") {
+    node.setAttribute(name, value);
+  } else {
+    node[name] = value;
+  }
 }
 
 function canonicalState(requestedState) {
@@ -709,7 +718,7 @@ function setSourceCopy(source) {
   const subtitle = source === "live"
     ? (
       screen === "accounts"
-        ? "Пул аккаунтов отображается из подтверждённого ответа команды. Действия доступны только после проверки допустимости."
+        ? "Пул аккаунтов, статусы проверки и распределение по режимам."
         : (
           screen === "api-connections"
             ? "Маршруты API-подключений отображаются из пакетов команд. Разрешены только безопасные проверки маршрутов без мутации конфигурации."
@@ -730,7 +739,7 @@ function setSourceCopy(source) {
     )
     : (
       screen === "accounts"
-        ? "Демо-просмотр экрана аккаунтов. Данные не являются фактическим состоянием системы."
+        ? "Пул аккаунтов, статусы проверки и распределение по режимам."
         : (
           screen === "api-connections"
             ? "Демо-просмотр API-подключений. Кнопки проверок доступны только в live-режиме."
@@ -1516,20 +1525,30 @@ function renderAccountsSnapshot(snapshot) {
   const banner = document.getElementById("accountsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "Live-режим аккаунтов. Подтверждение приходит только из канонического accounts JSON packet; lifecycle controls являются bounded action requests."
-    : "Только демо-просмотр аккаунтов. Действия с аккаунтами отключены.";
+    ? (
+      safeSnapshot.status === "ok"
+        ? "Live-readonly аккаунтов. Действия остаются bounded requests и подтверждаются обновлённым списком."
+        : "Live-readonly аккаунтов недоступен. Предыдущие healthy-данные не используются."
+    )
+    : "Демо-режим аккаунтов. Данные не являются runtime truth.";
 
   const summary = safeSnapshot.summary;
-  text("accountsActiveChip", `${summary.active} активных`);
-  text("accountsReserveChip", `${summary.reserve} резерв`);
-  text("accountsHoldChip", `${summary.hold} удержание`);
-  text("accountsProblemChip", `${summary.problem} проблемных`);
+  const noData = source === "live" && safeSnapshot.status !== "ok";
+  text("accountsActiveChip", noData ? "нет данных" : `${summary.active} активных`);
+  text("accountsReserveChip", noData ? "нет данных" : `${summary.reserve} резерв`);
+  text("accountsHoldChip", noData ? "нет данных" : `${summary.hold} удержание`);
+  text("accountsProblemChip", noData ? "нет данных" : `${summary.problem} проблемных`);
   text(
     "accountsRegistryStatus",
     `Идентичность registry: ${safeSnapshot.registry_identity.status} · ${safeSnapshot.registry_identity.machine_error_code}`
   );
   text("accountsVisibleCount", `Показано ${safeSnapshot.accounts.length} из ${summary.visible_count}`);
-  text("accountsPagination", `Строки ${safeSnapshot.accounts.length ? 1 : 0}-${safeSnapshot.accounts.length} из ${summary.visible_count}`);
+  text(
+    "accountsPagination",
+    safeSnapshot.accounts.length
+      ? `Строки 1-${safeSnapshot.accounts.length} из ${summary.visible_count}`
+      : (noData ? "Нет данных для таблицы" : "Строки 0-0 из 0")
+  );
   currentAccountsSnapshot = safeSnapshot;
   renderAccountRows(safeSnapshot.accounts);
   renderAccountDetailDrawer();
@@ -1705,20 +1724,27 @@ function apiRouteStateRequirement(uiAction) {
 function renderAccountRows(accounts) {
   const body = document.getElementById("accountsTableBody");
   body.replaceChildren();
-  for (const account of accounts.slice(0, 12)) {
+  const validIds = new Set(accounts.map((account) => account.id).filter(Boolean));
+  selectedAccountIds = new Set([...selectedAccountIds].filter((id) => validIds.has(id)));
+  for (const account of accounts) {
     const row = document.createElement("tr");
+    const accountId = account.id || "";
+    const errorCell = td(account.last_error_summary ? "account-error-cell" : "dash account-error-cell", account.last_error_summary || "—");
+    errorCell.title = account.last_error_summary || "";
     row.append(
-      td("checkcell", checkbox()),
+      td("checkcell", checkbox(account)),
       td("", accountIdentity(account)),
       td("", account.pool_label || poolLabel(account.pool)),
       td("", statusChip(account)),
-      td(account.last_error_summary ? "" : "dash", account.last_error_summary || "—"),
+      errorCell,
       td("right mono-value", account.last_success || account.cooldown_until || "—"),
-      td("", accountActionButtons(account))
+      td("account-actions-cell", accountActionButtons(account, { rowMenu: true }))
     );
-    row.dataset.accountId = account.id || "";
+    row.dataset.accountId = accountId;
+    row.classList.toggle("selected", selectedAccountIds.has(accountId));
     body.append(row);
   }
+  updateAccountsSelectionUi();
   applyActionAvailability();
 }
 
@@ -1735,10 +1761,16 @@ function td(className, child) {
   return cell;
 }
 
-function checkbox() {
-  const node = document.createElement("div");
-  node.className = "checkbox";
-  node.title = "Массовые lifecycle-действия отложены в этом контуре.";
+function checkbox(account) {
+  const accountId = account.id || "";
+  const node = document.createElement("button");
+  node.className = "checkbox account-row-select";
+  node.type = "button";
+  node.dataset.accountId = accountId;
+  setNodeAttribute(node, "aria-label", `Выбрать ${accountId || "аккаунт"}`);
+  setNodeAttribute(node, "aria-pressed", selectedAccountIds.has(accountId) ? "true" : "false");
+  node.title = "Массовые lifecycle-действия отложены; выбор строк не запускает команды.";
+  node.addEventListener("click", () => toggleAccountSelection(accountId));
   return node;
 }
 
@@ -1756,17 +1788,20 @@ function accountIdentity(account) {
 
 function statusChip(account) {
   const chip = document.createElement("span");
-  const visual = ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral";
+  const visual = account.manual_hold ? "amber" : (ACCOUNT_VISUAL_CLASS[account.visual_state] || "neutral");
   chip.className = `chip ${visual}`;
   const dot = document.createElement("span");
   dot.className = "dot";
   const label = document.createElement("span");
-  label.textContent = account.status_label || statusLabel(account.status);
+  label.textContent = account.manual_hold ? "Удержан" : (account.status_label || statusLabel(account.status));
   chip.append(dot, label);
   return chip;
 }
 
-function accountActionButtons(account) {
+function accountActionButtons(account, options = {}) {
+  if (options.rowMenu) {
+    return accountActionMenu(account);
+  }
   const group = document.createElement("div");
   group.className = "account-action-group";
   group.append(accountDetailButton(account));
@@ -1788,9 +1823,52 @@ function accountActionButtons(account) {
   return group;
 }
 
-function accountDetailButton(account) {
+function accountActionMenu(account) {
+  const menu = document.createElement("details");
+  menu.className = "account-action-menu";
+
+  const summary = document.createElement("summary");
+  summary.className = "account-action-menu-trigger";
+  setNodeAttribute(summary, "aria-label", `Действия для ${account.id || "аккаунта"}`);
+  const icon = document.createElement("img");
+  icon.className = "ui-icon button-icon";
+  icon.src = "assets/icons/phosphor/dots-three.png";
+  icon.alt = "";
+  setNodeAttribute(icon, "aria-hidden", "true");
+  summary.append(icon);
+
+  const list = document.createElement("div");
+  list.className = "account-action-menu-list";
+  list.append(accountDetailButton(account, { menuItem: true }));
+  list.append(accountActionButton(account, "validate_account", "Проверить", { menuItem: true }));
+
+  if (account.pool !== "retired") {
+    if (account.manual_hold) {
+      list.append(accountActionButton(account, "release_account", "Снять удержание", { menuItem: true }));
+    } else {
+      if (account.pool === "reserve") {
+        list.append(accountActionButton(account, "promote_account", "Перевести в активные", { menuItem: true }));
+      }
+      if (account.pool === "active") {
+        list.append(accountActionButton(account, "demote_account", "Перевести в резерв", { menuItem: true }));
+      }
+      list.append(accountActionButton(account, "hold_account", "Удержать", { menuItem: true }));
+    }
+    const divider = document.createElement("div");
+    divider.className = "account-action-menu-divider";
+    list.append(divider);
+    list.append(accountActionButton(account, "retire_account", "Вывести из пула", { menuItem: true, danger: true }));
+  }
+
+  menu.append(summary, list);
+  return menu;
+}
+
+function accountDetailButton(account, options = {}) {
   const button = document.createElement("button");
-  button.className = "button small account-detail-trigger";
+  button.className = options.menuItem
+    ? "button small account-detail-trigger account-menu-item"
+    : "button small account-detail-trigger";
   button.type = "button";
   button.dataset.accountId = account.id || "";
   button.textContent = "Детали";
@@ -1801,9 +1879,11 @@ function accountDetailButton(account) {
   return button;
 }
 
-function accountActionButton(account, uiAction, label) {
+function accountActionButton(account, uiAction, label, options = {}) {
   const button = document.createElement("button");
-  button.className = "button small account-action";
+  button.className = options.menuItem
+    ? `button small account-action account-menu-item${options.danger ? " danger" : ""}`
+    : "button small account-action";
   button.type = "button";
   button.dataset.uiAction = uiAction;
   button.dataset.accountId = account.id || "";
@@ -1815,6 +1895,60 @@ function accountActionButton(account, uiAction, label) {
     maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId });
   });
   return button;
+}
+
+function toggleAccountSelection(accountId) {
+  if (!accountId) {
+    return;
+  }
+  if (selectedAccountIds.has(accountId)) {
+    selectedAccountIds = new Set([...selectedAccountIds].filter((id) => id !== accountId));
+  } else {
+    selectedAccountIds.add(accountId);
+  }
+  updateAccountsSelectionUi();
+}
+
+function clearAccountSelection() {
+  selectedAccountIds.clear();
+  updateAccountsSelectionUi();
+}
+
+function updateAccountsSelectionUi() {
+  const count = selectedAccountIds.size;
+  const bulkBar = document.getElementById("accountsBulkBar");
+  if (bulkBar) {
+    bulkBar.hidden = count === 0;
+  }
+  const selectedCount = document.getElementById("accountsSelectedCount");
+  if (selectedCount) {
+    selectedCount.textContent = `Выбрано: ${count}`;
+  }
+
+  const validateButton = document.getElementById("accountValidateSelectedAction");
+  if (validateButton) {
+    validateButton.disabled = true;
+    validateButton.title = count === 0
+      ? "Выберите аккаунты в таблице."
+      : "Массовая проверка будет добавлена отдельным контуром.";
+  }
+
+  const bulkValidate = document.getElementById("accountsBulkValidateAction");
+  if (bulkValidate) {
+    bulkValidate.disabled = true;
+    bulkValidate.title = count === 0
+      ? "Выберите аккаунты в таблице."
+      : "Массовая проверка будет добавлена отдельным контуром.";
+  }
+
+  for (const row of document.querySelectorAll("#accountsTableBody tr")) {
+    const selected = selectedAccountIds.has(row.dataset.accountId || "");
+    row.classList.toggle("selected", selected);
+    const selector = row.querySelector(".account-row-select");
+    if (selector) {
+      setNodeAttribute(selector, "aria-pressed", selected ? "true" : "false");
+    }
+  }
 }
 
 function openAccountDrawer(accountId) {
@@ -2075,6 +2209,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
   document.getElementById("accountAddAction").addEventListener("click", () => openOnboardModal());
+  document.getElementById("accountsClearSelectionAction")?.addEventListener("click", () => clearAccountSelection());
   document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());
   document.addEventListener("keydown", (event) => {

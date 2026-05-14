@@ -409,6 +409,15 @@ button:disabled {
   color: var(--text);
 }
 
+.desktop[data-screen="accounts"] #sourcePill {
+  display: none;
+}
+
+.desktop[data-screen="accounts"] .header-actions {
+  flex-wrap: nowrap;
+  max-width: none;
+}
+
 .input {
   align-items: center;
   background: #fffaf6;
@@ -438,11 +447,23 @@ button:disabled {
 
 .header-actions #refreshFixture {
   min-width: 138px;
+  order: 2;
   padding-inline: 16px;
+}
+
+.header-actions #accountValidateSelectedAction {
+  min-width: 174px;
+  order: 1;
+}
+
+.header-actions #accountAddAction {
+  min-width: 176px;
+  order: 3;
 }
 
 .header-actions #launchClientAction {
   min-width: 190px;
+  order: 3;
   padding: 0 18px;
   width: auto;
 }
@@ -1639,7 +1660,7 @@ button:disabled {
 .accounts-table-card {
   max-height: calc(100vh - 372px);
   overflow: auto;
-  padding: 20px 22px 16px;
+  padding: 18px 20px 14px;
 }
 
 .api-connections-table-card {
@@ -1662,6 +1683,10 @@ button:disabled {
   width: 100%;
 }
 
+.accounts-table {
+  min-width: 920px;
+}
+
 .api-connections-table {
   min-width: 1112px;
 }
@@ -1671,7 +1696,7 @@ button:disabled {
   color: var(--secondary);
   font-size: 11px;
   font-weight: 500;
-  height: 44px;
+  height: 42px;
   letter-spacing: .06em;
   line-height: 14px;
   text-align: left;
@@ -1682,11 +1707,15 @@ button:disabled {
 .table td {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
   font-size: 13px;
-  height: 62px;
+  height: 58px;
   line-height: 18px;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
   word-break: normal;
   vertical-align: middle;
+}
+
+.table tbody tr.selected td {
+  background: rgba(249, 239, 224, .58);
 }
 
 .table tr:last-child td {
@@ -1698,12 +1727,22 @@ button:disabled {
 }
 
 .checkbox {
+  appearance: none;
   background: #fffdfa;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
+  display: block;
   height: 16px;
   opacity: .55;
+  padding: 0;
   width: 16px;
+}
+
+.checkbox[aria-pressed="true"] {
+  background: var(--blue);
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 3px #fffdfa;
+  opacity: .86;
 }
 
 .account-main {
@@ -1726,6 +1765,12 @@ button:disabled {
 
 .dash {
   color: var(--muted);
+}
+
+.account-error-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-action-group {
@@ -1785,6 +1830,106 @@ button:disabled {
   min-width: 0;
   padding-inline: 8px;
   white-space: nowrap;
+}
+
+.account-actions-cell {
+  overflow: visible;
+}
+
+.account-action-menu {
+  display: inline-flex;
+  justify-content: flex-end;
+  position: relative;
+  width: 100%;
+}
+
+.account-action-menu summary {
+  list-style: none;
+}
+
+.account-action-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-action-menu-trigger {
+  align-items: center;
+  background: #fffdfa;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.account-action-menu-list {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 18px 46px rgba(30, 27, 24, .13);
+  display: grid;
+  gap: 4px;
+  min-width: 210px;
+  padding: 7px;
+  position: absolute;
+  right: 0;
+  top: 38px;
+  z-index: 12;
+}
+
+.account-menu-item,
+.button.small.account-menu-item {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 12px;
+  height: 31px;
+  justify-content: flex-start;
+  max-width: none;
+  padding-inline: 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.account-menu-item.danger {
+  color: var(--red);
+}
+
+.account-menu-item:disabled {
+  color: var(--muted);
+}
+
+.account-action-menu-divider {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  height: 1px;
+  margin: 3px 4px;
+}
+
+.accounts-bulk-bar {
+  align-items: center;
+  background: rgba(249, 239, 224, .7);
+  border: 1px solid rgba(217, 208, 195, .82);
+  border-radius: 12px;
+  color: var(--secondary);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+  min-height: 40px;
+  padding: 6px 8px 6px 12px;
+}
+
+.accounts-bulk-bar[hidden] {
+  display: none;
+}
+
+.accounts-bulk-bar > span {
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: auto;
 }
 
 .account-detail-overlay {

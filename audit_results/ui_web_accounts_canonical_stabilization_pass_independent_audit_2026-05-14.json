@@ -1,0 +1,48 @@
+{
+  "contour": "UI_WEB_ACCOUNTS_CANONICAL_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent explorer agent 019e273b-44d1-7100-8314-f8ca0086060f",
+  "verdict": "no findings",
+  "findings": [],
+  "verified": {
+    "scope": {
+      "result": "pass",
+      "details": "Unstaged diff stayed inside wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, and wild_boar_proxy/web_design_ui/styles/overview.css; new contour screenshots were under audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/."
+    },
+    "command_boundaries": {
+      "result": "pass",
+      "details": "BROWSER_ACTION_PAYLOAD_KEYS stayed [\"account_id\", \"route_id\"]; accountActionButton still dispatches only ui_action plus account_id; route actions still dispatch only route_id."
+    },
+    "bulk_selection": {
+      "result": "pass",
+      "details": "The bulk validate control is disabled and not wired to command execution."
+    },
+    "accounts_visual": {
+      "result": "pass",
+      "details": "#accountsScreen contains no inline svg tags; visible screen icons use img assets; row actions are collapsed to the dots menu."
+    },
+    "live_failure_truth": {
+      "result": "pass",
+      "details": "Live readonly failure screenshot and code show net-data copy rather than healthy-looking zero counts."
+    },
+    "leak_scan": {
+      "result": "pass",
+      "details": "No added forbidden external reference service strings were found in the touched UI diff."
+    }
+  },
+  "commands_run_by_auditor": [
+    "git status --short",
+    "git diff --stat -- . ':(exclude)runtime.py' ':(exclude)command*' ':(exclude)live*' ':(exclude)desktop*' ':(exclude)fixtures*' ':(exclude)docs*'",
+    "rg --files audit_results | rg 'ui_web_accounts_canonical_stabilization_pass'",
+    "git diff -- wild_boar_proxy/web_design_ui/index.html",
+    "git diff -- wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "git diff -- wild_boar_proxy/web_design_ui/styles/overview.css",
+    "nl -ba wild_boar_proxy/web_design_ui/index.html",
+    "nl -ba wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "nl -ba wild_boar_proxy/web_design_ui/styles/overview.css",
+    "rg -n",
+    "git diff -U0 -- wild_boar_proxy/web_design_ui/... | rg",
+    "file audit_results/ui_web_accounts_canonical_stabilization_pass_screenshots/*.png",
+    "git diff --check -- wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css"
+  ]
+}
