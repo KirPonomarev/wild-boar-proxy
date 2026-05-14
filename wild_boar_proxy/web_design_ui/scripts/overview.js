@@ -725,7 +725,11 @@ function setSourceCopy(source) {
             : (
               screen === "settings"
                 ? "Настройки · hub разделов"
-                : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
+                : (
+                  screen === "setup"
+                    ? "Setup · admission wizard"
+                    : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
+                )
             )
             )
         )
@@ -745,9 +749,13 @@ function setSourceCopy(source) {
               screen === "settings"
                 ? "Конфигурация клиента, данных приложения и безопасных действий."
                 : (
+                  screen === "setup"
+                    ? "Подготовка локального контура без изменения рабочих файлов Codex."
+                    : (
                   setupLike
                     ? "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
                     : "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
+                    )
                 )
             )
             )
@@ -766,9 +774,13 @@ function setSourceCopy(source) {
               screen === "settings"
                 ? "Конфигурация клиента, данных приложения и безопасных действий."
                 : (
+                  screen === "setup"
+                    ? "Подготовка локального контура без изменения рабочих файлов Codex."
+                    : (
                   setupLike
                     ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
                     : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
+                    )
                 )
             )
             )
@@ -782,6 +794,28 @@ function setSourceCopy(source) {
     sourcePill.className = source === "live" ? "source-pill live" : "source-pill";
   }
   updateDiagnosticsDetailSource(source);
+  updateSetupAdmissionCopy(source);
+}
+
+function updateSetupAdmissionCopy(source) {
+  const banner = document.getElementById("setupBanner");
+  if (!banner) {
+    return;
+  }
+  const desktop = document.querySelector(".desktop");
+  const fixtureState = desktop?.dataset?.fixtureState || "healthy";
+  if (source === "live") {
+    setClassName(banner, "fixture-banner", "integration_failure");
+    banner.textContent = "Live-readonly setup недоступен. Предыдущие данные не используются.";
+    return;
+  }
+  const stateClass = fixtureState === "stale"
+    ? "stale"
+    : (fixtureState === "down" || fixtureState === "integration_failure" ? "degraded" : "amber");
+  setClassName(banner, "fixture-banner", stateClass);
+  banner.textContent = fixtureState === "stale"
+    ? "Демо-режим stale. Экран показывает admitted layout, не результат настройки."
+    : "Демо-режим. Экран показывает admitted layout, не результат настройки.";
 }
 
 function updateDiagnosticsDetailSource(source) {
@@ -1337,7 +1371,7 @@ function setScreen(screen, updateUrl = false) {
               ? "Настройки"
               : (
                 nextScreen === "setup"
-                  ? "Настройка"
+                  ? "Первичная настройка"
                   : (
                     nextScreen === "select-client"
                       ? "Выбор клиента"

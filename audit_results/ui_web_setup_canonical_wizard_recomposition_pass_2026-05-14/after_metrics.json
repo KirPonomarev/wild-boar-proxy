@@ -1,0 +1,152 @@
+{
+  "fixture_healthy": {
+    "url": "http://127.0.0.1:8789/?state=healthy&source=fixture&screen=setup",
+    "mainTitle": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "setupBanner": "Демо-режим. Экран показывает admitted layout, не результат настройки.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "setupBottom": 915,
+    "setupHeight": 747,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 10,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать клиента · disabled",
+      "Назад",
+      "Проверить готовность · missing surface",
+      "Продолжить · requires proof"
+    ],
+    "stepCount": 5,
+    "overflows": []
+  },
+  "fixture_degraded": {
+    "url": "http://127.0.0.1:8789/?state=degraded&source=fixture&screen=setup",
+    "mainTitle": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "setupBanner": "Демо-режим. Экран показывает admitted layout, не результат настройки.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "setupBottom": 915,
+    "setupHeight": 747,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 10,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать клиента · disabled",
+      "Назад",
+      "Проверить готовность · missing surface",
+      "Продолжить · requires proof"
+    ],
+    "stepCount": 5,
+    "overflows": []
+  },
+  "fixture_down": {
+    "url": "http://127.0.0.1:8789/?state=down&source=fixture&screen=setup",
+    "mainTitle": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "setupBanner": "Демо-режим. Экран показывает admitted layout, не результат настройки.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "setupBottom": 915,
+    "setupHeight": 747,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 10,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать клиента · disabled",
+      "Назад",
+      "Проверить готовность · missing surface",
+      "Продолжить · requires proof"
+    ],
+    "stepCount": 5,
+    "overflows": []
+  },
+  "fixture_stale": {
+    "url": "http://127.0.0.1:8789/?state=stale&source=fixture&screen=setup",
+    "mainTitle": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "setupBanner": "Демо-режим stale. Экран показывает admitted layout, не результат настройки.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "setupBottom": 915,
+    "setupHeight": 747,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 10,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать клиента · disabled",
+      "Назад",
+      "Проверить готовность · missing surface",
+      "Продолжить · requires proof"
+    ],
+    "stepCount": 5,
+    "overflows": []
+  },
+  "live_integration_failure": {
+    "url": "http://127.0.0.1:8789/?source=live&screen=setup",
+    "mainTitle": "Первичная настройка",
+    "subtitle": "Подготовка локального контура без изменения рабочих файлов Codex.",
+    "setupBanner": "Live-readonly setup недоступен. Предыдущие данные не используются.",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "setupBottom": 915,
+    "setupHeight": 747,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 10,
+    "inputs": 0,
+    "fileInputs": 0,
+    "dataUiActions": 0,
+    "liveActions": 0,
+    "activePrimaryButtons": [],
+    "activeButtons": [
+      "Закрыть"
+    ],
+    "disabledButtons": [
+      "Выбрать клиента · disabled",
+      "Назад",
+      "Проверить готовность · missing surface",
+      "Продолжить · requires proof"
+    ],
+    "stepCount": 5,
+    "overflows": []
+  }
+}

@@ -904,108 +904,146 @@
           </div>
         </section>
 
-        <section id="setupScreen" class="screen setup-screen setup-final-screen" data-screen="setup" hidden>
-          <div class="fixture-banner amber">
-            Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.
+        <section id="setupScreen" class="screen setup-screen setup-final-screen" data-screen="setup" data-setup-mode="admission-wizard" hidden>
+          <div id="setupBanner" class="fixture-banner amber">
+            Демо-режим. Экран показывает admitted layout, не результат настройки.
           </div>
 
           <div class="setup-flow-layout" data-visual-reference="10_first_run_setup_wizard" data-setup-flow-frame="left-step-rail">
             <aside class="setup-flow-rail" aria-label="Шаги настройки">
-              <div class="eyebrow">Setup Wizard</div>
-              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Готовность</strong><small>только каркас</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Компоненты</strong><small>без discovery</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Граница</strong><small>нет browser paths</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Завершение</strong><small>ждёт packet truth</small></span></div>
-              <div class="setup-flow-note">Локальная навигация не доказывает завершение настройки; simulated truth нет.</div>
+              <div class="eyebrow">First-run</div>
+              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Готовность</strong><small>admission state</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Компоненты</strong><small>policy check</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Клиент</strong><small>deferred surface</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Данные</strong><small>readonly display</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">5</span><span><strong>Проверка</strong><small>requires proof</small></span></div>
+              <div class="setup-flow-note">Wizard не доказывает завершение настройки; simulated truth нет.</div>
             </aside>
 
             <div class="setup-workbench">
-              <section class="card setup-hero setup-final-hero">
-                <div class="eyebrow">Первичная настройка</div>
-                <div class="section-head">
+              <section class="card setup-hero setup-final-hero setup-admission-hero">
+                <div class="setup-card-head">
+                  <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
                   <div>
-                    <h3>Подготовка локального контура</h3>
-                    <div class="secondary">Безопасная подготовка renderer-прототипа без прямых файловых операций из web UI.</div>
+                    <div class="eyebrow">Первичная настройка</div>
+                    <h3>Готовность локального контура</h3>
+                    <div class="secondary">Подготовка локального контура без изменения рабочих файлов Codex.</div>
                   </div>
-                  <span class="chip amber"><span class="dot"></span>каркас только чтение</span>
+                  <span class="chip amber"><span class="dot"></span>не подтверждена</span>
                 </div>
                 <div class="setup-readiness-card" aria-label="Состояние готовности настройки">
-                  <div>
-                    <strong>Готовность не заявлена</strong>
-                    <span>Для статуса нужен отдельный JSON command packet. Этот экран показывает только admitted layout.</span>
-                  </div>
-                  <button class="button primary disabled" type="button" disabled>Проверка готовности отложена</button>
+                  <div><span>Runtime status</span><strong>admitted readonly</strong></div>
+                  <div><span>Client surface</span><strong>deferred</strong></div>
+                  <div><span>Data directory</span><strong>readonly display</strong></div>
+                  <div><span>Setup complete</span><strong>pending packet truth</strong></div>
                 </div>
               </section>
 
               <div class="setup-grid">
                 <section class="card form-section">
-                  <div class="section-head">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon blue"><img class="ui-icon" src="assets/icons/phosphor/sliders-horizontal.png" alt="" aria-hidden="true"></span>
                     <div>
                       <h3>Компоненты настройки</h3>
-                      <div class="secondary">Каждый пункт требует собственного admitted command surface.</div>
+                      <div class="secondary">Policy-карта admitted, deferred и blocked surfaces.</div>
                     </div>
-                    <span class="chip neutral"><span class="dot"></span>частично</span>
                   </div>
                   <div class="setup-component-list">
                     <div class="setup-component-row">
-                      <span class="setup-component-icon blue">01</span>
-                      <div><strong>Runtime status</strong><span>только через существующие readonly packets</span></div>
+                      <span class="setup-component-icon blue"><img class="ui-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Runtime status</strong><span>readonly status packet</span></div>
                       <span class="chip green"><span class="dot"></span>admitted</span>
                     </div>
                     <div class="setup-component-row">
-                      <span class="setup-component-icon amber">02</span>
-                      <div><strong>Client surface</strong><span>нет команды обнаружения, manual picker deferred</span></div>
+                      <span class="setup-component-icon amber"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Client discovery</strong><span>command surface missing</span></div>
                       <span class="chip amber"><span class="dot"></span>deferred</span>
                     </div>
                     <div class="setup-component-row">
-                      <span class="setup-component-icon red">03</span>
-                      <div><strong>Local source</strong><span>отправка путей из браузера запрещена</span></div>
+                      <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Manual picker</strong><span>future desktop/native picker</span></div>
+                      <span class="chip neutral"><span class="dot"></span>desktop-only</span>
+                    </div>
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Local source paths</strong><span>browser-provided paths blocked</span></div>
                       <span class="chip red"><span class="dot"></span>blocked</span>
                     </div>
                     <div class="setup-component-row">
-                      <span class="setup-component-icon neutral">04</span>
-                      <div><strong>Setup complete</strong><span>только после packet truth и refresh</span></div>
-                      <span class="chip neutral"><span class="dot"></span>pending</span>
+                      <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Config write</strong><span>requires command-owned result</span></div>
+                      <span class="chip neutral"><span class="dot"></span>no command</span>
                     </div>
                   </div>
                 </section>
 
                 <section class="card form-section">
-                  <div class="section-head">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
                     <div>
-                      <h3>Что не настроено</h3>
-                      <div class="secondary">Видимые состояния без выполнения и без overclaim.</div>
+                      <h3>Клиент Codex</h3>
+                      <div class="secondary">Выбор клиента ждёт command-owned candidates.</div>
                     </div>
-                    <span class="chip amber"><span class="dot"></span>deferred</span>
                   </div>
                   <div class="deferred-list">
-                    <div class="deferred-row"><span>Найти автоматически</span><span>нет команды обнаружения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                    <div class="deferred-row"><span>Указать вручную</span><span>будущий desktop/native picker</span><button class="button small disabled" type="button" disabled>Запрещено</button></div>
-                    <div class="deferred-row"><span>Сохранить контур</span><span>нет command-owned результата настройки</span><button class="button small disabled" type="button" disabled>Нет команды</button></div>
+                    <div class="deferred-row"><span>Текущий выбор</span><span>не подтверждён</span><span class="chip neutral"><span class="dot"></span>pending</span></div>
+                    <div class="deferred-row"><span>Candidates</span><span>command surface missing</span><span class="chip amber"><span class="dot"></span>deferred</span></div>
+                    <div class="deferred-row"><span>Manual picker</span><span>desktop/native only</span><button class="button small disabled" type="button" disabled title="Requires command-owned candidates.">Выбрать клиента · disabled</button></div>
                   </div>
                 </section>
               </div>
 
-              <section class="card form-section setup-boundary-card">
-                <div class="section-head">
-                  <div>
-                    <h3>Граница безопасной настройки</h3>
-                    <div class="secondary">Этот экран не является настройщиком runtime и не пишет конфигурацию.</div>
+              <div class="setup-grid setup-grid-compact">
+                <section class="card form-section setup-boundary-card">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Данные приложения</h3>
+                      <div class="secondary">Только readiness display, без записи структуры.</div>
+                    </div>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>boundary</span>
+                  <div class="setup-boundary-grid setup-boundary-grid-compact">
+                    <div><span>Каталог</span><strong>не подтверждён / readonly</strong></div>
+                    <div><span>Создать структуру</span><strong>deferred</strong></div>
+                    <div><span>Показать в Finder</span><strong>desktop-only</strong></div>
+                  </div>
+                </section>
+
+                <section class="card form-section setup-boundary-card">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Граница настройки</h3>
+                      <div class="secondary">Нет прямой конфигурации из web UI.</div>
+                    </div>
+                  </div>
+                  <div class="setup-boundary-grid setup-boundary-grid-compact">
+                    <div><span>Browser payload</span><strong>no paths, no raw config, no secrets</strong></div>
+                    <div><span>Truth source</span><strong>future JSON packet</strong></div>
+                    <div><span>Next action</span><strong>missing command surface</strong></div>
+                  </div>
+                </section>
+              </div>
+
+              <section class="card form-section setup-check-card">
+                <div class="setup-card-head">
+                  <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Проверка</h3>
+                    <div class="secondary">Продолжение возможно только после setup proof packet.</div>
+                  </div>
                 </div>
-                <div class="setup-boundary-grid">
-                  <div><span>Browser payload</span><strong>нет путей, нет raw config, нет секретов</strong></div>
-                  <div><span>Truth source</span><strong>только будущий JSON packet</strong></div>
-                  <div><span>Next action</span><strong>описать command surface перед implementation</strong></div>
+                <div class="setup-action-reasons">
+                  <span class="chip amber"><span class="dot"></span>Проверить готовность · missing surface</span>
+                  <span class="chip neutral"><span class="dot"></span>Продолжить · requires setup proof packet</span>
                 </div>
               </section>
 
               <div class="setup-bottom-bar" aria-label="Инертные действия настройки">
                 <button class="button small disabled" type="button" disabled>Назад</button>
-                <button class="button small disabled" type="button" disabled>Отмена</button>
-                <button class="button primary small disabled" type="button" disabled>Продолжить после packet truth</button>
+                <button class="button small" type="button">Закрыть</button>
+                <button class="button small disabled" type="button" disabled title="Readiness check requires an admitted command surface.">Проверить готовность · missing surface</button>
+                <button class="button small disabled setup-continue-disabled" type="button" disabled title="Continue requires setup proof packet.">Продолжить · requires proof</button>
               </div>
             </div>
           </div>
