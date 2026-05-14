@@ -859,7 +859,7 @@ function setSourceCopy(source) {
                 ? "Настройки · hub разделов"
                 : (
                   screen === "setup"
-                    ? "Setup · admission wizard"
+                    ? "Setup · admission preview"
                     : (
                       screen === "select-client"
                         ? "Select Client · candidate preview"
@@ -886,7 +886,7 @@ function setSourceCopy(source) {
                 ? "Конфигурация клиента, данных приложения и безопасных действий."
                 : (
                   screen === "setup"
-                    ? "Подготовка локального контура без изменения рабочих файлов Codex."
+                    ? "Безопасная подготовка локального контура без изменения рабочих файлов Codex."
                     : (
                   screen === "select-client"
                     ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
@@ -915,7 +915,7 @@ function setSourceCopy(source) {
                 ? "Конфигурация клиента, данных приложения и безопасных действий."
                 : (
                   screen === "setup"
-                    ? "Подготовка локального контура без изменения рабочих файлов Codex."
+                    ? "Безопасная подготовка локального контура без изменения рабочих файлов Codex."
                     : (
                   screen === "select-client"
                     ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
@@ -951,7 +951,7 @@ function updateSetupAdmissionCopy(source) {
   const fixtureState = desktop?.dataset?.fixtureState || "healthy";
   if (source === "live") {
     setClassName(banner, "fixture-banner", "integration_failure");
-    banner.textContent = "Live-readonly setup недоступен. Предыдущие данные не используются.";
+    banner.textContent = "Live-readonly setup недоступен. Предыдущие fixture-данные не используются.";
     return;
   }
   const stateClass = fixtureState === "stale"
@@ -959,8 +959,8 @@ function updateSetupAdmissionCopy(source) {
     : (fixtureState === "down" || fixtureState === "integration_failure" ? "degraded" : "amber");
   setClassName(banner, "fixture-banner", stateClass);
   banner.textContent = fixtureState === "stale"
-    ? "Демо-режим stale. Экран показывает admitted layout, не результат настройки."
-    : "Демо-режим. Экран показывает admitted layout, не результат настройки.";
+    ? "Демо-режим stale. Экран показывает setup preview, не результат настройки."
+    : "Демо-режим. Экран показывает setup preview, не результат настройки.";
 }
 
 function updateSelectClientCopy(source) {
@@ -1981,7 +1981,7 @@ function setScreen(screen, updateUrl = false) {
               ? "Настройки"
               : (
                 nextScreen === "setup"
-                  ? "Первичная настройка"
+                  ? "Настройка Wild Boar Proxy"
                   : (
                     nextScreen === "select-client"
                       ? "Выбор клиента"

@@ -4012,6 +4012,35 @@ button:disabled {
   display: none;
 }
 
+.desktop[data-screen="setup"] .setup-workbench {
+  gap: 6px;
+}
+
+.desktop[data-screen="setup"] .setup-hero,
+.desktop[data-screen="setup"] .form-section {
+  padding: 12px;
+}
+
+.desktop[data-screen="setup"] .setup-readiness-card {
+  margin-top: 8px;
+  min-height: 56px;
+  padding: 10px;
+}
+
+.desktop[data-screen="setup"] .setup-component-list {
+  gap: 6px;
+}
+
+.desktop[data-screen="setup"] .setup-component-row {
+  min-height: 32px;
+  padding-block: 4px;
+}
+
+.desktop[data-screen="setup"] .setup-bottom-bar {
+  min-height: 42px;
+  padding-block: 4px;
+}
+
 .setup-action-reasons {
   display: flex;
   flex-wrap: wrap;

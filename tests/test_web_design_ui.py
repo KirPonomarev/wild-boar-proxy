@@ -1042,23 +1042,29 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-visual-reference="12_import_existing_wizard"', html)
         self.assertIn("setup-flow-rail", html)
         self.assertIn("setup-bottom-bar", html)
-        self.assertIn("Подготовка локального контура без изменения рабочих файлов Codex.", js)
-        self.assertIn("Live-readonly setup недоступен. Предыдущие данные не используются.", js)
+        self.assertIn("Настройка Wild Boar Proxy", js)
+        self.assertIn("Безопасная подготовка локального контура без изменения рабочих файлов Codex.", html + js)
+        self.assertIn("Live-readonly setup недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Экран показывает setup preview, не результат настройки.", html + js)
         self.assertIn("simulated truth нет", js)
         self.assertIn("Первичная настройка", html)
         self.assertIn("Готовность локального контура", html)
         self.assertIn("admission state", html)
-        self.assertIn("Client discovery", html)
+        self.assertIn("Codex client candidate", html)
         self.assertIn("Manual picker", html)
         self.assertIn("Data directory", html)
         self.assertIn("Проверка", html)
         self.assertIn("Runtime status", html)
         self.assertIn("Client surface", html)
-        self.assertIn("Local source paths", html)
-        self.assertIn("Setup complete", html)
-        self.assertIn("browser-provided paths blocked", html)
+        self.assertIn("Accounts pool", html)
+        self.assertIn("Diagnostics export", html)
+        self.assertIn("Desktop bridge", html)
+        self.assertIn("Setup proof", html)
+        self.assertNotIn("Setup complete", html)
+        self.assertIn("no browser path", html)
         self.assertIn("command surface missing", html)
-        self.assertIn("future desktop/native picker", html)
+        self.assertIn("future desktop/native flow", html)
+        self.assertIn("owner-gated", html)
         self.assertIn("Продолжить · requires proof", html)
         self.assertIn("Проверить готовность · missing surface", html)
         self.assertIn("setup proof packet", html)
@@ -1110,8 +1116,22 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         setup_section = self._section_html(html, "setupScreen")
         self.assertIn('src="assets/icons/phosphor/shield-check.png"', setup_section)
         self.assertIn('src="assets/icons/phosphor/sliders-horizontal.png"', setup_section)
-        self.assertIn('src="assets/icons/phosphor/x-circle.png"', setup_section)
+        self.assertIn('src="assets/icons/phosphor/squares-four.png"', setup_section)
+        self.assertNotIn('src="assets/icons/phosphor/x-circle.png"', setup_section)
+        self.assertNotIn("setup-component-icon red", setup_section)
+        self.assertNotIn("setup-card-icon red", setup_section)
+        self.assertNotIn("chip red", setup_section)
         self.assertNotIn("<svg", setup_section.lower())
+        for forbidden in (
+            "Установка завершена",
+            "Клиент найден",
+            "Конфигурация сохранена",
+            "найдено приложение",
+            "production",
+            "путь сохранён",
+            "данные инициализированы",
+        ):
+            self.assertNotIn(forbidden, setup_section + js)
         self.assertNotIn('class="button primary small">Продолжить', setup_section)
         self.assertNotIn('class="button primary small disabled" type="button" disabled title="Continue requires setup proof packet.">Продолжить', setup_section)
         self.assertRegex(

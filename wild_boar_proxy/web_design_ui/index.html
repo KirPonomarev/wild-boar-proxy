@@ -993,7 +993,7 @@
 
         <section id="setupScreen" class="screen setup-screen setup-final-screen" data-screen="setup" data-setup-mode="admission-wizard" hidden>
           <div id="setupBanner" class="fixture-banner amber">
-            Демо-режим. Экран показывает admitted layout, не результат настройки.
+            Демо-режим. Экран показывает setup preview, не результат настройки.
           </div>
 
           <div class="setup-flow-layout" data-visual-reference="10_first_run_setup_wizard" data-setup-flow-frame="left-step-rail">
@@ -1014,7 +1014,7 @@
                   <div>
                     <div class="eyebrow">Первичная настройка</div>
                     <h3>Готовность локального контура</h3>
-                    <div class="secondary">Подготовка локального контура без изменения рабочих файлов Codex.</div>
+                    <div class="secondary">Безопасная подготовка локального контура без изменения рабочих файлов Codex.</div>
                   </div>
                   <span class="chip amber"><span class="dot"></span>не подтверждена</span>
                 </div>
@@ -1022,7 +1022,7 @@
                   <div><span>Runtime status</span><strong>admitted readonly</strong></div>
                   <div><span>Client surface</span><strong>deferred</strong></div>
                   <div><span>Data directory</span><strong>readonly display</strong></div>
-                  <div><span>Setup complete</span><strong>pending packet truth</strong></div>
+                  <div><span>Setup proof</span><strong>pending packet truth</strong></div>
                 </div>
               </section>
 
@@ -1032,7 +1032,7 @@
                     <span class="setup-card-icon blue"><img class="ui-icon" src="assets/icons/phosphor/sliders-horizontal.png" alt="" aria-hidden="true"></span>
                     <div>
                       <h3>Компоненты настройки</h3>
-                      <div class="secondary">Policy-карта admitted, deferred и blocked surfaces.</div>
+                      <div class="secondary">Readiness summaries, не command surfaces.</div>
                     </div>
                   </div>
                   <div class="setup-component-list">
@@ -1043,23 +1043,28 @@
                     </div>
                     <div class="setup-component-row">
                       <span class="setup-component-icon amber"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
-                      <div><strong>Client discovery</strong><span>command surface missing</span></div>
-                      <span class="chip amber"><span class="dot"></span>deferred</span>
+                      <div><strong>Codex client candidate</strong><span>preview, not saved selection</span></div>
+                      <span class="chip amber"><span class="dot"></span>preview</span>
                     </div>
                     <div class="setup-component-row">
                       <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
-                      <div><strong>Manual picker</strong><span>future desktop/native picker</span></div>
-                      <span class="chip neutral"><span class="dot"></span>desktop-only</span>
+                      <div><strong>Data directory</strong><span>display-only, no browser path</span></div>
+                      <span class="chip neutral"><span class="dot"></span>readonly</span>
                     </div>
                     <div class="setup-component-row">
-                      <span class="setup-component-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
-                      <div><strong>Local source paths</strong><span>browser-provided paths blocked</span></div>
-                      <span class="chip red"><span class="dot"></span>blocked</span>
+                      <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Accounts pool</strong><span>preview category only</span></div>
+                      <span class="chip neutral"><span class="dot"></span>unknown</span>
                     </div>
                     <div class="setup-component-row">
-                      <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
-                      <div><strong>Config write</strong><span>requires command-owned result</span></div>
-                      <span class="chip neutral"><span class="dot"></span>no command</span>
+                      <span class="setup-component-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Diagnostics export</strong><span>support readiness, not health truth</span></div>
+                      <span class="chip neutral"><span class="dot"></span>support-only</span>
+                    </div>
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon amber"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                      <div><strong>Desktop bridge</strong><span>future desktop/native flow</span></div>
+                      <span class="chip amber"><span class="dot"></span>owner-gated</span>
                     </div>
                   </div>
                 </section>
@@ -1075,7 +1080,7 @@
                   <div class="deferred-list">
                     <div class="deferred-row"><span>Текущий выбор</span><span>не подтверждён</span><span class="chip neutral"><span class="dot"></span>pending</span></div>
                     <div class="deferred-row"><span>Candidates</span><span>command surface missing</span><span class="chip amber"><span class="dot"></span>deferred</span></div>
-                    <div class="deferred-row"><span>Manual picker</span><span>desktop/native only</span><button class="button small disabled" type="button" disabled title="Requires command-owned candidates.">Выбрать клиента · disabled</button></div>
+                    <div class="deferred-row"><span>Manual picker</span><span>desktop/native only</span><button class="button small disabled" type="button" disabled title="Requires command-owned candidates.">Недоступно</button></div>
                   </div>
                 </section>
               </div>
@@ -1098,7 +1103,7 @@
 
                 <section class="card form-section setup-boundary-card">
                   <div class="setup-card-head">
-                    <span class="setup-card-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                    <span class="setup-card-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
                     <div>
                       <h3>Граница настройки</h3>
                       <div class="secondary">Нет прямой конфигурации из web UI.</div>
@@ -1106,7 +1111,7 @@
                   </div>
                   <div class="setup-boundary-grid setup-boundary-grid-compact">
                     <div><span>Browser payload</span><strong>no paths, no raw config, no secrets</strong></div>
-                    <div><span>Truth source</span><strong>future JSON packet</strong></div>
+                    <div><span>Truth source</span><strong>bounded setup packet</strong></div>
                     <div><span>Next action</span><strong>missing command surface</strong></div>
                   </div>
                 </section>

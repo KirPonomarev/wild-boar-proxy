@@ -1,0 +1,75 @@
+{
+  "url": "http://127.0.0.1:8766/?screen=setup&state=healthy&v=1778798762137",
+  "title": "Настройка Wild Boar Proxy",
+  "subtitle": "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
+  "banner": "Демо-режим. Экран показывает setup preview, не результат настройки.",
+  "documentScrollWidth": 1600,
+  "documentScrollHeight": 1000,
+  "mainClientHeight": 942,
+  "mainScrollHeight": 942,
+  "screenBottom": 892,
+  "screenHeight": 724,
+  "railBottom": 638,
+  "workbenchBottom": 892,
+  "visibleSvgs": 0,
+  "visibleImgs": 11,
+  "redSetupMarkers": 0,
+  "buttons": [
+    {
+      "text": "Выбрать клиента · disabled",
+      "scrollWidth": 90,
+      "clientWidth": 90,
+      "disabled": true,
+      "title": "Requires command-owned candidates."
+    },
+    {
+      "text": "Назад",
+      "scrollWidth": 60,
+      "clientWidth": 60,
+      "disabled": true,
+      "title": ""
+    },
+    {
+      "text": "Закрыть",
+      "scrollWidth": 74,
+      "clientWidth": 74,
+      "disabled": false,
+      "title": ""
+    },
+    {
+      "text": "Проверить готовность · missing surface",
+      "scrollWidth": 298,
+      "clientWidth": 298,
+      "disabled": true,
+      "title": "Readiness check requires an admitted command surface."
+    },
+    {
+      "text": "Продолжить · requires proof",
+      "scrollWidth": 218,
+      "clientWidth": 218,
+      "disabled": true,
+      "title": "Continue requires setup proof packet."
+    }
+  ],
+  "steps": [
+    "1Готовностьadmission state",
+    "2Компонентыpolicy check",
+    "3Клиентdeferred surface",
+    "4Данныеreadonly display",
+    "5Проверкаrequires proof"
+  ],
+  "readiness": [
+    "Runtime statusadmitted readonly",
+    "Client surfacedeferred",
+    "Data directoryreadonly display",
+    "Setup proofpending packet truth"
+  ],
+  "components": [
+    "Runtime statusreadonly status packet admitted",
+    "Codex client candidatepreview, not saved selection preview",
+    "Data directorydisplay-only, no browser path readonly",
+    "Accounts poolpreview category only unknown",
+    "Diagnostics exportsupport readiness, not health truth support-only",
+    "Desktop bridgefuture desktop/native flow owner-gated"
+  ]
+}
