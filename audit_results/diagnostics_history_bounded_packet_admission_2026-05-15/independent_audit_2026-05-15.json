@@ -1,0 +1,60 @@
+{
+  "contour_id": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+  "date": "2026-05-15",
+  "auditor": "independent_subagent",
+  "mode": "read_only",
+  "verdict": "PASS",
+  "commands_or_patterns_reviewed": [
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "readFile",
+    "tail",
+    "raw argv",
+    "argv",
+    "bundle_path",
+    "raw_paths",
+    "raw_logs",
+    "secret_ref",
+    "logs",
+    "diagnostics bundle"
+  ],
+  "findings": [
+    {
+      "path": "wild_boar_proxy/web_design_ui/index.html",
+      "lines": "729-825",
+      "classification": "benign",
+      "summary": "Diagnostics history card is fixture/deferred and explicitly requires a bounded redacted JSON command surface before live history is admitted."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "983-1025,1472-1476,1491-1604",
+      "classification": "benign",
+      "summary": "UI switches fixture/live display state and renders sanitized artifact metadata; it does not read bundle contents or raw files."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "453-600,1095-1107",
+      "classification": "benign",
+      "summary": "Live server uses strict JSON command packets, records forbidden-field metadata, and normalizes diagnostics export bundle references."
+    },
+    {
+      "path": "tests/test_web_design_ui.py",
+      "lines": "324-327,772-774,945-946,1065-1067",
+      "classification": "benign_guard_tests",
+      "summary": "Negative tests forbid browser storage, file-reading, browser file picker, and related unsafe UI behavior."
+    }
+  ],
+  "risks": [
+    {
+      "classification": "deferred_not_blocking",
+      "summary": "Richer live diagnostics history remains not admitted until a new bounded packet command surface exists."
+    }
+  ],
+  "summary": {
+    "raw_log_state_bundle_reads_found": false,
+    "browser_storage_for_diagnostics_history_found": false,
+    "raw_argv_or_secret_leakage_found": false,
+    "admission_scan_result": "PASS"
+  }
+}

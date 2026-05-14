@@ -1,0 +1,108 @@
+{
+  "contour_id": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "6e6fec7c2a6f4a3915494039b9580ca47b340c0c",
+  "scan_scope": [
+    "wild_boar_proxy/web_design_ui",
+    "wild_boar_proxy/web_design_live_server.py"
+  ],
+  "commands": [
+    {
+      "command": "rg -n \"tail|readFile|localStorage|sessionStorage|diagnostics.*bundle|bundle_path|raw_logs|window\\.history|changed_files\" wild_boar_proxy/web_design_ui wild_boar_proxy/web_design_live_server.py",
+      "exit_code": 0,
+      "classification": "reviewed_hits"
+    },
+    {
+      "command": "sed -n '60,105p' wild_boar_proxy/web_design_live_server.py && sed -n '1088,1112p' wild_boar_proxy/web_design_live_server.py && sed -n '1490,1564p' wild_boar_proxy/web_design_ui/scripts/overview.js && sed -n '1900,1934p' wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "exit_code": 0,
+      "classification": "source_context_reviewed"
+    }
+  ],
+  "reviewed_hits": [
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "89-96",
+      "pattern": "export_diagnostics",
+      "classification": "benign_existing_command_surface",
+      "notes": "Existing diagnostics export action is a support artifact surface, not diagnostics live history."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "440,574,1267,1312",
+      "pattern": "raw_logs",
+      "classification": "benign_redaction_metadata",
+      "notes": "References appear inside forbidden_fields_excluded privacy metadata."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "1099-1113",
+      "pattern": "bundle_path / changed_files",
+      "classification": "benign_sanitized_export_result",
+      "notes": "Export result reduces bundle_path to basename and replaces changed files with diagnostics_bundle markers; it does not parse bundle contents."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1491-1564",
+      "pattern": "artifactReference(data.bundle_path)",
+      "classification": "benign_sanitized_artifact_reference",
+      "notes": "UI renders a sanitized artifact reference/count for export diagnostics result; no bundle parsing or file read is present."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/index.html",
+      "lines": "729-825",
+      "pattern": "diagnostics history deferred surface",
+      "classification": "benign_deferred_fixture_surface",
+      "notes": "Existing diagnostics history copy states that live history requires a bounded redacted JSON command surface and that UI does not read journals or state directly."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "1905,3103,3122",
+      "pattern": "window.history.replaceState",
+      "classification": "benign_browser_url_state",
+      "notes": "Used for preview navigation query params; not diagnostics history storage."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "lines": "multiple details selectors",
+      "pattern": "details",
+      "classification": "benign_css_word_match",
+      "notes": "CSS selectors for disclosure widgets and detail panels; not filesystem or diagnostics-history reads."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_live_server.py",
+      "lines": "1484-1485",
+      "pattern": "domain_tail",
+      "classification": "benign_identifier_suffix",
+      "notes": "String suffix redaction helper; not log tailing."
+    },
+    {
+      "path": "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "lines": "3031-3032",
+      "pattern": "tail",
+      "classification": "benign_identifier_suffix",
+      "notes": "Email/domain suffix redaction helper; not log tailing."
+    }
+  ],
+  "findings": {
+    "raw_log_reads_found": false,
+    "ui_side_tail_found": false,
+    "ui_side_read_file_found": false,
+    "direct_state_file_reads_found": false,
+    "diagnostics_bundle_parsing_found": false,
+    "browser_storage_history_found": false,
+    "raw_argv_rendering_found": false,
+    "secret_rendering_found": false,
+    "deferred_diagnostics_history_surface_found": true
+  },
+  "scope_integrity": {
+    "runtime_changed": false,
+    "command_adapter_changed": false,
+    "allowlist_changed": false,
+    "web_ui_changed": false,
+    "live_server_changed": false,
+    "desktop_changed": false
+  },
+  "verdict": "PASS",
+  "notes": "Current surfaces expose diagnostics export metadata, sanitized artifact references, and an explicitly deferred diagnostics-history fixture surface only. No diagnostics live history implementation or UI-side raw log/state/bundle read was admitted by this contour."
+}

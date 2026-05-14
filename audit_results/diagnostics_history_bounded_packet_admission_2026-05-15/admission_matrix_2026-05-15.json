@@ -1,0 +1,183 @@
+{
+  "contour_id": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "6e6fec7c2a6f4a3915494039b9580ca47b340c0c",
+  "contour_type": "admission_spec",
+  "implemented_now": false,
+  "admitted_command_now": false,
+  "runtime_changed": false,
+  "command_adapter_changed": false,
+  "allowlist_changed": false,
+  "web_ui_changed": false,
+  "future_command_candidate": {
+    "name": "diagnostics history --json",
+    "implemented_now": false,
+    "admitted_now": false,
+    "notes": "Future command contract placeholder only; no UI wiring or allowlist change in this contour."
+  },
+  "required_packet_fields": [
+    "schema_version",
+    "status",
+    "observed_at",
+    "ttl_seconds",
+    "window.label",
+    "window.bucket_seconds",
+    "window.bucket_count",
+    "summary.success_count",
+    "summary.failure_count",
+    "summary.stale_count",
+    "summary.unknown_count",
+    "series[].timestamp",
+    "series[].state",
+    "series[].count",
+    "records[].timestamp",
+    "records[].object_type",
+    "records[].object_ref",
+    "records[].severity",
+    "records[].machine_code",
+    "records[].message",
+    "redaction.paths_redacted",
+    "redaction.secrets_redacted",
+    "redaction.raw_logs_included",
+    "next_action"
+  ],
+  "allowed_values": {
+    "status": [
+      "ok",
+      "empty",
+      "stale",
+      "unavailable",
+      "error"
+    ],
+    "series_state": [
+      "success",
+      "failure",
+      "stale",
+      "unknown"
+    ],
+    "object_type": [
+      "account",
+      "route",
+      "sync",
+      "auth",
+      "upstream"
+    ],
+    "severity": [
+      "ok",
+      "warning",
+      "error"
+    ],
+    "next_action": [
+      "retry",
+      "export_diagnostics",
+      "none"
+    ]
+  },
+  "forbidden_fields_or_claims": [
+    "raw log lines",
+    "absolute file paths",
+    "auth tokens",
+    "api keys",
+    "secret values",
+    "raw command argv",
+    "stack traces",
+    "diagnostics bundle contents",
+    "browser-provided paths",
+    "raw command packets",
+    "unadmitted personal identifiers",
+    "runtime healthy claim",
+    "account usable claim",
+    "route active claim",
+    "repair needed claim",
+    "rollout proven claim"
+  ],
+  "state_matrix": [
+    {
+      "state": "ok",
+      "input_condition": "status=ok and packet is fresh and redaction passed",
+      "visual_class": "green",
+      "allowed_claim": "History packet is fresh and parsed.",
+      "forbidden_claim": "Runtime is healthy."
+    },
+    {
+      "state": "empty",
+      "input_condition": "status=empty with valid schema and redaction",
+      "visual_class": "amber",
+      "allowed_claim": "No bounded history records are available in the requested window.",
+      "forbidden_claim": "Diagnostics failed."
+    },
+    {
+      "state": "stale",
+      "input_condition": "status=stale or observed_at + ttl_seconds is expired",
+      "visual_class": "amber",
+      "allowed_claim": "History packet is stale and requires refresh.",
+      "forbidden_claim": "Previous healthy data is still current."
+    },
+    {
+      "state": "unavailable",
+      "input_condition": "status=unavailable or command-owned surface is absent",
+      "visual_class": "amber",
+      "allowed_claim": "Bounded history surface is unavailable.",
+      "forbidden_claim": "Fixture history is live history."
+    },
+    {
+      "state": "invalid_json",
+      "input_condition": "stdout is not exactly one valid JSON object",
+      "visual_class": "red",
+      "allowed_claim": "Hard integration failure.",
+      "forbidden_claim": "Recoverable success."
+    },
+    {
+      "state": "missing_fields",
+      "input_condition": "critical packet fields are absent or malformed",
+      "visual_class": "red",
+      "allowed_claim": "Packet contract is not satisfied.",
+      "forbidden_claim": "Partial fields prove history."
+    },
+    {
+      "state": "timeout",
+      "input_condition": "future command does not return within bounded timeout",
+      "visual_class": "amber",
+      "allowed_claim": "History request timed out and may be retried.",
+      "forbidden_claim": "Command succeeded."
+    },
+    {
+      "state": "integration_failure",
+      "input_condition": "command runner or packet bridge fails",
+      "visual_class": "red",
+      "allowed_claim": "History integration failed.",
+      "forbidden_claim": "Cached or fixture history can replace packet truth."
+    },
+    {
+      "state": "redaction_failed",
+      "input_condition": "packet includes forbidden raw paths, logs, secrets, argv, stack traces, or bundle contents",
+      "visual_class": "red",
+      "allowed_claim": "Packet must be rejected before rendering details.",
+      "forbidden_claim": "Sensitive fields can be displayed after truncation."
+    }
+  ],
+  "freshness_rules": {
+    "fresh_until": "observed_at + ttl_seconds",
+    "expired_packet_visual_state": "stale",
+    "missing_observed_at": "missing_fields",
+    "missing_ttl_seconds": "missing_fields",
+    "ok_status_scope": "packet parsed, fresh, and redacted; not runtime health"
+  },
+  "future_ui_constraints": {
+    "graph_type": "wide_operational_tick_scale",
+    "tick_count": 48,
+    "success_color_scope": "series bucket state only",
+    "must_label_as": "bounded history packet",
+    "must_not_label_as": "runtime truth"
+  },
+  "stop_conditions": [
+    "history requires UI-side log parsing",
+    "history requires diagnostics bundle parsing",
+    "redaction cannot be guaranteed",
+    "UI needs direct state or log reads",
+    "command adapter or allowlist must change in this contour",
+    "chart would present fixture data as live truth",
+    "raw paths, secrets, argv, stack traces, or bundle contents appear in packet"
+  ]
+}
