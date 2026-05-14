@@ -1,0 +1,43 @@
+{
+  "contour_id": "ROLLOUT_SCALE_GATE_ADMISSION",
+  "date": "2026-05-14",
+  "auditors": [
+    {
+      "agent_id": "019e26ba-149b-7380-8f25-fda2c79a63f8",
+      "scope": "web/action boundary",
+      "model": "gpt-5.4-mini",
+      "verdict": "PASS"
+    },
+    {
+      "agent_id": "019e26ba-3e6f-73e2-b973-768005bb8556",
+      "scope": "canon/claims fact check",
+      "model": "gpt-5.4-mini",
+      "verdict": "FAIL_FOR_CLAIM_PROMOTION"
+    }
+  ],
+  "orchestrator_interpretation": {
+    "web_boundary": "PASS",
+    "scale_claim_admission": "BLOCKED_BY_CANON",
+    "contour_result": "PASS_BOUNDARY_AUDITED_WITH_CLAIM_BLOCK"
+  },
+  "auditor_findings": [
+    {
+      "finding": "No active rollout-stage UI controls, raw command_id browser payload, raw argv browser payload, arbitrary command execution, direct evidence/log/state reads, or false pilot/scale claims found in the web/action boundary.",
+      "severity": "none"
+    },
+    {
+      "finding": "Current canon does not support promoting observed 16-account evidence to 20-account proof or desktop admission.",
+      "severity": "blocking_for_scale_claims"
+    },
+    {
+      "finding": "Existing live mutation requests such as sync/mode/account lifecycle/API route actions remain bounded and confirmation/post-refresh driven; they are not rollout-stage mutation controls.",
+      "severity": "nonblocking"
+    }
+  ],
+  "commands_reported_by_auditors": [
+    "rg scans over web UI, live server, command adapter, tests, and canon docs",
+    "nl -ba inspections of web/action files and canon docs",
+    "jq inspection of ui_final_next_contour_queue_2026-05-14.json"
+  ],
+  "final_result": "PASS_WITH_SCALE_CLAIMS_BLOCKED"
+}

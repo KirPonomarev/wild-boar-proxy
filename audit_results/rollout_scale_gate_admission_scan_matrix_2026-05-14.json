@@ -1,0 +1,87 @@
+{
+  "contour_id": "ROLLOUT_SCALE_GATE_ADMISSION",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_at_start": "9aca9b7",
+  "scope": "pre_desktop_web_ui_rollout_scale_boundary",
+  "product_code_changed": false,
+  "web_action_boundary": {
+    "verdict": "PASS",
+    "active_rollout_stage_controls_found": false,
+    "browser_raw_command_id_allowed": false,
+    "browser_raw_argv_allowed": false,
+    "arbitrary_command_execution_allowed": false,
+    "direct_evidence_log_state_reads_found": false,
+    "false_scale_or_pilot_claims_found": false
+  },
+  "current_allowed_surface": [
+    {
+      "surface": "rollout_rotation_inspect",
+      "category": "bounded_read_metadata",
+      "command": "rollout rotation inspect --json",
+      "ui_admission": "allowed_as_conservative_warning_or_metadata_only",
+      "claim_limit": "rollout evidence warning, not scale proof"
+    }
+  ],
+  "owner_or_live_only_surfaces": [
+    {
+      "surface": "policy_stage_set",
+      "command": "policy stage set <10|15|20> --json",
+      "ui_admission": "forbidden_active_web_control",
+      "claim_limit": "policy truth only; no stage completion proof"
+    },
+    {
+      "surface": "rollout_stage_prove",
+      "command": "rollout stage prove 10/15 --json",
+      "ui_admission": "owner_live_only_deferred",
+      "claim_limit": "stage proof only from owner packet"
+    },
+    {
+      "surface": "rollout_stage_advance",
+      "command": "rollout stage advance 15/20 <id> --json",
+      "ui_admission": "owner_live_only_forbidden_as_active_web_control",
+      "claim_limit": "one-step control-layer progression; no stronger claim"
+    },
+    {
+      "surface": "same_day_20_validation",
+      "command": "approved live validation contour",
+      "ui_admission": "deferred_until_owner_approval_and_machine_evidence",
+      "claim_limit": "may support scale-to-20 validated only after evidence"
+    }
+  ],
+  "deferred_future_ui_requirements": [
+    "bounded JSON packet source only",
+    "basename-only artifact references",
+    "no raw evidence/log/state file viewer",
+    "no active stage mutation buttons",
+    "explicit owner/live-only labels for any stage command",
+    "no stable/pilot/production claims without machine-carried evidence"
+  ],
+  "static_scan_findings": [
+    {
+      "pattern": "policy_stage",
+      "finding": "Only negative tests/unknown action checks found.",
+      "blocking": false
+    },
+    {
+      "pattern": "rollout stage advance",
+      "finding": "Forbidden command appears in tests and canon docs only; not as active web UI control.",
+      "blocking": false
+    },
+    {
+      "pattern": "scale proof",
+      "finding": "Existing tests assert UI does not contain this claim.",
+      "blocking": false
+    }
+  ],
+  "key_evidence": [
+    "wild_boar_proxy/web_design_live_server.py:611 rejects browser command_id",
+    "wild_boar_proxy/web_design_live_server.py:627 rejects unsupported UI action fields",
+    "wild_boar_proxy/web_design_command_adapter.py:278 keeps command execution allowlisted",
+    "tests/test_web_design_live_server.py:2055 forbids policy stage set and rollout stage advance in operator flow",
+    "COMMAND_API.md:472 states READY_FOR_STAGE_ADVANCE is not scale proof",
+    "MASTER_PLAN.md:58 requires one approved live validation contour for 20-account proof",
+    "STATE_SCHEMA.md:161 forbids using bounded evidence for STABLE_20_PROVED/SCALE_COMPLETE/PILOT_READY"
+  ],
+  "final_result": "PASS_BOUNDARY_AUDITED_SCALE_CLAIMS_BLOCKED"
+}
