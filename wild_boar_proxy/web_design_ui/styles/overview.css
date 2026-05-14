@@ -1560,7 +1560,7 @@ button:disabled {
 
 .diagnostics-fixture-chart {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .diagnostics-fixture-chart[hidden],
@@ -1569,24 +1569,105 @@ button:disabled {
   display: none;
 }
 
-.chart-grid {
-  align-items: end;
+.diagnostics-line-chart {
   background:
-    linear-gradient(to top, rgba(217, 208, 195, .42) 1px, transparent 1px) 0 0 / 100% 25%,
+    linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(248, 244, 237, .84)),
     var(--surface);
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 14px;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(7, 1fr);
-  height: 132px;
-  padding: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+  height: 172px;
+  overflow: hidden;
+  padding: 10px 12px 8px;
+  position: relative;
 }
 
-.chart-grid span {
-  background: linear-gradient(180deg, var(--blue), #8fb1ff);
-  border-radius: 999px 999px 4px 4px;
-  min-height: 18px;
+.chart-legend {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  left: 12px;
+  position: absolute;
+  right: 16px;
+  top: 8px;
+  z-index: 1;
+}
+
+.chart-legend span {
+  align-items: center;
+  color: var(--secondary);
+  display: inline-flex;
+  font-size: 11px;
+  gap: 5px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.legend-line {
+  border-radius: 999px;
+  display: inline-block;
+  height: 3px;
+  width: 13px;
+}
+
+.legend-line.failure {
+  background: #ef4444;
+}
+
+.legend-line.success {
+  background: #2563eb;
+}
+
+.chart-svg {
+  display: block;
+  height: 100%;
+  overflow: visible;
+  width: 100%;
+}
+
+.chart-grid-lines line {
+  stroke: rgba(136, 124, 108, .18);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-y-labels text,
+.chart-x-labels text {
+  fill: var(--secondary);
+  font-size: 10px;
+}
+
+.chart-x-labels text {
+  text-anchor: middle;
+}
+
+.chart-area {
+  stroke: none;
+}
+
+.chart-area.failure {
+  fill: url("#diagnosticsFailureFill");
+}
+
+.chart-area.success {
+  fill: url("#diagnosticsSuccessFill");
+}
+
+.chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-line.failure {
+  stroke: #ef4444;
+}
+
+.chart-line.success {
+  stroke: #2563eb;
 }
 
 .chart-caption {

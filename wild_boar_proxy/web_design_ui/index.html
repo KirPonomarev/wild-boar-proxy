@@ -578,14 +578,52 @@
                     <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
                   </div>
                   <div id="diagnosticsFixtureChart" class="diagnostics-fixture-chart" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
-                    <div class="chart-grid" aria-hidden="true">
-                      <span style="height:36%"></span>
-                      <span style="height:52%"></span>
-                      <span style="height:44%"></span>
-                      <span style="height:68%"></span>
-                      <span style="height:58%"></span>
-                      <span style="height:82%"></span>
-                      <span style="height:46%"></span>
+                    <div class="diagnostics-line-chart" role="img" aria-label="Демо-график истории сигнала: сбои и успешные попытки за семь дней">
+                      <div class="chart-legend" aria-hidden="true">
+                        <span><i class="legend-line failure"></i>Сбои</span>
+                        <span><i class="legend-line success"></i>Успешные попытки</span>
+                      </div>
+                      <svg class="chart-svg" viewBox="0 0 640 236" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                        <defs>
+                          <linearGradient id="diagnosticsFailureFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#ef4444" stop-opacity=".22"></stop>
+                            <stop offset="72%" stop-color="#ef4444" stop-opacity=".05"></stop>
+                            <stop offset="100%" stop-color="#ef4444" stop-opacity="0"></stop>
+                          </linearGradient>
+                          <linearGradient id="diagnosticsSuccessFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#2563eb" stop-opacity=".16"></stop>
+                            <stop offset="74%" stop-color="#2563eb" stop-opacity=".04"></stop>
+                            <stop offset="100%" stop-color="#2563eb" stop-opacity="0"></stop>
+                          </linearGradient>
+                        </defs>
+                        <g class="chart-grid-lines">
+                          <line x1="54" y1="28" x2="612" y2="28"></line>
+                          <line x1="54" y1="70" x2="612" y2="70"></line>
+                          <line x1="54" y1="112" x2="612" y2="112"></line>
+                          <line x1="54" y1="154" x2="612" y2="154"></line>
+                          <line x1="54" y1="196" x2="612" y2="196"></line>
+                        </g>
+                        <g class="chart-y-labels">
+                          <text x="8" y="32">100%</text>
+                          <text x="18" y="74">75%</text>
+                          <text x="18" y="116">50%</text>
+                          <text x="18" y="158">25%</text>
+                          <text x="24" y="200">0%</text>
+                        </g>
+                        <path class="chart-area failure" d="M54 152 C78 136, 96 120, 122 124 S164 132, 190 118 S232 68, 260 74 S302 24, 334 40 S380 82, 416 94 S468 114, 500 128 S560 156, 612 166 L612 196 L54 196 Z"></path>
+                        <path class="chart-area success" d="M54 178 C86 178, 102 180, 130 172 S182 148, 210 154 S248 180, 282 172 S326 172, 356 160 S398 182, 430 178 S486 166, 520 172 S572 184, 612 182 L612 196 L54 196 Z"></path>
+                        <path class="chart-line failure" d="M54 152 C78 136, 96 120, 122 124 S164 132, 190 118 S232 68, 260 74 S302 24, 334 40 S380 82, 416 94 S468 114, 500 128 S560 156, 612 166"></path>
+                        <path class="chart-line success" d="M54 178 C86 178, 102 180, 130 172 S182 148, 210 154 S248 180, 282 172 S326 172, 356 160 S398 182, 430 178 S486 166, 520 172 S572 184, 612 182"></path>
+                        <g class="chart-x-labels">
+                          <text x="50" y="226">26 мая</text>
+                          <text x="132" y="226">27 мая</text>
+                          <text x="214" y="226">28 мая</text>
+                          <text x="296" y="226">29 мая</text>
+                          <text x="378" y="226">30 мая</text>
+                          <text x="462" y="226">31 мая</text>
+                          <text x="552" y="226">2 июн.</text>
+                        </g>
+                      </svg>
                     </div>
                     <div class="chart-caption">fixture/demo-only · не наблюдаемая runtime-история</div>
                   </div>

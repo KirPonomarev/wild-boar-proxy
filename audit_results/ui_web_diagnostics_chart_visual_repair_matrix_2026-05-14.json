@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "contour": "UI_WEB_DIAGNOSTICS_CHART_VISUAL_REPAIR",
+  "date": "2026-05-14",
+  "head_before": "e42f2a9",
+  "scope": "diagnostics fixture/demo chart visual repair",
+  "changes": [
+    {
+      "file": "wild_boar_proxy/web_design_ui/index.html",
+      "change": "replaced the diagnostics fixture bar placeholder with an SVG line/area chart"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "change": "added stable chart geometry, legend, grid, axis labels, and line/area styling"
+    },
+    {
+      "file": "tests/test_web_design_ui.py",
+      "change": "added assertions for the diagnostics line chart structure and styling"
+    }
+  ],
+  "chart_contract": {
+    "mode": "fixture/demo",
+    "runtime_truth_claim": false,
+    "live_history_claim": false,
+    "direct_log_read": false,
+    "direct_state_read": false,
+    "series": [
+      "failures",
+      "successful_attempts"
+    ],
+    "visual_shape": [
+      "line_chart",
+      "area_fill",
+      "percent_y_axis",
+      "date_x_axis",
+      "legend"
+    ]
+  },
+  "verification": {
+    "targeted_tests": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server",
+    "targeted_tests_result": "PASS: 61 tests",
+    "browser_preview": "PASS: http://127.0.0.1:8788/?screen=diagnostics&state=healthy",
+    "screenshot": "audit_results/ui_web_diagnostics_chart_visual_repair_2026-05-14.png",
+    "diff_check": "PASS"
+  },
+  "scope_check": {
+    "ui_changed": true,
+    "backend_changed": false,
+    "live_server_changed": false,
+    "command_adapter_changed": false,
+    "runtime_changed": false,
+    "desktop_started": false,
+    "new_action_surface": false,
+    "external_reference_research_used": false
+  },
+  "resume_from_here": "Continue owner review; diagnostics chart visual repair is complete."
+}
