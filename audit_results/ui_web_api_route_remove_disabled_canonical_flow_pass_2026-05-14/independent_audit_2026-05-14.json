@@ -1,0 +1,16 @@
+{
+  "contour": "UI_WEB_API_ROUTE_REMOVE_DISABLED_CANONICAL_FLOW_PASS",
+  "date": "2026-05-14",
+  "auditor": "Noether / read-only subagent",
+  "verdict": "PASS",
+  "findings": [],
+  "verified_claims": [
+    "api_route_remove is available only for proven disabled route rows",
+    "enabled and unknown routes remain blocked",
+    "browser payload remains bounded to ui_action plus route_id for remove",
+    "confirmation preflight copy is readonly and server-authoritative",
+    "refresh mismatch remains amber and not green success",
+    "tests cover route availability, confirmation copy, payload bounds, and mismatch ledger state"
+  ],
+  "auditor_note": "Independent audit inspected git diff and relevant files only; no edits were made."
+}

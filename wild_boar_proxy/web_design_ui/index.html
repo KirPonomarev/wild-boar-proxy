@@ -573,7 +573,7 @@
             </table>
             <div class="pagination">
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
-              <span>разрешены только проверки · мутации маршрутов отложены</span>
+              <span>remove только для disabled route · create/update отложены</span>
             </div>
           </section>
 
@@ -1418,6 +1418,19 @@
             <div>Граница</div><div id="confirmScope">-</div>
             <div>Отправка</div><div id="confirmDispatchState">ожидание</div>
           </div>
+          <section id="apiRouteRemovePreflight" class="api-route-remove-preflight" aria-label="Preflight удаления disabled route" hidden>
+            <div class="eyebrow">Preflight summary</div>
+            <div class="confirm-facts">
+              <div>Route exists</div><div id="apiRouteRemovePreflightExists">-</div>
+              <div>Route status</div><div id="apiRouteRemovePreflightStatus">-</div>
+              <div>Mutation</div><div id="apiRouteRemovePreflightMutation">remove registry route</div>
+              <div>Config write</div><div id="apiRouteRemovePreflightWrite">command-owned</div>
+              <div>Refresh</div><div id="apiRouteRemovePreflightRefresh">required</div>
+            </div>
+            <p class="confirm-note">
+              UI показывает только readonly preflight summary. Сервер повторно проверит disabled-state перед dispatch.
+            </p>
+          </section>
           <p id="confirmTruthWarning" class="confirm-note">
             Результат действия не является подтверждённым состоянием runtime. После выполнения экран
             обновится только из live JSON-команд.

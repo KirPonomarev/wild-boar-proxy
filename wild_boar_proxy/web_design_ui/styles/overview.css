@@ -1585,6 +1585,28 @@ button:disabled {
   word-break: break-word;
 }
 
+.api-route-remove-preflight {
+  background: rgba(255, 250, 246, .72);
+  border: 1px solid rgba(193, 68, 45, .18);
+  border-radius: var(--radius-card);
+  margin-top: 16px;
+  padding: 14px;
+}
+
+.api-route-remove-preflight[hidden] {
+  display: none;
+}
+
+.api-route-remove-preflight .confirm-facts {
+  background: #fffdfa;
+  margin-top: 8px;
+  padding: 12px;
+}
+
+.api-route-remove-preflight .confirm-note {
+  margin-top: 10px;
+}
+
 .modal-state-list {
   display: grid;
   gap: 8px;

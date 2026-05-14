@@ -67,6 +67,7 @@ const ACTION_STATUS_VISUAL_CLASS = {
   ok_refresh_pending: "amber",
   ok_refresh_complete: "green",
   ok_refresh_failed: "amber",
+  refresh_mismatch: "amber",
   command_error: "red",
   integration_failure: "red",
   invalid_json: "red",
@@ -196,6 +197,7 @@ let actionMetadata = {};
 let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
+let currentApiConnectionsSnapshot = null;
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
@@ -429,6 +431,8 @@ function actionDisplayState(payload, refreshState = "none") {
       displayState = "ok_refresh_complete";
     } else if (refreshState === "failed") {
       displayState = "ok_refresh_failed";
+    } else if (refreshState === "mismatch") {
+      displayState = "refresh_mismatch";
     } else {
       displayState = "ok_refresh_pending";
     }
@@ -466,6 +470,9 @@ function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "ok_refresh_failed" || refreshState === "failed") {
     return "Команда могла выполниться, но состояние не подтверждено: canonical refresh failed.";
   }
+  if (displayState === "refresh_mismatch" || refreshState === "mismatch") {
+    return "Команда могла выполниться, но обновлённый список всё ещё содержит target. Успех не подтверждён.";
+  }
   if (displayState === "ok_refresh_complete" && payload.action_role === "support_artifact") {
     return "Пакет support artifact сообщил ok. Это не является отдельным источником runtime truth.";
   }
@@ -497,6 +504,7 @@ function actionDisplayLabel(displayState) {
     ok_refresh_pending: "требует refresh",
     ok_refresh_complete: "подтверждено",
     ok_refresh_failed: "refresh failed",
+    refresh_mismatch: "refresh mismatch",
     command_error: "ошибка команды",
     invalid_json: "invalid JSON",
     timeout: "timeout",
@@ -514,6 +522,9 @@ function actionRefreshLabel(payload, refreshState) {
   }
   if (refreshState === "failed") {
     return "canonical refresh failed";
+  }
+  if (refreshState === "mismatch") {
+    return "canonical refresh mismatch";
   }
   return payload.post_action_refresh_required ? "canonical refresh pending" : "refresh not required";
 }
@@ -581,8 +592,13 @@ async function runUiAction(uiAction, extraPayload = {}) {
       text("actionRefreshStatus", `обновление live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       if (refreshed.status === "ok") {
-        setActionPanel(payload, "complete");
-        setMiniPill("onboardingResultRefreshChip", "refresh complete", "green");
+        const refreshState = apiRouteRemoveRefreshState(payload, refreshed);
+        setActionPanel(payload, refreshState);
+        setMiniPill(
+          "onboardingResultRefreshChip",
+          refreshState === "mismatch" ? "refresh mismatch" : "refresh complete",
+          refreshState === "mismatch" ? "amber" : "green"
+        );
       } else {
         setActionPanel(payload, "failed");
       }
@@ -620,6 +636,21 @@ function actionRequestKey(payload) {
   ].join("|");
 }
 
+function apiRouteRemoveRefreshState(payload, refreshed) {
+  if (payload.ui_action !== "api_route_remove") {
+    return "complete";
+  }
+  return apiRoutePresentInSnapshot(refreshed, payload.route_id) ? "mismatch" : "complete";
+}
+
+function apiRoutePresentInSnapshot(snapshot, routeId) {
+  if (!routeId) {
+    return false;
+  }
+  const routes = Array.isArray(snapshot?.routes) ? snapshot.routes : [];
+  return routes.some((route) => route?.route_id === routeId);
+}
+
 function boundedUiActionPayload(uiAction, extraPayload = {}) {
   const payload = { ui_action: uiAction };
   for (const key of BROWSER_ACTION_PAYLOAD_KEYS) {
@@ -635,7 +666,6 @@ function isApiRouteActionDeferredInReadonlyRegistry(uiAction) {
     "api_route_allow",
     "api_route_disable",
     "api_route_check",
-    "api_route_remove",
     "api_route_profile",
     "api_route_evidence_capture"
   ].includes(uiAction);
@@ -651,10 +681,11 @@ function applyActionAvailability() {
     );
     const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
     const routeEnabled = button.dataset.routeEnabled !== "false";
+    const routeStateProven = button.dataset.routeStateProven === "true";
     const routeStateRequirement = button.dataset.routeStateRequirement || "any";
     const routeStateAllowed = routeStateRequirement === "disabled"
-      ? !routeEnabled
-      : (routeStateRequirement === "enabled" ? routeEnabled : true);
+      ? (!routeEnabled && routeStateProven)
+      : (routeStateRequirement === "enabled" ? (routeEnabled && routeStateProven) : true);
     const routeActionDeferred = button.classList.contains("api-route-action") && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
     const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed && !routeActionDeferred;
     button.disabled = !available;
@@ -665,8 +696,16 @@ function applyActionAvailability() {
         !routeStateAllowed
           ? (
             routeStateRequirement === "disabled"
-              ? "Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов."
-              : "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+              ? (
+                routeStateProven
+                  ? "Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов."
+                  : "Состояние маршрута не доказано. Нужен readonly route packet."
+              )
+              : (
+                routeStateProven
+                  ? "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+                  : "Состояние маршрута не доказано. Нужен readonly route packet."
+              )
           )
           : (
             routeActionDeferred
@@ -1286,7 +1325,7 @@ function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
     specialDetails: actionSpecialDetails(payload),
     timestamp: actionLedgerTimestamp()
   };
-  if (["complete", "failed"].includes(refreshState) && actionLedger[0]?.key === entry.key) {
+  if (["complete", "failed", "mismatch"].includes(refreshState) && actionLedger[0]?.key === entry.key) {
     actionLedger[0] = entry;
   } else {
     actionLedger = [entry, ...actionLedger.filter((item) => item.key !== entry.key)]
@@ -1331,9 +1370,10 @@ function actionLedgerFilterPredicate(entry) {
       && !["ok_refresh_pending", "running"].includes(entry.displayState);
   }
   if (actionLedgerFilter === "refresh") {
-    return ["ok_refresh_pending", "ok_refresh_failed"].includes(entry.displayState)
+    return ["ok_refresh_pending", "ok_refresh_failed", "refresh_mismatch"].includes(entry.displayState)
       || entry.refreshStatus.includes("pending")
-      || entry.refreshStatus.includes("failed");
+      || entry.refreshStatus.includes("failed")
+      || entry.refreshStatus.includes("mismatch");
   }
   return true;
 }
@@ -1636,9 +1676,44 @@ function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   text("confirmRefresh", metadata.post_action_refresh_required ? "требуется" : "не требуется");
   text("confirmScope", metadata.action_claim_scope || "unknown");
   text("confirmTruthWarning", policy.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning);
+  renderApiRouteRemovePreflight(uiAction, extraPayload);
+  const confirmButton = document.getElementById("confirmAction");
+  if (confirmButton) {
+    confirmButton.dataset.readyLabel = uiAction === "api_route_remove" ? "Удалить route" : "Подтвердить";
+  }
   setConfirmationInFlight(false);
   document.getElementById("confirmOverlay").hidden = false;
   document.getElementById("confirmAction").focus();
+}
+
+function renderApiRouteRemovePreflight(uiAction, extraPayload = {}) {
+  const block = document.getElementById("apiRouteRemovePreflight");
+  if (!block) {
+    return;
+  }
+  const isRouteRemove = uiAction === "api_route_remove";
+  block.hidden = !isRouteRemove;
+  if (!isRouteRemove) {
+    return;
+  }
+  const routeId = extraPayload.route_id || "";
+  const route = findApiRouteById(routeId);
+  const exists = route ? "yes" : "no";
+  const status = route?.enabled === false
+    ? "disabled"
+    : (route?.enabled === true ? "enabled · blocked" : "unproven · blocked");
+  text("apiRouteRemovePreflightExists", exists);
+  text("apiRouteRemovePreflightStatus", status);
+  text("apiRouteRemovePreflightMutation", "remove registry route");
+  text("apiRouteRemovePreflightWrite", "command-owned");
+  text("apiRouteRemovePreflightRefresh", "required");
+}
+
+function findApiRouteById(routeId) {
+  const routes = Array.isArray(currentApiConnectionsSnapshot?.routes)
+    ? currentApiConnectionsSnapshot.routes
+    : [];
+  return routes.find((route) => route?.route_id === routeId) || null;
 }
 
 function closeConfirmation() {
@@ -1656,7 +1731,7 @@ function setConfirmationInFlight(isInFlight) {
   const cancelButton = document.getElementById("cancelAction");
   if (confirmButton) {
     confirmButton.disabled = isInFlight;
-    confirmButton.textContent = isInFlight ? "Выполняется..." : "Подтвердить";
+    confirmButton.textContent = isInFlight ? "Выполняется..." : (confirmButton.dataset.readyLabel || "Подтвердить");
   }
   if (cancelButton) {
     cancelButton.disabled = isInFlight;
@@ -2047,7 +2122,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   banner.textContent = source === "live"
     ? (
       safeSnapshot.status === "ok"
-        ? "Live-readonly маршрутов. Доступны только безопасные проверки; создание и удаление отложены."
+        ? "Live-readonly маршрутов. Удаление доступно только для disabled route после server preflight."
         : "Live-readonly маршруты недоступны. Предыдущие данные не используются."
     )
     : "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.";
@@ -2071,6 +2146,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   );
   text("apiConnectionsVisibleCount", noData ? "Нет данных" : `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
   text("apiConnectionsPagination", noData ? "Нет данных для таблицы" : `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
+  currentApiConnectionsSnapshot = safeSnapshot;
   renderApiConnectionRows(safeSnapshot.routes);
 
   const sidebarDot = document.getElementById("sidebarDot");
@@ -2171,7 +2247,11 @@ function routeActionButtons(route) {
   const divider = document.createElement("div");
   divider.className = "account-action-menu-divider";
   list.append(divider);
-  list.append(routeDisabledMenuButton("Удалить", "Remove stays deferred in this readonly registry contour.", true));
+  if (route.enabled === false) {
+    list.append(routeActionButton(route, "api_route_remove", "Удалить route", { menuItem: true, danger: true }));
+  } else {
+    list.append(routeDisabledMenuButton("Удалить route", apiRouteRemoveDisabledReason(route), true));
+  }
 
   menu.append(summary, list);
   return menu;
@@ -2179,13 +2259,19 @@ function routeActionButtons(route) {
 
 function routeActionButton(route, uiAction, label, options = {}) {
   const button = document.createElement("button");
-  button.className = options.menuItem
-    ? "button small api-route-action account-menu-item"
-    : "button small api-route-action";
+  const classes = ["button", "small", "api-route-action"];
+  if (options.menuItem) {
+    classes.push("account-menu-item");
+  }
+  if (options.danger) {
+    classes.push("danger", "api-route-destructive-action");
+  }
+  button.className = classes.join(" ");
   button.type = "button";
   button.dataset.uiAction = uiAction;
   button.dataset.routeId = route.route_id || "";
   button.dataset.routeEnabled = route.enabled === true ? "true" : "false";
+  button.dataset.routeStateProven = route.enabled === true || route.enabled === false ? "true" : "false";
   button.dataset.routeStateRequirement = apiRouteStateRequirement(uiAction);
   button.textContent = label;
   const routeActionTitles = {
@@ -2202,6 +2288,13 @@ function routeActionButton(route, uiAction, label, options = {}) {
     maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId });
   });
   return button;
+}
+
+function apiRouteRemoveDisabledReason(route) {
+  if (route.enabled === true) {
+    return "Удаление доступно только для disabled route после server preflight.";
+  }
+  return "Удаление недоступно: disabled-state не доказан readonly route packet.";
 }
 
 function routeDisabledMenuButton(label, title, danger = false) {

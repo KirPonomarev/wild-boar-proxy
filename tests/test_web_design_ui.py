@@ -575,6 +575,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("routeActionButton", js)
         self.assertIn("routeSecretRef", js)
         self.assertIn("routeDisabledMenuButton", js)
+        self.assertIn("apiRouteRemoveDisabledReason", js)
         self.assertIn("isApiRouteActionDeferredInReadonlyRegistry", js)
         self.assertIn("apiRouteStateRequirement", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
@@ -611,7 +612,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn("api_route_draft", api_screen + js)
         self.assertNotIn('routeActionButton(route, "api_route_allow"', js)
         self.assertNotIn('routeActionButton(route, "api_route_disable"', js)
-        self.assertNotIn('routeActionButton(route, "api_route_remove"', js)
+        self.assertIn('routeActionButton(route, "api_route_remove", "Удалить route"', js)
         self.assertNotIn('routeActionButton(route, "api_route_profile"', js)
         self.assertNotIn('routeActionButton(route, "api_route_evidence_capture"', js)
         self.assertNotIn("Вкл", api_screen + js)
@@ -1148,6 +1149,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("confirmPolicy", html)
         self.assertIn("confirmTruthWarning", html)
         self.assertIn("confirmDispatchState", html)
+        self.assertIn("apiRouteRemovePreflight", html)
+        self.assertIn("Route exists", html)
+        self.assertIn("remove registry route", html)
+        self.assertIn("Сервер повторно проверит disabled-state", html)
         self.assertIn("CONFIRMATION_POLICY", js)
         self.assertIn("CONSERVATIVE_CONFIRMATION_POLICY", js)
         self.assertIn("confirmationInFlight", js)
@@ -1162,6 +1167,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("runUiAction(pending.uiAction, pending.extraPayload);", js)
         self.assertIn("post_action_refresh_required", js)
         self.assertIn("setLiveReadonly(false)", js)
+        self.assertIn("renderApiRouteRemovePreflight", js)
+        self.assertIn("apiRouteRemoveRefreshState", js)
+        self.assertIn("apiRoutePresentInSnapshot", js)
 
     def test_static_confirmation_modal_matches_locked_visual_tokens(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -1216,6 +1224,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('ok_refresh_pending: "amber"', js)
         self.assertIn('ok_refresh_complete: "green"', js)
         self.assertIn('ok_refresh_failed: "amber"', js)
+        self.assertIn('refresh_mismatch: "amber"', js)
         self.assertIn('command_error: "red"', js)
         self.assertIn('integration_failure: "red"', js)
         self.assertIn('invalid_json: "red"', js)
@@ -1226,7 +1235,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("actionSupportDetails(payload)", js)
         self.assertIn("artifactReference(data.evidence_path)", js)
         self.assertIn('displayState = "ok_refresh_failed"', js)
+        self.assertIn('displayState = "refresh_mismatch"', js)
         self.assertIn("canonical refresh failed", js)
+        self.assertIn("canonical refresh mismatch", js)
         self.assertIn("UI_ACTION_INVALID_JSON", js)
         self.assertIn("UI_ACTION_TIMEOUT", js)
         self.assertIn("UI_DUPLICATE_SUBMIT_BLOCKED", js)
@@ -2230,6 +2241,28 @@ const staleRow = elements.actionLedgerList.children[0];
 if (!staleRow.className.includes("amber") || !JSON.stringify(staleRow).includes("ok_refresh_failed")) {
   throw new Error(`failed refresh should replace ok row with refresh-failed amber: ${JSON.stringify(staleRow)}`);
 }
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "api_route_remove",
+  route_id: "wbp-disabled",
+  action_role: "api_route_registry_cleanup",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK_REFRESH",
+    human_message: "route remove packet ok",
+    next_action: "refresh_api_connections",
+    changed_files: ["/tmp/registry.json"]
+  }
+}, "mismatch");
+const mismatchRow = elements.actionLedgerList.children[0];
+const mismatchText = JSON.stringify(mismatchRow);
+if (!mismatchRow.className.includes("amber") || !mismatchText.includes("refresh_mismatch")) {
+  throw new Error(`route still present after refresh must be mismatch amber: ${mismatchText}`);
+}
+if (!mismatchText.includes("canonical refresh mismatch") || mismatchText.includes("/tmp/registry.json")) {
+  throw new Error(`mismatch row should show bounded refresh label and no path: ${mismatchText}`);
+}
 if (elements.actionLedgerList.children.length > 5) {
   throw new Error("ledger should stay bounded to five rows");
 }
@@ -2315,49 +2348,49 @@ function makeClassList(classes) {
 const settingsLaunchAvailability = { textContent: "" };
 const desktop = { dataset: { source: "fixture", screen: "api-connections" } };
 const enabledButton = {
-  dataset: { uiAction: "api_route_validate", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "enabled" },
+  dataset: { uiAction: "api_route_validate", routeEnabled: "true", routeStateProven: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "enabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const disabledRouteButton = {
-  dataset: { uiAction: "api_route_check", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "enabled" },
+  dataset: { uiAction: "api_route_check", routeEnabled: "false", routeStateProven: "true", routeId: "wbp-disabled", routeStateRequirement: "enabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const allowDisabledRouteButton = {
-  dataset: { uiAction: "api_route_allow", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
+  dataset: { uiAction: "api_route_allow", routeEnabled: "false", routeStateProven: "true", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const allowEnabledRouteButton = {
-  dataset: { uiAction: "api_route_allow", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
+  dataset: { uiAction: "api_route_allow", routeEnabled: "true", routeStateProven: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const removeDisabledRouteButton = {
-  dataset: { uiAction: "api_route_remove", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
+  dataset: { uiAction: "api_route_remove", routeEnabled: "false", routeStateProven: "true", routeId: "wbp-disabled", routeStateRequirement: "disabled" },
   classList: makeClassList(["api-route-action", "api-route-destructive-action"]),
   disabled: false,
   title: ""
 };
 const removeEnabledRouteButton = {
-  dataset: { uiAction: "api_route_remove", routeEnabled: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
+  dataset: { uiAction: "api_route_remove", routeEnabled: "true", routeStateProven: "true", routeId: "wbp-deepseek-v3", routeStateRequirement: "disabled" },
   classList: makeClassList(["api-route-action", "api-route-destructive-action"]),
   disabled: false,
   title: ""
 };
 const profileDisabledRouteButton = {
-  dataset: { uiAction: "api_route_profile", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "any" },
+  dataset: { uiAction: "api_route_profile", routeEnabled: "false", routeStateProven: "true", routeId: "wbp-disabled", routeStateRequirement: "any" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
 };
 const evidenceDisabledRouteButton = {
-  dataset: { uiAction: "api_route_evidence_capture", routeEnabled: "false", routeId: "wbp-disabled", routeStateRequirement: "any" },
+  dataset: { uiAction: "api_route_evidence_capture", routeEnabled: "false", routeStateProven: "true", routeId: "wbp-disabled", routeStateRequirement: "any" },
   classList: makeClassList(["api-route-action"]),
   disabled: false,
   title: ""
@@ -2442,11 +2475,8 @@ if (!allowDisabledRouteButton.title.includes("отложено")) {
 if (!allowEnabledRouteButton.disabled) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
 }
-if (!removeDisabledRouteButton.disabled) {
-  throw new Error(`remove should stay deferred in readonly registry: ${JSON.stringify(removeDisabledRouteButton)}`);
-}
-if (!removeDisabledRouteButton.title.includes("отложено")) {
-  throw new Error(`remove should explain deferred route mutation: ${JSON.stringify(removeDisabledRouteButton)}`);
+if (removeDisabledRouteButton.disabled) {
+  throw new Error(`remove should be available only for proven disabled route in live source: ${JSON.stringify(removeDisabledRouteButton)}`);
 }
 if (!removeEnabledRouteButton.disabled || !removeEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
   throw new Error(`remove should be blocked for enabled route: ${JSON.stringify(removeEnabledRouteButton)}`);
