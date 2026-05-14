@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "contour": "EVIDENCE_PACKETS_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "The repo already has evidence-adjacent metadata surfaces, but they remain family-specific and do not yet form a canon-safe dedicated Evidence Packets screen."
+    },
+    {
+      "agent": "Rawls",
+      "role": "independent repo fact checker",
+      "finding": "Agent attempt failed on remote compact transport before a factual report was produced, so no Rawls evidence was relied on for the contour verdict."
+    },
+    {
+      "agent": "Heisenberg",
+      "role": "post-artifact closeout auditor",
+      "finding": "No substantive canon drift or verdict inflation was found. The only independent-audit blocks were process issues: a pending audit placeholder and a pre-commit closeout overclaim before verification/commit/push had been reflected in the artifacts."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "wild_boar_proxy/web_design_command_adapter.py:215-221",
+      "fact": "The route evidence capture surface is allowlisted as external_models_evidence_capture with required/allowed args limited to route_id."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_live_server.py:261-271",
+      "fact": "api_route_evidence_capture is explicitly tagged support-only with mutates_runtime=false, affects_primary_truth=false, and action_claim_scope blocking runtime-proof interpretation."
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:1013-1022",
+      "fact": "Current route evidence action results still carry an evidence_path value shaped like a local temp path."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_live_server.py:1101-1105",
+      "fact": "Diagnostics export result shaping rewrites bundle_path to basename before browser delivery."
+    },
+    {
+      "source": "tests/test_web_design_ui.py:1202-1225",
+      "fact": "UI renders route evidence and diagnostics support artifacts as basename-only metadata and rejects raw path display as user-facing support text."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:127-146",
+      "fact": "Diagnostics export is a support artifact only, and rollout evidence capture 16 is explicitly not exposed as a normal first-pass UI action."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:515-528",
+      "fact": "Live evidence capture remains out of scope for the first UI contour and requires a separate approved contour."
+    },
+    {
+      "source": "COMMAND_API.md:491-553",
+      "fact": "rollout evidence capture 16 --json is the owner surface for the 16-account field evidence packet and defines a rich scale_evidence_packet_result contract."
+    },
+    {
+      "source": "audit_results/ui_final_screen_passports_2026-05-14.json:1106-1131",
+      "fact": "Screen 29 Evidence Packets is admission-required and already records the need for a bounded evidence index/packet contract."
+    },
+    {
+      "source": "audit_results/ui_final_next_contour_queue_2026-05-14.json:126-131",
+      "fact": "The queued contour itself declares dependency on a bounded evidence packet/index contract."
+    }
+  ],
+  "checks": [
+    {
+      "check": "family_specific_support_metadata_exists_today",
+      "verdict": "PASS",
+      "reason": "Route evidence support metadata and diagnostics bundle metadata already exist in current web design surfaces."
+    },
+    {
+      "check": "live_rollout_evidence_owner_packet_exists_today",
+      "verdict": "PASS",
+      "reason": "The CLI/runtime lane already owns a rollout evidence capture packet with explicit packet status and claim scope."
+    },
+    {
+      "check": "dedicated_screen_has_unified_packet_index_contract",
+      "verdict": "FAIL",
+      "reason": "No current bounded evidence index or cross-family readonly selector is established for a dedicated Evidence Packets screen."
+    },
+    {
+      "check": "path_free_server_owned_identity_boundary_exists",
+      "verdict": "FAIL",
+      "reason": "Current route evidence shaping still includes evidence_path in packet data, even though the browser display trims it to basename."
+    },
+    {
+      "check": "browser_owned_proof_model_blocked",
+      "verdict": "PASS",
+      "reason": "Canon and UI readiness materials continue to block direct file truth, live evidence normal-button exposure, and proof inflation from support artifacts."
+    },
+    {
+      "check": "verdict_reconciliation",
+      "verdict": "PASS",
+      "reason": "Existing metadata snippets stay admissible in their current limited places, but the dedicated Evidence Packets screen itself remains deferred pending a stricter packet/index contract."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_DEFERRED_PENDING_STRICTER_PACKET"
+}
