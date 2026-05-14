@@ -1,0 +1,79 @@
+{
+  "contour_id": "DESKTOP_RENDERER_ADMISSION_APPROVAL_GATE",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_at_start": "f4d6fcb",
+  "mode": "blocked_planning_owner_approval_gate_no_implementation",
+  "desktop_approval_granted": false,
+  "desktop_phase_started": false,
+  "product_code_changed": false,
+  "desktop_files_touched": false,
+  "web_ui_files_touched": false,
+  "runtime_files_touched": false,
+  "command_files_touched": false,
+  "gate_evidence": [
+    {
+      "source": "audit_results/ui_final_next_contour_queue_2026-05-14.json:17",
+      "fact": "desktop_approval_granted is false"
+    },
+    {
+      "source": "audit_results/ui_final_next_contour_queue_2026-05-14.json:163-166",
+      "fact": "DESKTOP_RENDERER_ADMISSION depends on explicit owner approval"
+    },
+    {
+      "source": "audit_results/rollout_scale_gate_admission_closeout_2026-05-14.md:15",
+      "fact": "previous contour stops for owner approval before DESKTOP_RENDERER_ADMISSION"
+    },
+    {
+      "source": "CANON.md:64-66",
+      "fact": "generic start/begin-work language is not sufficient for gated work"
+    }
+  ],
+  "current_user_request_classification": {
+    "request": "начинай работу по данному контуру",
+    "sufficient_for_gate_artifacts": true,
+    "sufficient_for_desktop_phase": false,
+    "reason": "The request starts the approval-gate contour, not the gated desktop renderer admission phase."
+  },
+  "approval_condition": [
+    "одобряю старт desktop phase",
+    "начинай DESKTOP_RENDERER_ADMISSION",
+    "разрешаю открыть desktop renderer admission",
+    "an explicitly equivalent phrase naming desktop phase or renderer admission"
+  ],
+  "insufficient_phrases": [
+    "погнали",
+    "начинай работу",
+    "продолжай",
+    "делай следующий контур",
+    "approval of this gate plan"
+  ],
+  "forbidden_before_approval": [
+    "desktop implementation",
+    "desktop file edits",
+    "renderer scaffold",
+    "static embed smoke",
+    "command bridge",
+    "live binding",
+    "packaging",
+    "installer",
+    "runtime changes",
+    "web UI changes",
+    "command adapter changes",
+    "direct runtime/state/log/evidence reads"
+  ],
+  "independent_audits": [
+    {
+      "agent_id": "019e26c0-7642-7021-8dcb-d9b7a117b4cb",
+      "scope": "approval gate facts",
+      "verdict": "PASS"
+    },
+    {
+      "agent_id": "019e26c0-a8b3-78b0-9f68-e6780e1ee33e",
+      "scope": "scope boundary",
+      "verdict": "PASS"
+    }
+  ],
+  "final_state": "BLOCKED_ON_OWNER_APPROVAL",
+  "next_after_explicit_approval": "DESKTOP_RENDERER_ADMISSION"
+}
