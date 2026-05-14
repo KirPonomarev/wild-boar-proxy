@@ -82,6 +82,8 @@ const ACCOUNT_VISUAL_CLASS = {
   red: "red",
   neutral: "neutral"
 };
+const ACTION_LEDGER_LIMIT = 5;
+const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
 
 const CONFIRMATION_POLICY = {
   sync_runtime: {
@@ -187,6 +189,7 @@ let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
 let selectedAccountId = "";
+let actionLedger = [];
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -448,12 +451,13 @@ function actionTruthNote(payload, displayState, refreshState) {
 }
 
 async function runUiAction(uiAction, extraPayload = {}) {
+  const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
   setActionsBusy(true);
   setActionPanel({
     ui_action: uiAction,
     action_role: "running",
-    account_id: extraPayload.account_id || "",
-    route_id: extraPayload.route_id || "",
+    account_id: requestPayload.account_id || "",
+    route_id: requestPayload.route_id || "",
     post_action_refresh_required: false,
     result: {
       status: "running",
@@ -468,7 +472,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ui_action: uiAction, ...extraPayload })
+      body: JSON.stringify(requestPayload)
     });
     if (!response.ok) {
       throw new Error(`action http ${response.status}`);
@@ -500,8 +504,8 @@ async function runUiAction(uiAction, extraPayload = {}) {
     setActionPanel({
       ui_action: uiAction,
       action_role: "integration_failure",
-      account_id: extraPayload.account_id || "",
-      route_id: extraPayload.route_id || "",
+      account_id: requestPayload.account_id || "",
+      route_id: requestPayload.route_id || "",
       post_action_refresh_required: false,
       result: {
         status: failureStatus,
@@ -514,6 +518,16 @@ async function runUiAction(uiAction, extraPayload = {}) {
   } finally {
     setActionsBusy(false);
   }
+}
+
+function boundedUiActionPayload(uiAction, extraPayload = {}) {
+  const payload = { ui_action: uiAction };
+  for (const key of BROWSER_ACTION_PAYLOAD_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(extraPayload, key) && typeof extraPayload[key] === "string") {
+      payload[key] = extraPayload[key];
+    }
+  }
+  return payload;
 }
 
 function applyActionAvailability() {
@@ -771,9 +785,114 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionOnboardingOutcome", onboarding.final_outcome || "-");
   text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "доказано" : (onboarding.ui_state || "-"));
   text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
+  recordActionLedgerEntry(payload, refreshState, display, changedFiles);
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
+}
+
+function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
+  if (display.status === "running") {
+    renderActionLedger();
+    return;
+  }
+  const result = payload.result || {};
+  const entry = {
+    key: actionLedgerKey(payload, result),
+    uiAction: payload.ui_action || "unknown",
+    role: payload.action_role || metadataFor(payload.ui_action || "unknown").action_role || "unknown",
+    target: payload.account_id || payload.route_id || "-",
+    status: display.status,
+    displayState: display.displayState,
+    visualClass: display.visualClass,
+    machineCode: result.machine_error_code || "-",
+    message: result.human_message || "-",
+    nextAction: result.next_action || "none",
+    changedFilesCount: changedFiles.length,
+    refreshStatus: refreshState === "failed"
+      ? "canonical refresh failed"
+      : (payload.post_action_refresh_required ? "canonical refresh required" : "refresh not required"),
+    truthNote: display.truthNote,
+    supportDetails: actionSupportDetails(payload)
+  };
+  if (refreshState === "failed" && actionLedger[0]?.key === entry.key) {
+    actionLedger[0] = entry;
+  } else {
+    actionLedger = [entry, ...actionLedger.filter((item) => item.key !== entry.key)]
+      .slice(0, ACTION_LEDGER_LIMIT);
+  }
+  renderActionLedger();
+}
+
+function actionLedgerKey(payload, result) {
+  return [
+    payload.ui_action || "unknown",
+    payload.account_id || payload.route_id || "-",
+    result.machine_error_code || "-",
+    result.human_message || "-"
+  ].join("|");
+}
+
+function renderActionLedger() {
+  const list = document.getElementById("actionLedgerList");
+  if (!list || typeof list.replaceChildren !== "function") {
+    return;
+  }
+  list.replaceChildren();
+  if (!actionLedger.length) {
+    const empty = document.createElement("div");
+    empty.className = "action-ledger-empty";
+    empty.textContent = "Действия ещё не выполнялись в этой UI-сессии.";
+    list.append(empty);
+    return;
+  }
+  for (const entry of actionLedger) {
+    list.append(actionLedgerRow(entry));
+  }
+}
+
+function actionLedgerRow(entry) {
+  const row = document.createElement("article");
+  row.className = `action-ledger-row ${entry.visualClass}`;
+
+  const head = document.createElement("div");
+  head.className = "action-ledger-row-head";
+  const title = document.createElement("strong");
+  title.textContent = entry.uiAction;
+  const chip = document.createElement("span");
+  chip.className = `chip ${entry.visualClass}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const chipText = document.createElement("span");
+  chipText.textContent = entry.displayState;
+  chip.append(dot, chipText);
+  head.append(title, chip);
+
+  const meta = document.createElement("div");
+  meta.className = "action-ledger-meta";
+  meta.textContent = [
+    `role=${entry.role}`,
+    `target=${entry.target}`,
+    `code=${entry.machineCode}`,
+    `changed_files=${entry.changedFilesCount}`,
+    entry.refreshStatus
+  ].join(" · ");
+
+  const message = document.createElement("p");
+  message.textContent = entry.message;
+
+  const truth = document.createElement("div");
+  truth.className = "action-ledger-truth";
+  truth.textContent = `command packet outcome only · ${entry.truthNote}`;
+
+  row.append(head, meta, message, truth);
+  if (entry.supportDetails && entry.supportDetails !== "-") {
+    const support = document.createElement("div");
+    support.className = "action-ledger-support";
+    support.textContent = entry.supportDetails;
+    row.append(support);
+  }
+  return row;
 }
 
 function actionSupportDetails(payload) {

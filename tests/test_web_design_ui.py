@@ -219,7 +219,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn(".accounts-filter-row", css)
         self.assertIn(".accounts-chips", css)
 
-        self.assertIn("JSON.stringify({ ui_action: uiAction, ...extraPayload })", js)
+        self.assertIn("boundedUiActionPayload(uiAction, extraPayload)", js)
+        self.assertIn("BROWSER_ACTION_PAYLOAD_KEYS", js)
+        self.assertIn("body: JSON.stringify(requestPayload)", js)
         self.assertNotIn("JSON.stringify({ command_id", js)
         self.assertNotIn('data-ui-action="stable_repair_apply"', (WEB_DESIGN_UI / "index.html").read_text())
 
@@ -875,7 +877,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn('data-ui-action="launch_client"', html)
         self.assertNotIn('data-ui-action="stable_repair_apply"', html)
         self.assertIn('fetch("api/action"', js)
-        self.assertIn("JSON.stringify({ ui_action: uiAction, ...extraPayload })", js)
+        self.assertIn("boundedUiActionPayload(uiAction, extraPayload)", js)
+        self.assertIn("body: JSON.stringify(requestPayload)", js)
         self.assertNotIn("JSON.stringify({ command_id", js)
         self.assertNotIn("client_path", html + js)
         self.assertNotIn("sync --json", html + js)
@@ -953,7 +956,16 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('id="actionTruthNote"', html)
         self.assertIn('id="actionSupportDetails"', html)
         self.assertIn('id="actionPanel" class="action-panel neutral compact-action-panel"', html)
+        self.assertIn('id="actionLedgerList"', html)
+        self.assertIn('id="actionLedgerScope"', html)
+        self.assertIn("Текущая UI-сессия", html)
+        self.assertIn("не сохраняется", html)
         self.assertIn("ACTION_STATUS_VISUAL_CLASS", js)
+        self.assertIn("ACTION_LEDGER_LIMIT = 5", js)
+        self.assertIn("let actionLedger = []", js)
+        self.assertIn("recordActionLedgerEntry", js)
+        self.assertIn("renderActionLedger", js)
+        self.assertIn("changedFilesCount", js)
         self.assertIn('command_error: "red"', js)
         self.assertIn('integration_failure: "red"', js)
         self.assertIn('invalid_json: "red"', js)
@@ -972,6 +984,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".action-panel.amber", css)
         self.assertIn(".action-panel.red", css)
         self.assertIn(".action-panel.neutral", css)
+        self.assertIn(".action-ledger-row.green", css)
+        self.assertIn(".action-ledger-row.amber", css)
+        self.assertIn(".action-ledger-row.red", css)
 
     def test_action_ledger_rendering_executes_status_mapping(self) -> None:
         script = r"""
@@ -1127,6 +1142,199 @@ if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport
 }
         if (!commandError.truth.includes("не должен показывать это как успех")) {
   throw new Error(`missing command_error truth note: ${commandError.truth}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_action_ledger_recent_entries_are_session_only_and_count_paths(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+    this.lastElementChild = { textContent: "" };
+    this.dataset = {};
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "actionLedgerScope"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.actionLedgerScope.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "overview", source: "fixture" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const bounded = sandbox.boundedUiActionPayload("validate_account", {
+  account_id: "backend-a",
+  route_id: "wbp-route",
+  ["command" + "_id"]: "forbidden",
+  argv: "forbidden",
+  path: "/tmp/forbidden"
+});
+if (bounded["command" + "_id"] || bounded.argv || bounded.path) {
+  throw new Error(`bounded action payload leaked forbidden fields: ${JSON.stringify(bounded)}`);
+}
+if (bounded.ui_action !== "validate_account" || bounded.account_id !== "backend-a" || bounded.route_id !== "wbp-route") {
+  throw new Error(`bounded action payload dropped admitted fields: ${JSON.stringify(bounded)}`);
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "sync_runtime",
+  action_role: "runtime_sync",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "sync packet ok",
+    next_action: "none",
+    changed_files: ["/tmp/runtime-state-a.json", "/tmp/runtime-state-b.json"]
+  }
+});
+let first = elements.actionLedgerList.children[0];
+const firstText = JSON.stringify(first);
+if (!first.className.includes("green")) {
+  throw new Error(`ok command packet should be green only as command outcome: ${first.className}`);
+}
+if (!firstText.includes("changed_files=2")) {
+  throw new Error(`ledger should show changed_files count only: ${firstText}`);
+}
+if (firstText.includes("/tmp/runtime-state") || firstText.includes("runtime-state-b.json")) {
+  throw new Error(`ledger leaked changed_files path identity: ${firstText}`);
+}
+if (!firstText.includes("command packet outcome only")) {
+  throw new Error(`ledger did not keep not-runtime-truth copy: ${firstText}`);
+}
+
+sandbox.setActionPanel({
+  status: "command_error",
+  ui_action: "set_mode_managed",
+  action_role: "",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "COMMAND_FAILED",
+    human_message: "nested ok must not win",
+    next_action: "retry",
+    changed_files: []
+  }
+});
+if (!elements.actionLedgerList.children[0].className.includes("red")) {
+  throw new Error("command_error ledger row must not be green");
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "set_mode_managed",
+  action_role: "mode_set",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK_REFRESH",
+    human_message: "mode packet ok",
+    next_action: "none",
+    changed_files: []
+  }
+});
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "set_mode_managed",
+  action_role: "mode_set",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK_REFRESH",
+    human_message: "mode packet ok",
+    next_action: "none",
+    changed_files: []
+  }
+}, "failed");
+const staleRow = elements.actionLedgerList.children[0];
+if (!staleRow.className.includes("amber") || !JSON.stringify(staleRow).includes("stale")) {
+  throw new Error(`failed refresh should replace ok row with stale amber: ${JSON.stringify(staleRow)}`);
+}
+if (elements.actionLedgerList.children.length > 5) {
+  throw new Error("ledger should stay bounded to five rows");
 }
 """
         result = subprocess.run(
