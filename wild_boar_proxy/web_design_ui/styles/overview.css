@@ -2242,6 +2242,14 @@ button:disabled {
   white-space: nowrap;
 }
 
+.api-route-id {
+  display: block;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .right {
   text-align: right;
 }

@@ -181,7 +181,7 @@ const CONFIRMATION_POLICY = {
   api_route_remove: {
     severity: "critical",
     policy: "api-route-registry-cleanup",
-    warning: "Удаляет только отключённую route registry запись после server preflight. Не меняет traffic, primary route, failover или runtime readiness."
+    warning: "Удаляет только отключённую route registry запись после server preflight. Не меняет другие routes и не утверждает runtime readiness."
   },
   api_route_profile: {
     severity: "medium",
@@ -2051,14 +2051,16 @@ function apiConnectionsFixtureFromOverview(fixture) {
   const routes = integrationFailure ? [] : [
     {
       route_id: "wbp-openrouter-primary",
-      display_name: "OpenRouter рабочий маршрут",
+      display_name: "OpenRouter registry entry",
       provider: "openrouter",
       upstream_model: "deepseek/deepseek-chat",
       enabled: true,
       status_code: degraded ? "missing_secret" : "enabled",
-      status_label: degraded ? "missing" : "Разрешён",
+      status_label: degraded ? "missing secret" : "enabled",
       visual_state: degraded ? "amber" : "blue",
-      role_label: "Кандидат",
+      role_label: "registry entry",
+      validation_label: degraded ? "blocked by secret" : "not checked",
+      validation_visual_state: degraded ? "amber" : "neutral",
       secret_ref: "OPENROUTER_PRIMARY",
       secret_status_label: degraded ? "missing" : "available",
       secret_visual_state: degraded ? "amber" : "green",
@@ -2069,14 +2071,16 @@ function apiConnectionsFixtureFromOverview(fixture) {
     },
     {
       route_id: "wbp-openrouter-reserve",
-      display_name: "OpenRouter резервный маршрут",
+      display_name: "OpenRouter disabled entry",
       provider: "openrouter",
       upstream_model: "deepseek/deepseek-chat",
       enabled: false,
       status_code: "disabled",
-      status_label: "Отключён",
+      status_label: "disabled",
       visual_state: "neutral",
-      role_label: "Допустим для резерва",
+      role_label: "registry entry",
+      validation_label: "not checked",
+      validation_visual_state: "neutral",
       secret_ref: "OPENROUTER_RESERVE",
       secret_status_label: "unknown",
       secret_visual_state: "neutral",
@@ -2297,7 +2301,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   text("apiConnectionsAttentionCount", noData ? "—" : summary.attention_count);
   text("apiConnectionsLatestCheck", noData ? "—" : latestCheck);
   text("apiConnectionsRoutesNote", noData ? "нет данных" : (source === "live" ? "из пакета команд" : "bounded fixture"));
-  text("apiConnectionsEnabledNote", noData ? "нет данных" : "только признак разрешения");
+  text("apiConnectionsEnabledNote", noData ? "нет данных" : "только registry state");
   text("apiConnectionsAttentionNote", noData ? "нет данных" : "missing/invalid/disabled");
   text("apiConnectionsLatestCheckNote", noData ? "нет данных" : (latestCheck === "Нет данных" ? "проверка маршрута ещё не запускалась" : "время последней проверки"));
   text(
@@ -2336,7 +2340,7 @@ function renderApiConnectionRows(routes) {
       td("", route.provider || "—"),
       td("", route.upstream_model || "—"),
       td("", routeStatusChip(route)),
-      td("", route.role_label || "Нет данных"),
+      td("", routeValidationChip(route)),
       td("", routeSecretRef(route)),
       td("right mono-value", route.last_checked || "—"),
       td("", routeActionButtons(route))
@@ -2349,11 +2353,11 @@ function renderApiConnectionRows(routes) {
 function routeIdentity(route) {
   const wrap = document.createElement("div");
   const main = document.createElement("div");
-  main.className = "account-main";
-  main.textContent = route.display_name || route.route_id || "unknown-route";
+  main.className = "account-main mono-value api-route-id";
+  main.textContent = route.route_id || "unknown-route";
   const sub = document.createElement("div");
   sub.className = "account-sub";
-  sub.textContent = route.route_id || "route-id unavailable";
+  sub.textContent = [route.display_name, route.role_label].filter(Boolean).join(" · ") || "route registry entry";
   wrap.append(main, sub);
   return wrap;
 }
@@ -2366,6 +2370,19 @@ function routeStatusChip(route) {
   dot.className = "dot";
   const label = document.createElement("span");
   label.textContent = route.status_label || "Нет данных";
+  chip.append(dot, label);
+  return chip;
+}
+
+function routeValidationChip(route) {
+  const chip = document.createElement("span");
+  const fallbackVisual = route.status_code === "missing_secret" ? "amber" : "neutral";
+  const visual = ACCOUNT_VISUAL_CLASS[route.validation_visual_state] || ACCOUNT_VISUAL_CLASS[fallbackVisual] || "neutral";
+  chip.className = `chip ${visual}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const label = document.createElement("span");
+  label.textContent = route.validation_label || route.validation_status_label || (route.status_code === "missing_secret" ? "blocked by secret" : "not checked");
   chip.append(dot, label);
   return chip;
 }
@@ -2443,7 +2460,7 @@ function routeActionButton(route, uiAction, label, options = {}) {
     api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение состояния runtime.",
     api_route_profile: "Пакет профиля поддержки без настройки Codex config и без утверждения состояния runtime.",
     api_route_evidence_capture: "Свидетельство маршрута: собрать локальный support artifact. UI не читает evidence file.",
-    api_route_remove: "Удалить только отключённую route registry запись после server preflight. Не меняет traffic, primary route, failover или runtime readiness."
+    api_route_remove: "Удалить только отключённую route registry запись после server preflight. Не меняет другие routes и не утверждает runtime readiness."
   };
   button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный command surface.";
   button.addEventListener("click", () => {
