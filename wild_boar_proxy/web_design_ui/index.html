@@ -816,76 +816,102 @@
           </div>
         </section>
 
-        <section id="setupScreen" class="screen setup-screen" data-screen="setup" hidden>
+        <section id="setupScreen" class="screen setup-screen setup-final-screen" data-screen="setup" hidden>
           <div class="fixture-banner amber">
             Экран настройки является ограниченным визуальным каркасом. Он не сканирует файлы, не отправляет пути и не меняет конфигурацию.
           </div>
 
-          <div class="setup-flow-layout" data-visual-reference="02_setup_client" data-setup-flow-frame="left-step-rail">
+          <div class="setup-flow-layout" data-visual-reference="10_first_run_setup_wizard" data-setup-flow-frame="left-step-rail">
             <aside class="setup-flow-rail" aria-label="Шаги настройки">
-              <div class="eyebrow">Setup flow</div>
-              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Клиент</strong><small>выбор клиента</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Данные</strong><small>пути и снимки</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Проверка</strong><small>контроль цепочки</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Готово</strong><small>ожидает packet truth</small></span></div>
-              <div class="setup-flow-note">Локальная навигация не доказывает завершение настройки.</div>
+              <div class="eyebrow">Setup Wizard</div>
+              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Готовность</strong><small>только каркас</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Компоненты</strong><small>без discovery</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Граница</strong><small>нет browser paths</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Завершение</strong><small>ждёт packet truth</small></span></div>
+              <div class="setup-flow-note">Локальная навигация не доказывает завершение настройки; simulated truth нет.</div>
             </aside>
 
             <div class="setup-workbench">
-              <section class="card setup-hero">
-                <div class="eyebrow">Клиент</div>
+              <section class="card setup-hero setup-final-hero">
+                <div class="eyebrow">Первичная настройка</div>
                 <div class="section-head">
                   <div>
-                    <h3>Настройка Wild Boar Proxy</h3>
-                    <div class="secondary">Подключение внешнего клиента отложено до обнаружения через command-owned поверхность.</div>
+                    <h3>Подготовка локального контура</h3>
+                    <div class="secondary">Безопасная подготовка renderer-прототипа без прямых файловых операций из web UI.</div>
                   </div>
                   <span class="chip amber"><span class="dot"></span>каркас только чтение</span>
+                </div>
+                <div class="setup-readiness-card" aria-label="Состояние готовности настройки">
+                  <div>
+                    <strong>Готовность не заявлена</strong>
+                    <span>Для статуса нужен отдельный JSON command packet. Этот экран показывает только admitted layout.</span>
+                  </div>
+                  <button class="button primary disabled" type="button" disabled>Проверка готовности отложена</button>
                 </div>
               </section>
 
               <div class="setup-grid">
                 <section class="card form-section">
-                <div class="section-head">
-                  <div>
-                    <h3>Найти автоматически</h3>
-                    <div class="secondary">Для запуска нужно command-owned обнаружение.</div>
+                  <div class="section-head">
+                    <div>
+                      <h3>Компоненты настройки</h3>
+                      <div class="secondary">Каждый пункт требует собственного admitted command surface.</div>
+                    </div>
+                    <span class="chip neutral"><span class="dot"></span>частично</span>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>отложено</span>
-                </div>
-                <p class="bounded-copy">
-                  Этот макетный блок не проверяет файловую систему. Будущий пакет команды должен предоставить найденных кандидатов.
-                </p>
-                <button class="button disabled" type="button" disabled>Отложено: нет команды обнаружения</button>
+                  <div class="setup-component-list">
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon blue">01</span>
+                      <div><strong>Runtime status</strong><span>только через существующие readonly packets</span></div>
+                      <span class="chip green"><span class="dot"></span>admitted</span>
+                    </div>
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon amber">02</span>
+                      <div><strong>Client surface</strong><span>нет команды обнаружения, manual picker deferred</span></div>
+                      <span class="chip amber"><span class="dot"></span>deferred</span>
+                    </div>
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon red">03</span>
+                      <div><strong>Local source</strong><span>отправка путей из браузера запрещена</span></div>
+                      <span class="chip red"><span class="dot"></span>blocked</span>
+                    </div>
+                    <div class="setup-component-row">
+                      <span class="setup-component-icon neutral">04</span>
+                      <div><strong>Setup complete</strong><span>только после packet truth и refresh</span></div>
+                      <span class="chip neutral"><span class="dot"></span>pending</span>
+                    </div>
+                  </div>
                 </section>
 
                 <section class="card form-section">
-                <div class="section-head">
-                  <div>
-                    <h3>Указать вручную</h3>
-                    <div class="secondary">Браузер не принимает ручные локальные пути.</div>
+                  <div class="section-head">
+                    <div>
+                      <h3>Что не настроено</h3>
+                      <div class="secondary">Видимые состояния без выполнения и без overclaim.</div>
+                    </div>
+                    <span class="chip amber"><span class="dot"></span>deferred</span>
                   </div>
-                  <span class="chip red"><span class="dot"></span>запрещено</span>
-                </div>
-                <p class="bounded-copy">
-                  Отправка путей из браузера запрещена. Будущий ручной выбор относится к допуску desktop/native picker.
-                </p>
-                <button class="button disabled" type="button" disabled>Запрещено в первом web-проходе</button>
+                  <div class="deferred-list">
+                    <div class="deferred-row"><span>Найти автоматически</span><span>нет команды обнаружения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                    <div class="deferred-row"><span>Указать вручную</span><span>будущий desktop/native picker</span><button class="button small disabled" type="button" disabled>Запрещено</button></div>
+                    <div class="deferred-row"><span>Сохранить контур</span><span>нет command-owned результата настройки</span><button class="button small disabled" type="button" disabled>Нет команды</button></div>
+                  </div>
                 </section>
               </div>
 
-              <section class="card form-section">
-              <div class="section-head">
-                <div>
-                  <h3>Наблюдаемые факты настройки</h3>
-                  <div class="secondary">Этот экран не заявляет реальный статус настройки.</div>
+              <section class="card form-section setup-boundary-card">
+                <div class="section-head">
+                  <div>
+                    <h3>Граница безопасной настройки</h3>
+                    <div class="secondary">Этот экран не является настройщиком runtime и не пишет конфигурацию.</div>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>boundary</span>
                 </div>
-                <span class="chip neutral"><span class="dot"></span>макет</span>
-              </div>
-              <div class="deferred-list">
-                <div class="deferred-row"><span>Рабочий каталог / каталог данных</span><span>показывается только после появления пакета команды</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Кандидаты внешнего клиента</span><span>этот UI-каркас ничего не обнаруживает</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Продолжить</span><span>только локальная навигация; завершение настройки не заявляется</span><button class="button small disabled" type="button" disabled>Нет команды</button></div>
-              </div>
+                <div class="setup-boundary-grid">
+                  <div><span>Browser payload</span><strong>нет путей, нет raw config, нет секретов</strong></div>
+                  <div><span>Truth source</span><strong>только будущий JSON packet</strong></div>
+                  <div><span>Next action</span><strong>описать command surface перед implementation</strong></div>
+                </div>
               </section>
 
               <div class="setup-bottom-bar" aria-label="Инертные действия настройки">
@@ -897,61 +923,67 @@
           </div>
         </section>
 
-        <section id="selectClientScreen" class="screen setup-screen" data-screen="select-client" hidden>
+        <section id="selectClientScreen" class="screen setup-screen setup-final-screen" data-screen="select-client" hidden>
           <div class="fixture-banner amber">
             Выбор клиента отложен. Строки ниже являются макетными кандидатами, а не найденными приложениями.
           </div>
 
-          <div class="setup-flow-layout" data-visual-reference="03_select_codex_client" data-setup-flow-frame="left-step-rail">
+          <div class="setup-flow-layout" data-visual-reference="11_select_client_screen" data-setup-flow-frame="left-step-rail">
             <aside class="setup-flow-rail" aria-label="Шаги выбора клиента">
-              <div class="eyebrow">Setup flow</div>
+              <div class="eyebrow">Client Picker</div>
               <div class="flow-step done"><span class="flow-step-num">1</span><span><strong>Клиент</strong><small>каркас</small></span></div>
               <div class="flow-step active"><span class="flow-step-num">2</span><span><strong>Выбор</strong><small>кандидаты отложены</small></span></div>
               <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Проверка</strong><small>нет dispatch</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Сохранить</strong><small>нет command id</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Сохранить</strong><small>нет action</small></span></div>
               <div class="setup-flow-note">Кандидаты ниже не являются найденными приложениями.</div>
             </aside>
 
             <div class="setup-workbench">
-              <section class="card form-section">
-              <div class="section-head">
-                <div>
-                  <h3>Выбор клиента</h3>
-                  <div class="secondary">Для выбора нужны command-owned идентификаторы кандидатов и команда сохранения.</div>
+              <section class="card form-section setup-selection-card">
+                <div class="section-head">
+                  <div>
+                    <h3>Выбор клиента</h3>
+                    <div class="secondary">Для выбора нужны command-owned идентификаторы кандидатов и команда сохранения.</div>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>отложено</span>
                 </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
-              </div>
-              <div class="search-placeholder">Поиск по имени или пути · отключён до появления пакета обнаружения</div>
-              <div class="candidate-list" aria-label="Макетные кандидаты">
-                <div class="candidate-row">
-                  <div><strong>Внешний клиент Custom</strong><span>макетный кандидат, не обнаружен</span></div>
-                  <button class="button small disabled" type="button" disabled>Выбор отключён</button>
+                <div class="search-placeholder">Поиск по имени или пути отключён до появления пакета обнаружения</div>
+                <div class="candidate-list" aria-label="Макетные кандидаты">
+                  <div class="candidate-row selected">
+                    <span class="candidate-icon amber">WB</span>
+                    <div><strong>Recommended local client</strong><span>макетный кандидат, source_id не заявляется</span></div>
+                    <button class="button small disabled" type="button" disabled>Выбор отключён</button>
+                  </div>
+                  <div class="candidate-row">
+                    <span class="candidate-icon blue">CL</span>
+                    <div><strong>External CLI surface</strong><span>требует будущей command-owned проверки</span></div>
+                    <button class="button small disabled" type="button" disabled>Проверка отключена</button>
+                  </div>
+                  <div class="candidate-row unavailable">
+                    <span class="candidate-icon neutral">NA</span>
+                    <div><strong>Unavailable candidate</strong><span>нет discovery evidence и нет save command</span></div>
+                    <button class="button small disabled" type="button" disabled>Недоступно</button>
+                  </div>
                 </div>
-                <div class="candidate-row">
-                  <div><strong>Внешний клиент Stable</strong><span>макетный кандидат, не обнаружен</span></div>
-                  <button class="button small disabled" type="button" disabled>Выбор отключён</button>
-                </div>
-                <div class="candidate-row">
-                  <div><strong>Внешний клиент CLI</strong><span>требует будущей command-owned проверки</span></div>
-                  <button class="button small disabled" type="button" disabled>Проверка отключена</button>
-                </div>
-              </div>
               </section>
 
               <section class="card form-section">
-              <div class="section-head">
-                <div>
-                  <h3>Отключённые действия</h3>
-                  <div class="secondary">Видимые элементы без безопасного браузерного контракта.</div>
+                <div class="section-head">
+                  <div>
+                    <h3>Выбранный клиент</h3>
+                    <div class="secondary">Панель показывает будущую геометрию, а не реальную находку.</div>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>draft</span>
                 </div>
-                <span class="chip red"><span class="dot"></span>не выполняется</span>
-              </div>
-              <div class="deferred-list">
-                <div class="deferred-row"><span>Выбрать файл</span><span>только будущий desktop/native picker</span><button class="button small disabled" type="button" disabled>Запрещено</button></div>
-                <div class="deferred-row"><span>Проверить путь</span><span>bounded dispatch не является проверкой пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Сохранить выбор</span><span>нужен command-owned идентификатор кандидата</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Показать расположение</span><span>нет support-контракта для открытия расположения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-              </div>
+                <div class="setup-boundary-grid selected-client-grid">
+                  <div><span>Candidate identity</span><strong>нужен command-owned идентификатор кандидата</strong></div>
+                  <div><span>Path handling</span><strong>только будущий desktop/native picker</strong></div>
+                  <div><span>Save action</span><strong>deferred until command surface</strong></div>
+                </div>
+                <div class="deferred-list">
+                  <div class="deferred-row"><span>Проверить расположение</span><span>bounded dispatch не является проверкой пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                  <div class="deferred-row"><span>Показать расположение</span><span>нет support-контракта для открытия расположения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                </div>
               </section>
 
               <div class="setup-bottom-bar" aria-label="Инертные действия выбора клиента">
@@ -963,14 +995,14 @@
           </div>
         </section>
 
-        <section id="importExistingScreen" class="screen setup-screen" data-screen="import-existing" hidden>
+        <section id="importExistingScreen" class="screen setup-screen setup-final-screen" data-screen="import-existing" hidden>
           <div class="fixture-banner amber">
             Импорт отложен. Этот экран показывает только структуру: существующая установка здесь не обнаружена, не проверена и не готова к применению.
           </div>
 
-          <div class="setup-flow-layout import-flow" data-visual-reference="08_import_existing" data-setup-flow-frame="left-step-rail">
+          <div class="setup-flow-layout import-flow" data-visual-reference="12_import_existing_wizard" data-setup-flow-frame="left-step-rail">
             <aside class="setup-flow-rail" aria-label="Шаги импорта">
-              <div class="eyebrow">Import flow</div>
+              <div class="eyebrow">Import Wizard</div>
               <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Найти</strong><small>отложено</small></span></div>
               <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Проверить</strong><small>dry-run packet</small></span></div>
               <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Снимок</strong><small>нет evidence</small></span></div>
@@ -979,7 +1011,7 @@
             </aside>
 
             <div class="setup-workbench">
-              <section class="card setup-hero">
+              <section class="card setup-hero setup-final-hero">
                 <div class="eyebrow">Импорт</div>
                 <div class="section-head">
                   <div>
@@ -990,23 +1022,40 @@
                 </div>
               </section>
 
-              <div class="setup-grid">
+              <div class="setup-grid import-grid">
                 <section class="card form-section">
-                <div class="section-head">
-                  <div>
-                    <h3>Макет установки</h3>
-                    <div class="secondary">Только макет: команда обнаружения не запускалась.</div>
+                  <div class="section-head">
+                    <div>
+                      <h3>Источник импорта</h3>
+                      <div class="secondary">Существующая установка здесь не обнаружена; source_id не заявляется.</div>
+                    </div>
+                    <span class="chip neutral"><span class="dot"></span>не обнаружено</span>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>не обнаружено</span>
-                </div>
-                <div class="deferred-list">
-                  <div class="deferred-row"><span>Установка</span><span>отложено до строгого JSON-пакета обнаружения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>План импорта</span><span>количество аккаунтов и активное назначение не заявляются</span><button class="button small disabled" type="button" disabled>Макет</button></div>
-                  <div class="deferred-row"><span>Состояние безопасности</span><span>снимок и доступность отката не доказаны</span><button class="button small disabled" type="button" disabled>Нет пакета</button></div>
-                </div>
+                  <div class="setup-boundary-grid">
+                    <div><span>Source</span><strong>нужна медиация исходного расположения</strong></div>
+                    <div><span>Preview</span><strong>нужен немутационный dry-run пакет импорта</strong></div>
+                    <div><span>Apply</span><strong>нет медиации исходного расположения и сильного подтверждения</strong></div>
+                  </div>
                 </section>
 
                 <section class="card form-section">
+                  <div class="section-head">
+                    <div>
+                      <h3>Dry-run preview</h3>
+                      <div class="secondary">Показывается только будущая структура результата без чисел и готовности.</div>
+                    </div>
+                    <span class="chip amber"><span class="dot"></span>нет пакета</span>
+                  </div>
+                  <div class="import-phase-list">
+                    <div class="import-phase-row"><span>1</span><strong>Scan packet</strong><em>не запускался</em></div>
+                    <div class="import-phase-row"><span>2</span><strong>Safety snapshot</strong><em>не доказан</em></div>
+                    <div class="import-phase-row"><span>3</span><strong>Mutation plan</strong><em>не заявляется</em></div>
+                    <div class="import-phase-row"><span>4</span><strong>Rollback packet</strong><em>нет поверхности</em></div>
+                  </div>
+                </section>
+              </div>
+
+              <section class="card form-section">
                 <div class="section-head">
                   <div>
                     <h3>Управление импортом</h3>
@@ -1018,11 +1067,10 @@
                   <div class="deferred-row"><span>Найти установку</span><span>нужно command-owned обнаружение</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                   <div class="deferred-row"><span>Создать снимок</span><span>нужна command-owned поверхность снимка</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                   <div class="deferred-row"><span>Проверить</span><span>нужен немутационный dry-run пакет импорта</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>Применить</span><span>нет медиации исходного расположения и сильного подтверждения</span><button class="button small disabled" type="button" disabled>Отключено</button></div>
+                  <div class="deferred-row"><span>Внести изменения</span><span>нет медиации исходного расположения и сильного подтверждения</span><button class="button small disabled" type="button" disabled>Отключено</button></div>
                   <div class="deferred-row"><span>Откат</span><span>нужна command-owned поверхность отката</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 </div>
-                </section>
-              </div>
+              </section>
 
               <div class="setup-bottom-bar" aria-label="Инертные действия импорта">
                 <button class="button small disabled" type="button" disabled>Найти установку отложено</button>
@@ -1048,12 +1096,18 @@
             <span>command request</span>
             <span>резерв сначала</span>
             <span>результат только из packet</span>
+            <span>автоповышения нет</span>
           </div>
           <div class="confirm-facts">
             <div>Размещение</div><div>только сначала в резерв</div>
             <div>Повышение</div><div>никогда автоматически</div>
             <div>Подтверждение</div><div>пакет команды плюс обновлённый accounts JSON</div>
             <div>Недоступные итоги</div><div>no-new-auth и ambiguous identity требуют действия оператора</div>
+          </div>
+          <div class="modal-state-list" aria-label="Состояния результата подключения">
+            <div class="modal-state-row success"><span>reserve-only success</span><strong>показать результат, затем обновить accounts JSON</strong></div>
+            <div class="modal-state-row neutral"><span>no-new-auth</span><strong>не считать успехом и не включать в рабочий поток</strong></div>
+            <div class="modal-state-row amber"><span>ambiguous identity</span><strong>остановить и запросить действие оператора</strong></div>
           </div>
           <p class="confirm-note">
             Это окно запускает ограниченный owner command request. Оно не сканирует файлы,

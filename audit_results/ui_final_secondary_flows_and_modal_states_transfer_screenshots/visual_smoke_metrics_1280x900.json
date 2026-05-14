@@ -1,0 +1,46 @@
+[
+  {
+    "name": "setup_1280",
+    "screen": "setup",
+    "viewport": "1280x900",
+    "documentWidthMatchesViewport": true,
+    "mainHasVerticalScroll": true,
+    "activeBottom": 1637,
+    "mainBottom": 871,
+    "bodyText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nНастрой"
+  },
+  {
+    "name": "select_client_1280",
+    "screen": "select-client",
+    "viewport": "1280x900",
+    "documentWidthMatchesViewport": true,
+    "mainHasVerticalScroll": true,
+    "activeBottom": 1092,
+    "mainBottom": 871,
+    "bodyText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nВыбор к"
+  },
+  {
+    "name": "import_existing_1280",
+    "screen": "import-existing",
+    "viewport": "1280x900",
+    "documentWidthMatchesViewport": true,
+    "mainHasVerticalScroll": true,
+    "activeBottom": 1469,
+    "mainBottom": 871,
+    "bodyText": "WILD BOAR\nPROXY\nдемо-просмотр UI\nОбзор\nАккаунты\nAPI-подключения\nДиагностика\nНастройки\nДемо: все primary surfaces представлены как healthy.\nПредпросмотр UI · без live-команд\nИмпорт\n"
+  },
+  {
+    "name": "onboard_modal_1280",
+    "viewport": "1280x900",
+    "documentWidthMatchesViewport": true,
+    "overlayHidden": false,
+    "modalText": "ДОБАВЛЕНИЕ АККАУНТА\nДобавить аккаунт в резерв\n\nПодключение выполняется через onboard_account. Браузер не передаёт секретные значения, исходные расположения или идентификаторы бекен"
+  },
+  {
+    "name": "route_remove_confirm_1280",
+    "viewport": "1280x900",
+    "documentWidthMatchesViewport": true,
+    "overlayHidden": false,
+    "modalText": "ПОДТВЕРЖДЕНИЕ ДЕЙСТВИЯ\nУдалить отключённый маршрут\n\nУдалить только отключённую route registry запись после server preflight.\n\ncommand request\nне runtime truth\nнужен JSON refresh\nui"
+  }
+]

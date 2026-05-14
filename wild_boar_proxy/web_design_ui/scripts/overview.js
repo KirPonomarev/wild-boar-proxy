@@ -162,7 +162,7 @@ const CONFIRMATION_POLICY = {
   api_route_remove: {
     severity: "critical",
     policy: "api-route-registry-cleanup",
-    warning: "Это удаляет отключённую registry-запись. Область действия не шире command packet."
+    warning: "Удаляет только отключённую route registry запись после server preflight. Не меняет traffic, primary route, failover или runtime readiness."
   },
   api_route_profile: {
     severity: "medium",
@@ -1432,7 +1432,7 @@ function routeActionButton(route, uiAction, label) {
     api_route_validate: "Проверка доступности модели у провайдера для выбранного маршрута. Это не утверждение состояния runtime.",
     api_route_profile: "Пакет профиля поддержки без настройки Codex config и без утверждения состояния runtime.",
     api_route_evidence_capture: "Свидетельство маршрута: собрать локальный support artifact. UI не читает evidence file.",
-    api_route_remove: "Удалить отключённую registry-запись после server preflight. Область действия не шире command packet."
+    api_route_remove: "Удалить только отключённую route registry запись после server preflight. Не меняет traffic, primary route, failover или runtime readiness."
   };
   button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
   button.addEventListener("click", () => {

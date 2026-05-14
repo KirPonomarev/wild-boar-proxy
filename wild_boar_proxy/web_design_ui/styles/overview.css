@@ -726,6 +726,47 @@ button:disabled {
   word-break: break-word;
 }
 
+.modal-state-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.modal-state-row {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .74);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(126px, .8fr) minmax(0, 1fr);
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
+.modal-state-row span {
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 15px;
+  text-transform: uppercase;
+}
+
+.modal-state-row strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+.modal-state-row.success {
+  border-color: rgba(36, 145, 80, .28);
+}
+
+.modal-state-row.amber {
+  border-color: rgba(225, 124, 0, .32);
+}
+
 .confirm-note {
   background: var(--amber-bg);
   border: 1px solid rgba(168, 106, 16, .22);
@@ -1842,8 +1883,8 @@ button:disabled {
   align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: 252px minmax(0, 720px);
-  max-width: 1000px;
+  grid-template-columns: 252px minmax(0, 1fr);
+  max-width: 1120px;
 }
 
 .setup-flow-rail {
@@ -1942,6 +1983,161 @@ button:disabled {
   padding: 24px;
 }
 
+.setup-final-screen .setup-hero {
+  overflow: hidden;
+  position: relative;
+}
+
+.setup-final-screen .setup-hero::after {
+  background: linear-gradient(135deg, rgba(31, 92, 211, .12), rgba(225, 124, 0, .1));
+  border-radius: 999px;
+  content: "";
+  height: 138px;
+  position: absolute;
+  right: -54px;
+  top: -64px;
+  width: 138px;
+}
+
+.setup-readiness-card {
+  align-items: center;
+  background: linear-gradient(180deg, #fffdfa 0%, #fff6ec 100%);
+  border: 1px solid rgba(217, 208, 195, .78);
+  border-radius: 18px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 18px;
+  min-height: 74px;
+  padding: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.setup-readiness-card strong,
+.setup-readiness-card span,
+.setup-boundary-grid strong,
+.setup-boundary-grid span {
+  display: block;
+}
+
+.setup-readiness-card strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.setup-readiness-card span {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 17px;
+  margin-top: 3px;
+}
+
+.setup-component-list {
+  display: grid;
+  gap: 10px;
+}
+
+.setup-component-row {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .74);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.setup-component-row strong,
+.setup-component-row span {
+  display: block;
+}
+
+.setup-component-row strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.setup-component-row span {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  margin-top: 1px;
+}
+
+.setup-component-icon,
+.candidate-icon {
+  align-items: center;
+  border-radius: 12px;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 34px;
+  justify-content: center;
+  line-height: 14px;
+  width: 34px;
+}
+
+.setup-component-icon.blue,
+.candidate-icon.blue {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+
+.setup-component-icon.amber,
+.candidate-icon.amber {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.setup-component-icon.red {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.setup-component-icon.neutral,
+.candidate-icon.neutral {
+  background: var(--neutral-bg);
+  color: var(--secondary);
+}
+
+.setup-boundary-card {
+  background: linear-gradient(180deg, #fffdfa 0%, #fff9f3 100%);
+}
+
+.setup-boundary-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.setup-boundary-grid div {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.setup-boundary-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.setup-boundary-grid strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .stepper {
   display: grid;
   gap: 10px;
@@ -2001,8 +2197,18 @@ button:disabled {
   border-radius: 16px;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   padding: 12px 14px;
+}
+
+.candidate-row.selected {
+  background: #fff7ed;
+  border-color: rgba(225, 124, 0, .36);
+  box-shadow: inset 3px 0 0 rgba(225, 124, 0, .6);
+}
+
+.candidate-row.unavailable {
+  opacity: .82;
 }
 
 .candidate-row strong,
@@ -2061,11 +2267,54 @@ button:disabled {
 }
 
 .import-flow .setup-grid {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .import-flow .deferred-row {
   grid-template-columns: minmax(124px, .75fr) minmax(0, 1.5fr) auto;
+}
+
+.import-phase-list {
+  display: grid;
+  gap: 10px;
+}
+
+.import-phase-row {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  min-height: 48px;
+  padding: 9px 12px;
+}
+
+.import-phase-row span {
+  align-items: center;
+  background: var(--neutral-bg);
+  border-radius: 999px;
+  color: var(--secondary);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.import-phase-row strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.import-phase-row em {
+  color: var(--secondary);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 15px;
 }
 
 .form-row:first-of-type {
@@ -2145,8 +2394,12 @@ button:disabled {
   .diagnostics-insight-grid,
   .setup-flow-layout,
   .setup-grid,
+  .setup-readiness-card,
+  .setup-boundary-grid,
   .stepper,
   .candidate-row,
+  .setup-component-row,
+  .import-phase-row,
   .settings-hub,
   .settings-action-grid,
   .deferred-row {
