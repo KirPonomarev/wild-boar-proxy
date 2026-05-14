@@ -766,7 +766,7 @@
 
         <section id="settingsScreen" class="screen" data-screen="settings" hidden>
           <div id="settingsBanner" class="fixture-banner neutral">
-            Настройки доступны только для чтения. Изменения требуют отдельной admitted command surface.
+            Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
           <div class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-only">
@@ -779,24 +779,24 @@
               <div class="settings-card-facts">
                 <div><span>desired</span><strong id="settingsDesiredMode">-</strong></div>
                 <div><span>effective</span><strong id="settingsEffectiveMode">-</strong></div>
-                <div><span>status</span><strong id="settingsRuntimeStatus">-</strong></div>
               </div>
               <button class="button small disabled" type="button" disabled title="Mode changes require a separate admitted command surface.">missing surface</button>
               <span id="settingsMachineCode" class="settings-hidden-field">-</span>
+              <span id="settingsRuntimeStatus" class="settings-hidden-field">-</span>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="client-launch">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true"></span>
                 <div><h3>Client / Launch</h3><p>Клиент и запуск остаются command-owned.</p></div>
-                <span class="chip blue"><span class="dot"></span>bounded</span>
+                <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>client</span><strong>Codex Custom</strong></div>
-                <div><span>endpoint</span><strong id="settingsEndpoint">-</strong></div>
                 <div><span>launch</span><strong id="settingsLaunchAvailability">метаданные недоступны</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Browser Settings does not accept arbitrary app paths.">manual picker deferred</button>
+              <button class="button small disabled" type="button" disabled title="Web Settings does not accept arbitrary app paths.">manual picker deferred</button>
+              <span id="settingsEndpoint" class="settings-hidden-field">-</span>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="accounts-policy">
@@ -807,7 +807,6 @@
               </div>
               <div class="settings-card-facts">
                 <div><span>active</span><strong>рабочий пул</strong></div>
-                <div><span>reserve</span><strong>запас без promote из Settings</strong></div>
                 <div><span>held</span><strong>операторская пауза</strong></div>
               </div>
               <button class="button small disabled" type="button" disabled title="Lifecycle commands stay on Accounts.">readonly policy</button>
@@ -817,12 +816,11 @@
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true"></span>
                 <div><h3>API Routes</h3><p>Маршруты редактируются только на своём экране.</p></div>
-                <span class="chip neutral"><span class="dot"></span>readonly</span>
+                <span class="chip blue"><span class="dot"></span>admitted</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>routes</span><strong>bounded registry</strong></div>
                 <div><span>attention</span><strong>см. API-подключения</strong></div>
-                <div><span>raw config</span><strong>не отправляется</strong></div>
               </div>
               <a class="button small settings-card-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть</a>
             </section>
@@ -831,12 +829,11 @@
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true"></span>
                 <div><h3>Diagnostics / Privacy</h3><p>Экспорт и redaction без просмотра сырого текста.</p></div>
-                <span class="chip blue"><span class="dot"></span>redacted</span>
+                <span class="chip blue"><span class="dot"></span>protected</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>export</span><strong>support artifact</strong></div>
                 <div><span>redaction</span><strong>enforced by packet</strong></div>
-                <div><span>bundle</span><strong>только метаданные</strong></div>
               </div>
               <a class="button small settings-card-link" href="?screen=diagnostics" data-screen-link="diagnostics">Открыть</a>
             </section>
@@ -845,12 +842,11 @@
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
                 <div><h3>Security</h3><p>Учётные данные не показываются и не вводятся.</p></div>
-                <span class="chip amber"><span class="dot"></span>boundary</span>
+                <span class="chip blue"><span class="dot"></span>protected</span>
               </div>
               <div class="settings-card-facts">
-                <div><span>credentials</span><strong>values hidden</strong></div>
-                <div><span>browser input</span><strong>disabled</strong></div>
-                <div><span>redaction</span><strong>support-command owned</strong></div>
+                <div><span>credentials</span><strong>values never shown</strong></div>
+                <div><span>web input</span><strong>disabled</strong></div>
               </div>
               <button class="button small disabled" type="button" disabled title="Security edits require owner approval and a dedicated command surface.">owner approval</button>
             </section>
@@ -863,8 +859,7 @@
               </div>
               <div class="settings-card-facts">
                 <div><span>repair</span><strong>execution blocked</strong></div>
-                <div><span>rollback</span><strong>separate contour</strong></div>
-                <div><span>runtime files</span><strong>direct read blocked</strong></div>
+                <div><span>approval</span><strong>owner required</strong></div>
               </div>
               <button class="button small disabled" type="button" disabled title="Dangerous operations require owner approval.">missing surface</button>
             </section>
@@ -877,10 +872,22 @@
               </div>
               <div class="settings-card-facts">
                 <div><span>product</span><strong>Wild Boar Proxy</strong></div>
-                <div><span>schema</span><strong>web design UI</strong></div>
                 <div><span>license</span><strong>AGPL-3.0-or-later</strong></div>
               </div>
               <button class="button small disabled" type="button" disabled title="About does not read runtime state or package metadata.">readonly</button>
+            </section>
+
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="data-installer">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true"></span>
+                <div><h3>Data / Installer</h3><p>Данные и первичная настройка без browser paths.</p></div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
+              </div>
+              <div class="settings-card-facts">
+                <div><span>data</span><strong>display deferred</strong></div>
+                <div><span>setup</span><strong>separate packet</strong></div>
+              </div>
+              <button class="button small disabled" type="button" disabled title="Data and installer changes need a separate admitted surface.">missing surface</button>
             </section>
           </div>
         </section>

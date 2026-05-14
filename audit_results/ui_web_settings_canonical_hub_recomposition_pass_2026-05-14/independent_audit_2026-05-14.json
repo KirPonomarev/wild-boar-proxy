@@ -1,0 +1,25 @@
+{
+  "contour": "UI_WEB_SETTINGS_CANONICAL_HUB_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent read-only subagent",
+  "findings": [],
+  "checks": {
+    "settings_3x3_hub": "pass",
+    "data_installer_deferred_no_picker": "pass",
+    "active_settings_command_surface": "pass",
+    "visible_inline_svg_icons": "pass",
+    "viewport_fit_1600x1000": "pass",
+    "tests_updated": "pass"
+  },
+  "evidence": {
+    "cardCount": 9,
+    "grid": "repeat(3, minmax(0, 1fr))",
+    "settingsBottom": 713,
+    "maxCardHeight": 155,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "overflows": []
+  },
+  "verdict": "PASS"
+}

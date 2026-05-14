@@ -1,0 +1,322 @@
+{
+  "fixture_healthy": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "settingsBottom": 713,
+    "settingsHeight": 545,
+    "cardCount": 9,
+    "maxCardHeight": 155,
+    "minCardHeight": 155,
+    "gridColumns": "376.656px 376.672px 376.656px",
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "previewBottom": 943,
+    "overflows": [],
+    "cardRects": [
+      {
+        "section": "runtime-mode",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "client-launch",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "accounts-policy",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "api-routes",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "diagnostics-privacy",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "security-boundary",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "advanced-boundary",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "about",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "data-installer",
+        "h": 155,
+        "bottom": 713
+      }
+    ]
+  },
+  "fixture_degraded": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "settingsBottom": 713,
+    "settingsHeight": 545,
+    "cardCount": 9,
+    "maxCardHeight": 155,
+    "minCardHeight": 155,
+    "gridColumns": "376.656px 376.672px 376.656px",
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "previewBottom": 943,
+    "overflows": [],
+    "cardRects": [
+      {
+        "section": "runtime-mode",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "client-launch",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "accounts-policy",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "api-routes",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "diagnostics-privacy",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "security-boundary",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "advanced-boundary",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "about",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "data-installer",
+        "h": 155,
+        "bottom": 713
+      }
+    ]
+  },
+  "fixture_down": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "settingsBottom": 713,
+    "settingsHeight": 545,
+    "cardCount": 9,
+    "maxCardHeight": 155,
+    "minCardHeight": 155,
+    "gridColumns": "376.656px 376.672px 376.656px",
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "previewBottom": 943,
+    "overflows": [],
+    "cardRects": [
+      {
+        "section": "runtime-mode",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "client-launch",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "accounts-policy",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "api-routes",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "diagnostics-privacy",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "security-boundary",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "advanced-boundary",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "about",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "data-installer",
+        "h": 155,
+        "bottom": 713
+      }
+    ]
+  },
+  "fixture_stale": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "settingsBottom": 713,
+    "settingsHeight": 545,
+    "cardCount": 9,
+    "maxCardHeight": 155,
+    "minCardHeight": 155,
+    "gridColumns": "376.656px 376.672px 376.656px",
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "previewBottom": 943,
+    "overflows": [],
+    "cardRects": [
+      {
+        "section": "runtime-mode",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "client-launch",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "accounts-policy",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "api-routes",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "diagnostics-privacy",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "security-boundary",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "advanced-boundary",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "about",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "data-installer",
+        "h": 155,
+        "bottom": 713
+      }
+    ]
+  },
+  "live_integration_failure": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "settingsBottom": 713,
+    "settingsHeight": 545,
+    "cardCount": 9,
+    "maxCardHeight": 155,
+    "minCardHeight": 155,
+    "gridColumns": "376.656px 376.672px 376.656px",
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 9,
+    "activeSettingsActions": [],
+    "previewBottom": 943,
+    "overflows": [],
+    "cardRects": [
+      {
+        "section": "runtime-mode",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "client-launch",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "accounts-policy",
+        "h": 155,
+        "bottom": 375
+      },
+      {
+        "section": "api-routes",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "diagnostics-privacy",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "security-boundary",
+        "h": 155,
+        "bottom": 544
+      },
+      {
+        "section": "advanced-boundary",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "about",
+        "h": 155,
+        "bottom": 713
+      },
+      {
+        "section": "data-installer",
+        "h": 155,
+        "bottom": 713
+      }
+    ]
+  }
+}

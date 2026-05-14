@@ -1,0 +1,86 @@
+{
+  "contour": "UI_WEB_SETTINGS_CANONICAL_HUB_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "baseline_head": "090975d",
+  "states": {
+    "fixture_healthy": {
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "settingsBottom": 713,
+      "cardCount": 9,
+      "maxCardHeight": 155,
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "activeSettingsActions": [],
+      "overflows": []
+    },
+    "fixture_degraded": {
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "settingsBottom": 713,
+      "cardCount": 9,
+      "maxCardHeight": 155,
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "activeSettingsActions": [],
+      "overflows": []
+    },
+    "fixture_down": {
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "settingsBottom": 713,
+      "cardCount": 9,
+      "maxCardHeight": 155,
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "activeSettingsActions": [],
+      "overflows": []
+    },
+    "fixture_stale": {
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "settingsBottom": 713,
+      "cardCount": 9,
+      "maxCardHeight": 155,
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "activeSettingsActions": [],
+      "overflows": []
+    },
+    "live_integration_failure": {
+      "documentScrollHeight": 1000,
+      "mainScrollHeight": 942,
+      "mainClientHeight": 942,
+      "settingsBottom": 713,
+      "cardCount": 9,
+      "maxCardHeight": 155,
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "activeSettingsActions": [],
+      "overflows": []
+    }
+  },
+  "scoped_forbidden_scan": {
+    "settings_slice": "clean",
+    "checked": [
+      "data_ui_action",
+      "live_action",
+      "account_action",
+      "onboard_action",
+      "api_route_action",
+      "stable_repair_apply",
+      "installer_init",
+      "save_selection",
+      "import_apply",
+      "file_inputs",
+      "picker_api",
+      "path_tokens",
+      "secret_value_tokens"
+    ]
+  },
+  "verdict": "pass"
+}

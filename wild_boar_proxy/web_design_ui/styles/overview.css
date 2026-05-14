@@ -2796,22 +2796,22 @@ button:disabled {
 
 .settings-layout {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   max-width: none;
 }
 
 .settings-hub {
   align-items: stretch;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .settings-hub-card {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   grid-template-rows: auto 1fr auto;
-  min-height: 216px;
+  min-height: 144px;
   min-width: 0;
-  padding: 14px;
+  padding: 10px;
 }
 
 .settings-hub-card-wide {
@@ -2821,28 +2821,32 @@ button:disabled {
 .settings-card-head {
   align-items: flex-start;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   position: relative;
 }
 
 .settings-card-head .chip {
-  justify-self: start;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   margin-top: 1px;
+  max-width: 104px;
+  white-space: nowrap;
 }
 
 .settings-card-head h3 {
-  font-size: 14px;
-  line-height: 18px;
+  font-size: 12px;
+  line-height: 15px;
   margin: 0;
 }
 
 .settings-card-head p {
   color: var(--secondary);
   display: -webkit-box;
-  font-size: 11px;
-  line-height: 15px;
-  margin: 3px 0 0;
+  font-size: 9px;
+  line-height: 12px;
+  margin: 2px 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -2851,50 +2855,59 @@ button:disabled {
 .settings-card-icon {
   align-items: center;
   background: var(--blue-bg);
-  border-radius: 13px;
+  border-radius: 10px;
   display: flex;
-  height: 40px;
+  height: 30px;
   justify-content: center;
-  width: 40px;
+  width: 30px;
 }
 
 .settings-card-icon .button-icon {
-  height: 18px;
-  width: 18px;
+  height: 15px;
+  width: 15px;
 }
 
 .settings-card-facts {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .settings-card-facts div {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
-  border-radius: 12px;
+  border-radius: 10px;
   display: grid;
-  gap: 5px;
-  grid-template-columns: minmax(72px, .7fr) minmax(0, 1fr);
-  min-height: 32px;
-  padding: 6px 8px;
+  gap: 4px;
+  grid-template-columns: minmax(54px, .62fr) minmax(0, 1fr);
+  min-height: 24px;
+  padding: 4px 6px;
 }
 
 .settings-card-facts span {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 13px;
+  font-size: 9px;
+  line-height: 11px;
 }
 
 .settings-card-facts strong {
   color: var(--text);
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 10px;
+  line-height: 12px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .settings-card-link {
   text-decoration: none;
+}
+
+.settings-hub-card > .button,
+.settings-hub-card > .settings-card-link {
+  font-size: 11px;
+  height: 28px;
+  line-height: 14px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 
 .settings-hidden-field {
