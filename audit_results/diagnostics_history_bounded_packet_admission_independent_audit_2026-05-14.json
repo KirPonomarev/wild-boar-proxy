@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "contour": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "Current diagnostics UI is explicitly export-result only for live truth and explicitly fixture or deferred for richer history detail."
+    },
+    {
+      "agent": "Carver",
+      "role": "independent repo fact checker",
+      "finding": "Current command surfaces do not truthfully support live diagnostics history, event feed, or chart summary without a new bounded packet, but a readonly current-state detail screen is already supportable from existing bounded surfaces."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "COMMAND_API.md:41",
+      "fact": "diagnostics export --json exists as the current diagnostics command surface"
+    },
+    {
+      "source": "COMMAND_API.md:207-208",
+      "fact": "runtime health ownership remains under healthcheck --json while status --json is delegated runtime readout"
+    },
+    {
+      "source": "RUNTIME_CONTRACT.md:197-198",
+      "fact": "live attestation is owned by healthcheck --json and status --json must not replace it"
+    },
+    {
+      "source": "tests/test_web_design_ui.py:597-653",
+      "fact": "diagnostics screen is constrained to support-artifact metadata, fixture/demo history, and explicit live deferment"
+    },
+    {
+      "source": "wild_boar_proxy/web_design_ui/index.html:626-715",
+      "fact": "history chart and latest records are present as fixture/demo-only slots with deferred live state"
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:166-204",
+      "fact": "a readonly runtime or diagnostics detail pane may be grounded in status --json with optional healthcheck detail"
+    }
+  ],
+  "checks": [
+    {
+      "check": "existing_surfaces_can_power_live_history",
+      "verdict": "BLOCK",
+      "reason": "No current owner surface exposes a bounded live history packet."
+    },
+    {
+      "check": "existing_surfaces_can_power_readonly_current_state_detail",
+      "verdict": "PASS",
+      "reason": "Existing bounded status, healthcheck, and evidence surfaces are sufficient for a readonly current-state detail pane."
+    },
+    {
+      "check": "ui_may_read_raw_logs_or_bundles",
+      "verdict": "PASS",
+      "reason": "Admission artifacts correctly forbid direct log, bundle, and file reads."
+    },
+    {
+      "check": "runtime_truth_ownership_preserved",
+      "verdict": "PASS",
+      "reason": "Artifacts preserve healthcheck/status ownership and do not move runtime truth into diagnostics history."
+    },
+    {
+      "check": "support_export_scope_preserved",
+      "verdict": "PASS",
+      "reason": "Diagnostics export remains support-artifact metadata only."
+    },
+    {
+      "check": "implementation_leakage",
+      "verdict": "PASS",
+      "reason": "This contour changes admission artifacts only."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_DEFERRED_PENDING_NEW_BOUNDED_PACKET_WITH_READONLY_DETAIL_ALREADY_ADMITTED"
+}

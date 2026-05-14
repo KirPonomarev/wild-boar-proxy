@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "contour": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+  "mode": "admission/spec-only",
+  "date": "2026-05-14",
+  "final_verdict": "DIAGNOSTICS_HISTORY_DEFERRED_PENDING_NEW_BOUNDED_PACKET",
+  "current_owner_surfaces": [
+    "diagnostics export --json",
+    "status --json",
+    "healthcheck --json",
+    "accounts list --json",
+    "rollout rotation inspect --json"
+  ],
+  "areas": [
+    {
+      "surface": "diagnostics_export_result_metadata",
+      "current_admission": "ADMITTED",
+      "current_owner_surface": "diagnostics export --json",
+      "notes": [
+        "support artifact metadata only",
+        "not runtime health truth",
+        "artifact reference must remain basename-only",
+        "changed_files must remain count-only in browser UI"
+      ]
+    },
+    {
+      "surface": "live_history_chart",
+      "current_admission": "DEFERRED_PENDING_NEW_BOUNDED_PACKET",
+      "current_owner_surface": "none",
+      "blocking_reasons": [
+        "current command surfaces do not provide bounded live chart points",
+        "UI must not synthesize chart truth from logs or bundles",
+        "diagnostics export is not a history-truth surface"
+      ],
+      "future_requirements": [
+        "readonly bounded packet",
+        "bounded time-window presets",
+        "redacted chart summary points",
+        "explicit stale or deferred state"
+      ]
+    },
+    {
+      "surface": "live_event_feed",
+      "current_admission": "DEFERRED_PENDING_NEW_BOUNDED_PACKET",
+      "current_owner_surface": "none",
+      "blocking_reasons": [
+        "current command surfaces do not expose bounded event entries",
+        "UI must not render log tail or raw bundle contents",
+        "support export metadata is not an event-feed contract"
+      ],
+      "future_requirements": [
+        "readonly bounded packet",
+        "redacted event summaries only",
+        "no raw file paths",
+        "no raw stack dumps"
+      ]
+    },
+    {
+      "surface": "signal_chain_detail",
+      "current_admission": "DEFERRED_PENDING_NEW_BOUNDED_PACKET",
+      "current_owner_surface": "none",
+      "blocking_reasons": [
+        "no current command packet owns step-by-step diagnostics chain detail",
+        "UI must not infer chain status from multiple unrelated packets",
+        "chain detail can easily overclaim runtime truth"
+      ],
+      "future_requirements": [
+        "command-owned bounded signal-chain summary",
+        "readonly step states",
+        "clear non-attestation copy limits"
+      ]
+    },
+    {
+      "surface": "per_entity_diagnostics_detail",
+      "current_admission": "ADMITTED_WITH_EXISTING_BOUNDED_SURFACES",
+      "current_owner_surface": "status --json plus optional healthcheck --json plus bounded evidence readouts",
+      "notes": [
+        "allowed as readonly current-state detail",
+        "must not be presented as diagnostics history",
+        "must not join bundle, log, or state-file reads into diagnosis",
+        "accounts list remains lifecycle truth, not diagnostics-history truth"
+      ],
+      "future_requirements_for_richer_history": [
+        "bounded subject scope",
+        "readonly entity summary",
+        "redacted recent diagnostic facts",
+        "dedicated bounded history packet"
+      ]
+    },
+    {
+      "surface": "support_action_hints",
+      "current_admission": "ADMITTED_WITH_EXISTING_SURFACES",
+      "current_owner_surface": "diagnostics export --json",
+      "notes": [
+        "next action copy may reflect command packet outcome only",
+        "must not broaden into recovery success or runtime health claim"
+      ]
+    },
+    {
+      "surface": "raw_log_or_bundle_view",
+      "current_admission": "NOT_ADMITTED",
+      "current_owner_surface": "forbidden",
+      "blocking_reasons": [
+        "UI is not a log viewer",
+        "UI must not read diagnostics bundle contents directly",
+        "UI must not disclose raw local paths or raw diagnostic text"
+      ]
+    }
+  ],
+  "global_browser_payload_rules": {
+    "allowed_if_future_admitted": [
+      "ui_action",
+      "bounded time_window preset",
+      "bounded subject id",
+      "bounded view mode"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "file_path",
+      "bundle_path",
+      "raw_log_text",
+      "regex_query",
+      "token",
+      "credential",
+      "raw_json_blob"
+    ]
+  },
+  "truth_ownership_rules": {
+    "runtime_attestation_owner": "healthcheck --json",
+    "delegated_runtime_summary_owner": "status --json",
+    "support_artifact_owner": "diagnostics export --json",
+    "rotation_evidence_owner": "rollout rotation inspect --json"
+  },
+  "next_required_contour_if_reprioritized": "DIAGNOSTICS_HISTORY_PACKET_CONTRACT_ADMISSION",
+  "implementation_allowed_in_this_contour": false
+}
