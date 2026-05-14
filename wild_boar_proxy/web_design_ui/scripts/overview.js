@@ -728,7 +728,11 @@ function setSourceCopy(source) {
                 : (
                   screen === "setup"
                     ? "Setup · admission wizard"
-                    : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
+                    : (
+                      screen === "select-client"
+                        ? "Select Client · candidate preview"
+                        : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
+                    )
                 )
             )
             )
@@ -752,9 +756,13 @@ function setSourceCopy(source) {
                   screen === "setup"
                     ? "Подготовка локального контура без изменения рабочих файлов Codex."
                     : (
+                  screen === "select-client"
+                    ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
+                    : (
                   setupLike
                     ? "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
                     : "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
+                    )
                     )
                 )
             )
@@ -777,9 +785,13 @@ function setSourceCopy(source) {
                   screen === "setup"
                     ? "Подготовка локального контура без изменения рабочих файлов Codex."
                     : (
+                  screen === "select-client"
+                    ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
+                    : (
                   setupLike
                     ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
                     : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
+                    )
                     )
                 )
             )
@@ -795,6 +807,7 @@ function setSourceCopy(source) {
   }
   updateDiagnosticsDetailSource(source);
   updateSetupAdmissionCopy(source);
+  updateSelectClientCopy(source);
 }
 
 function updateSetupAdmissionCopy(source) {
@@ -816,6 +829,27 @@ function updateSetupAdmissionCopy(source) {
   banner.textContent = fixtureState === "stale"
     ? "Демо-режим stale. Экран показывает admitted layout, не результат настройки."
     : "Демо-режим. Экран показывает admitted layout, не результат настройки.";
+}
+
+function updateSelectClientCopy(source) {
+  const banner = document.getElementById("selectClientBanner");
+  if (!banner) {
+    return;
+  }
+  const desktop = document.querySelector(".desktop");
+  const fixtureState = desktop?.dataset?.fixtureState || "healthy";
+  if (source === "live") {
+    setClassName(banner, "fixture-banner", "integration_failure");
+    banner.textContent = "Список клиентов недоступен. Ручной выбор ожидает desktop/native flow.";
+    return;
+  }
+  const stateClass = fixtureState === "stale"
+    ? "stale"
+    : (fixtureState === "down" || fixtureState === "integration_failure" ? "degraded" : "amber");
+  setClassName(banner, "fixture-banner", stateClass);
+  banner.textContent = fixtureState === "stale"
+    ? "Демо-режим stale. Кандидаты показаны как fixture preview, не как найденные локальные приложения."
+    : "Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.";
 }
 
 function updateDiagnosticsDetailSource(source) {

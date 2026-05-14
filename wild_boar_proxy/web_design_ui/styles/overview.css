@@ -3260,7 +3260,8 @@ button:disabled {
 }
 
 .setup-card-icon .ui-icon,
-.setup-component-icon .ui-icon {
+.setup-component-icon .ui-icon,
+.candidate-icon .ui-icon {
   height: 16px;
   width: 16px;
 }
@@ -3370,7 +3371,8 @@ button:disabled {
   color: var(--amber);
 }
 
-.setup-component-icon.red {
+.setup-component-icon.red,
+.candidate-icon.red {
   background: var(--red-bg);
   color: var(--red);
 }
@@ -3482,15 +3484,27 @@ button:disabled {
   border: 1px dashed rgba(116, 103, 91, .45);
   border-radius: 14px;
   color: var(--secondary);
+  align-items: center;
+  display: flex;
   font-size: 13px;
+  gap: 8px;
   line-height: 18px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.select-client-search {
+  min-height: 36px;
+}
+
+.select-client-search .ui-icon {
+  height: 16px;
+  width: 16px;
 }
 
 .candidate-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .candidate-row {
@@ -3499,9 +3513,15 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .74);
   border-radius: 16px;
   display: grid;
-  gap: 14px;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  padding: 12px 14px;
+  gap: 10px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  padding: 10px 12px;
+}
+
+.select-client-candidate-row {
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  min-height: 64px;
+  padding: 8px 10px;
 }
 
 .candidate-row.selected {
@@ -3515,7 +3535,8 @@ button:disabled {
 }
 
 .candidate-row strong,
-.candidate-row span {
+.candidate-row span,
+.candidate-row small {
   display: block;
 }
 
@@ -3524,6 +3545,66 @@ button:disabled {
   font-size: 12px;
   line-height: 16px;
   margin-top: 2px;
+}
+
+.candidate-row small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+  margin-top: 2px;
+}
+
+.candidate-path {
+  direction: ltr;
+  font-family: var(--mono);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-client-detail-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .62fr);
+}
+
+.select-client-boundary {
+  display: none;
+  padding: 12px 14px;
+}
+
+.desktop[data-screen="select-client"] .setup-flow-layout {
+  gap: 16px;
+}
+
+.desktop[data-screen="select-client"] .setup-workbench {
+  gap: 8px;
+}
+
+.desktop[data-screen="select-client"] .setup-flow-rail {
+  padding: 16px;
+}
+
+.desktop[data-screen="select-client"] .flow-step {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.desktop[data-screen="select-client"] .setup-card-head {
+  gap: 8px;
+}
+
+.desktop[data-screen="select-client"] .form-section {
+  padding: 12px;
+}
+
+.desktop[data-screen="select-client"] .deferred-row {
+  grid-template-columns: minmax(92px, .7fr) minmax(0, 1fr);
+}
+
+.desktop[data-screen="select-client"] .deferred-row .button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  min-height: 30px;
 }
 
 .form-section {

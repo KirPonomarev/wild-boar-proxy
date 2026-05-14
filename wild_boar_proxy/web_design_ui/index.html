@@ -1049,73 +1049,123 @@
           </div>
         </section>
 
-        <section id="selectClientScreen" class="screen setup-screen setup-final-screen" data-screen="select-client" hidden>
-          <div class="fixture-banner amber">
-            Выбор клиента отложен. Строки ниже являются макетными кандидатами, а не найденными приложениями.
+        <section id="selectClientScreen" class="screen setup-screen setup-final-screen" data-screen="select-client" data-select-client-mode="candidate-preview" hidden>
+          <div id="selectClientBanner" class="fixture-banner amber">
+            Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.
           </div>
 
-          <div class="setup-flow-layout" data-visual-reference="11_select_client_screen" data-setup-flow-frame="left-step-rail">
+          <div class="setup-flow-layout select-client-layout" data-visual-reference="11_select_client_screen" data-setup-flow-frame="left-step-rail">
             <aside class="setup-flow-rail" aria-label="Шаги выбора клиента">
-              <div class="eyebrow">Client Picker</div>
-              <div class="flow-step done"><span class="flow-step-num">1</span><span><strong>Клиент</strong><small>каркас</small></span></div>
-              <div class="flow-step active"><span class="flow-step-num">2</span><span><strong>Выбор</strong><small>кандидаты отложены</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Проверка</strong><small>нет dispatch</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Сохранить</strong><small>нет action</small></span></div>
-              <div class="setup-flow-note">Кандидаты ниже не являются найденными приложениями.</div>
+              <div class="eyebrow">First-run</div>
+              <div class="flow-step done"><span class="flow-step-num">1</span><span><strong>Готовность</strong><small>admission state</small></span></div>
+              <div class="flow-step done"><span class="flow-step-num">2</span><span><strong>Компоненты</strong><small>policy check</small></span></div>
+              <div class="flow-step active"><span class="flow-step-num">3</span><span><strong>Клиент</strong><small>candidate preview</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Данные</strong><small>readonly display</small></span></div>
+              <div class="flow-step"><span class="flow-step-num">5</span><span><strong>Проверка</strong><small>requires proof</small></span></div>
+              <div class="setup-flow-note">Candidates не являются найденными приложениями; simulated truth нет.</div>
             </aside>
 
             <div class="setup-workbench">
               <section class="card form-section setup-selection-card">
-                <div class="section-head">
+                <div class="setup-card-head">
+                  <span class="setup-card-icon blue"><img class="ui-icon" src="assets/icons/phosphor/sliders-horizontal.png" alt="" aria-hidden="true"></span>
                   <div>
                     <h3>Выбор клиента</h3>
-                    <div class="secondary">Для выбора нужны command-owned идентификаторы кандидатов и команда сохранения.</div>
+                    <div class="secondary">Candidate preview из bounded packet, без disk discovery.</div>
                   </div>
-                  <span class="chip amber"><span class="dot"></span>отложено</span>
+                  <span class="chip amber"><span class="dot"></span>fixture preview</span>
                 </div>
-                <div class="search-placeholder">Поиск по имени или пути отключён до появления пакета обнаружения</div>
-                <div class="candidate-list" aria-label="Макетные кандидаты">
-                  <div class="candidate-row selected">
-                    <span class="candidate-icon amber">WB</span>
-                    <div><strong>Recommended local client</strong><span>макетный кандидат, source_id не заявляется</span></div>
-                    <button class="button small disabled" type="button" disabled>Выбор отключён</button>
+                <div class="search-placeholder select-client-search">
+                  <img class="ui-icon" src="assets/icons/phosphor/magnifying-glass.png" alt="" aria-hidden="true">
+                  <span>Поиск по кандидату · local filter only</span>
+                </div>
+                <div class="candidate-list select-client-candidate-list" aria-label="Candidate preview">
+                  <div class="candidate-row select-client-candidate-row selected">
+                    <span class="candidate-icon amber"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <strong>Codex Custom</strong>
+                      <span class="candidate-path" title="/Applications/Codex Custom.app">/Applications/Codex Custom.app</span>
+                      <small>source: fixture candidate display</small>
+                    </div>
+                    <span class="chip amber"><span class="dot"></span>Рекомендуется</span>
+                    <button class="button small disabled" type="button" disabled title="requires candidate proof">Выбрать кандидата · disabled</button>
                   </div>
-                  <div class="candidate-row">
-                    <span class="candidate-icon blue">CL</span>
-                    <div><strong>External CLI surface</strong><span>требует будущей command-owned проверки</span></div>
-                    <button class="button small disabled" type="button" disabled>Проверка отключена</button>
+                  <div class="candidate-row select-client-candidate-row">
+                    <span class="candidate-icon blue"><img class="ui-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <strong>Codex Stable</strong>
+                      <span class="candidate-path" title="/Applications/Codex.app">/Applications/Codex.app</span>
+                      <small>source: fixture candidate display</small>
+                    </div>
+                    <span class="chip blue"><span class="dot"></span>Доступен</span>
+                    <button class="button small disabled" type="button" disabled title="requires candidate proof">Выбрать кандидата · disabled</button>
                   </div>
-                  <div class="candidate-row unavailable">
-                    <span class="candidate-icon neutral">NA</span>
-                    <div><strong>Unavailable candidate</strong><span>нет discovery evidence и нет save command</span></div>
-                    <button class="button small disabled" type="button" disabled>Недоступно</button>
+                  <div class="candidate-row select-client-candidate-row unavailable">
+                    <span class="candidate-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <strong>Unavailable candidate</strong>
+                      <span class="candidate-path" title="/Applications/Codex Beta.app">/Applications/Codex Beta.app</span>
+                      <small>reason: missing candidate proof</small>
+                    </div>
+                    <span class="chip red"><span class="dot"></span>Недоступен</span>
+                    <button class="button small disabled" type="button" disabled title="candidate unavailable">Недоступно</button>
                   </div>
                 </div>
               </section>
 
-              <section class="card form-section">
-                <div class="section-head">
-                  <div>
-                    <h3>Выбранный клиент</h3>
-                    <div class="secondary">Панель показывает будущую геометрию, а не реальную находку.</div>
+              <div class="setup-grid select-client-detail-grid">
+                <section class="card form-section setup-boundary-card">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Предпросмотр выбора</h3>
+                      <div class="secondary">Preview не является saved selection или runtime readiness.</div>
+                    </div>
+                    <span class="chip neutral"><span class="dot"></span>requires confirmation</span>
                   </div>
-                  <span class="chip neutral"><span class="dot"></span>draft</span>
+                  <div class="setup-boundary-grid selected-client-grid">
+                    <div><span>Название</span><strong>Codex Custom</strong></div>
+                    <div><span>Путь</span><strong class="candidate-path" title="/Applications/Codex Custom.app">/Applications/Codex Custom.app</strong></div>
+                    <div><span>Источник</span><strong>fixture candidate display</strong></div>
+                  </div>
+                </section>
+
+                <section class="card form-section setup-boundary-card">
+                  <div class="setup-card-head">
+                    <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Указать вручную</h3>
+                      <div class="secondary">Доступно только в desktop/native flow.</div>
+                    </div>
+                    <span class="chip amber"><span class="dot"></span>deferred</span>
+                  </div>
+                  <div class="deferred-list">
+                    <div class="deferred-row"><span>Manual picker</span><span>browser path payload forbidden</span><button class="button small disabled" type="button" disabled>Выбрать файл · disabled</button></div>
+                    <div class="deferred-row"><span>No candidates</span><span>bounded candidates packet missing</span><span class="chip neutral"><span class="dot"></span>calm empty</span></div>
+                  </div>
+                </section>
+              </div>
+
+              <section class="card form-section setup-boundary-card select-client-boundary">
+                <div class="setup-card-head">
+                  <span class="setup-card-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Граница выбора</h3>
+                    <div class="secondary">Выбор клиента не запускает клиент и не доказывает runtime readiness.</div>
+                  </div>
                 </div>
-                <div class="setup-boundary-grid selected-client-grid">
-                  <div><span>Candidate identity</span><strong>нужен command-owned идентификатор кандидата</strong></div>
-                  <div><span>Path handling</span><strong>только будущий desktop/native picker</strong></div>
-                  <div><span>Save action</span><strong>deferred until command surface</strong></div>
-                </div>
-                <div class="deferred-list">
-                  <div class="deferred-row"><span>Проверить расположение</span><span>bounded dispatch не является проверкой пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>Показать расположение</span><span>нет support-контракта для открытия расположения</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="setup-boundary-grid">
+                  <div><span>Path handling</span><strong>inert display only</strong></div>
+                  <div><span>Save action</span><strong>requires candidate proof</strong></div>
+                  <div><span>Launch readiness</span><strong>not claimed here</strong></div>
                 </div>
               </section>
 
               <div class="setup-bottom-bar" aria-label="Инертные действия выбора клиента">
                 <button class="button small disabled" type="button" disabled>Назад</button>
-                <button class="button small disabled" type="button" disabled>Отмена</button>
-                <button class="button primary small disabled" type="button" disabled>Сохранить после command-owned кандидата</button>
+                <button class="button small" type="button">Закрыть</button>
+                <button class="button small disabled" type="button" disabled title="Candidate check requires an admitted command surface.">Проверить кандидатов · missing surface</button>
+                <button class="button small disabled setup-save-disabled" type="button" disabled title="Save requires admitted candidate proof.">Сохранить выбор · requires candidate proof</button>
               </div>
             </div>
           </div>
