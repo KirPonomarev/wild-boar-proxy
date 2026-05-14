@@ -1,0 +1,67 @@
+{
+  "contour": "UI_FINAL_CORE_EXISTING_SURFACES_VISUAL_TRANSFER",
+  "date": "2026-05-14",
+  "verdict": "implemented_pending_final_verification",
+  "scope": {
+    "allowed_files_changed": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "tests/test_web_design_ui.py"
+    ],
+    "artifact_files_added": [
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_spec_2026-05-14.md",
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_matrix_2026-05-14.json",
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_browser_smoke_2026-05-14.json",
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_independent_audit_2026-05-14.json",
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_closeout_2026-05-14.md",
+      "audit_results/ui_final_core_existing_surfaces_visual_transfer_screenshots_2026-05-14/"
+    ],
+    "forbidden_files_changed": []
+  },
+  "surface_inventory": {
+    "screens_expected": [
+      "overview",
+      "accounts",
+      "api-connections",
+      "diagnostics",
+      "settings",
+      "setup",
+      "select-client",
+      "import-existing"
+    ],
+    "screen_registry_changed": false,
+    "static_data_ui_actions_expected": [
+      "launch_client_dispatch",
+      "onboard_account",
+      "export_diagnostics",
+      "refresh_health_detail",
+      "stable_repair_plan",
+      "set_mode_managed",
+      "sync_runtime",
+      "launch_smoke",
+      "set_mode_stable"
+    ],
+    "static_data_ui_action_value_set_changed": false
+  },
+  "visual_transfer": {
+    "overview": "header action geometry and readable launch button retained within existing action surface",
+    "accounts": "table density and card padding adjusted without action expansion",
+    "diagnostics": "signal-detail and chart block sizing adjusted within existing support-packet boundary",
+    "settings": "readonly settings refit into a hub layout while retaining observed field ids and existing safe actions",
+    "api_connections": "route registry table inherits final table/card density without new route editor behavior",
+    "modals": "locked confirmation modal tokens preserved"
+  },
+  "canon_checks": {
+    "new_fetch_endpoint_introduced": false,
+    "new_ui_action_introduced": false,
+    "command_id_payload_introduced": false,
+    "raw_argv_or_shell_introduced": false,
+    "arbitrary_path_payload_introduced": false,
+    "token_or_secret_input_introduced": false,
+    "raw_route_config_input_introduced": false,
+    "direct_runtime_truth_file_read_introduced": false,
+    "runtime_or_backend_changed": false,
+    "desktop_changed": false
+  },
+  "resume_from_here": "Run final verification, record independent audit PASS/BLOCK, then closeout and commit if clean."
+}

@@ -696,24 +696,58 @@
             Настройки в этом контуре доступны только для чтения. Значения ниже получены из JSON-пакетов, а не прямым чтением config.
           </div>
 
-          <div class="settings-layout form-wrap" data-visual-reference="07_settings" data-config-mode="readonly">
-            <section class="card form-section settings-observed">
+          <div class="settings-layout settings-hub" data-visual-reference="14_settings_main_hub" data-config-mode="readonly">
+            <section class="card form-section settings-observed settings-hub-card settings-hub-card-wide">
               <div class="section-head">
                 <div>
-                  <h3>Наблюдаемая конфигурация и статус</h3>
+                  <h3>Runtime / Mode</h3>
                   <div class="secondary">Факты только для чтения из существующих пакетов команд.</div>
                 </div>
                 <span class="chip neutral"><span class="dot"></span>только чтение</span>
               </div>
-              <div class="form-row"><label>Желаемый режим</label><div id="settingsDesiredMode">-</div></div>
-              <div class="form-row"><label>Фактический режим</label><div id="settingsEffectiveMode">-</div></div>
+              <div class="settings-hub-kv">
+                <div><label>Желаемый режим</label><div id="settingsDesiredMode">-</div></div>
+                <div><label>Фактический режим</label><div id="settingsEffectiveMode">-</div></div>
+                <div><label>Статус runtime</label><div id="settingsRuntimeStatus">-</div></div>
+                <div><label>Машинный код</label><div id="settingsMachineCode">-</div></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card">
+              <div class="section-head">
+                <div>
+                  <h3>Client / Launch</h3>
+                  <div class="secondary">Запуск остаётся командным запросом, не настройкой.</div>
+                </div>
+                <span class="chip blue"><span class="dot"></span>bounded</span>
+              </div>
               <div class="form-row"><label>Наблюдаемый endpoint</label><div id="settingsEndpoint" class="mono-value">-</div></div>
-              <div class="form-row"><label>Статус runtime</label><div id="settingsRuntimeStatus">-</div></div>
-              <div class="form-row"><label>Машинный код</label><div id="settingsMachineCode">-</div></div>
               <div class="form-row"><label>Запуск клиента</label><div id="settingsLaunchAvailability">метаданные недоступны</div></div>
             </section>
 
-            <section class="card form-section settings-safe-actions">
+            <section class="card form-section settings-hub-card">
+              <div class="section-head">
+                <div>
+                  <h3>Accounts policy</h3>
+                  <div class="secondary">Lifecycle управляется отдельными account actions.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
+              </div>
+              <div class="deferred-row"><span>Проверки при старте</span><span>изменение стартовой политики отложено</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+            </section>
+
+            <section class="card form-section settings-hub-card">
+              <div class="section-head">
+                <div>
+                  <h3>API routes</h3>
+                  <div class="secondary">Registry виден на отдельном экране API-подключений.</div>
+                </div>
+                <span class="chip neutral"><span class="dot"></span>readonly</span>
+              </div>
+              <div class="deferred-row"><span>Route editor</span><span>сырой route config не отправляется из браузера</span><button class="button small disabled" type="button" disabled>Нет формы</button></div>
+            </section>
+
+            <section class="card form-section settings-safe-actions settings-hub-card settings-hub-card-wide">
               <div class="section-head">
                 <div>
                   <h3>Безопасные доступные действия</h3>
@@ -761,7 +795,7 @@
               </div>
             </section>
 
-            <section class="card form-section settings-deferred">
+            <section class="card form-section settings-deferred settings-hub-card settings-hub-card-wide">
               <div class="section-head">
                 <div>
                   <h3>Отложенные элементы настроек</h3>
@@ -774,7 +808,9 @@
                 <div class="deferred-row"><span>Каталог данных приложения</span><span>прямой доступ к файловой системе отложен</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 <div class="deferred-row"><span>Сетевой host / port</span><span>изменение конфигурации runtime вне границ контура</span><button class="button small disabled" type="button" disabled>Только чтение</button></div>
                 <div class="deferred-row"><span>Политика автовосстановления</span><span>изменение политики требует owner command surface</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Проверки аккаунтов при старте</span><span>изменение стартовой политики отложено</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Security</span><span>секреты и токены не вводятся в UI</span><button class="button small disabled" type="button" disabled>Нет ввода</button></div>
+                <div class="deferred-row"><span>Advanced</span><span>низкоуровневые параметры остаются вне web UI</span><button class="button small disabled" type="button" disabled>Закрыто</button></div>
+                <div class="deferred-row"><span>About</span><span>версия и лицензия требуют отдельного readonly packet</span><button class="button small disabled" type="button" disabled>Позже</button></div>
               </div>
             </section>
           </div>
