@@ -1,0 +1,49 @@
+{
+  "contour": "UI_WEB_OVERVIEW_CANONICAL_POLISH_PASS",
+  "date": "2026-05-14",
+  "auditor": "independent explorer agent",
+  "result": "PASS",
+  "findings": [],
+  "checks": [
+    {
+      "name": "allowed surface",
+      "result": "PASS",
+      "evidence": "git diff --name-only returned only wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, and wild_boar_proxy/web_design_ui/styles/overview.css."
+    },
+    {
+      "name": "runtime command desktop scope",
+      "result": "PASS",
+      "evidence": "git diff --name-only | rg 'runtime|command|adapter|desktop' returned no matches."
+    },
+    {
+      "name": "contract ids",
+      "result": "PASS",
+      "evidence": "sourcePicker, statePicker, refreshFixture, sourceFooter, and sourcePill remain present."
+    },
+    {
+      "name": "overview data-ui-action hooks",
+      "result": "PASS",
+      "evidence": "launch_client_dispatch, refresh_health_detail, export_diagnostics, stable_repair_plan, set_mode_managed, sync_runtime, launch_smoke, and set_mode_stable remain present."
+    },
+    {
+      "name": "main preview controls",
+      "result": "PASS",
+      "evidence": "dev-operator-strip is absent; selectors are inside preview-instrumentation in the sidebar."
+    },
+    {
+      "name": "refresh copy",
+      "result": "PASS",
+      "evidence": "No Обновить live or Обновить демо strings remain in the changed web-design files."
+    },
+    {
+      "name": "screenshots",
+      "result": "PASS",
+      "evidence": "After screenshots exist for fixture healthy, degraded, down, stale, and live integration failure, plus sampled full-page fit screenshots."
+    },
+    {
+      "name": "external reference traces",
+      "result": "PASS",
+      "evidence": "No forbidden external-reference tokens were found in changed files or artifact names."
+    }
+  ]
+}

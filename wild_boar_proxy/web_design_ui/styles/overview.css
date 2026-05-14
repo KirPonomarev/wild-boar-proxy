@@ -456,41 +456,71 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .8);
   border-radius: 14px;
   color: var(--secondary);
+  display: flex;
+  align-items: center;
   font-size: 12px;
+  min-height: 42px;
   line-height: 18px;
   margin-bottom: 10px;
-  overflow-wrap: anywhere;
-  padding: 11px 468px 11px 14px;
+  overflow: hidden;
+  padding: 0 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.dev-operator-strip {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  margin-bottom: 0;
-  min-height: 32px;
-  position: absolute;
-  right: 0;
-  top: 6px;
+.preview-instrumentation {
+  border-top: 1px solid rgba(217, 208, 195, .68);
+  margin-top: 10px;
+  padding-top: 9px;
 }
 
-.dev-operator-strip .input {
-  background: rgba(255, 250, 246, .72);
+.preview-instrumentation summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 15px;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.preview-instrumentation summary::-webkit-details-marker {
+  display: none;
+}
+
+.preview-instrumentation summary::after {
+  content: "· preview-only";
+  color: var(--secondary);
+  font-weight: 500;
+  margin-left: 6px;
+  text-transform: none;
+}
+
+.preview-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.preview-controls .input {
+  background: rgba(255, 250, 246, .74);
   border-color: rgba(217, 208, 195, .68);
   color: var(--muted);
   font-size: 11px;
-  height: 30px;
+  height: 31px;
   line-height: 15px;
   padding: 0 10px;
+  width: 100%;
 }
 
-.dev-operator-strip .state-picker {
-  width: auto;
-}
-
-.dev-operator-strip select {
+.preview-controls select {
   font-size: 11px;
+  max-width: 112px;
+}
+
+.desktop[data-source="live"] .preview-state-picker {
+  display: none;
 }
 
 .fixture-banner.green {
@@ -775,10 +805,20 @@ button:disabled {
   display: none;
 }
 
+.compact-action-panel.red .action-panel-grid > div:nth-child(11),
+.compact-action-panel.red .action-panel-grid > div:nth-child(12) {
+  display: block;
+}
+
 .compact-action-panel #actionMessage,
 .compact-action-panel #actionTruthNote {
   font-size: 12px;
   line-height: 18px;
+}
+
+.compact-action-panel .action-ledger-head,
+.compact-action-panel .action-ledger-list {
+  display: none;
 }
 
 .action-ledger-head {
@@ -1195,7 +1235,8 @@ button:disabled {
 }
 
 .last-error.ok {
-  color: var(--green);
+  color: var(--secondary);
+  font-weight: 500;
 }
 
 .last-error.problem {
@@ -1275,32 +1316,43 @@ button:disabled {
 .action-row {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(4, minmax(118px, 1fr));
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
 }
 
 .overview-utility-strip {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: -2px 0 14px;
-  padding-bottom: 14px;
+  margin: -4px 0 12px;
+  padding-bottom: 12px;
 }
 
 .overview-utility-strip .button {
-  background: #fffdfb;
-  border-color: var(--border);
-  color: var(--text);
-  font-size: 12px;
-  height: 38px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--secondary);
+  font-size: 11px;
+  height: 30px;
   line-height: 16px;
   min-width: 0;
-  padding: 0 12px;
+  padding: 0 6px;
+  justify-content: flex-start;
 }
 
 .overview-utility-strip .button-icon {
   height: 14px;
   width: 14px;
+}
+
+.diagnostics-nav-action {
+  color: inherit;
+  text-decoration: none;
+}
+
+.quiet-mode-action[hidden] {
+  display: none;
 }
 
 .action-tile {

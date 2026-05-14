@@ -1,0 +1,88 @@
+{
+  "contour": "UI_WEB_OVERVIEW_CANONICAL_POLISH_PASS",
+  "date": "2026-05-14",
+  "scope": {
+    "changed_tracked_files": [
+      "wild_boar_proxy/web_design_ui/index.html",
+      "wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "wild_boar_proxy/web_design_ui/styles/overview.css"
+    ],
+    "runtime_files_touched": false,
+    "command_adapter_files_touched": false,
+    "desktop_files_touched": false
+  },
+  "contracts": {
+    "ids_preserved": [
+      "sourcePicker",
+      "statePicker",
+      "refreshFixture",
+      "sourceFooter",
+      "sourcePill"
+    ],
+    "overview_data_ui_actions_preserved": [
+      "launch_client_dispatch",
+      "refresh_health_detail",
+      "export_diagnostics",
+      "stable_repair_plan",
+      "set_mode_managed",
+      "sync_runtime",
+      "launch_smoke",
+      "set_mode_stable"
+    ],
+    "new_command_surfaces": false
+  },
+  "visual_state_matrix": [
+    {
+      "case": "fixture healthy",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/after_overview_fixture_healthy_1600x1000.png",
+      "result": "captured"
+    },
+    {
+      "case": "fixture degraded",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/after_overview_fixture_degraded_1600x1000.png",
+      "result": "captured"
+    },
+    {
+      "case": "fixture down",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/after_overview_fixture_down_1600x1000.png",
+      "result": "captured"
+    },
+    {
+      "case": "fixture stale",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/after_overview_fixture_stale_1600x1000.png",
+      "result": "captured"
+    },
+    {
+      "case": "live integration failure",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/after_overview_live_integration_failure_1600x1000.png",
+      "result": "captured"
+    }
+  ],
+  "fit_checks": [
+    {
+      "case": "fixture healthy",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/fit_fullpage_overview_fixture_healthy.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000
+    },
+    {
+      "case": "fixture stale",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/fit_fullpage_overview_fixture_stale.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000
+    },
+    {
+      "case": "live integration failure",
+      "screenshot": "audit_results/ui_web_overview_canonical_polish_pass_screenshots/fit_fullpage_overview_live_integration_failure.png",
+      "pixel_width": 1600,
+      "pixel_height": 1000
+    }
+  ],
+  "verification": {
+    "node_check": "pass",
+    "unit_tests": "pass: python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+    "git_diff_check": "pass",
+    "forbidden_trace_scan": "pass",
+    "independent_audit": "pass"
+  }
+}

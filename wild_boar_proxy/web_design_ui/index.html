@@ -53,6 +53,29 @@
             <span id="sidebarStatus">Демо-состояние неизвестно</span>
           </div>
           <div id="sourceFooter">Предпросмотр UI · без live-команд</div>
+          <details class="preview-instrumentation">
+            <summary>Preview</summary>
+            <div class="preview-controls" aria-label="Preview-only controls">
+              <label class="input state-picker preview-source-picker">
+                <span>Источник</span>
+                <select id="sourcePicker" aria-label="Источник данных">
+                  <option value="fixture">демо</option>
+                  <option value="live">live только чтение</option>
+                </select>
+              </label>
+              <label class="input state-picker preview-state-picker">
+                <span>Состояние</span>
+                <select id="statePicker" aria-label="Демо-состояние">
+                  <option value="healthy">здорово</option>
+                  <option value="degraded">деградация</option>
+                  <option value="down">недоступно</option>
+                  <option value="stale">устарело</option>
+                  <option value="unknown">неизвестно</option>
+                  <option value="integration_failure">ошибка интеграции</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </div>
       </aside>
 
@@ -71,7 +94,7 @@
             <span id="sourcePill" class="source-pill">Demo</span>
             <button id="refreshFixture" class="button" type="button">
               <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
-              <span>Обновить демо</span>
+              <span>Обновить</span>
             </button>
             <button id="launchClientAction" class="button primary live-action overview-only" type="button" data-ui-action="launch_client_dispatch" aria-label="Запустить клиент" title="Запустить клиент" disabled>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
@@ -108,26 +131,6 @@
           <div id="fixtureBanner" class="fixture-banner">
             Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.
           </div>
-          <div class="dev-operator-strip" aria-label="Настройки web preview">
-            <label class="input state-picker">
-              <span>Источник</span>
-              <select id="sourcePicker" aria-label="Источник данных">
-                <option value="fixture">демо</option>
-                <option value="live">live только чтение</option>
-              </select>
-            </label>
-            <label class="input state-picker">
-              <span>Демо</span>
-              <select id="statePicker" aria-label="Демо-состояние">
-                <option value="healthy">здорово</option>
-                <option value="degraded">деградация</option>
-                <option value="down">недоступно</option>
-                <option value="stale">устарело</option>
-                <option value="unknown">неизвестно</option>
-                <option value="integration_failure">ошибка интеграции</option>
-              </select>
-            </label>
-          </div>
 
           <div class="grid overview-top">
           <section class="card system-card">
@@ -152,7 +155,7 @@
               <span id="managedSegment">Управляемый</span>
               <span id="stableSegment">Стабильный</span>
             </div>
-            <div class="overview-utility-strip" aria-label="Служебные действия обзора">
+            <div class="overview-utility-strip" aria-label="Статусы и быстрые проверки обзора">
               <button id="healthcheckAction" class="button ghost live-action overview-only" type="button" data-ui-action="refresh_health_detail">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Проверка здоровья</span>
@@ -179,13 +182,13 @@
                 <img class="ui-icon tile-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
                 <span>Проверить работу</span>
               </button>
-              <button id="stableModeAction" class="action-tile secondary-action-tile live-action" type="button" data-ui-action="set_mode_stable">
-                <img class="ui-icon tile-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
-                <span>Стабильный режим</span>
-              </button>
-              <button class="action-tile secondary-action-tile" type="button" disabled>
+              <a class="action-tile secondary-action-tile diagnostics-nav-action" href="?screen=diagnostics" data-screen-link="diagnostics">
                 <img class="ui-icon tile-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
                 <span>Открыть диагностику</span>
+              </a>
+              <button id="stableModeAction" class="action-tile secondary-action-tile live-action quiet-mode-action" type="button" data-ui-action="set_mode_stable" hidden>
+                <img class="ui-icon tile-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Стабильный режим</span>
               </button>
             </div>
           </section>

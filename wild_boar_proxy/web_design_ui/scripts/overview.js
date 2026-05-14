@@ -599,14 +599,27 @@ function validateSnapshot(snapshot) {
 function snapshotNotice(snapshot) {
   if (snapshot.source === "live_readonly") {
     if (snapshot.status !== "ok") {
-      return "Ошибка интеграции live only-read. Предыдущие healthy-данные не переиспользуются.";
+      return "Live-readonly недоступен. Предыдущие healthy-данные не используются.";
     }
     if (snapshot.has_warnings) {
-      return `Live-просмотр только для чтения с предупреждениями. ${warningSummary(snapshot.warnings || [])}`;
+      return `Live-readonly с предупреждениями. ${warningSummary(snapshot.warnings || [])}`;
     }
-    return "Live-просмотр только для чтения. Истина runtime приходит из строгих пакетов команд.";
+    return "Live-readonly. Экран открыт без команд на изменение.";
   }
-  return snapshot.fixture_notice || "Только демо-просмотр. Команды не выполняются, runtime-файлы не читаются.";
+  const state = canonicalState(snapshot.state_id || snapshot.ui_state || "healthy");
+  if (state === "stale") {
+    return "Данные устарели. Требуется обновление.";
+  }
+  if (state === "down") {
+    return "Демо-режим. Недоступное состояние показано как ошибка, а не как успех.";
+  }
+  if (state === "degraded") {
+    return "Демо-режим. Деградация выделена отдельно от рабочего состояния.";
+  }
+  if (state === "integration_failure") {
+    return "Демо-режим. Ошибка интеграции не использует предыдущие healthy-данные.";
+  }
+  return "Демо-режим. Данные не являются runtime truth.";
 }
 
 function warningSummary(warnings) {
@@ -1497,9 +1510,7 @@ function renderAccountsSnapshot(snapshot) {
   document.getElementById("brandCaption").textContent = source === "live"
     ? "аккаунты · live только чтение"
     : "аккаунты · демо-просмотр";
-  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
-    ? "Обновить live"
-    : "Обновить демо";
+  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
   setSourceCopy(source);
 
   const banner = document.getElementById("accountsBanner");
@@ -1553,9 +1564,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   document.getElementById("brandCaption").textContent = source === "live"
     ? "API-подключения · список маршрутов"
     : "API-подключения · демо";
-  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
-    ? "Обновить live"
-    : "Обновить демо";
+  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
   setSourceCopy(source);
 
   const banner = document.getElementById("apiConnectionsBanner");
@@ -1957,9 +1966,7 @@ function renderSnapshot(snapshot) {
     ? "live только чтение"
     : "демо-просмотр UI";
   setSourceCopy(source);
-  document.getElementById("refreshFixture").lastElementChild.textContent = source === "live"
-    ? "Обновить live"
-    : "Обновить демо";
+  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
 
   const runtimeChip = document.getElementById("runtimeChip");
   setClassName(runtimeChip, "chip", visualState);
