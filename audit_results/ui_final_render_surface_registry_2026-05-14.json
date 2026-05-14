@@ -108,7 +108,7 @@
     },
     {
       "screen_id": "03_account_detail_drawer",
-      "final_status": "partial",
+      "final_status": "implemented",
       "truth_sources": [
         "accounts list --json"
       ],

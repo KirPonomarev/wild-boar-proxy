@@ -1,0 +1,68 @@
+{
+  "contour_id": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER",
+  "date": "2026-05-14",
+  "branch": "codex/external-agent-lab-isolated",
+  "scope": "web_design_ui_action_result_surface_only",
+  "final_verdict": "PASS",
+  "implementation": {
+    "html_surface": "wild_boar_proxy/web_design_ui/index.html#onboardingResultFlow",
+    "renderer": "wild_boar_proxy/web_design_ui/scripts/overview.js#setActionPanel/renderOnboardingResultFlow",
+    "styles": "wild_boar_proxy/web_design_ui/styles/overview.css#onboarding-result-flow",
+    "tests": "tests/test_web_design_ui.py#test_onboarding_result_flow_renders_reserve_first_without_active_claim"
+  },
+  "command_surface": {
+    "browser_request_shape_changed": false,
+    "adapter_command_changed": false,
+    "new_ui_action_added": false,
+    "forbidden_browser_fields_added": [],
+    "accepted_action": "onboard_account"
+  },
+  "truth_rules": {
+    "green_requires_ui_state_success": true,
+    "green_requires_final_outcome_admitted": true,
+    "green_requires_reserve_first_proven": true,
+    "green_requires_selected_backend_id": true,
+    "claims_active_routing": false,
+    "claims_auto_promotion": false,
+    "claims_runtime_truth": false
+  },
+  "safe_display_fields": [
+    "new_backend_ids",
+    "selected_backend_id",
+    "selection_status",
+    "reserve_first_proven",
+    "validate_outcome",
+    "sync_outcome"
+  ],
+  "verification": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui -q",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 -m json.tool audit_results/ui_final_render_package_completeness_matrix_2026-05-14.json; python3 -m json.tool audit_results/ui_final_screen_passports_2026-05-14.json; python3 -m json.tool audit_results/ui_final_render_surface_registry_2026-05-14.json",
+      "result": "PASS"
+    }
+  ],
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "id": "browser_js_url_blocked",
+      "status": "accepted",
+      "note": "Browser policy blocked javascript URL injection for visualizing synthetic action state; result-state coverage is VM-backed and static browser smoke covers page load/default hidden state."
+    }
+  ],
+  "next_contour": "ROLLOUT_SCALE_GATE_ADMISSION"
+}

@@ -134,7 +134,7 @@
     {
       "screen_id": "03_account_detail_drawer",
       "final_design_file": "screens/03_account_detail_drawer.png",
-      "implementation_status": "partial",
+      "implementation_status": "implemented",
       "repo_surfaces": [
         "wild_boar_proxy/web_design_command_adapter.py",
         "wild_boar_proxy/web_design_live_server.py",
@@ -380,9 +380,7 @@
         "demote_account",
         "retire_account"
       ],
-      "deferred_actions": [
-        "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
-      ],
+      "deferred_actions": [],
       "forbidden_actions": [
         "arbitrary path",
         "browser command_id",
@@ -396,9 +394,9 @@
       "direct_file_truth_allowed": false,
       "runtime_truth_claims_allowed": true,
       "desktop_transfer_status": "blocked_until_owner_approval",
-      "next_allowed_contour": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
       "notes": [
-        "Reserve-first modal states are implemented; standalone result screen is not."
+        "Reserve-first onboarding result flow is represented in the existing action result surface without a new command or standalone runtime screen."
       ]
     },
     {

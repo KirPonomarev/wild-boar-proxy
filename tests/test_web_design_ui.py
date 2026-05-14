@@ -557,6 +557,14 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn('id="actionOnboardingOutcome"', html)
         self.assertIn('id="actionOnboardingReserveProof"', html)
         self.assertIn('id="actionOnboardingBackend"', html)
+        self.assertIn('id="onboardingResultFlow"', html)
+        self.assertIn('id="onboardingResultBanner"', html)
+        self.assertIn('id="onboardingResultNewIds"', html)
+        self.assertIn('id="onboardingResultSelected"', html)
+        self.assertIn('id="onboardingResultReserveChip"', html)
+        self.assertIn('id="onboardingResultNextAction"', html)
+        self.assertIn("Result flow после onboarding", html)
+        self.assertIn("Автоповышение запрещено", js)
         self.assertIn("hold_account", js)
         self.assertIn("release_account", js)
         self.assertIn("account_id", js)
@@ -1070,6 +1078,185 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".action-ledger-row.blue", css)
         self.assertIn(".action-ledger-row.amber", css)
         self.assertIn(".action-ledger-row.red", css)
+        self.assertIn(".onboarding-result-flow", css)
+        self.assertIn(".onboarding-result-banner.green", css)
+        self.assertIn(".onboarding-state-row", css)
+
+    def test_onboarding_result_flow_renders_reserve_first_without_active_claim(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "onboardingResultFlow",
+  "onboardingResultModeChip",
+  "onboardingResultBanner",
+  "onboardingResultNewIds",
+  "onboardingResultSelected",
+  "onboardingResultSelectionChip",
+  "onboardingResultReserveChip",
+  "onboardingResultValidateChip",
+  "onboardingResultSyncChip",
+  "onboardingResultNextAction"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.onboardingResultModeChip.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "accounts", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=accounts" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account",
+  action_role: "account_onboarding",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+      human_message: "Onboarding owner packet emitted.",
+      next_action: "none",
+      changed_files: [],
+      onboarding: {
+        ui_state: "success",
+      final_outcome: "admitted",
+      selected_backend_id: "acct-new",
+      new_backend_ids: ["acct-new"],
+      reserve_first_proven: true,
+      selection_status: "selected_unique_backend",
+      pool_after_onboarding: "reserve",
+      active_routing_changed: false,
+      validate_outcome: "ok",
+      sync_outcome: "ok"
+    }
+  }
+});
+
+const serialized = JSON.stringify(elements);
+if (elements.onboardingResultFlow.hidden !== false) {
+  throw new Error("onboarding result flow must be visible for onboard_account");
+}
+if (elements.onboardingResultBanner.className !== "onboarding-result-banner green") {
+  throw new Error(`success banner must be green: ${elements.onboardingResultBanner.className}`);
+}
+if (!elements.onboardingResultBanner.textContent.includes("аккаунт добавлен в резерв")) {
+  throw new Error(`reserve-first success copy missing: ${elements.onboardingResultBanner.textContent}`);
+}
+if (elements.onboardingResultSelected.textContent !== "acct-new") {
+  throw new Error(`safe selected backend id missing: ${elements.onboardingResultSelected.textContent}`);
+}
+if (elements.onboardingResultReserveChip.textContent !== "true") {
+  throw new Error(`reserve proof chip missing: ${elements.onboardingResultReserveChip.textContent}`);
+}
+if (!elements.onboardingResultNextAction.textContent.includes("отдельным действием оператора")) {
+  throw new Error(`next action must keep promotion separate: ${elements.onboardingResultNextAction.textContent}`);
+}
+if (serialized.includes("Аккаунт активен") || serialized.includes("Аккаунт продвинут")) {
+  throw new Error(`onboarding result overclaimed active/promoted state: ${serialized}`);
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account",
+  action_role: "account_onboarding",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "Onboarding owner packet emitted.",
+    next_action: "user_action",
+    changed_files: [],
+    onboarding: {
+      ui_state: "needs_user_action",
+      final_outcome: "no_new_auth_detected",
+      selected_backend_id: "",
+      reserve_first_proven: false,
+      selection_status: "not_selected"
+    }
+  }
+});
+if (elements.onboardingResultBanner.className !== "onboarding-result-banner amber") {
+  throw new Error(`needs_user_action must be amber: ${elements.onboardingResultBanner.className}`);
+}
+if (elements.onboardingResultSelected.textContent !== "-") {
+  throw new Error("non-success onboarding must not show selected backend");
+}
+if (!elements.onboardingResultBanner.textContent.includes("не считается успешным")) {
+  throw new Error(`non-success copy must not be green: ${elements.onboardingResultBanner.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_action_ledger_rendering_executes_status_mapping(self) -> None:
         script = r"""

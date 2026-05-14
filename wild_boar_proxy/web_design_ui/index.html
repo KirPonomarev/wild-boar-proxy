@@ -290,6 +290,48 @@
             <div>Доказательство резерва</div><div id="actionOnboardingReserveProof">-</div>
             <div>Выбранный backend</div><div id="actionOnboardingBackend">-</div>
           </div>
+          <section id="onboardingResultFlow" class="onboarding-result-flow" aria-label="Result flow добавления аккаунта" hidden>
+            <div class="onboarding-result-head">
+              <div>
+                <div class="eyebrow">Добавление аккаунта</div>
+                <h3>Result flow после onboarding</h3>
+                <p>Отображается только из результата <span class="mono-value">onboard_account</span>; автоповышение не выполняется.</p>
+              </div>
+              <span id="onboardingResultModeChip" class="chip neutral"><span class="dot"></span><span>reserve-first</span></span>
+            </div>
+            <div id="onboardingResultBanner" class="onboarding-result-banner neutral">
+              Результат подключения ещё не получен.
+            </div>
+            <div class="onboarding-result-grid">
+              <section class="onboarding-result-card">
+                <div class="eyebrow">Итог выполнения</div>
+                <div class="onboarding-result-kv">
+                  <div>new_backend_ids</div><div id="onboardingResultNewIds">-</div>
+                  <div>selected_backend_id</div><div id="onboardingResultSelected">-</div>
+                  <div>selection_status</div><div><span id="onboardingResultSelectionChip" class="mini-pill neutral">-</span></div>
+                  <div>reserve_first_enforced</div><div><span id="onboardingResultReserveChip" class="mini-pill neutral">-</span></div>
+                  <div>validate outcome</div><div><span id="onboardingResultValidateChip" class="mini-pill neutral">-</span></div>
+                  <div>sync outcome</div><div><span id="onboardingResultSyncChip" class="mini-pill neutral">-</span></div>
+                </div>
+              </section>
+              <section class="onboarding-result-card">
+                <div class="eyebrow">Другие состояния</div>
+                <div class="onboarding-state-stack">
+                  <div class="onboarding-state-row neutral"><span class="round-icon neutral">i</span><div><strong>no_new_auth_detected</strong><small>не success</small></div><span class="mini-pill neutral">neutral</span></div>
+                  <div class="onboarding-state-row amber"><span class="round-icon amber">!</span><div><strong>ambiguous</strong><small>требует оператора</small></div><span class="mini-pill amber">warning</span></div>
+                  <div class="onboarding-state-row red"><span class="round-icon red">!</span><div><strong>validation failed</strong><small>не active routing</small></div><span class="mini-pill red">failed</span></div>
+                  <div class="onboarding-state-row red"><span class="round-icon red">!</span><div><strong>status proof failed</strong><small>не зелёный результат</small></div><span class="mini-pill red">blocked</span></div>
+                </div>
+              </section>
+            </div>
+            <div class="onboarding-next-action">
+              <div>
+                <div class="eyebrow">Следующее действие</div>
+                <p id="onboardingResultNextAction">Аккаунт находится в резервном пуле.</p>
+              </div>
+              <button class="button small disabled" type="button" disabled>Проверка отдельным действием</button>
+            </div>
+          </section>
           <div class="action-ledger-head">
             <div>
               <div class="card-title">Лента действий</div>

@@ -795,10 +795,109 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionOnboardingOutcome", onboarding.final_outcome || "-");
   text("actionOnboardingReserveProof", onboarding.reserve_first_proven === true ? "доказано" : (onboarding.ui_state || "-"));
   text("actionOnboardingBackend", onboarding.selected_backend_id || "-");
+  renderOnboardingResultFlow(payload, onboarding);
   recordActionLedgerEntry(payload, refreshState, display, changedFiles);
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
+}
+
+function renderOnboardingResultFlow(payload, onboarding) {
+  const flow = document.getElementById("onboardingResultFlow");
+  if (!flow) {
+    return;
+  }
+  const isOnboarding = payload.ui_action === "onboard_account";
+  flow.hidden = !isOnboarding;
+  if (!isOnboarding) {
+    return;
+  }
+
+  const model = onboardingResultModel(onboarding);
+  const chip = document.getElementById("onboardingResultModeChip");
+  chip.className = `chip ${model.visual}`;
+  chip.lastElementChild.textContent = model.modeLabel;
+  const banner = document.getElementById("onboardingResultBanner");
+  banner.className = `onboarding-result-banner ${model.visual}`;
+  banner.textContent = model.banner;
+  text("onboardingResultNewIds", model.newBackendIds);
+  text("onboardingResultSelected", model.selectedBackendId);
+  setMiniPill("onboardingResultSelectionChip", model.selectionStatus, model.selectionVisual);
+  setMiniPill("onboardingResultReserveChip", model.reserveFirst, model.reserveVisual);
+  setMiniPill("onboardingResultValidateChip", model.validateOutcome, model.validateVisual);
+  setMiniPill("onboardingResultSyncChip", model.syncOutcome, model.syncVisual);
+  text("onboardingResultNextAction", model.nextAction);
+}
+
+function onboardingResultModel(onboarding) {
+  const uiState = onboarding.ui_state || "unknown_outcome";
+  const finalOutcome = onboarding.final_outcome || "unknown_outcome";
+  const reserveFirst = onboarding.reserve_first_proven === true;
+  const selectedBackendId = onboarding.selected_backend_id || "-";
+  const success = uiState === "success" && finalOutcome === "admitted" && reserveFirst && selectedBackendId !== "-";
+  const newBackendIds = Array.isArray(onboarding.new_backend_ids) && onboarding.new_backend_ids.length
+    ? `[${onboarding.new_backend_ids.join(", ")}]`
+    : `[${selectedBackendId}]`;
+  const visual = success
+    ? "green"
+    : (uiState === "needs_user_action" ? "amber" : (uiState === "command_error" ? "red" : "neutral"));
+  const banner = success
+    ? "Reserve-only success: аккаунт добавлен в резерв. Автоповышение запрещено."
+    : onboardingResultBanner(uiState, finalOutcome);
+  return {
+    visual,
+    modeLabel: success ? "reserve-first" : uiStateLabel(uiState),
+    banner,
+    newBackendIds: success ? newBackendIds : "-",
+    selectedBackendId,
+    selectionStatus: onboarding.selection_status || "-",
+    selectionVisual: success ? "green" : (uiState === "needs_user_action" ? "amber" : "neutral"),
+    reserveFirst: reserveFirst ? "true" : "false",
+    reserveVisual: reserveFirst ? "green" : "amber",
+    validateOutcome: onboarding.validate_outcome || "-",
+    validateVisual: onboarding.validate_outcome === "ok" ? "green" : (onboarding.validate_outcome ? "amber" : "neutral"),
+    syncOutcome: onboarding.sync_outcome || "-",
+    syncVisual: onboarding.sync_outcome === "ok" ? "green" : (onboarding.sync_outcome ? "blue" : "neutral"),
+    nextAction: onboardingNextAction(uiState, finalOutcome, success)
+  };
+}
+
+function onboardingResultBanner(uiState, finalOutcome) {
+  if (uiState === "needs_user_action") {
+    return `${finalOutcome}: подключение не считается успешным без действия оператора.`;
+  }
+  if (uiState === "command_error") {
+    return `${finalOutcome}: команда не дала безопасный reserve-first успех.`;
+  }
+  return "Результат подключения недостаточен для зелёного вывода; UI не достраивает успех.";
+}
+
+function onboardingNextAction(uiState, finalOutcome, success) {
+  if (success) {
+    return "Аккаунт находится в резервном пуле. Проверка или продвижение возможны только отдельным действием оператора.";
+  }
+  if (uiState === "needs_user_action") {
+    return "Нужно действие оператора: проверьте источник авторизации и повторите существующий flow без новых browser payload.";
+  }
+  if (uiState === "command_error") {
+    return "Исправьте причину ошибки и повторите существующий onboard flow; active routing не менялся.";
+  }
+  return `Состояние ${finalOutcome} не admitted как успех; требуется новый packet truth или действие оператора.`;
+}
+
+function uiStateLabel(uiState) {
+  return {
+    success: "reserve-first",
+    needs_user_action: "operator action",
+    command_error: "failed",
+    unknown_outcome: "unknown"
+  }[uiState] || uiState;
+}
+
+function setMiniPill(id, label, visual) {
+  const node = document.getElementById(id);
+  node.className = `mini-pill ${visual || "neutral"}`;
+  node.textContent = label || "-";
 }
 
 function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {

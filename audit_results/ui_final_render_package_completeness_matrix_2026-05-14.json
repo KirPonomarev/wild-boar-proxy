@@ -20,8 +20,8 @@
   "screen_count_matches_manifest": true,
   "status_counts": {
     "reference-only": 4,
-    "implemented": 8,
-    "partial": 8,
+    "implemented": 9,
+    "partial": 7,
     "admission-required": 10,
     "inert-deferred": 4,
     "desktop-only-after-owner-approval": 1
@@ -220,7 +220,7 @@
         1600,
         1000
       ],
-      "final_status": "partial",
+      "final_status": "implemented",
       "current_web_surfaces": [
         "accounts"
       ],
@@ -524,9 +524,7 @@
         "demote_account",
         "retire_account"
       ],
-      "deferred_actions_or_contours": [
-        "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
-      ],
+      "deferred_actions_or_contours": [],
       "forbidden_browser_payloads_or_claims": [
         "arbitrary path",
         "browser command_id",
@@ -540,8 +538,8 @@
       "desktop_owner_approval_required": false,
       "direct_file_truth_allowed": false,
       "runtime_truth_claims_allowed": true,
-      "implementation_note": "Reserve-first modal states are implemented; standalone result screen is not.",
-      "next_allowed_contour": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
+      "implementation_note": "Reserve-first onboarding result flow is represented in the existing action result surface without a new command or standalone runtime screen.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
     },
     {
       "screen_id": "10_first_run_setup_wizard",
