@@ -959,17 +959,21 @@
               <button class="button small disabled" type="button" disabled title="Dangerous operations require owner approval.">missing surface</button>
             </section>
 
-            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="about">
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="about" data-about-surface="readonly-metadata">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
-                <div><h3>About</h3><p>Сведения о приложении без package verification.</p></div>
+                <div><h3>About</h3><p>Readonly metadata, not release proof.</p></div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>product</span><strong>Wild Boar Proxy</strong></div>
+                <div><span>role / UI</span><strong>local control layer · web design preview</strong></div>
                 <div><span>license</span><strong>AGPL-3.0-or-later</strong></div>
+                <div><span>version / build</span><strong>not packaged · local preview not published</strong></div>
+                <div><span>source</span><strong>not exposed to browser UI</strong></div>
+                <div><span>engine</span><strong>CLIProxyAPI boundary · desktop owner-gated</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="About does not read runtime state or package metadata.">readonly</button>
+              <button class="button small disabled" type="button" disabled title="About does not read runtime state, git metadata, or package metadata.">readonly metadata</button>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="data-installer">

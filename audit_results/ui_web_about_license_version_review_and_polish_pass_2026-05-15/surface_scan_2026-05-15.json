@@ -1,0 +1,53 @@
+{
+  "contour": "UI_WEB_ABOUT_LICENSE_VERSION_REVIEW_AND_POLISH_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "264d5073c84c3e24f4891f5db78b525c41d0fdaa",
+  "scope": {
+    "changed_ui_files": [
+      "wild_boar_proxy/web_design_ui/index.html"
+    ],
+    "changed_test_files": [
+      "tests/test_web_design_ui.py"
+    ],
+    "runtime_touched": false,
+    "command_adapter_touched": false,
+    "allowlist_touched": false,
+    "desktop_touched": false
+  },
+  "about_surface": {
+    "surface": "Settings/About",
+    "readonly": true,
+    "product": "Wild Boar Proxy",
+    "role": "local control layer",
+    "ui_mode": "web design preview",
+    "license": "AGPL-3.0-or-later",
+    "version_build": "not packaged / local preview not published",
+    "source_revision": "not exposed to browser UI",
+    "engine_boundary": "CLIProxyAPI boundary",
+    "desktop_status": "owner-gated"
+  },
+  "forbidden_claims_checked": [
+    "v1.0",
+    "production ready",
+    "desktop ready",
+    "release build",
+    "certified",
+    "support available",
+    "shipped app",
+    "stable release",
+    "CLIProxyAPI licensed as our product",
+    "git rev-parse",
+    "api/about",
+    "api/version"
+  ],
+  "private_external_reference_trace": {
+    "repo_safe": true,
+    "forbidden_terms_present": false
+  },
+  "scan_findings": {
+    "forbidden_claim_matches": "Only negative assertions in tests and forbidden-claim checklist entries in this audit packet matched the claim scan. No forbidden About claim was added to UI markup or runtime JavaScript.",
+    "private_external_reference_matches": "None"
+  },
+  "verdict": "PASS"
+}

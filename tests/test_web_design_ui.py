@@ -895,6 +895,16 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Data / Installer", settings_markup)
         self.assertIn("Wild Boar Proxy", settings_markup)
         self.assertIn("AGPL-3.0-or-later", settings_markup)
+        self.assertIn("Readonly metadata, not release proof.", settings_markup)
+        self.assertIn("local control layer", settings_markup)
+        self.assertIn("web design preview", settings_markup)
+        self.assertIn("not packaged", settings_markup)
+        self.assertIn("local preview not published", settings_markup)
+        self.assertIn("not exposed to browser UI", settings_markup)
+        self.assertIn("CLIProxyAPI boundary", settings_markup)
+        self.assertIn("desktop owner-gated", settings_markup)
+        self.assertIn("readonly metadata", settings_markup)
+        self.assertIn("About does not read runtime state, git metadata, or package metadata.", settings_markup)
         self.assertIn("Демо-режим настроек", settings_markup + js)
         self.assertIn("admitted layout, не runtime config truth", settings_markup + js)
         self.assertIn("Live-readonly настройки недоступны", js)
@@ -978,6 +988,16 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
             "third-party notices complete",
             "license audit passed",
             "packaging contents verified",
+            "production ready",
+            "release build",
+            "certified",
+            "support available",
+            "shipped app",
+            "stable release",
+            "cliproxyapi licensed as our product",
+            "git rev-parse",
+            "api/about",
+            "api/version",
         ]:
             self.assertNotIn(forbidden_claim, settings_markup.lower())
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
