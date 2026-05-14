@@ -1,0 +1,304 @@
+{
+  "viewport": "1600x1000",
+  "generated_at": "2026-05-14T22:17:59.026Z",
+  "metrics": [
+    {
+      "screen": "overview",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 902,
+      "activeHeight": 714,
+      "primaryVisibleCount": 1,
+      "primaryVisibleLabels": [
+        "Запустить клиент"
+      ],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 15,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Обзор",
+          "cw": 725,
+          "sw": 725,
+          "ch": 42,
+          "sh": 45
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "overview"
+    },
+    {
+      "screen": "accounts",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 667,
+      "activeHeight": 499,
+      "primaryVisibleCount": 1,
+      "primaryVisibleLabels": [
+        "Добавить аккаунт"
+      ],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 13,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Аккаунты",
+          "cw": 581,
+          "sw": 581,
+          "ch": 42,
+          "sh": 45
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "accounts"
+    },
+    {
+      "screen": "api-connections",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 705,
+      "activeHeight": 537,
+      "primaryVisibleCount": 0,
+      "primaryVisibleLabels": [],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 9,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "API-подключения",
+          "cw": 927,
+          "sw": 927,
+          "ch": 42,
+          "sh": 45
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "api-connections"
+    },
+    {
+      "screen": "diagnostics",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 929,
+      "activeHeight": 805,
+      "primaryVisibleCount": 0,
+      "primaryVisibleLabels": [],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 20,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Диагностика",
+          "cw": 682,
+          "sw": 682,
+          "ch": 36,
+          "sh": 39
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "diagnostics"
+    },
+    {
+      "screen": "settings",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 844,
+      "activeHeight": 676,
+      "primaryVisibleCount": 0,
+      "primaryVisibleLabels": [],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 15,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Настройки",
+          "cw": 927,
+          "sw": 927,
+          "ch": 42,
+          "sh": 45
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "settings"
+    },
+    {
+      "screen": "setup",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 915,
+      "activeHeight": 747,
+      "primaryVisibleCount": 0,
+      "primaryVisibleLabels": [],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 16,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Первичная настройка",
+          "cw": 927,
+          "sw": 927,
+          "ch": 42,
+          "sh": 45
+        },
+        {
+          "tag": "button",
+          "id": "",
+          "cls": "button small disabled",
+          "text": "Выбрать клиента · disabled",
+          "cw": 90,
+          "sw": 90,
+          "ch": 34,
+          "sh": 41
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "setup"
+    },
+    {
+      "screen": "select-client",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 942,
+      "mainBottom": 971,
+      "activeBottom": 934,
+      "activeHeight": 766,
+      "primaryVisibleCount": 0,
+      "primaryVisibleLabels": [],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 13,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Выбор клиента",
+          "cw": 927,
+          "sw": 927,
+          "ch": 42,
+          "sh": 45
+        },
+        {
+          "tag": "strong",
+          "id": "",
+          "cls": "candidate-path",
+          "text": "/Applications/Codex Custom.app",
+          "cw": 143,
+          "sw": 198,
+          "ch": 14,
+          "sh": 14
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": false,
+      "activeBeyondTarget": false,
+      "requested": "select-client"
+    },
+    {
+      "screen": "import-existing",
+      "documentScrollWidth": 1600,
+      "documentScrollHeight": 1000,
+      "viewportWidth": 1600,
+      "viewportHeight": 1000,
+      "mainClientHeight": 942,
+      "mainScrollHeight": 1150,
+      "mainBottom": 971,
+      "activeBottom": 1147,
+      "activeHeight": 959,
+      "primaryVisibleCount": 1,
+      "primaryVisibleLabels": [
+        "Применение отключено"
+      ],
+      "visibleInputs": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 6,
+      "overflowText": [
+        {
+          "tag": "h1",
+          "id": "mainTitle",
+          "cls": "",
+          "text": "Импорт",
+          "cw": 927,
+          "sw": 927,
+          "ch": 42,
+          "sh": 45
+        }
+      ],
+      "hasHorizontalOverflow": false,
+      "hasVerticalOverflow": false,
+      "mainOverflows": true,
+      "activeBeyondTarget": true,
+      "requested": "import-existing"
+    }
+  ]
+}
