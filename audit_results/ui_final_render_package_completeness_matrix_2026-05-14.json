@@ -1,0 +1,1609 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_RENDER_PACKAGE_COMPLETENESS_RECONCILIATION",
+  "date": "2026-05-14",
+  "head_at_start": "9cc31fc",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md",
+    "README.md"
+  ],
+  "design_package_role": "visual_inventory_only_not_runtime_or_admission_truth",
+  "browser_payload_boundary": "ui_action plus bounded structured payload only",
+  "desktop_approval_granted": false,
+  "screen_count": 35,
+  "expected_screen_count": 35,
+  "screen_count_matches_manifest": true,
+  "status_counts": {
+    "reference-only": 4,
+    "implemented": 8,
+    "partial": 8,
+    "admission-required": 10,
+    "inert-deferred": 4,
+    "desktop-only-after-owner-approval": 1
+  },
+  "current_repo_screens_array": [
+    "overview",
+    "accounts",
+    "api-connections",
+    "diagnostics",
+    "settings",
+    "setup",
+    "select-client",
+    "import-existing"
+  ],
+  "current_static_data_ui_actions": [
+    "launch_client_dispatch",
+    "onboard_account",
+    "export_diagnostics",
+    "refresh_health_detail",
+    "stable_repair_plan",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke",
+    "set_mode_stable"
+  ],
+  "stale_id_reconciliation": [
+    {
+      "old_id": "02_setup_client",
+      "final_id": "10_first_run_setup_wizard",
+      "resolution": "old setup passport superseded by final package setup wizard id"
+    },
+    {
+      "old_id": "03_select_codex_client",
+      "final_id": "11_select_client_screen",
+      "resolution": "old select-client passport superseded by final package client selection id"
+    },
+    {
+      "old_id": "08_import_existing",
+      "final_id": "12_import_existing_wizard",
+      "resolution": "old import passport superseded by final package import wizard id"
+    },
+    {
+      "old_id": "04_accounts",
+      "final_id": "02_accounts_table",
+      "resolution": "old account screen id reconciled to final accounts table id; account detail drawer is separate 03 screen"
+    },
+    {
+      "old_id": "diagnostics_screen",
+      "final_id": "04_diagnostics_signal_detail",
+      "resolution": "current diagnostics surface maps to signal detail; live history/export result remain separate partial/admission items"
+    }
+  ],
+  "screens": [
+    {
+      "screen_id": "00_brand_lockup",
+      "screen_number": "00",
+      "title": "Brand lockup",
+      "subtitle": "System cover",
+      "final_design_file": "screens/00_brand_lockup.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "reference-only",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Identity/token reference only; no runtime behavior.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "screen_number": "01",
+      "title": "Обзор",
+      "subtitle": "Состояние локального прокси, клиента Codex и пула аккаунтов.",
+      "final_design_file": "screens/01_overview_dashboard.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "overview"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "status --json",
+        "healthcheck --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_ui_actions": [
+        "refresh_health_detail",
+        "export_diagnostics",
+        "stable_repair_plan",
+        "sync_runtime",
+        "set_mode_stable",
+        "set_mode_managed",
+        "launch_smoke",
+        "launch_client_dispatch"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Core overview surface exists and is visually transferred.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "02_accounts_table",
+      "screen_number": "02",
+      "title": "Аккаунты",
+      "subtitle": "Пул аккаунтов, статусы проверки и распределение по режимам.",
+      "final_design_file": "screens/02_accounts_table.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "accounts"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Accounts table and lifecycle action gates exist.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "03_account_detail_drawer",
+      "screen_number": "03",
+      "title": "Аккаунты",
+      "subtitle": "Детали выбранного аккаунта открываются как drawer без потери контекста таблицы.",
+      "final_design_file": "screens/03_account_detail_drawer.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "accounts"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_ACCOUNT_DETAIL_DRAWER_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Data/actions exist on accounts table; final detail drawer itself is not implemented.",
+      "next_allowed_contour": "UI_FINAL_ACCOUNT_DETAIL_DRAWER_TRANSFER"
+    },
+    {
+      "screen_id": "04_diagnostics_signal_detail",
+      "screen_number": "04",
+      "title": "Диагностика",
+      "subtitle": "Список сигналов слева, подробности выбранного объекта справа.",
+      "final_design_file": "screens/04_diagnostics_signal_detail.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json",
+        "healthcheck --json for refresh/detail only"
+      ],
+      "allowed_ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Diagnostics master/detail and chart/result regions exist, with fixture-only history where live history is deferred.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "05_diagnostics_live_history",
+      "screen_number": "05",
+      "title": "Журнал диагностики",
+      "subtitle": "Детальная шкала событий строится только из bounded JSON history packet.",
+      "final_design_file": "screens/05_diagnostics_live_history.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "future bounded diagnostics history JSON packet"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Live history visualization requires a bounded history packet; raw logs are forbidden.",
+      "next_allowed_contour": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION"
+    },
+    {
+      "screen_id": "06_diagnostics_export_result",
+      "screen_number": "06",
+      "title": "Экспорт диагностики",
+      "subtitle": "Результат support bundle не является runtime health truth.",
+      "final_design_file": "screens/06_diagnostics_export_result.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "diagnostics",
+        "actionPanel"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "allowed_ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_DIAGNOSTICS_EXPORT_RESULT_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Export result details exist in diagnostics/action result regions; final standalone result composition remains incomplete.",
+      "next_allowed_contour": "UI_FINAL_DIAGNOSTICS_EXPORT_RESULT_TRANSFER"
+    },
+    {
+      "screen_id": "07_action_command_ledger",
+      "screen_number": "07",
+      "title": "Command ledger",
+      "subtitle": "Единая панель последних действий и результатов команд.",
+      "final_design_file": "screens/07_action_command_ledger.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "actionPanel"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "UI action command packet result"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_ACTION_COMMAND_LEDGER_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Current action panel normalizes last result; full ledger/history screen is not implemented.",
+      "next_allowed_contour": "UI_FINAL_ACTION_COMMAND_LEDGER_TRANSFER"
+    },
+    {
+      "screen_id": "08_global_error_integration_failure",
+      "screen_number": "08",
+      "title": "Ошибка интеграции",
+      "subtitle": "Системные ошибки показываются как явные состояния, а не случайный текст.",
+      "final_design_file": "screens/08_global_error_integration_failure.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "overview",
+        "accounts",
+        "api-connections",
+        "diagnostics",
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "fixture/live command integration failure packets"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Integration failure and stale/error state surfaces are represented.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "09_onboarding_result_flow",
+      "screen_number": "09",
+      "title": "Добавление аккаунта",
+      "subtitle": "Result flow после onboarding: reserve-first, без auto-promote.",
+      "final_design_file": "screens/09_onboarding_result_flow.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "accounts",
+        "onboardOverlay",
+        "actionPanel"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts onboard --json",
+        "accounts list --json refresh"
+      ],
+      "allowed_ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Reserve-first modal states are implemented; standalone result screen is not.",
+      "next_allowed_contour": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
+    },
+    {
+      "screen_id": "10_first_run_setup_wizard",
+      "screen_number": "10",
+      "title": "Первичная настройка",
+      "subtitle": "Безопасная подготовка локального контура без прямых файловых операций из web UI.",
+      "final_design_file": "screens/10_first_run_setup_wizard.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "inert-deferred",
+      "current_web_surfaces": [
+        "setup"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Visual shell exists and remains inert; setup readiness is not claimed.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "11_select_client_screen",
+      "screen_number": "11",
+      "title": "Выбор клиента",
+      "subtitle": "Клиент выбирается только из command-owned candidates.",
+      "final_design_file": "screens/11_select_client_screen.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "inert-deferred",
+      "current_web_surfaces": [
+        "select-client"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Visual shell exists and remains inert; candidate discovery/selection is not admitted.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "12_import_existing_wizard",
+      "screen_number": "12",
+      "title": "Импорт существующей настройки",
+      "subtitle": "Legacy setup импортируется как транзакционный wizard с preview и rollback semantics.",
+      "final_design_file": "screens/12_import_existing_wizard.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "inert-deferred",
+      "current_web_surfaces": [
+        "import-existing"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Visual shell exists and remains inert; import execution is not admitted.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "13_installer_data_layout",
+      "screen_number": "13",
+      "title": "Installer / Data layout",
+      "subtitle": "Инициализация данных и permissions как отдельный setup/settings subflow.",
+      "final_design_file": "screens/13_installer_data_layout.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "desktop-only-after-owner-approval",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": true,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Installer/data layout implies local path/native filesystem mediation and must wait for desktop admission/command contract.",
+      "next_allowed_contour": "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL"
+    },
+    {
+      "screen_id": "14_settings_main_hub",
+      "screen_number": "14",
+      "title": "Настройки",
+      "subtitle": "Hub настроек: Runtime, Client, Accounts, API routes, Diagnostics, Security, Advanced, About.",
+      "final_design_file": "screens/14_settings_main_hub.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Settings hub exists as readonly plus safe actions/deferred controls.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "15_settings_runtime_mode",
+      "screen_number": "15",
+      "title": "Runtime / Mode",
+      "subtitle": "Mode preferences с preflight, apply result и disabled states.",
+      "final_design_file": "screens/15_settings_runtime_mode.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "mode get --json",
+        "mode set stable/managed --json via ui_action"
+      ],
+      "allowed_ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Runtime mode controls are present inside settings hub; dedicated sub-screen not implemented.",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+    },
+    {
+      "screen_id": "16_settings_client_launch",
+      "screen_number": "16",
+      "title": "Client / Launch",
+      "subtitle": "client path/status, launch preconditions и bounded launch dispatch.",
+      "final_design_file": "screens/16_settings_client_launch.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "launch client dispatch metadata and ui_action"
+      ],
+      "allowed_ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Launch client action is bounded dispatch; selection/path configuration remains deferred.",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+    },
+    {
+      "screen_id": "17_settings_accounts_policy",
+      "screen_number": "17",
+      "title": "Accounts policy",
+      "subtitle": "Отображение meanings и policy без direct config write.",
+      "final_design_file": "screens/17_settings_accounts_policy.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "settings",
+        "accounts"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Policy/pool state is visible through account surfaces; policy mutation is not admitted.",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+    },
+    {
+      "screen_id": "18_settings_diagnostics_privacy",
+      "screen_number": "18",
+      "title": "Diagnostics / Privacy",
+      "subtitle": "Правила diagnostics export, redaction и support bundle location.",
+      "final_design_file": "screens/18_settings_diagnostics_privacy.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "partial",
+      "current_web_surfaces": [
+        "settings",
+        "diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "allowed_ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Diagnostics/privacy copy and export action exist; privacy sub-screen is not implemented.",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+    },
+    {
+      "screen_id": "19_settings_advanced",
+      "screen_number": "19",
+      "title": "Advanced",
+      "subtitle": "Developer/operator surfaces and deferred dangerous actions.",
+      "final_design_file": "screens/19_settings_advanced.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "inert-deferred",
+      "current_web_surfaces": [
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Advanced settings are visible as deferred readonly controls only.",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+    },
+    {
+      "screen_id": "20_api_routes_list",
+      "screen_number": "20",
+      "title": "API-подключения",
+      "subtitle": "Route registry summary без raw config editor.",
+      "final_design_file": "screens/20_api_routes_list.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "api-connections"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "external-models routes list --json"
+      ],
+      "allowed_ui_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "API routes list exists with bounded safe route actions.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "21_api_route_detail",
+      "screen_number": "21",
+      "title": "Route detail",
+      "subtitle": "Route id, provider, model, secret_ref status и safe actions.",
+      "final_design_file": "screens/21_api_route_detail.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "api-connections"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "future/read-only route detail packet or existing profile packet"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_DETAIL_READONLY_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Route detail needs explicit readonly packet boundary before implementation.",
+      "next_allowed_contour": "API_ROUTE_DETAIL_READONLY_ADMISSION"
+    },
+    {
+      "screen_id": "22_api_route_remove_disabled",
+      "screen_number": "22",
+      "title": "Remove disabled route",
+      "subtitle": "Strong confirmation, disabled preflight, result, changed files.",
+      "final_design_file": "screens/22_api_route_remove_disabled.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "api-connections",
+        "confirmOverlay"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "external-models routes remove --json --route <route_id> after preflight"
+      ],
+      "allowed_ui_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "implementation_note": "Disabled-route removal confirmation/copy is bounded and implemented.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "23_api_route_builder_draft",
+      "screen_number": "23",
+      "title": "Route builder draft",
+      "subtitle": "Deferred дизайн create/update route через bounded builder.",
+      "final_design_file": "screens/23_api_route_builder_draft.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Design presence does not admit route create/update or raw route config editing.",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+    },
+    {
+      "screen_id": "24_secret_ref_selector",
+      "screen_number": "24",
+      "title": "Secret references",
+      "subtitle": "Выбор/проверка secret_ref без ввода или показа secret value.",
+      "final_design_file": "screens/24_secret_ref_selector.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "secret manager behavior",
+        "secret value display",
+        "shell",
+        "token entry",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Design presence does not admit secret selection, token entry, or secret manager behavior.",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+    },
+    {
+      "screen_id": "25_human_open_support_actions",
+      "screen_number": "25",
+      "title": "Human-open diagnostics",
+      "subtitle": "Открытие файлов/папок только как bounded human-open action.",
+      "final_design_file": "screens/25_human_open_support_actions.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Opening support locations/actions requires server-owned bounded references; browser arbitrary paths are forbidden.",
+      "next_allowed_contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION"
+    },
+    {
+      "screen_id": "26_runtime_attestation_detail",
+      "screen_number": "26",
+      "title": "Runtime attestation",
+      "subtitle": "Listener/models/responses/effective-mode/base-url checks with observed_at and stale status.",
+      "final_design_file": "screens/26_runtime_attestation_detail.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "RUNTIME_ATTESTATION_DETAIL_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Runtime attestation cannot be claimed without bounded JSON attestation packet.",
+      "next_allowed_contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION"
+    },
+    {
+      "screen_id": "27_recovery_center",
+      "screen_number": "27",
+      "title": "Recovery center",
+      "subtitle": "Stable repair dry-run/apply, target status, repair plan, apply result, rollback notes.",
+      "final_design_file": "screens/27_recovery_center.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "overview",
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "stable repair --dry-run --json for plan only"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "RECOVERY_CENTER_DRY_RUN_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "repair apply without separate admission",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Dry-run planning exists; apply-like recovery center actions remain deferred/admission-required.",
+      "next_allowed_contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION"
+    },
+    {
+      "screen_id": "28_rollout_scale_gate",
+      "screen_number": "28",
+      "title": "Rollout / Scale gate",
+      "subtitle": "Stage prove/advance evidence requirements, deferred advanced mode only.",
+      "final_design_file": "screens/28_rollout_scale_gate.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "ROLLOUT_SCALE_GATE_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "rollout advancement",
+        "runtime readiness overclaim",
+        "scale readiness claim",
+        "shell",
+        "stage proof claim",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Rollout scale gate cannot imply stage proof, scale readiness, pilot readiness, or rollout advancement from design.",
+      "next_allowed_contour": "ROLLOUT_SCALE_GATE_ADMISSION"
+    },
+    {
+      "screen_id": "29_evidence_packets",
+      "screen_number": "29",
+      "title": "Evidence packets",
+      "subtitle": "Read-only/support view of evidence packets and redaction status.",
+      "final_design_file": "screens/29_evidence_packets.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "api-connections"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "api route evidence command packet metadata only"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "EVIDENCE_PACKETS_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Evidence packet screen cannot directly read evidence files; needs bounded evidence index/packet contract.",
+      "next_allowed_contour": "EVIDENCE_PACKETS_ADMISSION"
+    },
+    {
+      "screen_id": "30_audit_activity_history",
+      "screen_number": "30",
+      "title": "Audit / Activity history",
+      "subtitle": "Operator actions, command packet summary, failure states, no secrets, no raw logs as truth.",
+      "final_design_file": "screens/30_audit_activity_history.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "AUDIT_ACTIVITY_HISTORY_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Activity history needs bounded JSON activity packet; raw logs are forbidden.",
+      "next_allowed_contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION"
+    },
+    {
+      "screen_id": "31_about_license_version",
+      "screen_number": "31",
+      "title": "About",
+      "subtitle": "Версии, лицензия, schema/build channel and support links.",
+      "final_design_file": "screens/31_about_license_version.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "reference-only",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "About/license/version can be readonly later; no current runtime behavior admitted.",
+      "next_allowed_contour": "UI_FINAL_ABOUT_LICENSE_READONLY_TRANSFER"
+    },
+    {
+      "screen_id": "32_state_surfaces_library",
+      "screen_number": "32",
+      "title": "State surfaces",
+      "subtitle": "Обязательные плашки и состояния для всех экранов.",
+      "final_design_file": "screens/32_state_surfaces_library.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "reference-only",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Component library only; informs state styling, not runtime truth.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "33_dropdowns_popovers_library",
+      "screen_number": "33",
+      "title": "Dropdowns / Popovers",
+      "subtitle": "Выпадашки, menus, filters и contextual row actions.",
+      "final_design_file": "screens/33_dropdowns_popovers_library.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "reference-only",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Component library only; no action/dropdown behavior admitted.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    },
+    {
+      "screen_id": "34_modals_confirmations_library",
+      "screen_number": "34",
+      "title": "Modals / Confirmations",
+      "subtitle": "Destructive, irreversible, missing surface and permission confirmations.",
+      "final_design_file": "screens/34_modals_confirmations_library.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "implemented",
+      "current_web_surfaces": [
+        "confirmOverlay",
+        "onboardOverlay"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Confirmation and onboarding modal library has been transferred to current modal surfaces.",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+    }
+  ]
+}

@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_RENDER_PACKAGE_COMPLETENESS_RECONCILIATION",
+  "date": "2026-05-14",
+  "purpose": "Explicit guardrail list for screens that must not be implemented by visual design presence alone.",
+  "screens": [
+    {
+      "screen_id": "13_installer_data_layout",
+      "screen_number": "13",
+      "title": "Installer / Data layout",
+      "subtitle": "Инициализация данных и permissions как отдельный setup/settings subflow.",
+      "final_design_file": "screens/13_installer_data_layout.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "desktop-only-after-owner-approval",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": true,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Installer/data layout implies local path/native filesystem mediation and must wait for desktop admission/command contract.",
+      "next_allowed_contour": "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL"
+    },
+    {
+      "screen_id": "21_api_route_detail",
+      "screen_number": "21",
+      "title": "Route detail",
+      "subtitle": "Route id, provider, model, secret_ref status и safe actions.",
+      "final_design_file": "screens/21_api_route_detail.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "api-connections"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "future/read-only route detail packet or existing profile packet"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_DETAIL_READONLY_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Route detail needs explicit readonly packet boundary before implementation.",
+      "next_allowed_contour": "API_ROUTE_DETAIL_READONLY_ADMISSION"
+    },
+    {
+      "screen_id": "23_api_route_builder_draft",
+      "screen_number": "23",
+      "title": "Route builder draft",
+      "subtitle": "Deferred дизайн create/update route через bounded builder.",
+      "final_design_file": "screens/23_api_route_builder_draft.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Design presence does not admit route create/update or raw route config editing.",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+    },
+    {
+      "screen_id": "24_secret_ref_selector",
+      "screen_number": "24",
+      "title": "Secret references",
+      "subtitle": "Выбор/проверка secret_ref без ввода или показа secret value.",
+      "final_design_file": "screens/24_secret_ref_selector.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "secret manager behavior",
+        "secret value display",
+        "shell",
+        "token entry",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Design presence does not admit secret selection, token entry, or secret manager behavior.",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+    },
+    {
+      "screen_id": "25_human_open_support_actions",
+      "screen_number": "25",
+      "title": "Human-open diagnostics",
+      "subtitle": "Открытие файлов/папок только как bounded human-open action.",
+      "final_design_file": "screens/25_human_open_support_actions.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Opening support locations/actions requires server-owned bounded references; browser arbitrary paths are forbidden.",
+      "next_allowed_contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION"
+    },
+    {
+      "screen_id": "26_runtime_attestation_detail",
+      "screen_number": "26",
+      "title": "Runtime attestation",
+      "subtitle": "Listener/models/responses/effective-mode/base-url checks with observed_at and stale status.",
+      "final_design_file": "screens/26_runtime_attestation_detail.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "RUNTIME_ATTESTATION_DETAIL_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Runtime attestation cannot be claimed without bounded JSON attestation packet.",
+      "next_allowed_contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION"
+    },
+    {
+      "screen_id": "27_recovery_center",
+      "screen_number": "27",
+      "title": "Recovery center",
+      "subtitle": "Stable repair dry-run/apply, target status, repair plan, apply result, rollback notes.",
+      "final_design_file": "screens/27_recovery_center.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "overview",
+        "settings"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "stable repair --dry-run --json for plan only"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "RECOVERY_CENTER_DRY_RUN_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "repair apply without separate admission",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Dry-run planning exists; apply-like recovery center actions remain deferred/admission-required.",
+      "next_allowed_contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION"
+    },
+    {
+      "screen_id": "28_rollout_scale_gate",
+      "screen_number": "28",
+      "title": "Rollout / Scale gate",
+      "subtitle": "Stage prove/advance evidence requirements, deferred advanced mode only.",
+      "final_design_file": "screens/28_rollout_scale_gate.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "ROLLOUT_SCALE_GATE_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "rollout advancement",
+        "runtime readiness overclaim",
+        "scale readiness claim",
+        "shell",
+        "stage proof claim",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Rollout scale gate cannot imply stage proof, scale readiness, pilot readiness, or rollout advancement from design.",
+      "next_allowed_contour": "ROLLOUT_SCALE_GATE_ADMISSION"
+    },
+    {
+      "screen_id": "29_evidence_packets",
+      "screen_number": "29",
+      "title": "Evidence packets",
+      "subtitle": "Read-only/support view of evidence packets and redaction status.",
+      "final_design_file": "screens/29_evidence_packets.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [
+        "api-connections"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "api route evidence command packet metadata only"
+      ],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "EVIDENCE_PACKETS_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Evidence packet screen cannot directly read evidence files; needs bounded evidence index/packet contract.",
+      "next_allowed_contour": "EVIDENCE_PACKETS_ADMISSION"
+    },
+    {
+      "screen_id": "30_audit_activity_history",
+      "screen_number": "30",
+      "title": "Audit / Activity history",
+      "subtitle": "Operator actions, command packet summary, failure states, no secrets, no raw logs as truth.",
+      "final_design_file": "screens/30_audit_activity_history.png",
+      "source_frame_px": [
+        1600,
+        1000
+      ],
+      "final_status": "admission-required",
+      "current_web_surfaces": [],
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_ui_actions": [],
+      "deferred_actions_or_contours": [
+        "AUDIT_ACTIVITY_HISTORY_ADMISSION"
+      ],
+      "forbidden_browser_payloads_or_claims": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false,
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "implementation_note": "Activity history needs bounded JSON activity packet; raw logs are forbidden.",
+      "next_allowed_contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION"
+    }
+  ],
+  "global_stop_conditions": [
+    "browser-submitted path/token/raw config/raw route JSON is needed",
+    "screen implies scale proof, active route, failover, runtime readiness, evidence truth, or rollout advancement without admitted command packet",
+    "screen requires direct routes.json/state.json/log/evidence read",
+    "desktop/native picker is needed before owner desktop approval"
+  ]
+}

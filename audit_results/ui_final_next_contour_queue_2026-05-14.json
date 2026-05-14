@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_RENDER_PACKAGE_COMPLETENESS_RECONCILIATION",
+  "date": "2026-05-14",
+  "head_at_start": "9cc31fc",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md",
+    "README.md"
+  ],
+  "design_package_role": "visual_inventory_only_not_runtime_or_admission_truth",
+  "browser_payload_boundary": "ui_action plus bounded structured payload only",
+  "desktop_approval_granted": false,
+  "artifact_type": "ui_final_next_contour_queue",
+  "selection_rule": "order by canon risk and managed-operations value, not visual temptation",
+  "queue": [
+    {
+      "order": 1,
+      "contour": "UI_FINAL_ACCOUNT_DETAIL_DRAWER_TRANSFER",
+      "mode": "implementation",
+      "depends_on": [
+        "accounts list --json"
+      ],
+      "risk": "medium",
+      "reason": "High product value and uses existing account truth/actions."
+    },
+    {
+      "order": 2,
+      "contour": "UI_FINAL_ACTION_COMMAND_LEDGER_TRANSFER",
+      "mode": "implementation",
+      "depends_on": [
+        "existing UI action packet results"
+      ],
+      "risk": "medium",
+      "reason": "Improves operator feedback without new backend truth."
+    },
+    {
+      "order": 3,
+      "contour": "UI_FINAL_DIAGNOSTICS_EXPORT_RESULT_TRANSFER",
+      "mode": "implementation",
+      "depends_on": [
+        "diagnostics export --json"
+      ],
+      "risk": "medium",
+      "reason": "Existing command surface; must avoid treating support bundle as health truth."
+    },
+    {
+      "order": 4,
+      "contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "mode": "implementation/deferred visual transfer",
+      "depends_on": [
+        "existing settings readonly/safe actions"
+      ],
+      "risk": "medium",
+      "reason": "Mostly decomposes existing settings hub while preserving deferred controls."
+    },
+    {
+      "order": 5,
+      "contour": "UI_FINAL_ABOUT_LICENSE_READONLY_TRANSFER",
+      "mode": "implementation/admission-light",
+      "depends_on": [
+        "readonly package/version source decision"
+      ],
+      "risk": "low-medium",
+      "reason": "Low runtime risk but needs source-of-truth decision."
+    },
+    {
+      "order": 6,
+      "contour": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "future bounded diagnostics history JSON packet"
+      ],
+      "risk": "high",
+      "reason": "Must not read raw logs."
+    },
+    {
+      "order": 7,
+      "contour": "API_ROUTE_DETAIL_READONLY_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "routes list/profile packet boundary"
+      ],
+      "risk": "high",
+      "reason": "Route detail can drift into route config editing."
+    },
+    {
+      "order": 8,
+      "contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "server-owned bounded references"
+      ],
+      "risk": "high",
+      "reason": "Opening support locations can become arbitrary path handling."
+    },
+    {
+      "order": 9,
+      "contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "stable repair --dry-run --json"
+      ],
+      "risk": "high",
+      "reason": "Apply-like recovery must remain separately gated."
+    },
+    {
+      "order": 10,
+      "contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "bounded attestation packet"
+      ],
+      "risk": "high",
+      "reason": "Attestation cannot become a screenshot/runtime-readiness overclaim."
+    },
+    {
+      "order": 11,
+      "contour": "EVIDENCE_PACKETS_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "bounded evidence packet/index contract"
+      ],
+      "risk": "high",
+      "reason": "UI must not read evidence files directly."
+    },
+    {
+      "order": 12,
+      "contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "bounded activity JSON packet"
+      ],
+      "risk": "high",
+      "reason": "UI must not parse raw logs."
+    },
+    {
+      "order": 13,
+      "contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "bounded route builder plus secret_ref policy"
+      ],
+      "risk": "very_high",
+      "reason": "Route create/update and secret selection are config/secret-manager-adjacent."
+    },
+    {
+      "order": 14,
+      "contour": "ROLLOUT_SCALE_GATE_ADMISSION",
+      "mode": "admission",
+      "depends_on": [
+        "canonical rollout/evidence packets"
+      ],
+      "risk": "very_high",
+      "reason": "Can imply scale proof or rollout advancement."
+    },
+    {
+      "order": 15,
+      "contour": "DESKTOP_RENDERER_ADMISSION",
+      "mode": "owner-gated desktop admission",
+      "depends_on": [
+        "explicit owner approval"
+      ],
+      "risk": "high",
+      "reason": "Desktop phase cannot start from web visual completeness alone."
+    }
+  ]
+}

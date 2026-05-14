@@ -1,0 +1,619 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_RENDER_PACKAGE_COMPLETENESS_RECONCILIATION",
+  "date": "2026-05-14",
+  "head_at_start": "9cc31fc",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md",
+    "README.md"
+  ],
+  "design_package_role": "visual_inventory_only_not_runtime_or_admission_truth",
+  "browser_payload_boundary": "ui_action plus bounded structured payload only",
+  "desktop_approval_granted": false,
+  "artifact_type": "ui_final_render_surface_registry",
+  "current_repo_screens_array": [
+    "overview",
+    "accounts",
+    "api-connections",
+    "diagnostics",
+    "settings",
+    "setup",
+    "select-client",
+    "import-existing"
+  ],
+  "current_static_data_ui_actions": [
+    "launch_client_dispatch",
+    "onboard_account",
+    "export_diagnostics",
+    "refresh_health_detail",
+    "stable_repair_plan",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke",
+    "set_mode_stable"
+  ],
+  "global_truth_boundary": {
+    "direct_file_truth_allowed": false,
+    "runtime_truth_claims_from_screenshots_allowed": false,
+    "post_action_optimistic_success_allowed": false,
+    "canonical_refresh_required_after_mutating_action": true
+  },
+  "entries": [
+    {
+      "screen_id": "00_brand_lockup",
+      "final_status": "reference-only",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "final_status": "implemented",
+      "truth_sources": [
+        "status --json",
+        "healthcheck --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "ui_actions": [
+        "refresh_health_detail",
+        "export_diagnostics",
+        "stable_repair_plan",
+        "sync_runtime",
+        "set_mode_stable",
+        "set_mode_managed",
+        "launch_smoke",
+        "launch_client_dispatch"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "02_accounts_table",
+      "final_status": "implemented",
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "03_account_detail_drawer",
+      "final_status": "partial",
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "04_diagnostics_signal_detail",
+      "final_status": "implemented",
+      "truth_sources": [
+        "diagnostics export --json",
+        "healthcheck --json for refresh/detail only"
+      ],
+      "ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "05_diagnostics_live_history",
+      "final_status": "admission-required",
+      "truth_sources": [
+        "future bounded diagnostics history JSON packet"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "06_diagnostics_export_result",
+      "final_status": "partial",
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "07_action_command_ledger",
+      "final_status": "partial",
+      "truth_sources": [
+        "UI action command packet result"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "08_global_error_integration_failure",
+      "final_status": "implemented",
+      "truth_sources": [
+        "fixture/live command integration failure packets"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "09_onboarding_result_flow",
+      "final_status": "partial",
+      "truth_sources": [
+        "accounts onboard --json",
+        "accounts list --json refresh"
+      ],
+      "ui_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "10_first_run_setup_wizard",
+      "final_status": "inert-deferred",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "11_select_client_screen",
+      "final_status": "inert-deferred",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "12_import_existing_wizard",
+      "final_status": "inert-deferred",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "13_installer_data_layout",
+      "final_status": "desktop-only-after-owner-approval",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": true
+    },
+    {
+      "screen_id": "14_settings_main_hub",
+      "final_status": "implemented",
+      "truth_sources": [
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "15_settings_runtime_mode",
+      "final_status": "partial",
+      "truth_sources": [
+        "mode get --json",
+        "mode set stable/managed --json via ui_action"
+      ],
+      "ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "16_settings_client_launch",
+      "final_status": "partial",
+      "truth_sources": [
+        "launch client dispatch metadata and ui_action"
+      ],
+      "ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "17_settings_accounts_policy",
+      "final_status": "partial",
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "ui_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "18_settings_diagnostics_privacy",
+      "final_status": "partial",
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "ui_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "19_settings_advanced",
+      "final_status": "inert-deferred",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "20_api_routes_list",
+      "final_status": "implemented",
+      "truth_sources": [
+        "external-models routes list --json"
+      ],
+      "ui_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "21_api_route_detail",
+      "final_status": "admission-required",
+      "truth_sources": [
+        "future/read-only route detail packet or existing profile packet"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "22_api_route_remove_disabled",
+      "final_status": "implemented",
+      "truth_sources": [
+        "external-models routes remove --json --route <route_id> after preflight"
+      ],
+      "ui_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "23_api_route_builder_draft",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "24_secret_ref_selector",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "25_human_open_support_actions",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "26_runtime_attestation_detail",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "27_recovery_center",
+      "final_status": "admission-required",
+      "truth_sources": [
+        "stable repair --dry-run --json for plan only"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "28_rollout_scale_gate",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "29_evidence_packets",
+      "final_status": "admission-required",
+      "truth_sources": [
+        "api route evidence command packet metadata only"
+      ],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "30_audit_activity_history",
+      "final_status": "admission-required",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": true,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "31_about_license_version",
+      "final_status": "reference-only",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "32_state_surfaces_library",
+      "final_status": "reference-only",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "33_dropdowns_popovers_library",
+      "final_status": "reference-only",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    },
+    {
+      "screen_id": "34_modals_confirmations_library",
+      "final_status": "implemented",
+      "truth_sources": [],
+      "ui_actions": [],
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "command_admission_required": false,
+      "desktop_owner_approval_required": false
+    }
+  ]
+}

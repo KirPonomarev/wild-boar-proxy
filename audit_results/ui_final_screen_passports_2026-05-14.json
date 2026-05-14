@@ -1,0 +1,1282 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_RENDER_PACKAGE_COMPLETENESS_RECONCILIATION",
+  "date": "2026-05-14",
+  "head_at_start": "9cc31fc",
+  "canon_order": [
+    "CANON.md",
+    "MASTER_PLAN.md",
+    "RUNTIME_CONTRACT.md",
+    "STATE_SCHEMA.md",
+    "COMMAND_API.md",
+    "DELIVERY_RULES.md",
+    "README.md"
+  ],
+  "design_package_role": "visual_inventory_only_not_runtime_or_admission_truth",
+  "browser_payload_boundary": "ui_action plus bounded structured payload only",
+  "desktop_approval_granted": false,
+  "artifact_type": "ui_final_screen_passports",
+  "screen_count": 35,
+  "passports": [
+    {
+      "screen_id": "00_brand_lockup",
+      "final_design_file": "screens/00_brand_lockup.png",
+      "implementation_status": "reference-only",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Identity/token reference only; no runtime behavior."
+      ]
+    },
+    {
+      "screen_id": "01_overview_dashboard",
+      "final_design_file": "screens/01_overview_dashboard.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "status --json",
+        "healthcheck --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_actions": [
+        "refresh_health_detail",
+        "export_diagnostics",
+        "stable_repair_plan",
+        "sync_runtime",
+        "set_mode_stable",
+        "set_mode_managed",
+        "launch_smoke",
+        "launch_client_dispatch"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Core overview surface exists and is visually transferred."
+      ]
+    },
+    {
+      "screen_id": "02_accounts_table",
+      "final_design_file": "screens/02_accounts_table.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Accounts table and lifecycle action gates exist."
+      ]
+    },
+    {
+      "screen_id": "03_account_detail_drawer",
+      "final_design_file": "screens/03_account_detail_drawer.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_ACCOUNT_DETAIL_DRAWER_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_ACCOUNT_DETAIL_DRAWER_TRANSFER",
+      "notes": [
+        "Data/actions exist on accounts table; final detail drawer itself is not implemented."
+      ]
+    },
+    {
+      "screen_id": "04_diagnostics_signal_detail",
+      "final_design_file": "screens/04_diagnostics_signal_detail.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json",
+        "healthcheck --json for refresh/detail only"
+      ],
+      "allowed_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Diagnostics master/detail and chart/result regions exist, with fixture-only history where live history is deferred."
+      ]
+    },
+    {
+      "screen_id": "05_diagnostics_live_history",
+      "final_design_file": "screens/05_diagnostics_live_history.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "future bounded diagnostics history JSON packet"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION",
+      "notes": [
+        "Live history visualization requires a bounded history packet; raw logs are forbidden."
+      ]
+    },
+    {
+      "screen_id": "06_diagnostics_export_result",
+      "final_design_file": "screens/06_diagnostics_export_result.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "allowed_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_DIAGNOSTICS_EXPORT_RESULT_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_DIAGNOSTICS_EXPORT_RESULT_TRANSFER",
+      "notes": [
+        "Export result details exist in diagnostics/action result regions; final standalone result composition remains incomplete."
+      ]
+    },
+    {
+      "screen_id": "07_action_command_ledger",
+      "final_design_file": "screens/07_action_command_ledger.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "UI action command packet result"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "UI_FINAL_ACTION_COMMAND_LEDGER_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_ACTION_COMMAND_LEDGER_TRANSFER",
+      "notes": [
+        "Current action panel normalizes last result; full ledger/history screen is not implemented."
+      ]
+    },
+    {
+      "screen_id": "08_global_error_integration_failure",
+      "final_design_file": "screens/08_global_error_integration_failure.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "fixture/live command integration failure packets"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Integration failure and stale/error state surfaces are represented."
+      ]
+    },
+    {
+      "screen_id": "09_onboarding_result_flow",
+      "final_design_file": "screens/09_onboarding_result_flow.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts onboard --json",
+        "accounts list --json refresh"
+      ],
+      "allowed_actions": [
+        "onboard_account",
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_ONBOARDING_RESULT_FLOW_TRANSFER",
+      "notes": [
+        "Reserve-first modal states are implemented; standalone result screen is not."
+      ]
+    },
+    {
+      "screen_id": "10_first_run_setup_wizard",
+      "final_design_file": "screens/10_first_run_setup_wizard.png",
+      "implementation_status": "inert-deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Visual shell exists and remains inert; setup readiness is not claimed."
+      ]
+    },
+    {
+      "screen_id": "11_select_client_screen",
+      "final_design_file": "screens/11_select_client_screen.png",
+      "implementation_status": "inert-deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Visual shell exists and remains inert; candidate discovery/selection is not admitted."
+      ]
+    },
+    {
+      "screen_id": "12_import_existing_wizard",
+      "final_design_file": "screens/12_import_existing_wizard.png",
+      "implementation_status": "inert-deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Visual shell exists and remains inert; import execution is not admitted."
+      ]
+    },
+    {
+      "screen_id": "13_installer_data_layout",
+      "final_design_file": "screens/13_installer_data_layout.png",
+      "implementation_status": "desktop-only-after-owner-approval",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "DESKTOP_INSTALLER_DATA_LAYOUT_ADMISSION_AFTER_OWNER_APPROVAL",
+      "notes": [
+        "Installer/data layout implies local path/native filesystem mediation and must wait for desktop admission/command contract."
+      ]
+    },
+    {
+      "screen_id": "14_settings_main_hub",
+      "final_design_file": "screens/14_settings_main_hub.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "status --json",
+        "mode get --json",
+        "accounts list --json",
+        "rollout rotation inspect --json"
+      ],
+      "allowed_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Settings hub exists as readonly plus safe actions/deferred controls."
+      ]
+    },
+    {
+      "screen_id": "15_settings_runtime_mode",
+      "final_design_file": "screens/15_settings_runtime_mode.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "mode get --json",
+        "mode set stable/managed --json via ui_action"
+      ],
+      "allowed_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "notes": [
+        "Runtime mode controls are present inside settings hub; dedicated sub-screen not implemented."
+      ]
+    },
+    {
+      "screen_id": "16_settings_client_launch",
+      "final_design_file": "screens/16_settings_client_launch.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "launch client dispatch metadata and ui_action"
+      ],
+      "allowed_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "notes": [
+        "Launch client action is bounded dispatch; selection/path configuration remains deferred."
+      ]
+    },
+    {
+      "screen_id": "17_settings_accounts_policy",
+      "final_design_file": "screens/17_settings_accounts_policy.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "accounts list --json"
+      ],
+      "allowed_actions": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "notes": [
+        "Policy/pool state is visible through account surfaces; policy mutation is not admitted."
+      ]
+    },
+    {
+      "screen_id": "18_settings_diagnostics_privacy",
+      "final_design_file": "screens/18_settings_diagnostics_privacy.png",
+      "implementation_status": "partial",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "diagnostics export --json"
+      ],
+      "allowed_actions": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "notes": [
+        "Diagnostics/privacy copy and export action exist; privacy sub-screen is not implemented."
+      ]
+    },
+    {
+      "screen_id": "19_settings_advanced",
+      "final_design_file": "screens/19_settings_advanced.png",
+      "implementation_status": "inert-deferred",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_SETTINGS_SUBSCREENS_TRANSFER",
+      "notes": [
+        "Advanced settings are visible as deferred readonly controls only."
+      ]
+    },
+    {
+      "screen_id": "20_api_routes_list",
+      "final_design_file": "screens/20_api_routes_list.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "external-models routes list --json"
+      ],
+      "allowed_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "API routes list exists with bounded safe route actions."
+      ]
+    },
+    {
+      "screen_id": "21_api_route_detail",
+      "final_design_file": "screens/21_api_route_detail.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "future/read-only route detail packet or existing profile packet"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "API_ROUTE_DETAIL_READONLY_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "API_ROUTE_DETAIL_READONLY_ADMISSION",
+      "notes": [
+        "Route detail needs explicit readonly packet boundary before implementation."
+      ]
+    },
+    {
+      "screen_id": "22_api_route_remove_disabled",
+      "final_design_file": "screens/22_api_route_remove_disabled.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "external-models routes remove --json --route <route_id> after preflight"
+      ],
+      "allowed_actions": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": true,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Disabled-route removal confirmation/copy is bounded and implemented."
+      ]
+    },
+    {
+      "screen_id": "23_api_route_builder_draft",
+      "final_design_file": "screens/23_api_route_builder_draft.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION",
+      "notes": [
+        "Design presence does not admit route create/update or raw route config editing."
+      ]
+    },
+    {
+      "screen_id": "24_secret_ref_selector",
+      "final_design_file": "screens/24_secret_ref_selector.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "base_url/endpoint_path from browser",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "raw provider config",
+        "raw route JSON",
+        "secret manager behavior",
+        "secret value display",
+        "shell",
+        "token entry",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "API_ROUTE_BUILDER_AND_SECRET_CONTRACT_ADMISSION",
+      "notes": [
+        "Design presence does not admit secret selection, token entry, or secret manager behavior."
+      ]
+    },
+    {
+      "screen_id": "25_human_open_support_actions",
+      "final_design_file": "screens/25_human_open_support_actions.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "browser path picker",
+        "browser-submitted executable path",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "source_dir/client_path payload",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION",
+      "notes": [
+        "Opening support locations/actions requires server-owned bounded references; browser arbitrary paths are forbidden."
+      ]
+    },
+    {
+      "screen_id": "26_runtime_attestation_detail",
+      "final_design_file": "screens/26_runtime_attestation_detail.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "RUNTIME_ATTESTATION_DETAIL_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION",
+      "notes": [
+        "Runtime attestation cannot be claimed without bounded JSON attestation packet."
+      ]
+    },
+    {
+      "screen_id": "27_recovery_center",
+      "final_design_file": "screens/27_recovery_center.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "stable repair --dry-run --json for plan only"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "RECOVERY_CENTER_DRY_RUN_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "repair apply without separate admission",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "RECOVERY_CENTER_DRY_RUN_ADMISSION",
+      "notes": [
+        "Dry-run planning exists; apply-like recovery center actions remain deferred/admission-required."
+      ]
+    },
+    {
+      "screen_id": "28_rollout_scale_gate",
+      "final_design_file": "screens/28_rollout_scale_gate.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "ROLLOUT_SCALE_GATE_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "rollout advancement",
+        "runtime readiness overclaim",
+        "scale readiness claim",
+        "shell",
+        "stage proof claim",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "ROLLOUT_SCALE_GATE_ADMISSION",
+      "notes": [
+        "Rollout scale gate cannot imply stage proof, scale readiness, pilot readiness, or rollout advancement from design."
+      ]
+    },
+    {
+      "screen_id": "29_evidence_packets",
+      "final_design_file": "screens/29_evidence_packets.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_command_adapter.py",
+        "wild_boar_proxy/web_design_live_server.py",
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [
+        "api route evidence command packet metadata only"
+      ],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "EVIDENCE_PACKETS_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "EVIDENCE_PACKETS_ADMISSION",
+      "notes": [
+        "Evidence packet screen cannot directly read evidence files; needs bounded evidence index/packet contract."
+      ]
+    },
+    {
+      "screen_id": "30_audit_activity_history",
+      "final_design_file": "screens/30_audit_activity_history.png",
+      "implementation_status": "admission-required",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [
+        "AUDIT_ACTIVITY_HISTORY_ADMISSION"
+      ],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct evidence/log/state file read",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "runtime readiness overclaim",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION",
+      "notes": [
+        "Activity history needs bounded JSON activity packet; raw logs are forbidden."
+      ]
+    },
+    {
+      "screen_id": "31_about_license_version",
+      "final_design_file": "screens/31_about_license_version.png",
+      "implementation_status": "reference-only",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "UI_FINAL_ABOUT_LICENSE_READONLY_TRANSFER",
+      "notes": [
+        "About/license/version can be readonly later; no current runtime behavior admitted."
+      ]
+    },
+    {
+      "screen_id": "32_state_surfaces_library",
+      "final_design_file": "screens/32_state_surfaces_library.png",
+      "implementation_status": "reference-only",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Component library only; informs state styling, not runtime truth."
+      ]
+    },
+    {
+      "screen_id": "33_dropdowns_popovers_library",
+      "final_design_file": "screens/33_dropdowns_popovers_library.png",
+      "implementation_status": "reference-only",
+      "repo_surfaces": [],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Component library only; no action/dropdown behavior admitted."
+      ]
+    },
+    {
+      "screen_id": "34_modals_confirmations_library",
+      "final_design_file": "screens/34_modals_confirmations_library.png",
+      "implementation_status": "implemented",
+      "repo_surfaces": [
+        "wild_boar_proxy/web_design_ui/index.html",
+        "wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ],
+      "truth_sources": [],
+      "allowed_actions": [],
+      "deferred_actions": [],
+      "forbidden_actions": [
+        "arbitrary path",
+        "browser command_id",
+        "direct file truth",
+        "raw argv",
+        "raw config mutation",
+        "shell",
+        "token or API key"
+      ],
+      "browser_payload_boundary": "ui_action plus bounded structured payload only; no command_id/raw argv/shell/arbitrary path/token/raw config/raw route JSON/raw provider config/base_url/endpoint_path/evidence path",
+      "direct_file_truth_allowed": false,
+      "runtime_truth_claims_allowed": false,
+      "desktop_transfer_status": "blocked_until_owner_approval",
+      "next_allowed_contour": "NO_IMMEDIATE_IMPLEMENTATION_CONTOUR",
+      "notes": [
+        "Confirmation and onboarding modal library has been transferred to current modal surfaces."
+      ]
+    }
+  ]
+}
