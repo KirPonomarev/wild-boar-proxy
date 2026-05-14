@@ -1641,6 +1641,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         route_create = run_ui_action(runner, {"ui_action": "api_route_create", "route_id": "wbp-new"})
         route_update = run_ui_action(runner, {"ui_action": "api_route_update", "route_id": "wbp-deepseek-v3"})
         route_draft = run_ui_action(runner, {"ui_action": "api_route_draft", "route_id": "wbp-draft"})
+        save_settings = run_ui_action(runner, {"ui_action": "save_settings"})
+        update_settings = run_ui_action(runner, {"ui_action": "update_settings"})
+        settings_write = run_ui_action(runner, {"ui_action": "settings_write"})
+        settings_route_config = run_ui_action(
+            runner,
+            {"ui_action": "save_settings", "route_config": {"route_id": "wbp-new"}},
+        )
         client_path_payload = run_ui_action(
             runner,
             {"ui_action": "export_diagnostics", "client_path": "/Applications/Codex.app"},
@@ -1663,6 +1670,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             route_create,
             route_update,
             route_draft,
+            save_settings,
+            update_settings,
+            settings_write,
+            settings_route_config,
             client_path_payload,
             bundle_path_payload,
             log_path_payload,

@@ -750,11 +750,11 @@
             Настройки в этом контуре доступны только для чтения. Значения ниже получены из JSON-пакетов, а не прямым чтением config.
           </div>
 
-          <div class="settings-layout settings-hub" data-visual-reference="14_settings_main_hub" data-config-mode="readonly">
-            <section class="card form-section settings-observed settings-hub-card settings-hub-card-wide">
+          <div class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="section-only">
+            <section class="card form-section settings-observed settings-hub-card settings-hub-card-wide" data-settings-section="runtime-mode">
               <div class="section-head">
                 <div>
-                  <h3>Runtime / Mode</h3>
+                  <h3>Runtime & Mode</h3>
                   <div class="secondary">Факты только для чтения из существующих пакетов команд.</div>
                 </div>
                 <span class="chip neutral"><span class="dot"></span>только чтение</span>
@@ -767,10 +767,10 @@
               </div>
             </section>
 
-            <section class="card form-section settings-hub-card">
+            <section class="card form-section settings-hub-card" data-settings-section="client-launch">
               <div class="section-head">
                 <div>
-                  <h3>Client / Launch</h3>
+                  <h3>Client & Launch</h3>
                   <div class="secondary">Запуск остаётся командным запросом, не настройкой.</div>
                 </div>
                 <span class="chip blue"><span class="dot"></span>bounded</span>
@@ -779,26 +779,109 @@
               <div class="form-row"><label>Запуск клиента</label><div id="settingsLaunchAvailability">метаданные недоступны</div></div>
             </section>
 
-            <section class="card form-section settings-hub-card">
+            <section class="card form-section settings-hub-card" data-settings-section="data-storage">
               <div class="section-head">
                 <div>
-                  <h3>Accounts policy</h3>
+                  <h3>Данные и хранение</h3>
+                  <div class="secondary">Пути и каталоги не вводятся и не открываются из web UI.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
+              </div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Каталог данных</span><strong>прямой доступ к файловой системе отложен</strong></div>
+                <div class="settings-section-row"><span>Support artifacts</span><strong>только метаданные командных пакетов</strong></div>
+                <div class="settings-section-row"><span>Открыть папку</span><strong>нет bounded open-location контракта</strong></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card" data-settings-section="probe-recovery">
+              <div class="section-head">
+                <div>
+                  <h3>Probe & Recovery</h3>
+                  <div class="secondary">Политики восстановления не меняются из Settings.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>частично</span>
+              </div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Probe limits</span><strong>изменение политики требует owner command surface</strong></div>
+                <div class="settings-section-row"><span>Recovery plan</span><strong>доступен только dry-run план ремонта</strong></div>
+                <div class="settings-section-row"><span>Apply repair</span><strong>отсутствует в этом контуре</strong></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card" data-settings-section="account-defaults">
+              <div class="section-head">
+                <div>
+                  <h3>Account Defaults</h3>
                   <div class="secondary">Lifecycle управляется отдельными account actions.</div>
                 </div>
                 <span class="chip amber"><span class="dot"></span>отложено</span>
               </div>
-              <div class="deferred-row"><span>Проверки при старте</span><span>изменение стартовой политики отложено</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Проверки при старте</span><strong>изменение стартовой политики отложено</strong></div>
+                <div class="settings-section-row"><span>Lifecycle defaults</span><strong>мутации остаются на экране аккаунтов</strong></div>
+                <div class="settings-section-row"><span>Auto placement</span><strong>нет настройки без command packet truth</strong></div>
+              </div>
             </section>
 
-            <section class="card form-section settings-hub-card">
+            <section class="card form-section settings-hub-card" data-settings-section="api-routes">
               <div class="section-head">
                 <div>
-                  <h3>API routes</h3>
+                  <h3>API Routes</h3>
                   <div class="secondary">Registry виден на отдельном экране API-подключений.</div>
                 </div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
-              <div class="deferred-row"><span>Route editor</span><span>сырой route config не отправляется из браузера</span><button class="button small disabled" type="button" disabled>Нет формы</button></div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Route editor</span><strong>сырой route config не отправляется из браузера</strong></div>
+                <div class="settings-section-row"><span>Route operations</span><strong>действия остаются на API-подключениях</strong></div>
+                <div class="settings-section-row"><span>Key setup</span><strong>секреты и токены не вводятся в UI</strong></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card" data-settings-section="security-boundary">
+              <div class="section-head">
+                <div>
+                  <h3>Безопасность</h3>
+                  <div class="secondary">Учётные данные не показываются и не принимаются браузером.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>граница</span>
+              </div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Ключи доступа</span><strong>нет полей ввода и просмотра</strong></div>
+                <div class="settings-section-row"><span>Локальные секреты</span><strong>не пишутся и не читаются из Settings</strong></div>
+                <div class="settings-section-row"><span>Redaction</span><strong>проверяется командами поддержки, не этим экраном</strong></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card" data-settings-section="import-setup">
+              <div class="section-head">
+                <div>
+                  <h3>Import & Setup</h3>
+                  <div class="secondary">Setup/import остаются инертными до отдельного admission.</div>
+                </div>
+                <span class="chip amber"><span class="dot"></span>отложено</span>
+              </div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Legacy import</span><strong>не принимает исходный каталог из браузера</strong></div>
+                <div class="settings-section-row"><span>First run</span><strong>визуальный каркас уже есть, execution отложен</strong></div>
+                <div class="settings-section-row"><span>Rollback</span><strong>требует отдельный dry-run/import contract</strong></div>
+              </div>
+            </section>
+
+            <section class="card form-section settings-hub-card" data-settings-section="advanced-boundary">
+              <div class="section-head">
+                <div>
+                  <h3>Advanced</h3>
+                  <div class="secondary">Низкоуровневые параметры не редактируются в web prototype.</div>
+                </div>
+                <span class="chip neutral"><span class="dot"></span>закрыто</span>
+              </div>
+              <div class="settings-section-list">
+                <div class="settings-section-row"><span>Raw config</span><strong>нет формы редактирования</strong></div>
+                <div class="settings-section-row"><span>Runtime files</span><strong>прямое чтение запрещено</strong></div>
+                <div class="settings-section-row"><span>Rollback policy</span><strong>решается отдельным command contour</strong></div>
+              </div>
             </section>
 
             <section class="card form-section settings-safe-actions settings-hub-card settings-hub-card-wide">
@@ -860,9 +943,10 @@
               <div class="deferred-list">
                 <div class="deferred-row"><span>Выбор клиента</span><span>браузер не отправляет произвольные пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 <div class="deferred-row"><span>Каталог данных приложения</span><span>прямой доступ к файловой системе отложен</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="deferred-row"><span>Legacy import</span><span>исходный каталог не принимается из browser payload</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
                 <div class="deferred-row"><span>Сетевой host / port</span><span>изменение конфигурации runtime вне границ контура</span><button class="button small disabled" type="button" disabled>Только чтение</button></div>
                 <div class="deferred-row"><span>Политика автовосстановления</span><span>изменение политики требует owner command surface</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Security</span><span>секреты и токены не вводятся в UI</span><button class="button small disabled" type="button" disabled>Нет ввода</button></div>
+                <div class="deferred-row"><span>Безопасность</span><span>секреты и токены не вводятся в UI</span><button class="button small disabled" type="button" disabled>Нет ввода</button></div>
                 <div class="deferred-row"><span>Advanced</span><span>низкоуровневые параметры остаются вне web UI</span><button class="button small disabled" type="button" disabled>Закрыто</button></div>
                 <div class="deferred-row"><span>About</span><span>версия и лицензия требуют отдельного readonly packet</span><button class="button small disabled" type="button" disabled>Позже</button></div>
               </div>
