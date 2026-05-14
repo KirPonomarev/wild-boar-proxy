@@ -419,9 +419,9 @@
           </div>
         </section>
 
-        <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" hidden>
+        <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" data-api-connections-mode="readonly-registry" hidden>
           <div id="apiConnectionsBanner" class="fixture-banner neutral">
-            API-подключения показываются из пакетов команд. Доступны только безопасные проверки маршрутов; мутации маршрутов отложены.
+            Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.
           </div>
 
           <div class="grid api-connections-summary" aria-label="Сводка API-подключений">
@@ -455,7 +455,7 @@
             </section>
           </div>
 
-          <section class="card table-card api-connections-table-card">
+          <section class="card table-card api-connections-table-card" data-api-registry-surface="readonly-list">
             <div class="table-top">
               <div>
                 <div class="card-title">Маршруты API-подключений</div>
@@ -466,23 +466,23 @@
             <table class="table api-connections-table">
               <colgroup>
                 <col style="width:190px">
-                <col style="width:90px">
-                <col style="width:158px">
-                <col style="width:112px">
+                <col style="width:88px">
+                <col style="width:150px">
+                <col style="width:108px">
                 <col style="width:110px">
-                <col style="width:96px">
-                <col style="width:170px">
-                <col style="width:190px">
+                <col style="width:150px">
+                <col style="width:120px">
+                <col style="width:64px">
               </colgroup>
               <thead>
                 <tr>
-                  <th>Название</th>
+                  <th>Маршрут</th>
                   <th>Провайдер</th>
                   <th>Модель</th>
                   <th>Статус</th>
-                  <th>Роль маршрута</th>
+                  <th>Роль</th>
+                  <th>Secret ref</th>
                   <th class="right">Проверка</th>
-                  <th>Примечание</th>
                   <th>Действия</th>
                 </tr>
               </thead>
@@ -492,6 +492,18 @@
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
               <span>разрешены только проверки · мутации маршрутов отложены</span>
             </div>
+          </section>
+
+          <section class="card api-route-builder-card" data-api-builder-mode="deferred">
+            <div class="api-route-builder-icon">
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/git-branch.png" alt="" aria-hidden="true">
+            </div>
+            <div>
+              <div class="card-title">Создание маршрута</div>
+              <div class="secondary">Требуется server-side bounded route builder.</div>
+            </div>
+            <span class="chip amber"><span class="dot"></span>deferred</span>
+            <button class="button small disabled" type="button" disabled title="Route builder needs a separate admitted command surface.">Черновик маршрута · missing surface</button>
           </section>
         </section>
 

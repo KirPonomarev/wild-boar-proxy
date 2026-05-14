@@ -1,0 +1,145 @@
+{
+  "fixture_healthy": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1156,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 3,
+    "activeApiActions": [
+      "api_route_validate",
+      "api_route_validate"
+    ],
+    "disabledRouteMutationButtons": [
+      "Детали",
+      "Удалить",
+      "Детали",
+      "Удалить",
+      "Черновик маршрута · missing surface"
+    ],
+    "rows": 2,
+    "rowActionButtons": 2,
+    "rowMenus": 2,
+    "builderBottom": 705,
+    "overflows": []
+  },
+  "fixture_degraded": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1156,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 3,
+    "activeApiActions": [
+      "api_route_validate",
+      "api_route_validate"
+    ],
+    "disabledRouteMutationButtons": [
+      "Детали",
+      "Удалить",
+      "Детали",
+      "Удалить",
+      "Черновик маршрута · missing surface"
+    ],
+    "rows": 2,
+    "rowActionButtons": 2,
+    "rowMenus": 2,
+    "builderBottom": 705,
+    "overflows": []
+  },
+  "fixture_down": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1156,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 3,
+    "activeApiActions": [
+      "api_route_validate",
+      "api_route_validate"
+    ],
+    "disabledRouteMutationButtons": [
+      "Детали",
+      "Удалить",
+      "Детали",
+      "Удалить",
+      "Черновик маршрута · missing surface"
+    ],
+    "rows": 2,
+    "rowActionButtons": 2,
+    "rowMenus": 2,
+    "builderBottom": 705,
+    "overflows": []
+  },
+  "fixture_stale": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 705,
+    "screenHeight": 537,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1156,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 3,
+    "activeApiActions": [
+      "api_route_validate",
+      "api_route_validate"
+    ],
+    "disabledRouteMutationButtons": [
+      "Детали",
+      "Удалить",
+      "Детали",
+      "Удалить",
+      "Черновик маршрута · missing surface"
+    ],
+    "rows": 2,
+    "rowActionButtons": 2,
+    "rowMenus": 2,
+    "builderBottom": 705,
+    "overflows": []
+  },
+  "live_integration_failure": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 647,
+    "screenHeight": 479,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1156,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 1,
+    "activeApiActions": [],
+    "disabledRouteMutationButtons": [
+      "Черновик маршрута · missing surface"
+    ],
+    "rows": 1,
+    "rowActionButtons": 0,
+    "rowMenus": 0,
+    "builderBottom": 647,
+    "overflows": []
+  }
+}

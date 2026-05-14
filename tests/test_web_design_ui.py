@@ -211,8 +211,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("min-width: 980px;", css)
         self.assertIn("flex: 1 1 calc(50% - 4px);", css)
         self.assertIn("max-height: calc(100vh - 372px);", css)
-        self.assertIn("max-height: calc(100vh - 462px);", css)
+        self.assertIn("max-height: calc(100vh - 520px);", css)
         self.assertIn(".api-route-action-group", css)
+        self.assertIn(".api-route-builder-card", css)
         self.assertIn("max-width: 640px;", css)
         self.assertIn("max-height: calc(100vh - 96px);", css)
         self.assertIn("grid-template-columns: repeat(3, minmax(150px, 1fr));", css)
@@ -534,17 +535,47 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn("api_route_evidence_capture", js)
         self.assertIn("routeActionButtons", js)
         self.assertIn("routeActionButton", js)
+        self.assertIn("routeSecretRef", js)
+        self.assertIn("routeDisabledMenuButton", js)
+        self.assertIn("isApiRouteActionDeferredInReadonlyRegistry", js)
         self.assertIn("apiRouteStateRequirement", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
 
         api_screen = self._section_html(html, "apiConnectionsScreen")
-        self.assertIn("API-подключения пока не настроены", js)
+        self.assertIn('data-api-connections-mode="readonly-registry"', api_screen)
+        self.assertIn('data-api-registry-surface="readonly-list"', api_screen)
+        self.assertIn('data-api-builder-mode="deferred"', api_screen)
+        self.assertIn("Маршруты недоступны", js)
+        self.assertIn("Демо-режим. Маршруты показаны как bounded fixture view", api_screen + js)
+        self.assertIn("Live-readonly маршруты недоступны", js)
+        self.assertIn("Создание маршрута", api_screen)
+        self.assertIn("Черновик маршрута", api_screen)
         self.assertIn("Разрешён", api_screen + js)
         self.assertIn("Отключён", api_screen + js)
+        self.assertIn("Secret ref", api_screen)
+        self.assertIn("OPENROUTER_PRIMARY", js)
+        self.assertIn("available", js)
+        self.assertIn("missing", js)
         self.assertIn("Пакет профиля", js)
         self.assertIn("Свидетельство", js)
         self.assertIn("UI не читает evidence file", js)
         self.assertNotIn('data-ui-action=', api_screen)
+        self.assertNotIn("<textarea", api_screen)
+        self.assertNotIn("<input", api_screen)
+        self.assertNotIn("<select", api_screen)
+        self.assertNotIn('type="file"', api_screen)
+        self.assertNotIn("raw_route_json", api_screen + js)
+        self.assertNotIn("route_config", api_screen + js)
+        self.assertNotIn("endpoint_path", api_screen + js)
+        self.assertNotIn("base_url", api_screen + js)
+        self.assertNotIn("api_route_create", api_screen + js)
+        self.assertNotIn("api_route_update", api_screen + js)
+        self.assertNotIn("api_route_draft", api_screen + js)
+        self.assertNotIn('routeActionButton(route, "api_route_allow"', js)
+        self.assertNotIn('routeActionButton(route, "api_route_disable"', js)
+        self.assertNotIn('routeActionButton(route, "api_route_remove"', js)
+        self.assertNotIn('routeActionButton(route, "api_route_profile"', js)
+        self.assertNotIn('routeActionButton(route, "api_route_evidence_capture"', js)
         self.assertNotIn("Вкл", api_screen + js)
         self.assertNotIn("Сделать активным", api_screen + js)
         self.assertNotIn("Подключить Codex", api_screen + js)
@@ -579,6 +610,7 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn("accountActionButtons", js)
         self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
         self.assertIn("Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов.", js)
+        self.assertIn("Это действие маршрута отложено", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
@@ -1985,23 +2017,29 @@ if (enabledButton.disabled) {
 if (!disabledRouteButton.disabled || !disabledRouteButton.title.includes("Маршрут отключён")) {
   throw new Error(`disabled route should stay blocked: ${JSON.stringify(disabledRouteButton)}`);
 }
-if (allowDisabledRouteButton.disabled) {
-  throw new Error(`allow should be available for disabled route in live source: ${JSON.stringify(allowDisabledRouteButton)}`);
+if (!allowDisabledRouteButton.disabled) {
+  throw new Error(`allow should stay deferred in readonly registry: ${JSON.stringify(allowDisabledRouteButton)}`);
 }
-if (!allowEnabledRouteButton.disabled || !allowEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
+if (!allowDisabledRouteButton.title.includes("отложено")) {
+  throw new Error(`allow should explain deferred route mutation: ${JSON.stringify(allowDisabledRouteButton)}`);
+}
+if (!allowEnabledRouteButton.disabled) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
 }
-if (removeDisabledRouteButton.disabled) {
-  throw new Error(`remove should be available for disabled route in live source: ${JSON.stringify(removeDisabledRouteButton)}`);
+if (!removeDisabledRouteButton.disabled) {
+  throw new Error(`remove should stay deferred in readonly registry: ${JSON.stringify(removeDisabledRouteButton)}`);
+}
+if (!removeDisabledRouteButton.title.includes("отложено")) {
+  throw new Error(`remove should explain deferred route mutation: ${JSON.stringify(removeDisabledRouteButton)}`);
 }
 if (!removeEnabledRouteButton.disabled || !removeEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
   throw new Error(`remove should be blocked for enabled route: ${JSON.stringify(removeEnabledRouteButton)}`);
 }
-if (profileDisabledRouteButton.disabled) {
-  throw new Error(`profile packet should be available for disabled route in live source: ${JSON.stringify(profileDisabledRouteButton)}`);
+if (!profileDisabledRouteButton.disabled || !profileDisabledRouteButton.title.includes("отложено")) {
+  throw new Error(`profile packet should stay deferred in readonly registry: ${JSON.stringify(profileDisabledRouteButton)}`);
 }
-if (evidenceDisabledRouteButton.disabled) {
-  throw new Error(`evidence capture should be available for disabled route in live source: ${JSON.stringify(evidenceDisabledRouteButton)}`);
+if (!evidenceDisabledRouteButton.disabled || !evidenceDisabledRouteButton.title.includes("отложено")) {
+  throw new Error(`evidence capture should stay deferred in readonly registry: ${JSON.stringify(evidenceDisabledRouteButton)}`);
 }
 if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);

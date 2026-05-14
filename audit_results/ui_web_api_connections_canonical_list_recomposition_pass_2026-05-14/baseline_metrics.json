@@ -1,0 +1,222 @@
+{
+  "fixture_healthy": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 761,
+    "screenHeight": 593,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1160,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "activeApiActions": [
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "rows": 2,
+    "rowActionButtons": 14,
+    "rowMenus": 0,
+    "overflows": [
+      {
+        "text": "Маршруты API-подключений\n                Контур: fixture · models source: fixtur",
+        "tag": "SECTION",
+        "sw": 1160,
+        "cw": 1156,
+        "sh": 409,
+        "ch": 409,
+        "w": 1158,
+        "h": 411
+      }
+    ]
+  },
+  "fixture_degraded": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 761,
+    "screenHeight": 593,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1160,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "activeApiActions": [
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "rows": 2,
+    "rowActionButtons": 14,
+    "rowMenus": 0,
+    "overflows": [
+      {
+        "text": "Маршруты API-подключений\n                Контур: fixture · models source: fixtur",
+        "tag": "SECTION",
+        "sw": 1160,
+        "cw": 1156,
+        "sh": 409,
+        "ch": 409,
+        "w": 1158,
+        "h": 411
+      },
+      {
+        "text": "Требует ключ",
+        "tag": "TD",
+        "sw": 121,
+        "cw": 112,
+        "sh": 124,
+        "ch": 124,
+        "w": 112,
+        "h": 125
+      }
+    ]
+  },
+  "fixture_down": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 761,
+    "screenHeight": 593,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1160,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "activeApiActions": [
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "rows": 2,
+    "rowActionButtons": 14,
+    "rowMenus": 0,
+    "overflows": [
+      {
+        "text": "Маршруты API-подключений\n                Контур: fixture · models source: fixtur",
+        "tag": "SECTION",
+        "sw": 1160,
+        "cw": 1156,
+        "sh": 409,
+        "ch": 409,
+        "w": 1158,
+        "h": 411
+      }
+    ]
+  },
+  "fixture_stale": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 761,
+    "screenHeight": 593,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1160,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "activeApiActions": [
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove",
+      "api_route_allow",
+      "api_route_disable",
+      "api_route_validate",
+      "api_route_check",
+      "api_route_profile",
+      "api_route_evidence_capture",
+      "api_route_remove"
+    ],
+    "rows": 2,
+    "rowActionButtons": 14,
+    "rowMenus": 0,
+    "overflows": [
+      {
+        "text": "Маршруты API-подключений\n                Контур: fixture · models source: fixtur",
+        "tag": "SECTION",
+        "sw": 1160,
+        "cw": 1156,
+        "sh": 409,
+        "ch": 409,
+        "w": 1158,
+        "h": 411
+      }
+    ]
+  },
+  "live_integration_failure": {
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainScrollHeight": 942,
+    "mainClientHeight": 942,
+    "screenBottom": 589,
+    "screenHeight": 401,
+    "tableScrollWidth": 1116,
+    "tableClientWidth": 1116,
+    "tableCardScrollWidth": 1160,
+    "tableCardClientWidth": 1156,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 0,
+    "activeApiActions": [],
+    "rows": 1,
+    "rowActionButtons": 0,
+    "rowMenus": 0,
+    "overflows": [
+      {
+        "text": "Маршруты API-подключений\n                Контур: unknown · models source: integr",
+        "tag": "SECTION",
+        "sw": 1160,
+        "cw": 1156,
+        "sh": 217,
+        "ch": 217,
+        "w": 1158,
+        "h": 219
+      }
+    ]
+  }
+}

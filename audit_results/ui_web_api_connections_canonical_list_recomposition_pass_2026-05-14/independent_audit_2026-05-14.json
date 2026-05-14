@@ -1,0 +1,22 @@
+{
+  "contour": "UI_WEB_API_CONNECTIONS_CANONICAL_LIST_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "auditor_agent": "019e27a2-dd8a-7740-9ba1-dd96bfb3bad2",
+  "scope": [
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "wild_boar_proxy/web_design_ui/styles/overview.css",
+    "tests/test_web_design_ui.py",
+    "audit_results/ui_web_api_connections_canonical_list_recomposition_pass_2026-05-14/after_metrics.json"
+  ],
+  "findings": [
+    "No contour violations found.",
+    "The screen is a readonly registry: row menu exposes active api_route_validate only.",
+    "Remove, details, and builder surfaces are disabled or deferred.",
+    "No raw config editor, textarea, file input, or stdin surface was found in the screen tree.",
+    "After metrics show visibleSvgIcons = 0 for all states.",
+    "After metrics show overflows = [] for all states.",
+    "Fixture states keep two row menus and two active validate actions; live integration failure has no active API actions."
+  ],
+  "verdict": "PASS"
+}

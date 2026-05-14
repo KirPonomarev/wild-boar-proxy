@@ -549,6 +549,17 @@ function boundedUiActionPayload(uiAction, extraPayload = {}) {
   return payload;
 }
 
+function isApiRouteActionDeferredInReadonlyRegistry(uiAction) {
+  return [
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_check",
+    "api_route_remove",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ].includes(uiAction);
+}
+
 function applyActionAvailability() {
   for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
     const metadata = metadataFor(button.dataset.uiAction);
@@ -563,7 +574,8 @@ function applyActionAvailability() {
     const routeStateAllowed = routeStateRequirement === "disabled"
       ? !routeEnabled
       : (routeStateRequirement === "enabled" ? routeEnabled : true);
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed;
+    const routeActionDeferred = button.classList.contains("api-route-action") && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed && !routeActionDeferred;
     button.disabled = !available;
     button.dataset.available = available ? "true" : "false";
     button.title = available
@@ -576,9 +588,13 @@ function applyActionAvailability() {
               : "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
           )
           : (
+            routeActionDeferred
+              ? "Это действие маршрута отложено в этом readonly registry contour."
+              : (
             requiresLive && !isLiveSource
               ? "Переключите экран на live-источник перед выполнением действий."
               : (metadata.unavailable_reason || "Действие недоступно")
+              )
           )
       );
   }
@@ -721,7 +737,7 @@ function setSourceCopy(source) {
         ? "Пул аккаунтов, статусы проверки и распределение по режимам."
         : (
           screen === "api-connections"
-            ? "Маршруты API-подключений отображаются из пакетов команд. Разрешены только безопасные проверки маршрутов без мутации конфигурации."
+            ? "Маршруты внешних моделей, статусы проверки и безопасные действия."
             : (
           screen === "diagnostics"
             ? "Проверка цепочки подключения, аккаунтов и режима прокси."
@@ -742,7 +758,7 @@ function setSourceCopy(source) {
         ? "Пул аккаунтов, статусы проверки и распределение по режимам."
         : (
           screen === "api-connections"
-            ? "Демо-просмотр API-подключений. Кнопки проверок доступны только в live-режиме."
+            ? "Маршруты внешних моделей, статусы проверки и безопасные действия."
             : (
           screen === "diagnostics"
             ? "Проверка цепочки подключения, аккаунтов и режима прокси."
@@ -1164,7 +1180,8 @@ function setActionsBusy(isBusy) {
     const routeStateAllowed = routeStateRequirement === "disabled"
       ? !routeEnabled
       : (routeStateRequirement === "enabled" ? routeEnabled : true);
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed;
+    const routeActionDeferred = button.classList.contains("api-route-action") && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
+    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed && !routeActionDeferred;
     button.disabled = isBusy || !available;
   }
 }
@@ -1395,12 +1412,15 @@ function apiConnectionsFixtureFromOverview(fixture) {
       upstream_model: "deepseek/deepseek-chat",
       enabled: true,
       status_code: degraded ? "missing_secret" : "enabled",
-      status_label: degraded ? "Требует ключ" : "Разрешён",
+      status_label: degraded ? "missing" : "Разрешён",
       visual_state: degraded ? "amber" : "blue",
       role_label: "Кандидат",
-      last_checked: "",
+      secret_ref: "OPENROUTER_PRIMARY",
+      secret_status_label: degraded ? "missing" : "available",
+      secret_visual_state: degraded ? "amber" : "green",
+      last_checked: degraded ? "" : "12:44",
       note: degraded
-        ? "Демо-предупреждение: ключ не подтверждён, отдельная проверка маршрута не выполнялась."
+        ? "Демо-предупреждение: secret ref не подтверждён, отдельная проверка маршрута не выполнялась."
         : "Демо-представление registry-пакета без отдельной проверки маршрута."
     },
     {
@@ -1413,6 +1433,9 @@ function apiConnectionsFixtureFromOverview(fixture) {
       status_label: "Отключён",
       visual_state: "neutral",
       role_label: "Допустим для резерва",
+      secret_ref: "OPENROUTER_RESERVE",
+      secret_status_label: "unknown",
+      secret_visual_state: "neutral",
       last_checked: "",
       note: "Демо-представление отключённого маршрута. Резервное использование не подтверждено."
     }
@@ -1431,7 +1454,7 @@ function apiConnectionsFixtureFromOverview(fixture) {
       routes_count: routes.length,
       enabled_count: routes.filter((route) => route.enabled).length,
       attention_count: routes.filter((route) => route.status_code === "missing_secret").length,
-      latest_check: "",
+      latest_check: degraded || integrationFailure ? "" : "12:44",
       human_message: integrationFailure
         ? "Демо API-подключений не удалось собрать."
         : "Демо-представление API-подключений без live-команд.",
@@ -1615,25 +1638,32 @@ function renderApiConnectionsSnapshot(snapshot) {
   const banner = document.getElementById("apiConnectionsBanner");
   setClassName(banner, "fixture-banner", visualState);
   banner.textContent = source === "live"
-    ? "API-подключения показываются из пакетов команд. Доступны только безопасные проверки маршрутов; мутации маршрутов отложены."
-    : "Демо-представление API-подключений. Кнопки проверок отключены, пока не включён live-источник.";
+    ? (
+      safeSnapshot.status === "ok"
+        ? "Live-readonly маршрутов. Доступны только безопасные проверки; создание и удаление отложены."
+        : "Live-readonly маршруты недоступны. Предыдущие данные не используются."
+    )
+    : "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.";
 
   const summary = safeSnapshot.summary;
+  const noData = source === "live" && safeSnapshot.status !== "ok";
   const latestCheck = summary.latest_check || "Нет данных";
-  text("apiConnectionsRoutesCount", summary.routes_count);
-  text("apiConnectionsEnabledCount", summary.enabled_count);
-  text("apiConnectionsAttentionCount", summary.attention_count);
-  text("apiConnectionsLatestCheck", latestCheck);
-  text("apiConnectionsRoutesNote", source === "live" ? "список собран из пакетов команд" : "демо");
-  text("apiConnectionsEnabledNote", "только признак разрешения");
-  text("apiConnectionsAttentionNote", "только внимание по маршрутам");
-  text("apiConnectionsLatestCheckNote", latestCheck === "Нет данных" ? "проверка маршрута ещё не запускалась" : "время последней отдельной проверки");
+  text("apiConnectionsRoutesCount", noData ? "—" : summary.routes_count);
+  text("apiConnectionsEnabledCount", noData ? "—" : summary.enabled_count);
+  text("apiConnectionsAttentionCount", noData ? "—" : summary.attention_count);
+  text("apiConnectionsLatestCheck", noData ? "—" : latestCheck);
+  text("apiConnectionsRoutesNote", noData ? "нет данных" : (source === "live" ? "из пакета команд" : "bounded fixture"));
+  text("apiConnectionsEnabledNote", noData ? "нет данных" : "только признак разрешения");
+  text("apiConnectionsAttentionNote", noData ? "нет данных" : "missing/invalid/disabled");
+  text("apiConnectionsLatestCheckNote", noData ? "нет данных" : (latestCheck === "Нет данных" ? "проверка маршрута ещё не запускалась" : "время последней проверки"));
   text(
     "apiConnectionsRegistryStatus",
-    `Контур: ${safeSnapshot.adapter.foundation_phase} · models source: ${safeSnapshot.adapter.models_source}`
+    noData
+      ? `Недоступно · ${summary.machine_error_code}`
+      : `Контур: ${safeSnapshot.adapter.foundation_phase} · models source: ${safeSnapshot.adapter.models_source}`
   );
-  text("apiConnectionsVisibleCount", `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
-  text("apiConnectionsPagination", `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
+  text("apiConnectionsVisibleCount", noData ? "Нет данных" : `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
+  text("apiConnectionsPagination", noData ? "Нет данных для таблицы" : `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
   renderApiConnectionRows(safeSnapshot.routes);
 
   const sidebarDot = document.getElementById("sidebarDot");
@@ -1649,7 +1679,7 @@ function renderApiConnectionRows(routes) {
     const cell = document.createElement("td");
     cell.colSpan = 8;
     cell.className = "dash";
-    cell.textContent = "API-подключения пока не настроены. Добавление маршрутов будет подключено отдельным безопасным контуром.";
+    cell.textContent = "Маршруты недоступны. Создание и изменение маршрутов остаются deferred до отдельного server-side builder.";
     row.append(cell);
     body.append(row);
     return;
@@ -1662,8 +1692,8 @@ function renderApiConnectionRows(routes) {
       td("", route.upstream_model || "—"),
       td("", routeStatusChip(route)),
       td("", route.role_label || "Нет данных"),
+      td("", routeSecretRef(route)),
       td("right mono-value", route.last_checked || "—"),
-      td("", route.note || "—"),
       td("", routeActionButtons(route))
     );
     body.append(row);
@@ -1695,25 +1725,55 @@ function routeStatusChip(route) {
   return chip;
 }
 
-function routeActionButtons(route) {
-  const group = document.createElement("div");
-  group.className = "account-action-group api-route-action-group";
-  group.append(
-    routeActionButton(route, "api_route_allow", "Разрешить"),
-    routeActionButton(route, "api_route_disable", "Отключить"),
-    routeActionButton(route, "api_route_validate", "Проверить"),
-    routeActionButton(route, "api_route_check", "Запрос"),
-    routeActionButton(route, "api_route_profile", "Профиль"),
-    routeActionButton(route, "api_route_evidence_capture", "Свид-во"),
-    routeActionButton(route, "api_route_remove", "Удалить")
-  );
-  return group;
+function routeSecretRef(route) {
+  const wrap = document.createElement("div");
+  wrap.className = "api-secret-ref";
+  const ref = document.createElement("div");
+  ref.className = "mono-value";
+  ref.textContent = route.secret_ref || "unknown";
+  const chip = document.createElement("span");
+  const visual = ACCOUNT_VISUAL_CLASS[route.secret_visual_state] || "neutral";
+  chip.className = `chip ${visual}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const label = document.createElement("span");
+  label.textContent = route.secret_status_label || "unknown";
+  chip.append(dot, label);
+  wrap.append(ref, chip);
+  return wrap;
 }
 
-function routeActionButton(route, uiAction, label) {
+function routeActionButtons(route) {
+  const menu = document.createElement("details");
+  menu.className = "account-action-menu api-route-action-menu";
+
+  const summary = document.createElement("summary");
+  summary.className = "account-action-menu-trigger";
+  setNodeAttribute(summary, "aria-label", `Действия для маршрута ${route.route_id || "unknown"}`);
+  const icon = document.createElement("img");
+  icon.className = "ui-icon button-icon";
+  icon.src = "assets/icons/phosphor/dots-three.png";
+  icon.alt = "";
+  setNodeAttribute(icon, "aria-hidden", "true");
+  summary.append(icon);
+
+  const list = document.createElement("div");
+  list.className = "account-action-menu-list api-route-action-menu-list";
+  list.append(routeActionButton(route, "api_route_validate", "Проверить маршрут", { menuItem: true }));
+  list.append(routeDisabledMenuButton("Детали", "Readonly route details are deferred to a separate surface."));
+  const divider = document.createElement("div");
+  divider.className = "account-action-menu-divider";
+  list.append(divider);
+  list.append(routeDisabledMenuButton("Удалить", "Remove stays deferred in this readonly registry contour.", true));
+
+  menu.append(summary, list);
+  return menu;
+}
+
+function routeActionButton(route, uiAction, label, options = {}) {
   const button = document.createElement("button");
-  button.className = uiAction === "api_route_remove"
-    ? "button small api-route-action api-route-destructive-action"
+  button.className = options.menuItem
+    ? "button small api-route-action account-menu-item"
     : "button small api-route-action";
   button.type = "button";
   button.dataset.uiAction = uiAction;
@@ -1730,10 +1790,20 @@ function routeActionButton(route, uiAction, label) {
     api_route_evidence_capture: "Свидетельство маршрута: собрать локальный support artifact. UI не читает evidence file.",
     api_route_remove: "Удалить только отключённую route registry запись после server preflight. Не меняет traffic, primary route, failover или runtime readiness."
   };
-  button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный JSON command surface.";
+  button.title = routeActionTitles[uiAction] || "Действие с маршрутом через серверный command surface.";
   button.addEventListener("click", () => {
     maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId });
   });
+  return button;
+}
+
+function routeDisabledMenuButton(label, title, danger = false) {
+  const button = document.createElement("button");
+  button.className = `button small account-menu-item disabled${danger ? " danger" : ""}`;
+  button.type = "button";
+  button.disabled = true;
+  button.textContent = label;
+  button.title = title;
   return button;
 }
 

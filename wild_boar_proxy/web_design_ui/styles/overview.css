@@ -1475,7 +1475,7 @@ button:disabled {
 
 .api-connections-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .kpi-card {
@@ -1716,9 +1716,9 @@ button:disabled {
 }
 
 .api-connections-table-card {
-  max-height: calc(100vh - 462px);
+  max-height: calc(100vh - 520px);
   overflow: auto;
-  padding: 20px 22px 16px;
+  padding: 18px 20px 14px;
 }
 
 .table-top {
@@ -1740,7 +1740,7 @@ button:disabled {
 }
 
 .api-connections-table {
-  min-width: 1112px;
+  min-width: 980px;
 }
 
 .table th {
@@ -1833,7 +1833,8 @@ button:disabled {
 }
 
 .api-route-action-group {
-  min-width: 180px;
+  justify-content: flex-end;
+  min-width: 44px;
 }
 
 .account-action,
@@ -1871,6 +1872,44 @@ button:disabled {
 .api-route-destructive-action {
   border-color: #c74747;
   color: #922626;
+}
+
+.api-secret-ref {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.api-secret-ref .chip {
+  justify-self: start;
+}
+
+.api-route-action-menu {
+  justify-content: center;
+}
+
+.api-route-action-menu-list {
+  min-width: 196px;
+}
+
+.api-route-builder-card {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  margin-top: 14px;
+  min-height: 74px;
+  padding: 14px 18px;
+}
+
+.api-route-builder-icon {
+  align-items: center;
+  background: var(--blue-bg);
+  border-radius: 12px;
+  display: flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
 }
 
 .account-detail-trigger {
