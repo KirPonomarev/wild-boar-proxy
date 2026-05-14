@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_ATTESTATION_DETAIL_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "The repo already provides readonly packet-owned runtime attestation detail through status --json and healthcheck --json, but path-bearing/internal fields and browser-owned super-verdict synthesis remain out of bounds."
+    },
+    {
+      "agent": "Rawls",
+      "role": "independent repo fact checker",
+      "finding": "Repo evidence supports a stricter reading: the dedicated design-package screen and contour queue still describe runtime attestation detail as needing a bounded attestation packet, so a future implementation must stay limited to a safe subset and exclude path-bearing/internal detail."
+    },
+    {
+      "agent": "Heisenberg",
+      "role": "post-artifact closeout auditor",
+      "finding": "No substantive canon drift was found in the spec, matrix, or audit. The only block was pre-commit closeout overclaim before the contour had actually been committed and pushed."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "UI_READINESS_SPEC.md:166-208",
+      "fact": "The Runtime Status screen is defined as status --json with optional operator-triggered healthcheck detail, with explicit attestation fields and required separation of desired vs effective mode."
+    },
+    {
+      "source": "RUNTIME_CONTRACT.md:197-200",
+      "fact": "Live attestation is owned by healthcheck --json, while status --json may expose only summary and must not replace live attestation."
+    },
+    {
+      "source": "COMMAND_API.md:207-208,1126-1143,1182-1188",
+      "fact": "COMMAND_API distinguishes delegated status truth from healthcheck owner truth and explicitly defines stable_runtime_consumer plus deterministic_stable_recovery_contract/result surfaces."
+    },
+    {
+      "source": "wild_boar_proxy/runtime.py:5170-5199",
+      "fact": "status --json already emits attestation_summary and stable_runtime_consumer."
+    },
+    {
+      "source": "wild_boar_proxy/runtime.py:5990-6014",
+      "fact": "healthcheck --json already emits top-level deterministic_stable_recovery_contract and deterministic_stable_recovery_result."
+    },
+    {
+      "source": "tests/test_cli.py:4933-5007",
+      "fact": "CLI tests verify readonly stable_runtime_consumer contract detail inside status --json."
+    },
+    {
+      "source": "tests/test_cli.py:5455-5502",
+      "fact": "CLI tests verify status --json delegates deterministic_stable_recovery_result as nested secondary detail rather than top-level owner truth."
+    },
+    {
+      "source": "tests/test_cli.py:2998-3030,3084-3110",
+      "fact": "CLI tests verify healthcheck owner-path recovery result, including effectful_claim_allowed and guardrail_status distinction between confirmed and observation_only."
+    },
+    {
+      "source": "tests/test_cli.py:1565-1586",
+      "fact": "CLI tests verify current_proxy_url remains a separate truth surface from nested proxy candidate evidence."
+    },
+    {
+      "source": "tests/test_ui_shell.py:511-540",
+      "fact": "UI shell requires structured attestation_summary fields and treats them as validated packet-owned runtime snapshot data."
+    },
+    {
+      "source": "audit_results/ui_final_screen_passports_2026-05-14.json:1008-1034",
+      "fact": "The design-package screen passport for runtime attestation detail remains admission-required and warns that runtime attestation needs bounded JSON packet truth."
+    }
+  ],
+  "checks": [
+    {
+      "check": "readonly_attestation_detail_exists_today",
+      "verdict": "PASS",
+      "reason": "Existing status and healthcheck packets already provide readonly attestation detail surfaces."
+    },
+    {
+      "check": "status_vs_healthcheck_ownership_boundary",
+      "verdict": "PASS",
+      "reason": "Artifacts preserve status --json as primary operator truth and healthcheck --json as deeper owner-path attestation detail."
+    },
+    {
+      "check": "delegated_recovery_secondary_only",
+      "verdict": "PASS",
+      "reason": "Artifacts keep deterministic_stable_recovery_result secondary and forbid collapse into a stronger runtime-health claim."
+    },
+    {
+      "check": "path_bearing_internal_fields_excluded",
+      "verdict": "PASS",
+      "reason": "Artifacts explicitly exclude selected_source_path and other implementation/file-location detail."
+    },
+    {
+      "check": "verdict_reconciliation",
+      "verdict": "PASS",
+      "reason": "A stricter deferred reading remains plausible for the full design-package screen, but existing status/healthcheck packets are sufficient for readonly admission of a bounded safe subset without requiring a new packet."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_READONLY_ADMISSION_WITH_EXISTING_PACKETS"
+}
