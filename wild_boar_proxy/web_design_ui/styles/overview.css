@@ -427,12 +427,16 @@ button:disabled {
   max-width: none;
 }
 
+.desktop[data-screen="diagnostics"] .header-actions #refreshFixture {
+  order: 1;
+}
+
 .desktop[data-screen="diagnostics"] .main-header {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .desktop[data-screen="diagnostics"] .main {
-  padding: 30px 40px 20px;
+  padding: 24px 40px 14px;
 }
 
 .desktop[data-screen="diagnostics"] h1 {
@@ -445,7 +449,7 @@ button:disabled {
 }
 
 .desktop[data-screen="diagnostics"] .fixture-banner {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   min-height: 36px;
 }
 
@@ -494,12 +498,19 @@ button:disabled {
 
 .header-actions #diagnosticsExportAction {
   min-width: 112px;
-  order: 1;
+  order: 2;
 }
 
 .header-actions #diagnosticsFullCheckAction {
   min-width: 170px;
-  order: 2;
+  order: 3;
+}
+
+.header-actions #diagnosticsFullCheckAction.diagnostics-blocked-action {
+  background: #f1ebe3;
+  border-color: rgba(217, 208, 195, .82);
+  color: var(--secondary);
+  opacity: .62;
 }
 
 .header-actions #launchClientAction {
@@ -2088,8 +2099,8 @@ button:disabled {
 
 .diag-layout {
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(376px, 400px) minmax(0, 1fr);
+  gap: 22px;
+  grid-template-columns: 368px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -2118,7 +2129,7 @@ button:disabled {
 
 .signal-list {
   display: grid;
-  gap: 8px;
+  gap: 7px;
 }
 
 .signal-item {
@@ -2128,9 +2139,9 @@ button:disabled {
   border-radius: 14px;
   display: grid;
   gap: 10px;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  min-height: 64px;
-  padding: 9px 12px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  min-height: 82px;
+  padding: 10px 12px;
 }
 
 .signal-item.active {
@@ -2142,9 +2153,9 @@ button:disabled {
   align-items: center;
   border-radius: 13px;
   display: flex;
-  height: 36px;
+  height: 40px;
   justify-content: center;
-  width: 36px;
+  width: 40px;
 }
 
 .signal-icon.green {
@@ -2211,17 +2222,18 @@ button:disabled {
   border-top: 1px solid var(--border);
   color: var(--secondary);
   display: grid;
-  font-size: 12px;
+  font-size: 11px;
   gap: 6px;
-  line-height: 16px;
+  line-height: 15px;
   margin-top: auto;
-  padding-top: 14px;
+  opacity: .78;
+  padding-top: 10px;
 }
 
 .diag-detail {
   display: grid;
-  gap: 10px;
-  grid-template-rows: auto auto auto auto auto;
+  gap: 7px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -2229,7 +2241,8 @@ button:disabled {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  padding: 14px 18px;
+  min-height: 66px;
+  padding: 10px 16px;
 }
 
 .detail-object {
@@ -2271,13 +2284,13 @@ button:disabled {
 
 .diagnostics-facts-card {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .diagnostics-facts {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 10px;
+  grid-template-columns: minmax(128px, .8fr) minmax(260px, 1.35fr) minmax(170px, 1fr);
 }
 
 .diagnostics-facts div {
@@ -2285,7 +2298,7 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 12px;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 5px 9px;
 }
 
 .diagnostics-facts span,
@@ -2304,21 +2317,19 @@ button:disabled {
   font-size: 12px;
   line-height: 17px;
   margin-top: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .diagnostics-facts-card p {
   color: var(--secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
 .check-chain {
   display: grid;
-  gap: 6px;
+  gap: 7px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -2330,12 +2341,11 @@ button:disabled {
   display: grid;
   gap: 5px;
   grid-template-columns: 24px minmax(0, 1fr);
-  min-height: 46px;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 5px 10px;
 }
 
-.check-chain-step strong,
-.check-chain-step span:last-child {
+.check-chain-step strong {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -2355,6 +2365,8 @@ button:disabled {
   font-size: 11px;
   grid-column: 2;
   line-height: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .check-chain-step.success {
@@ -2371,9 +2383,9 @@ button:disabled {
   color: var(--secondary);
   display: flex;
   grid-row: 1 / span 2;
-  height: 24px;
+  height: 22px;
   justify-content: center;
-  width: 24px;
+  width: 22px;
 }
 
 .check-chain-step.success .chain-state-icon {
@@ -2385,8 +2397,8 @@ button:disabled {
 }
 
 .chain-state-icon .button-icon {
-  height: 18px;
-  width: 18px;
+  height: 16px;
+  width: 16px;
 }
 
 .detail-grid {
@@ -2404,21 +2416,29 @@ button:disabled {
   line-height: 17px;
 }
 
-.diagnostics-insight-grid {
+.diagnostics-insight-grid,
+.diagnostics-detail-stack {
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
 
 .compact-section-head {
   align-items: start;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
+}
+
+.diagnostics-chain-card .secondary,
+.diagnostics-records-card .secondary,
+.diagnostics-actions-card .secondary {
+  display: none;
 }
 
 .diagnostics-fixture-chart {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .diagnostics-fixture-chart[hidden],
@@ -2434,16 +2454,17 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 16px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
-  height: 90px;
+  height: 78px;
   overflow: hidden;
-  padding: 12px;
+  padding: 10px 14px;
   position: relative;
 }
 
 .telemetry-summary {
   display: flex;
   gap: 8px;
-  margin-bottom: 6px;
+  justify-content: flex-end;
+  margin-bottom: 2px;
 }
 
 .telemetry-summary span {
@@ -2452,7 +2473,7 @@ button:disabled {
   color: var(--secondary);
   font-size: 11px;
   line-height: 14px;
-  padding: 5px 9px;
+  padding: 3px 8px;
   white-space: nowrap;
 }
 
@@ -2463,9 +2484,9 @@ button:disabled {
 .telemetry-scale {
   align-items: stretch;
   display: grid;
-  gap: 4px;
-  grid-template-columns: repeat(28, minmax(4px, 1fr));
-  height: 34px;
+  gap: 5px;
+  grid-template-columns: repeat(48, minmax(5px, 1fr));
+  height: 46px;
 }
 
 .tick {
@@ -2479,19 +2500,19 @@ button:disabled {
 }
 
 .tick.success {
-  background: rgba(45, 122, 75, .64);
+  background: var(--green);
 }
 
 .tick.failure {
-  background: rgba(182, 64, 44, .66);
+  background: var(--red);
 }
 
 .tick.stale {
-  background: rgba(168, 106, 16, .62);
+  background: var(--amber);
 }
 
 .tick.no-data {
-  background: rgba(141, 133, 123, .28);
+  background: #d9d0c3;
 }
 
 .telemetry-legend {
@@ -2499,7 +2520,7 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .telemetry-legend span {
@@ -2512,13 +2533,13 @@ button:disabled {
 }
 
 .telemetry-legend .tick {
-  height: 9px;
-  width: 9px;
+  height: 8px;
+  width: 8px;
 }
 
 .no-data-scale {
-  grid-template-columns: repeat(8, minmax(8px, 1fr));
-  height: 34px;
+  grid-template-columns: repeat(48, minmax(5px, 1fr));
+  height: 46px;
   margin: 2px 0;
 }
 
@@ -2612,6 +2633,7 @@ button:disabled {
 
 .chart-caption {
   color: var(--secondary);
+  display: none;
   font-size: 11px;
   line-height: 14px;
 }
@@ -2621,20 +2643,20 @@ button:disabled {
   border: 1px dashed #dfbd8c;
   border-radius: 14px;
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 7px;
+  padding: 8px 12px;
 }
 
 .diagnostics-deferred-state p {
   color: var(--secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
 .diagnostics-record-list {
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .diagnostics-record {
@@ -2642,16 +2664,23 @@ button:disabled {
   border-top: 1px solid rgba(217, 208, 195, .62);
   display: grid;
   font-size: 12px;
-  gap: 9px;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(72px, auto) auto;
+  gap: 10px;
+  grid-template-columns: 74px minmax(0, 1fr) minmax(118px, auto) minmax(64px, auto);
   line-height: 16px;
-  min-height: 27px;
-  padding-top: 5px;
+  min-height: 22px;
+  padding-top: 4px;
+}
+
+.diagnostics-record .round-icon {
+  display: none;
 }
 
 .diagnostics-record time {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 10px;
+  grid-column: 1;
+  grid-row: 1;
+  order: -1;
 }
 
 .diagnostics-record code {
@@ -2665,7 +2694,7 @@ button:disabled {
 }
 
 .diag-detail .card.pad {
-  padding: 14px;
+  padding: 10px 12px;
 }
 
 .diag-detail .detail-grid .card.pad {
@@ -2706,7 +2735,7 @@ button:disabled {
   font-size: 11px;
   gap: 6px 12px;
   line-height: 15px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .action-summary strong {
@@ -2721,17 +2750,17 @@ button:disabled {
 .action-stack {
   border-top: 1px solid rgba(217, 208, 195, .62);
   display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 6px;
   padding-top: 6px;
 }
 
 .action-stack .button {
-  font-size: 10px;
-  height: 26px;
+  font-size: 12px;
+  height: 31px;
   min-width: 0;
-  padding-inline: 6px;
+  padding-inline: 10px;
   width: 100%;
 }
 
@@ -2750,16 +2779,18 @@ button:disabled {
 .action-note {
   border-top: 1px solid rgba(217, 208, 195, .62);
   color: var(--secondary);
+  display: none;
   font-size: 10px;
   line-height: 14px;
-  margin-top: 8px;
-  overflow: hidden;
-  padding-top: 8px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 6px;
+  padding-top: 6px;
 }
 
 .detail-grid .action-note {
+  display: none;
+}
+
+.diagnostics-support-meta {
   display: none;
 }
 

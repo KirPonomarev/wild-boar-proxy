@@ -1,0 +1,58 @@
+{
+  "contour": "UI_WEB_DIAGNOSTICS_CANONICAL_RECOMPOSITION_PASS",
+  "date": "2026-05-14",
+  "scope": {
+    "runtime_changed": false,
+    "command_adapter_changed": false,
+    "allowlist_changed": false,
+    "live_server_changed": false,
+    "desktop_changed": false,
+    "diagnostics_ui_changed": true,
+    "tests_changed": true
+  },
+  "command_boundary": {
+    "admitted_diagnostics_action": "export_diagnostics",
+    "full_check": "disabled_missing_surface",
+    "lifecycle_actions": "disabled_non_dispatching",
+    "journal_action": "disabled_deferred",
+    "danger_action": "disabled_non_dispatching"
+  },
+  "baseline": {
+    "metrics_file": "audit_results/ui_web_diagnostics_canonical_recomposition_pass_2026-05-14/baseline_metrics.json",
+    "telemetry_scale_width_px": 326,
+    "fixture_tick_count": 28,
+    "main_scroll_height_px": 942,
+    "diagnostics_screen_bottom_px": 913,
+    "action_button_width_px": 68
+  },
+  "after": {
+    "metrics_file": "audit_results/ui_web_diagnostics_canonical_recomposition_pass_2026-05-14/after_metrics.json",
+    "screenshots_dir": "audit_results/ui_web_diagnostics_canonical_recomposition_pass_2026-05-14/screenshots/after",
+    "states": [
+      "fixture_healthy",
+      "fixture_degraded",
+      "fixture_down",
+      "fixture_stale",
+      "live_integration_failure"
+    ],
+    "telemetry_scale_width_px_min": 712,
+    "fixture_tick_count": 48,
+    "live_deferred_tick_count": 48,
+    "visible_svg_icons": 0,
+    "visible_img_icons": 12,
+    "document_scroll_width_px": 1600,
+    "document_scroll_height_px": 1000,
+    "main_client_height_px": 942,
+    "main_scroll_height_px": 942,
+    "diagnostics_screen_bottom_px": 929,
+    "route_ellipsized": false,
+    "button_text_clipped": false,
+    "record_rows_overflow": false
+  },
+  "verification": {
+    "node_check": "passed",
+    "unit_tests": "87 tests passed",
+    "diff_check": "passed",
+    "private_reference_trace_scan": "passed"
+  }
+}

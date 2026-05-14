@@ -1,0 +1,267 @@
+[
+  {
+    "name": "fixture_healthy",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 913,
+    "leftPanelBottom": 913,
+    "rightDetailBottom": 913,
+    "telemetryScaleWidth": 326,
+    "telemetryTickCount": 28,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 13,
+    "routeClientWidth": 206,
+    "routeScrollWidth": 206,
+    "buttons": [
+      {
+        "text": "Экспорт",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": "export_diagnostics"
+      },
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      }
+    ]
+  },
+  {
+    "name": "fixture_degraded",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 913,
+    "leftPanelBottom": 913,
+    "rightDetailBottom": 913,
+    "telemetryScaleWidth": 326,
+    "telemetryTickCount": 28,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 13,
+    "routeClientWidth": 206,
+    "routeScrollWidth": 206,
+    "buttons": [
+      {
+        "text": "Экспорт",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": "export_diagnostics"
+      },
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      }
+    ]
+  },
+  {
+    "name": "fixture_down",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 913,
+    "leftPanelBottom": 913,
+    "rightDetailBottom": 913,
+    "telemetryScaleWidth": 326,
+    "telemetryTickCount": 28,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 13,
+    "routeClientWidth": 206,
+    "routeScrollWidth": 206,
+    "buttons": [
+      {
+        "text": "Экспорт",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": "export_diagnostics"
+      },
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      }
+    ]
+  },
+  {
+    "name": "fixture_stale",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 913,
+    "leftPanelBottom": 913,
+    "rightDetailBottom": 913,
+    "telemetryScaleWidth": 326,
+    "telemetryTickCount": 28,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 13,
+    "routeClientWidth": 206,
+    "routeScrollWidth": 206,
+    "buttons": [
+      {
+        "text": "Экспорт",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": "export_diagnostics"
+      },
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      }
+    ]
+  },
+  {
+    "name": "live_integration_failure",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "diagnosticsScreenBottom": 898,
+    "leftPanelBottom": 898,
+    "rightDetailBottom": 898,
+    "telemetryScaleWidth": 326,
+    "telemetryTickCount": 8,
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 13,
+    "routeClientWidth": 206,
+    "routeScrollWidth": 206,
+    "buttons": [
+      {
+        "text": "Экспорт",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": "export_diagnostics"
+      },
+      {
+        "text": "Повторить проверку",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Перевести в резерв",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть журнал",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Вывести из пула",
+        "clientWidth": 68,
+        "scrollWidth": 68,
+        "disabled": true,
+        "action": ""
+      }
+    ]
+  }
+]

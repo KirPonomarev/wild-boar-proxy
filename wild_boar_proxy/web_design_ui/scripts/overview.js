@@ -807,7 +807,7 @@ function updateDiagnosticsDetailSource(source) {
     };
     const [visual, copy] = fixtureOnly
       ? (fixtureCopy[fixtureState] || fixtureCopy.unknown)
-      : ["red", "Live-readonly диагностики недоступен для истории сигналов. Предыдущие healthy-данные не используются."];
+      : ["red", "Live-readonly диагностика недоступна. Предыдущие healthy-данные не используются."];
     banner.className = `fixture-banner ${visual}`;
     banner.textContent = copy;
   }

@@ -112,7 +112,7 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
               <span>Экспорт</span>
             </button>
-            <button id="diagnosticsFullCheckAction" class="button primary diagnostics-only" type="button" disabled title="Полная проверка требует отдельной admitted command surface." hidden>
+            <button id="diagnosticsFullCheckAction" class="button diagnostics-only diagnostics-blocked-action" type="button" disabled title="Полная проверка требует отдельной admitted command surface." hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
               <span>Полная проверка</span>
             </button>
@@ -596,10 +596,10 @@
                   <div><span>Маршрут</span><strong>proxy -> codex -> account</strong></div>
                   <div><span>Последняя проверка</span><strong>Сегодня, 12:38:54</strong></div>
                 </div>
-                <p id="diagnosticsMessage">Account auth не прошёл проверку. Live health truth остаётся за отдельными command packets.</p>
+                <p id="diagnosticsMessage">Account auth не прошёл проверку.</p>
               </div>
 
-              <div class="card pad">
+              <div class="card pad diagnostics-chain-card">
                 <div class="section-head compact-section-head">
                   <div>
                     <div class="card-title">Проверочная цепочка</div>
@@ -631,12 +631,12 @@
                 </div>
               </div>
 
-              <div class="diagnostics-insight-grid">
+              <div class="diagnostics-detail-stack">
                 <div class="card pad diagnostics-history-card" data-diagnostics-region="history_chart_slot">
                   <div class="section-head compact-section-head">
                     <div>
                       <div class="card-title">Шкала сигнала</div>
-                      <div class="secondary">Последние 48 минут · bounded fixture history.</div>
+                      <div class="secondary">Последние 48 минут · bounded history view.</div>
                     </div>
                     <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
                   </div>
@@ -649,12 +649,17 @@
                     <div class="diagnostics-line-chart" role="img" aria-label="Детальная шкала сигнала: success, failure, stale и no data">
                       <div class="telemetry-scale" aria-hidden="true">
                         <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span>
-                        <span class="tick success"></span><span class="tick failure"></span><span class="tick failure"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick failure"></span><span class="tick success"></span><span class="tick success"></span>
                         <span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span><span class="tick success"></span>
                         <span class="tick no-data"></span><span class="tick success"></span><span class="tick failure"></span><span class="tick success"></span>
                         <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
                         <span class="tick stale"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
                         <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick failure"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick no-data"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick success"></span>
+                        <span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span><span class="tick success"></span>
                       </div>
                       <div class="telemetry-legend">
                         <span><i class="tick success"></i>success</span>
@@ -668,6 +673,16 @@
                   <div id="diagnosticsHistoryDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
                     <span class="chip amber"><span class="dot"></span>history unavailable</span>
                     <div class="telemetry-scale no-data-scale" aria-hidden="true">
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
+                      <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                     </div>
@@ -714,27 +729,19 @@
                     <p>Live-записи не выводятся из журнального потока. Нужен отдельный redacted JSON packet.</p>
                   </div>
                 </div>
-              </div>
 
-              <div class="detail-grid">
-                <div class="card pad tech-log">
-                  <div class="card-title">Поля пакета поддержки</div>
-                  <div class="tech-row"><span>Статус</span><span id="diagnosticsPacketStatus">ожидание</span></div>
-                  <div class="tech-row compact-hidden"><span>Код выхода</span><span id="diagnosticsExitCode">-</span></div>
-                  <div class="tech-row"><span>Машинный код</span><span id="diagnosticsMachineCode">-</span></div>
-                  <div class="tech-row compact-hidden"><span>Следующее действие</span><span id="diagnosticsNextAction">нет</span></div>
-                </div>
-                <div class="card pad">
-                  <div class="card-title">Действия</div>
+                <div class="card pad diagnostics-actions-card">
+                  <div class="section-head compact-section-head">
+                    <div>
+                      <div class="card-title">Что делать</div>
+                      <div class="secondary">Действия ниже не меняют runtime без отдельной admitted surface.</div>
+                    </div>
+                    <span class="chip neutral"><span class="dot"></span>blocked</span>
+                  </div>
                   <div class="action-summary">
-                    <span>Изменённые записи: <strong id="diagnosticsChangedFiles">0</strong></span>
-                    <span>Метка артефакта: <strong id="diagnosticsBundleRef">не предоставлена</strong></span>
+                    <span>Пакет поддержки: <strong id="diagnosticsBundleRef">не создан</strong></span>
                   </div>
                   <div class="action-stack">
-                    <button class="button small live-action" type="button" data-ui-action="export_diagnostics">
-                      <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
-                      <span>Экспорт</span>
-                    </button>
                     <button class="button small disabled" type="button" disabled title="Full check requires a separate admitted command surface.">Повторить проверку</button>
                     <button class="button small disabled" type="button" disabled title="Account lifecycle actions are handled by the Accounts screen command mapping.">Перевести в резерв</button>
                     <button class="button small disabled" type="button" disabled title="Human-open support action is not admitted in this contour.">Открыть журнал</button>
@@ -743,7 +750,14 @@
                       <span>Вывести из пула</span>
                     </button>
                   </div>
-                  <div class="action-note">Просмотр артефакта отложен · Сырой текст диагностики недоступен · Истина runtime не изменяется</div>
+                  <div class="action-note">missing command surface · human-open deferred · requires account action gate</div>
+                  <div class="diagnostics-support-meta" aria-hidden="true">
+                    <span id="diagnosticsPacketStatus">ожидание</span>
+                    <span id="diagnosticsExitCode">-</span>
+                    <span id="diagnosticsMachineCode">-</span>
+                    <span id="diagnosticsNextAction">нет</span>
+                    <span id="diagnosticsChangedFiles">0</span>
+                  </div>
                 </div>
               </div>
             </section>
