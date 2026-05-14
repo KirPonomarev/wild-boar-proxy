@@ -1,0 +1,489 @@
+{
+  "generated_at": "2026-05-14T20:47:56Z",
+  "metrics": [
+    {
+      "scenario": "empty",
+      "displayState": "неизвестно",
+      "cardClass": "action-panel neutral compact-action-panel",
+      "ledgerHidden": false,
+      "ledgerRows": 0,
+      "emptyRows": 1,
+      "summaryTitle": "Действия ещё не выполнялись.",
+      "summaryRefresh": "не запрашивалось",
+      "ledgerText": "Действия ещё не выполнялись в этой UI-сессии.",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 902,
+        "width": 340.203125,
+        "height": 277
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/empty.png"
+    },
+    {
+      "scenario": "running",
+      "displayState": "running",
+      "cardClass": "action-panel compact-action-panel neutral",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "validate_account",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "validate_account · acc-02123:47:32выполняетсяrole=account_verification · target=acc-021 · code=RUNNING · changed_files=0 · refresh not requiredДействие выполняется.command packet outcome only · Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.machineRUNNINGnextwaitrefreshrefresh not requireddisplayrunning",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 864,
+        "width": 340.203125,
+        "height": 239
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/running.png"
+    },
+    {
+      "scenario": "success_refresh_complete",
+      "displayState": "ok_refresh_complete",
+      "cardClass": "action-panel compact-action-panel green",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "sync_runtime",
+      "summaryRefresh": "canonical refresh complete",
+      "ledgerText": "sync_runtime · -23:47:35подтвержденоrole=runtime_sync · target=- · code=OK · changed_files=1 · canonical refresh completeСверка выполнена, требуется подтверждение refresh.command packet outcome only · Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.machineOKnextrefresh_runtimerefreshcanonical refresh completedisplayok_refresh_complete",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 900,
+        "width": 340.203125,
+        "height": 275
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/success_refresh_complete.png"
+    },
+    {
+      "scenario": "success_refresh_pending",
+      "displayState": "ok_refresh_pending",
+      "cardClass": "action-panel compact-action-panel amber",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "sync_runtime",
+      "summaryRefresh": "canonical refresh pending",
+      "ledgerText": "sync_runtime · -23:47:38требует refreshrole=runtime_sync · target=- · code=OK · changed_files=1 · canonical refresh pendingСверка выполнена, требуется подтверждение refresh.command packet outcome only · Пакет действия сообщил ok; каноническое состояние runtime требует обновлённого JSON.machineOKnextrefresh_runtimerefreshcanonical refresh pendingdisplayok_refresh_pending",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 900,
+        "width": 340.203125,
+        "height": 275
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/success_refresh_pending.png"
+    },
+    {
+      "scenario": "refresh_failed",
+      "displayState": "ok_refresh_failed",
+      "cardClass": "action-panel compact-action-panel amber",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "sync_runtime",
+      "summaryRefresh": "canonical refresh failed",
+      "ledgerText": "sync_runtime · -23:47:40refresh failedrole=runtime_sync · target=- · code=OK · changed_files=1 · canonical refresh failedСверка выполнена, требуется подтверждение refresh.command packet outcome only · Команда могла выполниться, но состояние не подтверждено: canonical refresh failed.machineOKnextrefresh_runtimerefreshcanonical refresh faileddisplayok_refresh_failed",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 900,
+        "width": 340.203125,
+        "height": 275
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/refresh_failed.png"
+    },
+    {
+      "scenario": "command_error",
+      "displayState": "command_error",
+      "cardClass": "action-panel compact-action-panel red",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "sync_runtime",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "sync_runtime · -23:47:43ошибка командыrole=runtime_sync · target=- · code=COMMAND_FAILED · changed_files=0 · refresh not requiredКоманда не выполнена.command packet outcome only · Строгий JSON-пакет сообщил command_error. UI не должен показывать это как успех.machineCOMMAND_FAILEDnextretryrefreshrefresh not requireddisplaycommand_error",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 864,
+        "width": 340.203125,
+        "height": 239
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/command_error.png"
+    },
+    {
+      "scenario": "invalid_json",
+      "displayState": "invalid_json",
+      "cardClass": "action-panel compact-action-panel red",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "validate_account",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "validate_account · acc-02123:47:45invalid JSONrole=integration_failure · target=acc-021 · code=UI_ACTION_INVALID_JSON · changed_files=0 · refresh not requiredEndpoint не вернул admitted response.command packet outcome only · Endpoint вернул invalid JSON. Это жёсткая ошибка интеграции, а не успех.machineUI_ACTION_INVALID_JSONnextretryrefreshrefresh not requireddisplayinvalid_json",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 864,
+        "width": 340.203125,
+        "height": 239
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/invalid_json.png"
+    },
+    {
+      "scenario": "timeout",
+      "displayState": "timeout",
+      "cardClass": "action-panel compact-action-panel amber",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "validate_account",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "validate_account · acc-02123:47:48timeoutrole=integration_failure · target=acc-021 · code=UI_ACTION_TIMEOUT · changed_files=0 · refresh not requiredEndpoint не вернул admitted response.command packet outcome only · Запрос истёк по времени. Это recoverable ошибка интеграции, а не успех.machineUI_ACTION_TIMEOUTnextretryrefreshrefresh not requireddisplaytimeout",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 846,
+        "width": 340.203125,
+        "height": 221
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/timeout.png"
+    },
+    {
+      "scenario": "duplicate_blocked",
+      "displayState": "duplicate_blocked",
+      "cardClass": "action-panel compact-action-panel neutral",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "validate_account",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "validate_account · acc-02123:47:50дубль заблокированrole=ui_session_guard · target=acc-021 · code=UI_DUPLICATE_SUBMIT_BLOCKED · changed_files=0 · refresh not requiredПовторная отправка заблокирована в текущей UI-сессии.command packet outcome only · Повторная отправка заблокирована в текущей UI-сессии. Второй command dispatch не выполнялся.machineUI_DUPLICATE_SUBMIT_BLOCKEDnextwaitrefreshrefresh not requireddisplayduplicate_blocked",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 952,
+        "width": 340.203125,
+        "height": 327
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/duplicate_blocked.png"
+    },
+    {
+      "scenario": "onboarding_ambiguous",
+      "displayState": "ok_refresh_pending",
+      "cardClass": "action-panel compact-action-panel amber",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "onboard_account",
+      "summaryRefresh": "canonical refresh pending",
+      "ledgerText": "onboard_account · -23:47:53требует refreshrole=account_onboarding · target=- · code=OK · changed_files=0 · canonical refresh pendingOnboarding требует выбора оператора.command packet outcome only · Пакет действия сообщил ok; каноническое состояние runtime требует обновлённого JSON.machineOKnextoperator_actionrefreshcanonical refresh pendingdisplayok_refresh_pendingselected_backend_id=hidden · new_backend_ids=0 · reserve_first=false · final_outcome=ambiguous_new_auth_detection",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 902,
+        "width": 340.203125,
+        "height": 277
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/onboarding_ambiguous.png"
+    },
+    {
+      "scenario": "diagnostics_export_result",
+      "displayState": "ok_refresh_complete",
+      "cardClass": "action-panel compact-action-panel blue",
+      "ledgerHidden": false,
+      "ledgerRows": 1,
+      "emptyRows": 0,
+      "summaryTitle": "export_diagnostics",
+      "summaryRefresh": "refresh not required",
+      "ledgerText": "export_diagnostics · -23:47:55подтвержденоrole=support_artifact · target=- · code=OK · changed_files=1 · refresh not requiredДиагностический пакет поддержки экспортирован.command packet outcome only · Пакет support artifact сообщил ok. Это не является отдельным источником runtime truth.machineOKnextnonerefreshrefresh not requireddisplayok_refresh_completeлокальный artifact · только метаданные: wbp-diagnostics-secretartifact_ref=только метаданные: wbp-diagnostics-secret · redaction=enforced · changed_files=1",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "document": {
+        "scrollWidth": 1600,
+        "scrollHeight": 1000
+      },
+      "panelRect": {
+        "left": 1000,
+        "right": 1600,
+        "top": 0,
+        "bottom": 1000,
+        "width": 600,
+        "height": 1000,
+        "scrollWidth": 599,
+        "clientWidth": 599
+      },
+      "compactCardRect": {
+        "left": 1190.796875,
+        "right": 1531,
+        "top": 625,
+        "bottom": 902,
+        "width": 340.203125,
+        "height": 277
+      },
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 4,
+      "fileInputs": 0,
+      "rawPathVisible": false,
+      "rawArgvVisible": false,
+      "clipped": [],
+      "screenshot": "screenshots/after/diagnostics_export_result.png"
+    }
+  ]
+}

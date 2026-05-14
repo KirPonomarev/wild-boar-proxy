@@ -62,12 +62,20 @@ const EVENT_ICON = {
 };
 
 const ACTION_STATUS_VISUAL_CLASS = {
-  ok: "green",
-  running: "amber",
+  running: "neutral",
+  duplicate_blocked: "neutral",
+  ok_refresh_pending: "amber",
+  ok_refresh_complete: "green",
+  ok_refresh_failed: "amber",
   command_error: "red",
   integration_failure: "red",
   invalid_json: "red",
   timeout: "amber",
+  partial_success: "amber",
+  unsupported: "neutral",
+  missing_surface: "neutral",
+  needs_user_action: "amber",
+  ok: "green",
   stale: "amber",
   degraded: "amber",
   down: "red",
@@ -191,6 +199,8 @@ let currentAccountsSnapshot = null;
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
+let actionLedgerFilter = "all";
+let activeActionRequestKey = "";
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -413,9 +423,17 @@ function confirmationPolicyFor(uiAction, metadata) {
 function actionDisplayState(payload, refreshState = "none") {
   const result = payload.result || {};
   const status = String(payload.status || result.status || "unknown");
-  let displayState = status;
-  if (refreshState === "failed" && status === "ok" && payload.post_action_refresh_required) {
-    displayState = "stale";
+  let displayState = status || "unknown";
+  if (status === "ok" && payload.post_action_refresh_required) {
+    if (refreshState === "complete") {
+      displayState = "ok_refresh_complete";
+    } else if (refreshState === "failed") {
+      displayState = "ok_refresh_failed";
+    } else {
+      displayState = "ok_refresh_pending";
+    }
+  } else if (status === "ok") {
+    displayState = "ok_refresh_complete";
   }
   const visualClass = actionVisualClass(payload, displayState);
   return {
@@ -427,7 +445,7 @@ function actionDisplayState(payload, refreshState = "none") {
 }
 
 function actionVisualClass(payload, displayState) {
-  if (displayState === "ok" && payload.action_role === "support_artifact") {
+  if (displayState === "ok_refresh_complete" && payload.action_role === "support_artifact") {
     return "blue";
   }
   return ACTION_STATUS_VISUAL_CLASS[displayState] || (
@@ -439,17 +457,20 @@ function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "running") {
     return "Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.";
   }
-  if (displayState === "ok" && payload.post_action_refresh_required) {
+  if (displayState === "duplicate_blocked") {
+    return "Повторная отправка заблокирована в текущей UI-сессии. Второй command dispatch не выполнялся.";
+  }
+  if (displayState === "ok_refresh_pending") {
     return "Пакет действия сообщил ok; каноническое состояние runtime требует обновлённого JSON.";
   }
-  if (displayState === "ok" && payload.action_role === "support_artifact") {
+  if (displayState === "ok_refresh_failed" || refreshState === "failed") {
+    return "Команда могла выполниться, но состояние не подтверждено: canonical refresh failed.";
+  }
+  if (displayState === "ok_refresh_complete" && payload.action_role === "support_artifact") {
     return "Пакет support artifact сообщил ok. Это не является отдельным источником runtime truth.";
   }
-  if (displayState === "ok") {
+  if (displayState === "ok_refresh_complete") {
     return "Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.";
-  }
-  if (displayState === "stale" || refreshState === "failed") {
-    return "Обновление после действия не удалось или устарело. Не считайте прежнее состояние UI зелёным runtime truth.";
   }
   if (displayState === "timeout") {
     return "Запрос истёк по времени. Это recoverable ошибка интеграции, а не успех.";
@@ -469,8 +490,59 @@ function actionTruthNote(payload, displayState, refreshState) {
   return "Состояние действия не ok. UI не должен выводить успех по предположению.";
 }
 
+function actionDisplayLabel(displayState) {
+  return {
+    running: "выполняется",
+    duplicate_blocked: "дубль заблокирован",
+    ok_refresh_pending: "требует refresh",
+    ok_refresh_complete: "подтверждено",
+    ok_refresh_failed: "refresh failed",
+    command_error: "ошибка команды",
+    invalid_json: "invalid JSON",
+    timeout: "timeout",
+    integration_failure: "ошибка интеграции",
+    partial_success: "частично",
+    unsupported: "недоступно",
+    missing_surface: "missing surface",
+    needs_user_action: "нужно действие"
+  }[displayState] || displayState || "неизвестно";
+}
+
+function actionRefreshLabel(payload, refreshState) {
+  if (refreshState === "complete") {
+    return "canonical refresh complete";
+  }
+  if (refreshState === "failed") {
+    return "canonical refresh failed";
+  }
+  return payload.post_action_refresh_required ? "canonical refresh pending" : "refresh not required";
+}
+
 async function runUiAction(uiAction, extraPayload = {}) {
   const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
+  const requestKey = actionRequestKey(requestPayload);
+  if (activeActionRequestKey) {
+    const sameRequest = activeActionRequestKey === requestKey;
+    setActionPanel({
+      status: "duplicate_blocked",
+      ui_action: uiAction,
+      action_role: "ui_session_guard",
+      account_id: requestPayload.account_id || "",
+      route_id: requestPayload.route_id || "",
+      post_action_refresh_required: false,
+      result: {
+        status: "duplicate_blocked",
+        machine_error_code: sameRequest ? "UI_DUPLICATE_SUBMIT_BLOCKED" : "UI_ACTION_IN_FLIGHT",
+        human_message: sameRequest
+          ? "Повторная отправка заблокирована в текущей UI-сессии."
+          : "Другое действие уже выполняется в текущей UI-сессии.",
+        next_action: "wait",
+        changed_files: []
+      }
+    });
+    return;
+  }
+  activeActionRequestKey = requestKey;
   setActionsBusy(true);
   setActionPanel({
     ui_action: uiAction,
@@ -509,7 +581,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       text("actionRefreshStatus", `обновление live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
       if (refreshed.status === "ok") {
-        text("actionRefreshStatus", "live-обновление выполнено");
+        setActionPanel(payload, "complete");
         setMiniPill("onboardingResultRefreshChip", "refresh complete", "green");
       } else {
         setActionPanel(payload, "failed");
@@ -536,8 +608,16 @@ async function runUiAction(uiAction, extraPayload = {}) {
       }
     });
   } finally {
+    activeActionRequestKey = "";
     setActionsBusy(false);
   }
+}
+
+function actionRequestKey(payload) {
+  return [
+    payload.ui_action || "unknown",
+    payload.account_id || payload.route_id || "-"
+  ].join("|");
 }
 
 function boundedUiActionPayload(uiAction, extraPayload = {}) {
@@ -906,9 +986,11 @@ function setActionPanel(payload, refreshState = "none") {
   const display = actionDisplayState(payload, refreshState);
   const panel = document.getElementById("actionPanel");
   const panelVisualClass = payload.ui_action === "onboard_account"
-    ? onboardingModel.visual
+    ? actionPanelVisualForOnboarding(onboardingModel, display)
     : display.visualClass;
-  panel.className = `action-panel compact-action-panel ${panelVisualClass}`;
+  if (panel) {
+    panel.className = `action-panel compact-action-panel ${panelVisualClass}`;
+  }
   text("actionUiAction", payload.ui_action || "unknown");
   text("actionRole", payload.action_role || "unknown");
   text("actionAccountId", payload.account_id || payload.route_id || "-");
@@ -919,22 +1001,34 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionNextAction", result.next_action || "none");
   text("actionChangedFiles", `${changedFiles.length} записей метаданных`);
   text("actionSupportDetails", actionSupportDetails(payload));
-  text(
-    "actionRefreshStatus",
-    refreshState === "failed"
-      ? "live-обновление не удалось; состояние устарело"
-      : (payload.post_action_refresh_required ? "требуется после действия" : "не требуется")
-  );
+  const refreshLabel = actionRefreshLabel(payload, refreshState);
+  text("actionRefreshStatus", refreshLabel);
   text("actionTruthNote", display.truthNote);
   text("actionOnboardingOutcome", onboardingModel.finalOutcome || "-");
   text("actionOnboardingReserveProof", onboardingModel.reserveFirst);
   text("actionOnboardingBackend", onboardingModel.selectedBackendId);
+  setStatusChip("actionDisplayChip", actionDisplayLabel(display.displayState), panelVisualClass);
+  text("actionSummaryTitle", payload.ui_action || "Действие не выбрано");
+  text("actionSummaryMeta", `target ${payload.account_id || payload.route_id || "-"} · ${display.displayState}`);
+  text("actionSummaryMessage", result.human_message || "Действия ещё не выполнялись.");
+  text("actionSummaryTarget", payload.account_id || payload.route_id || "-");
+  text("actionSummaryRefresh", refreshLabel);
   renderOnboardingResultFlow(payload, onboarding, refreshState);
   recordActionLedgerEntry(payload, refreshState, display, changedFiles);
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
   renderAccountDetailDrawer();
+}
+
+function actionPanelVisualForOnboarding(onboardingModel, display) {
+  if (["ok_refresh_pending", "ok_refresh_failed"].includes(display.displayState)) {
+    return display.visualClass;
+  }
+  if (display.displayState === "ok_refresh_complete") {
+    return onboardingModel.visual;
+  }
+  return display.visualClass;
 }
 
 function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") {
@@ -1036,7 +1130,7 @@ function onboardingResultModel(onboarding, payload = {}, refreshState = "none") 
     statusProof: statusProofOk ? "confirmed" : "not confirmed",
     statusProofVisual: statusProofOk ? "green" : "amber",
     refreshState: onboardingRefreshLabel(payload, refreshState),
-    refreshVisual: refreshState === "failed" ? "red" : (payload.post_action_refresh_required ? "amber" : "neutral"),
+    refreshVisual: refreshState === "complete" ? "green" : (refreshState === "failed" ? "red" : (payload.post_action_refresh_required ? "amber" : "neutral")),
     nextAction: onboardingNextAction(uiState, finalOutcome, success, syncSkipped)
   };
 }
@@ -1111,6 +1205,9 @@ function onboardingStatusProofOk(onboarding) {
 }
 
 function onboardingRefreshLabel(payload, refreshState) {
+  if (refreshState === "complete") {
+    return "refresh complete";
+  }
   if (refreshState === "failed") {
     return "refresh failed";
   }
@@ -1144,15 +1241,32 @@ function uiStateLabel(uiState) {
 
 function setMiniPill(id, label, visual) {
   const node = document.getElementById(id);
+  if (!node) {
+    return;
+  }
   node.className = `mini-pill ${visual || "neutral"}`;
   node.textContent = label || "-";
 }
 
-function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
-  if (display.status === "running") {
-    renderActionLedger();
+function setStatusChip(id, label, visual) {
+  const node = document.getElementById(id);
+  if (!node) {
     return;
   }
+  node.className = `chip ${visual || "neutral"}`;
+  if (typeof node.replaceChildren !== "function") {
+    node.textContent = label || "-";
+    return;
+  }
+  node.replaceChildren();
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const value = document.createElement("span");
+  value.textContent = label || "-";
+  node.append(dot, value);
+}
+
+function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
   const result = payload.result || {};
   const entry = {
     key: actionLedgerKey(payload, result),
@@ -1166,13 +1280,13 @@ function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
     message: result.human_message || "-",
     nextAction: result.next_action || "none",
     changedFilesCount: changedFiles.length,
-    refreshStatus: refreshState === "failed"
-      ? "canonical refresh failed"
-      : (payload.post_action_refresh_required ? "canonical refresh required" : "refresh not required"),
+    refreshStatus: actionRefreshLabel(payload, refreshState),
     truthNote: display.truthNote,
-    supportDetails: actionSupportDetails(payload)
+    supportDetails: actionSupportDetails(payload),
+    specialDetails: actionSpecialDetails(payload),
+    timestamp: actionLedgerTimestamp()
   };
-  if (refreshState === "failed" && actionLedger[0]?.key === entry.key) {
+  if (["complete", "failed"].includes(refreshState) && actionLedger[0]?.key === entry.key) {
     actionLedger[0] = entry;
   } else {
     actionLedger = [entry, ...actionLedger.filter((item) => item.key !== entry.key)]
@@ -1196,34 +1310,55 @@ function renderActionLedger() {
     return;
   }
   list.replaceChildren();
-  if (!actionLedger.length) {
+  const entries = actionLedger.filter(actionLedgerFilterPredicate);
+  if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "action-ledger-empty";
-    empty.textContent = "Действия ещё не выполнялись в этой UI-сессии.";
+    empty.textContent = actionLedger.length
+      ? "Нет записей для выбранного фильтра."
+      : "Действия ещё не выполнялись в этой UI-сессии.";
     list.append(empty);
     return;
   }
-  for (const entry of actionLedger) {
+  for (const entry of entries) {
     list.append(actionLedgerRow(entry));
   }
 }
 
-function actionLedgerRow(entry) {
-  const row = document.createElement("article");
-  row.className = `action-ledger-row ${entry.visualClass}`;
+function actionLedgerFilterPredicate(entry) {
+  if (actionLedgerFilter === "errors") {
+    return ["red", "amber"].includes(entry.visualClass)
+      && !["ok_refresh_pending", "running"].includes(entry.displayState);
+  }
+  if (actionLedgerFilter === "refresh") {
+    return ["ok_refresh_pending", "ok_refresh_failed"].includes(entry.displayState)
+      || entry.refreshStatus.includes("pending")
+      || entry.refreshStatus.includes("failed");
+  }
+  return true;
+}
 
-  const head = document.createElement("div");
+function actionLedgerRow(entry) {
+  const row = document.createElement("details");
+  row.className = `action-ledger-row ${entry.visualClass}`;
+  row.open = true;
+
+  const head = document.createElement("summary");
   head.className = "action-ledger-row-head";
+  const titleWrap = document.createElement("div");
   const title = document.createElement("strong");
-  title.textContent = entry.uiAction;
+  title.textContent = `${entry.uiAction} · ${entry.target}`;
+  const time = document.createElement("small");
+  time.textContent = entry.timestamp;
+  titleWrap.append(title, time);
   const chip = document.createElement("span");
   chip.className = `chip ${entry.visualClass}`;
   const dot = document.createElement("span");
   dot.className = "dot";
   const chipText = document.createElement("span");
-  chipText.textContent = entry.displayState;
+  chipText.textContent = actionDisplayLabel(entry.displayState);
   chip.append(dot, chipText);
-  head.append(title, chip);
+  head.append(titleWrap, chip);
 
   const meta = document.createElement("div");
   meta.className = "action-ledger-meta";
@@ -1243,13 +1378,98 @@ function actionLedgerRow(entry) {
   truth.textContent = `command packet outcome only · ${entry.truthNote}`;
 
   row.append(head, meta, message, truth);
+  const detailGrid = document.createElement("div");
+  detailGrid.className = "action-ledger-detail-grid";
+  for (const [label, value] of [
+    ["machine", entry.machineCode],
+    ["next", entry.nextAction],
+    ["refresh", entry.refreshStatus],
+    ["display", entry.displayState]
+  ]) {
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    detailGrid.append(labelNode, valueNode);
+  }
+  row.append(detailGrid);
   if (entry.supportDetails && entry.supportDetails !== "-") {
     const support = document.createElement("div");
     support.className = "action-ledger-support";
     support.textContent = entry.supportDetails;
     row.append(support);
   }
+  if (entry.specialDetails && entry.specialDetails !== "-") {
+    const special = document.createElement("div");
+    special.className = "action-ledger-support";
+    special.textContent = entry.specialDetails;
+    row.append(special);
+  }
   return row;
+}
+
+function actionLedgerTimestamp() {
+  try {
+    return new Date().toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  } catch (_error) {
+    return "UI-session";
+  }
+}
+
+function actionSpecialDetails(payload) {
+  const result = payload.result || {};
+  const onboarding = result.onboarding || {};
+  if (payload.ui_action === "onboard_account" && Object.keys(onboarding).length) {
+    const newIds = Array.isArray(onboarding.new_backend_ids) ? onboarding.new_backend_ids.length : 0;
+    return [
+      `selected_backend_id=${onboarding.selected_backend_id || "-"}`,
+      `new_backend_ids=${newIds}`,
+      `reserve_first=${onboarding.reserve_first_proven === true ? "true" : "false"}`,
+      `final_outcome=${onboarding.final_outcome || "-"}`
+    ].join(" · ");
+  }
+  if (payload.ui_action === "export_diagnostics") {
+    const data = result.data || {};
+    return [
+      `artifact_ref=${artifactReference(data.bundle_path)}`,
+      `redaction=${data.redaction_status || "unknown"}`,
+      `changed_files=${Array.isArray(result.changed_files) ? result.changed_files.length : 0}`
+    ].join(" · ");
+  }
+  return "-";
+}
+
+function openActionLedgerPanel() {
+  const overlay = document.getElementById("actionLedgerOverlay");
+  if (!overlay) {
+    return;
+  }
+  overlay.hidden = false;
+  renderActionLedger();
+}
+
+function closeActionLedgerPanel() {
+  const overlay = document.getElementById("actionLedgerOverlay");
+  if (overlay) {
+    overlay.hidden = true;
+  }
+}
+
+function setActionLedgerFilter(filter) {
+  actionLedgerFilter = ["all", "errors", "refresh"].includes(filter) ? filter : "all";
+  for (const button of document.querySelectorAll("[data-ledger-filter]")) {
+    button.classList.toggle("active", button.dataset.ledgerFilter === actionLedgerFilter);
+  }
+  renderActionLedger();
+}
+
+function clearActionLedger() {
+  actionLedger = [];
+  renderActionLedger();
 }
 
 function actionSupportDetails(payload) {
@@ -2776,9 +2996,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("accountsClearSelectionAction")?.addEventListener("click", () => clearAccountSelection());
   document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());
+  document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
+  document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
+  document.getElementById("actionLedgerBackdrop")?.addEventListener("click", () => closeActionLedgerPanel());
+  document.getElementById("actionLedgerClear")?.addEventListener("click", () => clearActionLedger());
+  for (const button of document.querySelectorAll("[data-ledger-filter]")) {
+    button.addEventListener("click", () => setActionLedgerFilter(button.dataset.ledgerFilter));
+  }
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeAccountDrawer();
+      closeActionLedgerPanel();
     }
   });
   document.getElementById("cancelOnboardAction").addEventListener("click", () => closeOnboardModal());

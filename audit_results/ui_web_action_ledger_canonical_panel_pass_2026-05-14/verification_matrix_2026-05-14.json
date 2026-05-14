@@ -1,0 +1,48 @@
+{
+  "contour": "UI_WEB_ACTION_LEDGER_CANONICAL_PANEL_PASS",
+  "date": "2026-05-14",
+  "base_head": "22c0192",
+  "acceptance": {
+    "right_panel": "implemented",
+    "compact_last_action": "implemented",
+    "session_only": "implemented",
+    "ok_refresh_pending_not_green": "implemented",
+    "ok_refresh_failed_not_green": "implemented",
+    "ok_refresh_complete_green": "implemented",
+    "duplicate_submit_blocked": "implemented",
+    "no_raw_argv_command_id": "implemented",
+    "no_full_raw_paths": "implemented",
+    "no_persistent_storage": "implemented",
+    "no_runtime_adapter_allowlist_scope": "implemented"
+  },
+  "screenshot_matrix": {
+    "metrics_file": "after_metrics.json",
+    "scenarios": [
+      "empty",
+      "running",
+      "success_refresh_complete",
+      "success_refresh_pending",
+      "refresh_failed",
+      "command_error",
+      "invalid_json",
+      "timeout",
+      "duplicate_blocked",
+      "onboarding_ambiguous",
+      "diagnostics_export_result"
+    ],
+    "viewport": "1600x1000",
+    "panel_width": 600,
+    "scroll_width_max": 1600,
+    "scroll_height_max": 1000,
+    "clipped_elements": 0,
+    "visible_svg_icons": 0,
+    "raw_path_visible": false,
+    "raw_argv_visible": false
+  },
+  "tests": {
+    "node_check": "pass: node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "unit_tests": "pass: python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q (88 tests)",
+    "diff_check": "pass: git diff --check",
+    "closeout_resilience": "pass: python3 tools/check_closeout_resilience.py --staged-only"
+  }
+}

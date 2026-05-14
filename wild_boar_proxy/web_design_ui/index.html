@@ -227,7 +227,25 @@
         </section>
 
           <section id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite">
-          <div class="eyebrow">Последнее действие</div>
+          <div class="action-summary-head">
+            <div>
+              <div class="eyebrow">Последнее действие</div>
+              <strong id="actionSummaryTitle">Действия ещё не выполнялись.</strong>
+              <p id="actionSummaryMeta">Текущая UI-сессия · не сохраняется</p>
+            </div>
+            <span id="actionDisplayChip" class="chip neutral"><span class="dot"></span><span>ожидание</span></span>
+          </div>
+          <p id="actionSummaryMessage" class="action-summary-message">Command result появится здесь, подробности доступны в журнале действий.</p>
+          <div class="action-summary-footer">
+            <div>
+              <span>Target: <strong id="actionSummaryTarget">-</strong></span>
+              <span>Refresh: <strong id="actionSummaryRefresh">не запрашивалось</strong></span>
+            </div>
+            <button id="actionOpenLedgerAction" class="button small" type="button">
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+              Открыть журнал
+            </button>
+          </div>
           <div class="action-panel-grid">
             <div>ui_action</div><div id="actionUiAction">нет</div>
             <div>Роль</div><div id="actionRole">нет</div>
@@ -302,16 +320,6 @@
               </div>
             </div>
           </section>
-          <div class="action-ledger-head">
-            <div>
-              <div class="card-title">Лента действий</div>
-              <div class="secondary">Текущая UI-сессия · результат команды не является runtime truth</div>
-            </div>
-            <span id="actionLedgerScope" class="chip neutral"><span class="dot"></span><span>не сохраняется</span></span>
-          </div>
-          <div id="actionLedgerList" class="action-ledger-list" aria-label="Лента действий текущей UI-сессии">
-            <div class="action-ledger-empty">Действия ещё не выполнялись в этой UI-сессии.</div>
-          </div>
           </section>
         </div>
         </section>
@@ -1419,6 +1427,44 @@
             <button id="confirmAction" class="button primary" type="button">Подтвердить</button>
           </div>
         </section>
+      </div>
+
+      <div id="actionLedgerOverlay" class="action-ledger-overlay" hidden>
+        <button id="actionLedgerBackdrop" class="action-ledger-backdrop" type="button" aria-label="Закрыть журнал действий"></button>
+        <aside id="actionLedgerPanel" class="action-ledger-panel" aria-label="Журнал действий текущей UI-сессии" aria-live="polite">
+          <div class="action-ledger-panel-head">
+            <span class="account-detail-avatar"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+            <div>
+              <div class="eyebrow">Журнал действий</div>
+              <h2>Текущая UI-сессия</h2>
+              <p>Command result не является runtime truth. Reload очищает этот журнал.</p>
+            </div>
+            <button id="actionLedgerClose" class="button icon-button" type="button" aria-label="Закрыть журнал действий">
+              <img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
+            </button>
+          </div>
+          <div class="action-ledger-toolbar">
+            <div class="filter-seg action-ledger-filters" aria-label="Фильтр журнала действий">
+              <button class="active" type="button" data-ledger-filter="all">Все</button>
+              <button type="button" data-ledger-filter="errors">Ошибки</button>
+              <button type="button" data-ledger-filter="refresh">Требуют refresh</button>
+            </div>
+            <button id="actionLedgerClear" class="button small" type="button">
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+              Очистить
+            </button>
+          </div>
+          <div class="action-ledger-head">
+            <div>
+              <div class="card-title">Command results</div>
+              <div class="secondary">UI-session memory only · не persistent audit history</div>
+            </div>
+            <span id="actionLedgerScope" class="chip neutral"><span class="dot"></span><span>не сохраняется</span></span>
+          </div>
+          <div id="actionLedgerList" class="action-ledger-list" aria-label="Лента действий текущей UI-сессии">
+            <div class="action-ledger-empty">Действия ещё не выполнялись в этой UI-сессии.</div>
+          </div>
+        </aside>
       </div>
     </div>
   </div>

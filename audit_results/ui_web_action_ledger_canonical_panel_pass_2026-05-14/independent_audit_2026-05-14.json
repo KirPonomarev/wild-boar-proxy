@@ -1,0 +1,17 @@
+{
+  "contour": "UI_WEB_ACTION_LEDGER_CANONICAL_PANEL_PASS",
+  "date": "2026-05-14",
+  "auditor": "read-only subagent",
+  "verdict": "pass",
+  "findings": {
+    "scope": "pass: UI/test/audit only",
+    "refresh_pending_failed_not_green": "pass: ok_refresh_pending and ok_refresh_failed are amber",
+    "ok_refresh_complete": "pass: green after canonical refresh complete",
+    "support_artifact": "pass: blue by contour policy because support artifact is not runtime-health truth",
+    "duplicate_submit": "pass: in-flight guard returns before second fetch and test covers UI_DUPLICATE_SUBMIT_BLOCKED",
+    "session_only": "pass: ledger is in-memory UI-session state and marked non-persistent",
+    "raw_fields": "pass: rendered ledger does not expose raw argv, command_id, full paths, secrets, or raw JSON",
+    "metrics": "pass: after_metrics.json confirms 600px panel, 1600x1000 viewport fit, no clipping, no raw path, no raw argv, visibleSvgIcons=0"
+  },
+  "blockers": []
+}

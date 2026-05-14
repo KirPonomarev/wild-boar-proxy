@@ -1194,6 +1194,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('id="actionTruthNote"', html)
         self.assertIn('id="actionSupportDetails"', html)
         self.assertIn('id="actionPanel" class="action-panel neutral compact-action-panel"', html)
+        self.assertIn('id="actionDisplayChip"', html)
+        self.assertIn('id="actionOpenLedgerAction"', html)
+        self.assertIn('id="actionLedgerOverlay"', html)
+        self.assertIn('id="actionLedgerPanel"', html)
         self.assertIn('id="actionLedgerList"', html)
         self.assertIn('id="actionLedgerScope"', html)
         self.assertIn("Текущая UI-сессия", html)
@@ -1201,9 +1205,17 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("ACTION_STATUS_VISUAL_CLASS", js)
         self.assertIn("ACTION_LEDGER_LIMIT = 5", js)
         self.assertIn("let actionLedger = []", js)
+        self.assertIn("let actionLedgerFilter = \"all\"", js)
+        self.assertIn("let activeActionRequestKey = \"\"", js)
         self.assertIn("recordActionLedgerEntry", js)
         self.assertIn("renderActionLedger", js)
+        self.assertIn("openActionLedgerPanel", js)
+        self.assertIn("setActionLedgerFilter", js)
         self.assertIn("changedFilesCount", js)
+        self.assertIn('duplicate_blocked: "neutral"', js)
+        self.assertIn('ok_refresh_pending: "amber"', js)
+        self.assertIn('ok_refresh_complete: "green"', js)
+        self.assertIn('ok_refresh_failed: "amber"', js)
         self.assertIn('command_error: "red"', js)
         self.assertIn('integration_failure: "red"', js)
         self.assertIn('invalid_json: "red"', js)
@@ -1213,11 +1225,14 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("payload.status || result.status", js)
         self.assertIn("actionSupportDetails(payload)", js)
         self.assertIn("artifactReference(data.evidence_path)", js)
-        self.assertIn('displayState = "stale"', js)
-        self.assertIn("live-обновление не удалось; состояние устарело", js)
+        self.assertIn('displayState = "ok_refresh_failed"', js)
+        self.assertIn("canonical refresh failed", js)
         self.assertIn("UI_ACTION_INVALID_JSON", js)
         self.assertIn("UI_ACTION_TIMEOUT", js)
+        self.assertIn("UI_DUPLICATE_SUBMIT_BLOCKED", js)
         self.assertIn("а не успех", js)
+        self.assertIn(".action-ledger-panel", css)
+        self.assertIn(".action-summary-head", css)
         self.assertIn(".action-panel.green", css)
         self.assertIn(".action-panel.blue", css)
         self.assertIn(".action-panel.amber", css)
@@ -1350,7 +1365,7 @@ sandbox.setActionPanel({
       status_observed: { command_status: "ok" }
     }
   }
-});
+	}, "complete");
 
 const serialized = JSON.stringify(elements);
 if (elements.onboardingResultFlow.hidden !== false) {
@@ -1382,6 +1397,39 @@ if (!elements.onboardingResultNextAction.textContent.includes("отдельны�
 }
 if (serialized.includes("Аккаунт активен") || serialized.includes("Аккаунт продвинут")) {
   throw new Error(`onboarding result overclaimed active/promoted state: ${serialized}`);
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account",
+  action_role: "account_onboarding",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK_REFRESH_FAILED",
+    human_message: "Onboarding owner packet emitted.",
+    next_action: "refresh_accounts",
+    changed_files: [],
+    onboarding: {
+      ui_state: "success",
+      final_outcome: "reserve_only_success",
+      selected_backend_id: "acct-refresh-failed",
+      new_backend_ids: ["acct-refresh-failed"],
+      reserve_first_proven: true,
+      selection_status: "selected_unique_backend",
+      pool_after_onboarding: "reserve",
+      active_routing_changed: false,
+      validate_outcome: "ok",
+      sync_outcome: "ok",
+      status_observed: { command_status: "ok" }
+    }
+  }
+}, "failed");
+if (elements.actionPanel.className === "action-panel compact-action-panel green") {
+  throw new Error("refresh-failed onboarding must not keep outer panel green");
+}
+if (elements.actionDisplayState.textContent !== "ok_refresh_failed") {
+  throw new Error(`refresh-failed onboarding must show ok_refresh_failed: ${elements.actionDisplayState.textContent}`);
 }
 
 sandbox.setActionPanel({
@@ -1670,8 +1718,8 @@ if (commandError.panel !== "action-panel compact-action-panel red" || commandErr
 if (invalidJson.panel !== "action-panel compact-action-panel red" || invalidJson.display !== "invalid_json") {
   throw new Error(`invalid_json not red: ${JSON.stringify(invalidJson)}`);
 }
-if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRefresh.display !== "stale") {
-  throw new Error(`failed refresh not stale amber: ${JSON.stringify(staleRefresh)}`);
+if (staleRefresh.panel !== "action-panel compact-action-panel amber" || staleRefresh.display !== "ok_refresh_failed") {
+  throw new Error(`failed refresh not refresh-failed amber: ${JSON.stringify(staleRefresh)}`);
 }
 if (!profileSupport.support.includes("writes_external_config=false") || !profileSupport.support.includes("runtime_claim_blocked=true")) {
   throw new Error(`profile support packet details missing: ${JSON.stringify(profileSupport)}`);
@@ -1688,6 +1736,150 @@ if (!diagnosticsSupport.support.includes("wbp-diagnostics-secret") || diagnostic
         if (!commandError.truth.includes("не должен показывать это как успех")) {
   throw new Error(`missing command_error truth note: ${commandError.truth}`);
 }
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_action_ledger_blocks_duplicate_dispatch_in_ui_session(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.dataset = {};
+    this.classList = {
+      contains: () => false,
+      toggle: () => {},
+      add: () => {},
+      remove: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionDisplayChip",
+  "actionSummaryTitle",
+  "actionSummaryMeta",
+  "actionSummaryMessage",
+  "actionSummaryTarget",
+  "actionSummaryRefresh",
+  "actionLedgerList"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+let fetchCount = 0;
+let resolveFetch;
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "accounts", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=accounts" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() {
+    fetchCount += 1;
+    return new Promise((resolve) => {
+      resolveFetch = () => resolve({
+        ok: true,
+        json: async () => ({
+          status: "ok",
+          ui_action: "validate_account",
+          account_id: "acc-021",
+          action_role: "account_lifecycle",
+          post_action_refresh_required: false,
+          result: {
+            status: "ok",
+            machine_error_code: "OK",
+            human_message: "validated",
+            next_action: "none",
+            changed_files: []
+          }
+        })
+      });
+    });
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  const first = sandbox.runUiAction("validate_account", { account_id: "acc-021" });
+  const second = sandbox.runUiAction("validate_account", { account_id: "acc-021" });
+  if (fetchCount !== 1) {
+    throw new Error(`duplicate dispatch should not call fetch twice: ${fetchCount}`);
+  }
+  if (elements.actionDisplayState.textContent !== "duplicate_blocked") {
+    throw new Error(`duplicate should render duplicate_blocked: ${elements.actionDisplayState.textContent}`);
+  }
+  if (!JSON.stringify(elements.actionLedgerList).includes("UI_DUPLICATE_SUBMIT_BLOCKED")) {
+    throw new Error(`duplicate ledger entry missing: ${JSON.stringify(elements.actionLedgerList)}`);
+  }
+  resolveFetch();
+  await Promise.all([first, second]);
+  if (fetchCount !== 1) {
+    throw new Error(`duplicate dispatch leaked after resolve: ${fetchCount}`);
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
 """
         result = subprocess.run(
             ["node", "-e", script],
@@ -1960,8 +2152,8 @@ sandbox.setActionPanel({
 });
 let first = elements.actionLedgerList.children[0];
 const firstText = JSON.stringify(first);
-if (!first.className.includes("green")) {
-  throw new Error(`ok command packet should be green only as command outcome: ${first.className}`);
+if (!first.className.includes("amber") || !firstText.includes("ok_refresh_pending")) {
+  throw new Error(`ok command packet requiring refresh should stay amber pending: ${first.className} ${firstText}`);
 }
 if (!firstText.includes("changed_files=2")) {
   throw new Error(`ledger should show changed_files count only: ${firstText}`);
@@ -1971,6 +2163,24 @@ if (firstText.includes("/tmp/runtime-state") || firstText.includes("runtime-stat
 }
 if (!firstText.includes("command packet outcome only")) {
   throw new Error(`ledger did not keep not-runtime-truth copy: ${firstText}`);
+}
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "sync_runtime",
+  action_role: "runtime_sync",
+  post_action_refresh_required: true,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "sync packet ok",
+    next_action: "none",
+    changed_files: []
+  }
+}, "complete");
+first = elements.actionLedgerList.children[0];
+if (!first.className.includes("green") || !JSON.stringify(first).includes("ok_refresh_complete")) {
+  throw new Error(`refresh-complete action should become green: ${JSON.stringify(first)}`);
 }
 
 sandbox.setActionPanel({
@@ -2017,8 +2227,8 @@ sandbox.setActionPanel({
   }
 }, "failed");
 const staleRow = elements.actionLedgerList.children[0];
-if (!staleRow.className.includes("amber") || !JSON.stringify(staleRow).includes("stale")) {
-  throw new Error(`failed refresh should replace ok row with stale amber: ${JSON.stringify(staleRow)}`);
+if (!staleRow.className.includes("amber") || !JSON.stringify(staleRow).includes("ok_refresh_failed")) {
+  throw new Error(`failed refresh should replace ok row with refresh-failed amber: ${JSON.stringify(staleRow)}`);
 }
 if (elements.actionLedgerList.children.length > 5) {
   throw new Error("ledger should stay bounded to five rows");
