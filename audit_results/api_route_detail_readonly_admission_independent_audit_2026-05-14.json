@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "contour": "API_ROUTE_DETAIL_READONLY_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "Current repo already has route registry summary fields and separately bounded support packet actions, but the support packets are explicitly non-truth-bearing."
+    },
+        {
+            "agent": "Locke",
+            "role": "independent repo fact checker",
+            "finding": "Current surfaces support the existing table summary and secondary support metadata, but a dedicated route-detail screen remains deferred pending a bounded packet; selected/primary/failover/secret-heavy detail is not admitted."
+        }
+  ],
+  "evidence": [
+    {
+      "source": "wild_boar_proxy/web_design_live_server.py:249-270",
+      "fact": "api_route_profile and api_route_evidence_capture are support actions with mutates_runtime=false and affects_primary_truth=false"
+    },
+    {
+      "source": "audit_results/api_connections_support_details_gate_matrix_2026-05-13.json:13-21",
+      "fact": "support-only API route details actions were admitted without creating runtime, listener, selected-route, or automatic route-switching truth"
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:1915-1918",
+      "fact": "profile packet explicitly blocks runtime claims and evidence capture is not network-dependent runtime proof"
+    },
+    {
+      "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1237-1269",
+      "fact": "current readonly route fixture summary uses route_id, display_name, provider, upstream_model, enabled, status_label, role_label, and note"
+    },
+        {
+            "source": "audit_results/api_connections_web_readonly_closeout_2026-05-13.md:13",
+            "fact": "active/primary/failover semantics remain deferred"
+        },
+        {
+            "source": "audit_results/ui_final_forbidden_or_admission_required_screens_2026-05-14.json:45-70",
+            "fact": "screen 21_api_route_detail is still marked admission-required and explicitly says route detail needs an explicit readonly packet boundary before implementation"
+        }
+    ],
+    "checks": [
+        {
+            "check": "existing_summary_surfaces_present",
+            "verdict": "PASS",
+            "reason": "Current route/readowner summary fields already support the existing API-connections table summary."
+        },
+        {
+            "check": "new_route_detail_screen_without_packet_boundary",
+            "verdict": "BLOCK",
+            "reason": "The dedicated route-detail screen remains admission-required and still needs an explicit bounded readonly packet boundary."
+        },
+        {
+            "check": "support_packets_redefining_route_truth",
+            "verdict": "PASS",
+            "reason": "Artifacts keep support profile/evidence metadata explicitly secondary and non-truth-bearing."
+        },
+    {
+      "check": "selected_primary_failover_overclaim",
+      "verdict": "PASS",
+      "reason": "Artifacts keep selected/primary/failover semantics not admitted."
+    },
+    {
+      "check": "secret_boundary",
+      "verdict": "PASS",
+      "reason": "Secret-heavy detail remains deferred and raw secret references are not admitted."
+    },
+    {
+      "check": "implementation_leakage",
+      "verdict": "PASS",
+      "reason": "This contour changes admission artifacts only."
+    }
+  ],
+    "final_audit_verdict": "PASS_FOR_DEFERRED_PENDING_NEW_BOUNDED_PACKET"
+}

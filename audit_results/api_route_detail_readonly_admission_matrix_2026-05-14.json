@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "contour": "API_ROUTE_DETAIL_READONLY_ADMISSION",
+  "mode": "admission/spec-only",
+  "date": "2026-05-14",
+  "final_verdict": "API_ROUTE_DETAIL_DEFERRED_PENDING_NEW_BOUNDED_PACKET",
+  "current_owner_surfaces": [
+    "external-models routes list --json",
+    "api_route_profile support packet",
+    "api_route_evidence_capture support artifact packet"
+  ],
+  "areas": [
+    {
+      "surface": "route_registry_summary",
+      "current_admission": "ALREADY_PRESENT_IN_EXISTING_TABLE_SURFACE",
+      "current_owner_surface": "external-models routes list --json",
+      "allowed_fields": [
+        "route_id",
+        "display_name",
+        "provider",
+        "upstream_model",
+        "enabled",
+        "status_label",
+        "role_label",
+        "note"
+      ],
+      "notes": [
+        "registry or readonly summary only",
+        "not runtime-selected-route truth",
+        "not traffic ownership truth"
+      ]
+    },
+    {
+      "surface": "support_profile_packet_metadata",
+      "current_admission": "ALREADY_PRESENT_AS_SECONDARY_SUPPORT_CONTEXT",
+      "current_owner_surface": "api_route_profile",
+      "allowed_fields": [
+        "writes_external_config=false",
+        "listener_proven=false",
+        "runtime_claim_blocked=true",
+        "profile_ready=false",
+        "packet machine_error_code",
+        "packet next_action"
+      ],
+      "notes": [
+        "secondary support context only",
+        "must not redefine route truth",
+        "must not prove provider health or runtime readiness"
+      ]
+    },
+    {
+      "surface": "support_evidence_packet_metadata",
+      "current_admission": "ALREADY_PRESENT_AS_SECONDARY_SUPPORT_CONTEXT",
+      "current_owner_surface": "api_route_evidence_capture",
+      "allowed_fields": [
+        "artifact basename",
+        "changed_files count",
+        "packet machine_error_code",
+        "packet next_action"
+      ],
+      "notes": [
+        "secondary support context only",
+        "no direct evidence-file read",
+        "not runtime proof"
+      ]
+    },
+    {
+      "surface": "validate_check_context",
+      "current_admission": "ALREADY_PRESENT_AS_BOUNDED_ACTION_CONTEXT_ONLY",
+      "current_owner_surface": "api_route_validate and api_route_check command results",
+      "notes": [
+        "historical or packet-scoped context only",
+        "must not become durable route truth",
+        "must not imply serving or selected-route truth"
+      ]
+    },
+    {
+      "surface": "selected_or_primary_route_truth",
+      "current_admission": "NOT_ADMITTED",
+      "current_owner_surface": "none admitted",
+      "blocking_reasons": [
+        "no admitted selected-route owner truth in current scope",
+        "enabled is not selected or primary",
+        "canon explicitly keeps primary semantics deferred"
+      ]
+    },
+    {
+      "surface": "failover_role_or_readiness",
+      "current_admission": "NOT_ADMITTED",
+      "current_owner_surface": "none admitted",
+      "blocking_reasons": [
+        "automatic failover semantics are deferred",
+        "support packets are not failover truth",
+        "route detail must not imply future failover policy"
+      ]
+    },
+    {
+      "surface": "secret_state_detail",
+      "current_admission": "DEFERRED",
+      "current_owner_surface": "none safely admitted",
+      "blocking_reasons": [
+        "raw secret references are forbidden",
+        "no current safe packet-owned secret summary is established for route detail"
+      ]
+    },
+    {
+      "surface": "base_url_or_endpoint_detail",
+      "current_admission": "DEFERRED_PENDING_PACKET_BOUNDARY_CONFIRMATION",
+      "current_owner_surface": "current readonly list includes base_url in server/test shaping but browser-side admission remains intentionally narrower",
+      "blocking_reasons": [
+        "field can drift into provider/config disclosure",
+        "detail must not synthesize config inspection semantics",
+        "needs explicit bounded-field decision before route detail admission"
+      ]
+    },
+    {
+      "surface": "raw_log_bundle_or_evidence_view",
+      "current_admission": "NOT_ADMITTED",
+      "current_owner_surface": "forbidden",
+      "blocking_reasons": [
+        "UI must not read evidence files directly",
+        "UI is not a log viewer",
+        "UI must not disclose raw local paths"
+      ]
+    }
+  ],
+  "browser_payload_rules": {
+    "allowed_if_future_detail_ui_exists": [
+      "ui_action",
+      "route_id",
+      "bounded detail mode"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "file_path",
+      "raw_route_json",
+      "raw_provider_config",
+      "base_url_mutation",
+      "endpoint_mutation",
+      "secret_ref",
+      "secret_value",
+      "token",
+      "credential"
+    ]
+  },
+  "next_required_contour_if_richer_detail_is_wanted": "API_ROUTE_DETAIL_PACKET_CONTRACT_ADMISSION",
+  "implementation_allowed_in_this_contour": false
+}
