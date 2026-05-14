@@ -21,6 +21,13 @@
   --neutral-bg: #f1ebe3;
   --shadow: 0 1px 2px rgba(30, 27, 24, .04), 0 10px 30px rgba(30, 27, 24, .045);
   --window-shadow: 0 24px 80px rgba(30, 27, 24, .14);
+  --window-width: 1544px;
+  --window-height: 944px;
+  --sidebar-width: 304px;
+  --radius-window: 24px;
+  --radius-card: 18px;
+  --radius-button: 12px;
+  --radius-chip: 999px;
   --font-ui: "SF Mono", "SFMono-Regular", ui-monospace, "Noto Sans Mono", "Roboto Mono", Menlo, Consolas, monospace;
   --font-mono: var(--font-ui);
 }
@@ -43,7 +50,7 @@ body {
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 400;
-  line-height: 22px;
+  line-height: 20px;
   text-rendering: geometricPrecision;
 }
 
@@ -54,7 +61,7 @@ select {
 
 .desktop {
   align-items: center;
-  background: radial-gradient(900px 420px at 78% 8%, rgba(255, 255, 255, .46), transparent 65%), var(--canvas);
+  background: var(--canvas);
   display: flex;
   min-height: 100vh;
   justify-content: center;
@@ -66,13 +73,13 @@ select {
 .window {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: var(--radius-window);
   box-shadow: var(--window-shadow);
-  height: min(944px, calc(100vh - 56px));
+  height: min(var(--window-height), calc(100vh - 56px));
   min-height: 720px;
   overflow: hidden;
   position: relative;
-  width: min(1544px, calc(100vw - 56px));
+  width: min(var(--window-width), calc(100vw - 56px));
 }
 
 .window::after {
@@ -119,10 +126,10 @@ select {
   display: flex;
   flex-direction: column;
   left: 0;
-  padding: 66px clamp(18px, 1.8vw, 24px) 28px;
+  padding: 66px 24px 28px;
   position: absolute;
   top: 0;
-  width: var(--sidebar-width, 304px);
+  width: var(--sidebar-width);
   z-index: 2;
 }
 
@@ -139,7 +146,7 @@ select {
   display: block;
   height: auto;
   margin-bottom: 16px;
-  width: 112px;
+  width: 92px;
 }
 
 .brand .name {
@@ -252,10 +259,10 @@ select {
 .main {
   background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, 0) 24%), var(--surface);
   bottom: 0;
-  left: var(--sidebar-width, 304px);
+  left: var(--sidebar-width);
   overflow-x: hidden;
   overflow-y: auto;
-  padding: clamp(40px, 3.4vw, 48px) clamp(32px, 3vw, 40px) 36px;
+  padding: 46px 40px 34px;
   position: absolute;
   right: 0;
   top: 0;
@@ -285,7 +292,7 @@ select {
 
 h1 {
   font-size: 34px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0;
   line-height: 40px;
   margin: 0;
@@ -294,15 +301,15 @@ h1 {
 .subtitle {
   color: var(--secondary);
   font-size: 13px;
-  line-height: 18px;
+  line-height: 19px;
   margin-top: 8px;
   max-width: 500px;
 }
 
 .secondary {
   color: var(--secondary);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 13px;
+  line-height: 19px;
 }
 
 .header-actions {
@@ -325,7 +332,7 @@ h1 {
 .button {
   align-items: center;
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: var(--radius-button);
   display: inline-flex;
   font-size: 13px;
   font-weight: 500;
@@ -372,7 +379,7 @@ button:disabled {
   align-items: center;
   background: #fffaf6;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-button);
   color: var(--secondary);
   display: flex;
   font-size: 13px;
@@ -554,7 +561,7 @@ button:disabled {
   align-items: center;
   background: #fffaf6;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-button);
   color: var(--secondary);
   display: flex;
   font-size: 13px;
@@ -675,7 +682,7 @@ button:disabled {
 .confirm-boundary {
   background: var(--surface-muted);
   border: 1px solid rgba(217, 208, 195, .78);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   color: var(--secondary);
   display: flex;
   flex-wrap: wrap;
@@ -689,7 +696,7 @@ button:disabled {
 .confirm-boundary span {
   background: #fffdfa;
   border: 1px solid rgba(217, 208, 195, .7);
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   color: var(--text);
   min-width: 0;
   padding: 4px 10px;
@@ -698,7 +705,7 @@ button:disabled {
 .confirm-facts {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .8);
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   display: grid;
   font-size: 12px;
   gap: 9px 18px;
@@ -748,7 +755,7 @@ button:disabled {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow);
   min-width: 0;
 }
@@ -756,7 +763,7 @@ button:disabled {
 .eyebrow {
   color: var(--secondary);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 700;
   letter-spacing: .06em;
   line-height: 14px;
   text-transform: uppercase;
@@ -765,7 +772,7 @@ button:disabled {
 .card-title {
   color: var(--text);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 20px;
   margin: 0;
 }
@@ -814,7 +821,7 @@ button:disabled {
 
 .chip {
   align-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-chip);
   display: inline-flex;
   font-size: 12px;
   font-weight: 500;
@@ -985,8 +992,8 @@ button:disabled {
 .kpi-number {
   font-size: 32px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  line-height: 32px;
+  font-weight: 700;
+  line-height: 34px;
 }
 
 .api-kpi-copy {

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "date": "2026-05-14",
+  "auditor": "independent_read_only_subagent",
+  "verdict": "PASS",
+  "checks": [
+    {
+      "name": "changed_tracked_files",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_web_design_ui.py",
+        "wild_boar_proxy/web_design_ui/styles/overview.css"
+      ]
+    },
+    {
+      "name": "forbidden_files_unchanged",
+      "status": "PASS",
+      "evidence": "No tracked diff under command adapter, live server, runtime, cli, or external_models."
+    },
+    {
+      "name": "screen_and_action_surfaces_unchanged",
+      "status": "PASS",
+      "evidence": "index.html has no diff; data-screen and static data-ui-action inventory matches HEAD."
+    },
+    {
+      "name": "final_design_tokens_present",
+      "status": "PASS",
+      "evidence": [
+        "window tokens 1544x944",
+        "sidebar width 304",
+        "sidebar logo width 92",
+        "main padding 46px 40px 34px",
+        "radii 24/18/12/999",
+        "SF Mono stack",
+        "body 14/20",
+        "title 34/40 700",
+        "KPI 32/34 700"
+      ]
+    },
+    {
+      "name": "targeted_tests",
+      "status": "PASS",
+      "evidence": "python3 -m unittest tests.test_web_design_ui.WebDesignUiTests.test_preview_uses_desktop_containment_and_svg_icons tests.test_web_design_ui.WebDesignUiTests.test_visual_stabilization_keeps_layout_guards_css_only -v"
+    }
+  ],
+  "risks": [
+    {
+      "status": "NOTE_AND_CONTINUE",
+      "detail": "Many unrelated untracked audit/eval artifacts remain in the worktree; they are outside the tracked diff for this contour."
+    }
+  ],
+  "resume_from_here": "Proceed after final verification, commit, and push."
+}
