@@ -790,6 +790,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(diagnostics["action_role"], "support_artifact")
         self.assertFalse(diagnostics["mutates_runtime"])
         self.assertFalse(diagnostics["affects_primary_truth"])
+        self.assertEqual(diagnostics["result"]["data"]["bundle_path"], "wbp-diagnostics.zip")
         self.assertEqual(repair_plan["action_role"], "recovery_planning")
         self.assertFalse(repair_plan["mutates_runtime"])
         self.assertEqual(health["action_role"], "runtime_detail")
@@ -1684,6 +1685,30 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot_before["runtime"]["visual_state"], "healthy")
         self.assertEqual(snapshot_after["runtime"]["visual_state"], "healthy")
         self.assertFalse(diagnostics["affects_primary_truth"])
+
+    def test_diagnostics_export_forwards_safe_artifact_metadata(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("diagnostics", "export", "--json"): command_packet(
+                    human_message="Diagnostics exported.",
+                    changed_files=["/private/tmp/wild-boar-proxy-diagnostics-secret"],
+                    bundle_path="/private/tmp/wild-boar-proxy-diagnostics-secret",
+                ),
+            }
+        )
+
+        diagnostics = run_ui_action(runner, {"ui_action": "export_diagnostics"})
+
+        self.assertEqual(diagnostics["status"], "ok")
+        self.assertEqual(diagnostics["action_role"], "support_artifact")
+        self.assertEqual(
+            diagnostics["result"]["data"]["bundle_path"],
+            "wild-boar-proxy-diagnostics-secret",
+        )
+        self.assertEqual(diagnostics["result"]["changed_files"], ["diagnostics_bundle"])
+        self.assertNotIn("/private/tmp", json.dumps(diagnostics))
+        self.assertEqual(runner.calls[-1], ("diagnostics", "export", "--json"))
 
     def test_http_action_endpoint_uses_ui_action_not_command_id(self) -> None:
         runner = MappingRunner(live_payloads())

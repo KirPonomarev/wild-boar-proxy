@@ -408,9 +408,7 @@ function actionDisplayState(payload, refreshState = "none") {
   if (refreshState === "failed" && status === "ok" && payload.post_action_refresh_required) {
     displayState = "stale";
   }
-  const visualClass = ACTION_STATUS_VISUAL_CLASS[displayState] || (
-    displayState === "ok" ? "green" : "red"
-  );
+  const visualClass = actionVisualClass(payload, displayState);
   return {
     status,
     displayState,
@@ -419,12 +417,24 @@ function actionDisplayState(payload, refreshState = "none") {
   };
 }
 
+function actionVisualClass(payload, displayState) {
+  if (displayState === "ok" && payload.action_role === "support_artifact") {
+    return "blue";
+  }
+  return ACTION_STATUS_VISUAL_CLASS[displayState] || (
+    displayState === "ok" ? "green" : "red"
+  );
+}
+
 function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "running") {
     return "Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.";
   }
   if (displayState === "ok" && payload.post_action_refresh_required) {
     return "Пакет действия сообщил ok; каноническое состояние runtime требует обновлённого JSON.";
+  }
+  if (displayState === "ok" && payload.action_role === "support_artifact") {
+    return "Пакет support artifact сообщил ok. Это не является отдельным источником runtime truth.";
   }
   if (displayState === "ok") {
     return "Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.";
@@ -909,13 +919,15 @@ function actionSupportDetails(payload) {
   if (payload.ui_action === "api_route_evidence_capture") {
     return `локальный artifact · ${artifactReference(data.evidence_path)}`;
   }
+  if (payload.ui_action === "export_diagnostics") {
+    return `локальный artifact · ${artifactReference(data.bundle_path)}`;
+  }
   return "-";
 }
 
 function renderDiagnosticsAction(payload) {
   const result = payload.result || {};
-  const packet = result.packet || {};
-  const data = packet.data || {};
+  const data = result.data || {};
   const status = result.status || payload.status || "unknown";
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const visual = status === "ok" ? "blue" : (status === "running" ? "amber" : "red");
@@ -934,7 +946,7 @@ function renderDiagnosticsAction(payload) {
   text("diagnosticsBundleRef", artifactReference(data.bundle_path));
 
   const banner = document.getElementById("diagnosticsBanner");
-  setClassName(banner, "fixture-banner", status === "ok" ? "healthy" : (status === "running" ? "stale" : "integration_failure"));
+  banner.className = `fixture-banner ${visual}`;
   banner.textContent = status === "ok"
     ? "Диагностический пакет поддержки экспортирован. Истина о здоровье runtime не изменялась."
     : "Команда диагностики не создала успешный пакет поддержки. Истина о здоровье runtime не изменялась.";

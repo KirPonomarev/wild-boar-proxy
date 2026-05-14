@@ -605,6 +605,10 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn("Диагностический пакет поддержки", html + js)
         self.assertIn("Истина о здоровье runtime не изменялась", js)
         self.assertIn("только метаданные:", js)
+        self.assertIn("const data = result.data || {}", js)
+        self.assertIn("actionVisualClass", js)
+        self.assertIn('payload.action_role === "support_artifact"', js)
+        self.assertIn("Метка артефакта", html)
         self.assertIn('data-diagnostics-region="history_chart_slot"', html)
         self.assertIn('data-diagnostics-region="latest_records"', html)
         self.assertIn('data-diagnostics-mode="fixture-demo"', html)
@@ -624,6 +628,7 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertIn('node.hidden = !fixtureOnly', js)
         self.assertIn('node.hidden = fixtureOnly', js)
         self.assertIn(".diagnostics-fixture-chart[hidden]", css := (WEB_DESIGN_UI / "styles" / "overview.css").read_text())
+        self.assertIn(".fixture-banner.blue", css)
         self.assertIn(".diagnostics-line-chart", css)
         self.assertIn(".chart-area.failure", css)
         self.assertIn(".chart-line.success", css)
@@ -631,6 +636,7 @@ if (!node("accountDetailActions").children[0].disabled) {
         self.assertNotIn("runtime summary", (html + js).lower())
         self.assertIn("Просмотр артефакта отложен", html)
         self.assertIn("Сырой текст диагностики недоступен", html)
+        self.assertNotIn("Ссылка на артефакт", html)
         self.assertIn(
             'const SCREENS = ["overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
@@ -981,10 +987,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("UI_ACTION_TIMEOUT", js)
         self.assertIn("а не успех", js)
         self.assertIn(".action-panel.green", css)
+        self.assertIn(".action-panel.blue", css)
         self.assertIn(".action-panel.amber", css)
         self.assertIn(".action-panel.red", css)
         self.assertIn(".action-panel.neutral", css)
         self.assertIn(".action-ledger-row.green", css)
+        self.assertIn(".action-ledger-row.blue", css)
         self.assertIn(".action-ledger-row.amber", css)
         self.assertIn(".action-ledger-row.red", css)
 
@@ -1124,6 +1132,22 @@ const evidenceSupport = render({
     }
   }
 });
+const diagnosticsSupport = render({
+  status: "ok",
+  ui_action: "export_diagnostics",
+  action_role: "support_artifact",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "diagnostics exported",
+    next_action: "none",
+    changed_files: ["/private/tmp/wbp-diagnostics-secret"],
+    data: {
+      bundle_path: "/private/tmp/wbp-diagnostics-secret"
+    }
+  }
+});
 
 if (commandError.panel !== "action-panel compact-action-panel red" || commandError.status !== "command_error") {
   throw new Error(`command_error not red: ${JSON.stringify(commandError)}`);
@@ -1140,8 +1164,156 @@ if (!profileSupport.support.includes("writes_external_config=false") || !profile
 if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport.support.includes("/tmp/wbp-evidence/")) {
   throw new Error(`evidence support should show only artifact basename metadata: ${JSON.stringify(evidenceSupport)}`);
 }
+if (diagnosticsSupport.panel !== "action-panel compact-action-panel blue") {
+  throw new Error(`diagnostics support artifact ok should be blue, not runtime green: ${JSON.stringify(diagnosticsSupport)}`);
+}
+if (!diagnosticsSupport.support.includes("wbp-diagnostics-secret") || diagnosticsSupport.support.includes("/private/tmp/")) {
+  throw new Error(`diagnostics support should show only artifact basename metadata: ${JSON.stringify(diagnosticsSupport)}`);
+}
         if (!commandError.truth.includes("не должен показывать это как успех")) {
   throw new Error(`missing command_error truth note: ${commandError.truth}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_diagnostics_export_result_renders_safe_artifact_metadata(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "diagnosticsStatusChip",
+  "diagnosticsMessage",
+  "diagnosticsPacketStatus",
+  "diagnosticsExitCode",
+  "diagnosticsMachineCode",
+  "diagnosticsNextAction",
+  "diagnosticsChangedFiles",
+  "diagnosticsBundleRef",
+  "diagnosticsBanner"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.diagnosticsStatusChip.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "diagnostics", source: "fixture" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=diagnostics" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "export_diagnostics",
+  action_role: "support_artifact",
+  mutates_runtime: false,
+  affects_primary_truth: false,
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "Diagnostics exported.",
+    exit_code: 0,
+    next_action: "none",
+    changed_files: ["/private/tmp/wild-boar-proxy-diagnostics-secret"],
+    data: {
+      bundle_path: "/private/tmp/wild-boar-proxy-diagnostics-secret"
+    }
+  }
+});
+
+const domText = JSON.stringify(elements);
+if (elements.diagnosticsStatusChip.className !== "chip blue") {
+  throw new Error(`diagnostics status chip must be support blue: ${elements.diagnosticsStatusChip.className}`);
+}
+if (elements.diagnosticsBanner.className !== "fixture-banner blue") {
+  throw new Error(`diagnostics banner must be support blue: ${elements.diagnosticsBanner.className}`);
+}
+if (elements.actionPanel.className !== "action-panel compact-action-panel blue") {
+  throw new Error(`action panel must be support blue: ${elements.actionPanel.className}`);
+}
+if (elements.diagnosticsChangedFiles.textContent !== "1") {
+  throw new Error(`changed_files should render count only: ${elements.diagnosticsChangedFiles.textContent}`);
+}
+if (!elements.diagnosticsBundleRef.textContent.includes("wild-boar-proxy-diagnostics-secret")) {
+  throw new Error(`artifact basename missing: ${elements.diagnosticsBundleRef.textContent}`);
+}
+if (elements.diagnosticsBundleRef.textContent.includes("/private/tmp/") || domText.includes("/private/tmp/")) {
+  throw new Error(`diagnostics DOM leaked full local path: ${domText}`);
+}
+if (!elements.diagnosticsBanner.textContent.includes("Истина о здоровье runtime не изменялась")) {
+  throw new Error(`diagnostics banner broadened truth claim: ${elements.diagnosticsBanner.textContent}`);
 }
 """
         result = subprocess.run(

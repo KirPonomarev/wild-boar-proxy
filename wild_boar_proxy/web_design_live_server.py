@@ -1094,13 +1094,23 @@ def _action_unavailable_reason(ui_action: str, *, launch_client_path: str | None
 
 def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, Any]:
     packet = result.get("packet")
-    data = packet.get("data", {}) if isinstance(packet, dict) else {}
+    packet_data = packet.get("data", {}) if isinstance(packet, dict) else {}
+    data = dict(packet_data) if isinstance(packet_data, dict) else {}
+    changed_files = result["changed_files"]
+    if ui_action == "export_diagnostics" and isinstance(packet, dict):
+        bundle_path = packet.get("bundle_path")
+        if not isinstance(bundle_path, str) or not bundle_path:
+            bundle_path = data.get("bundle_path")
+        if isinstance(bundle_path, str) and bundle_path:
+            data["bundle_path"] = Path(bundle_path).name
+        if isinstance(changed_files, list):
+            changed_files = ["diagnostics_bundle"] * len(changed_files)
     payload = {
         "status": result["status"],
         "machine_error_code": result["machine_error_code"],
         "human_message": result["human_message"],
         "next_action": result["next_action"],
-        "changed_files": result["changed_files"],
+        "changed_files": changed_files,
         "data": data if isinstance(data, dict) else {},
     }
     if ui_action == "onboard_account":
