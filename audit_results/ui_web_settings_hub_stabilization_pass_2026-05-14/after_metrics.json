@@ -1,0 +1,412 @@
+[
+  {
+    "name": "fixture_healthy",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "settingsScreenBottom": 864,
+    "settingsCardCount": 8,
+    "activeSettingsActions": [],
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 8,
+    "buttonTextClipped": [],
+    "factOverflow": [],
+    "buttons": [
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "manual picker deferred",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly policy",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "owner approval",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "cardBottoms": [
+      560,
+      560,
+      560,
+      560,
+      864,
+      864,
+      864,
+      864
+    ]
+  },
+  {
+    "name": "fixture_degraded",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "settingsScreenBottom": 864,
+    "settingsCardCount": 8,
+    "activeSettingsActions": [],
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 8,
+    "buttonTextClipped": [],
+    "factOverflow": [],
+    "buttons": [
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "manual picker deferred",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly policy",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "owner approval",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "cardBottoms": [
+      560,
+      560,
+      560,
+      560,
+      864,
+      864,
+      864,
+      864
+    ]
+  },
+  {
+    "name": "fixture_down",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "settingsScreenBottom": 864,
+    "settingsCardCount": 8,
+    "activeSettingsActions": [],
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 8,
+    "buttonTextClipped": [],
+    "factOverflow": [],
+    "buttons": [
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "manual picker deferred",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly policy",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "owner approval",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "cardBottoms": [
+      560,
+      560,
+      560,
+      560,
+      864,
+      864,
+      864,
+      864
+    ]
+  },
+  {
+    "name": "fixture_stale",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "settingsScreenBottom": 864,
+    "settingsCardCount": 8,
+    "activeSettingsActions": [],
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 8,
+    "buttonTextClipped": [],
+    "factOverflow": [],
+    "buttons": [
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "manual picker deferred",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly policy",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "owner approval",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "cardBottoms": [
+      560,
+      560,
+      560,
+      560,
+      864,
+      864,
+      864,
+      864
+    ]
+  },
+  {
+    "name": "live_integration_failure",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 942,
+    "settingsScreenBottom": 864,
+    "settingsCardCount": 8,
+    "activeSettingsActions": [],
+    "visibleSvgIcons": 0,
+    "visibleImgIcons": 8,
+    "buttonTextClipped": [],
+    "factOverflow": [],
+    "buttons": [
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "manual picker deferred",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly policy",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "Открыть",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": false,
+        "action": ""
+      },
+      {
+        "text": "owner approval",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "missing surface",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      },
+      {
+        "text": "readonly",
+        "clientWidth": 249,
+        "scrollWidth": 249,
+        "disabled": true,
+        "action": ""
+      }
+    ],
+    "cardBottoms": [
+      560,
+      560,
+      560,
+      560,
+      864,
+      864,
+      864,
+      864
+    ]
+  }
+]

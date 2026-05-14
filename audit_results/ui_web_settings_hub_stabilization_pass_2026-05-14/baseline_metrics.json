@@ -1,0 +1,102 @@
+[
+  {
+    "name": "fixture_healthy",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 3093,
+    "settingsScreenBottom": 3090,
+    "settingsCardCount": 12,
+    "activeSettingsActions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "visibleSvgIcons": 6,
+    "visibleImgIcons": 0,
+    "buttonTextClipped": []
+  },
+  {
+    "name": "fixture_degraded",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 3093,
+    "settingsScreenBottom": 3090,
+    "settingsCardCount": 12,
+    "activeSettingsActions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "visibleSvgIcons": 6,
+    "visibleImgIcons": 0,
+    "buttonTextClipped": []
+  },
+  {
+    "name": "fixture_down",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 3093,
+    "settingsScreenBottom": 3090,
+    "settingsCardCount": 12,
+    "activeSettingsActions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "visibleSvgIcons": 6,
+    "visibleImgIcons": 0,
+    "buttonTextClipped": []
+  },
+  {
+    "name": "fixture_stale",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 3093,
+    "settingsScreenBottom": 3090,
+    "settingsCardCount": 12,
+    "activeSettingsActions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "visibleSvgIcons": 6,
+    "visibleImgIcons": 0,
+    "buttonTextClipped": []
+  },
+  {
+    "name": "live_integration_failure",
+    "documentScrollWidth": 1600,
+    "documentScrollHeight": 1000,
+    "mainClientHeight": 942,
+    "mainScrollHeight": 3093,
+    "settingsScreenBottom": 3090,
+    "settingsCardCount": 12,
+    "activeSettingsActions": [
+      "set_mode_stable",
+      "set_mode_managed",
+      "stable_repair_plan",
+      "launch_smoke",
+      "launch_client_dispatch",
+      "export_diagnostics"
+    ],
+    "visibleSvgIcons": 6,
+    "visibleImgIcons": 0,
+    "buttonTextClipped": []
+  }
+]

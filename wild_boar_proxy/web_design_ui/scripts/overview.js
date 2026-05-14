@@ -1127,7 +1127,15 @@ function renderSettingsSnapshot(snapshot) {
   if (banner) {
     const visualState = runtime.visual_state || snapshot.state_id || "unknown";
     setClassName(banner, "fixture-banner", visualState);
-    banner.textContent = "Настройки в этом контуре доступны только для чтения. Безопасные действия являются запросами, а не сохранёнными preferences.";
+    const copy = {
+      healthy: "Настройки доступны только для чтения. Изменения требуют отдельной admitted command surface.",
+      degraded: "Настройки доступны только для чтения. Деградация не открывает config mutation.",
+      down: "Настройки доступны только для чтения. Runtime недоступен, изменения не принимаются.",
+      stale: "Данные настроек устарели. Требуется обновление перед изменениями.",
+      integration_failure: "Live-readonly настройки недоступны. Предыдущие fixture-значения не используются как saved state.",
+      unknown: "Настройки доступны только для чтения. Источник состояния не подтверждён."
+    };
+    banner.textContent = copy[visualState] || copy.unknown;
   }
 }
 

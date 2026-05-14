@@ -2796,23 +2796,109 @@ button:disabled {
 
 .settings-layout {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   max-width: none;
 }
 
 .settings-hub {
   align-items: stretch;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .settings-hub-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 190px;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto 1fr auto;
+  min-height: 216px;
+  min-width: 0;
+  padding: 14px;
 }
 
 .settings-hub-card-wide {
   grid-column: span 2;
+}
+
+.settings-card-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  position: relative;
+}
+
+.settings-card-head .chip {
+  justify-self: start;
+  margin-top: 1px;
+}
+
+.settings-card-head h3 {
+  font-size: 14px;
+  line-height: 18px;
+  margin: 0;
+}
+
+.settings-card-head p {
+  color: var(--secondary);
+  display: -webkit-box;
+  font-size: 11px;
+  line-height: 15px;
+  margin: 3px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.settings-card-icon {
+  align-items: center;
+  background: var(--blue-bg);
+  border-radius: 13px;
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.settings-card-icon .button-icon {
+  height: 18px;
+  width: 18px;
+}
+
+.settings-card-facts {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-card-facts div {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 12px;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(72px, .7fr) minmax(0, 1fr);
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.settings-card-facts span {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.settings-card-facts strong {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-card-link {
+  text-decoration: none;
+}
+
+.settings-hidden-field {
+  display: none;
 }
 
 .settings-hub-kv {

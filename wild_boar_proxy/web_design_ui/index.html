@@ -766,231 +766,121 @@
 
         <section id="settingsScreen" class="screen" data-screen="settings" hidden>
           <div id="settingsBanner" class="fixture-banner neutral">
-            Настройки в этом контуре доступны только для чтения. Значения ниже получены из JSON-пакетов, а не прямым чтением config.
+            Настройки доступны только для чтения. Изменения требуют отдельной admitted command surface.
           </div>
 
-          <div class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="section-only">
-            <section class="card form-section settings-observed settings-hub-card settings-hub-card-wide" data-settings-section="runtime-mode">
-              <div class="section-head">
-                <div>
-                  <h3>Runtime & Mode</h3>
-                  <div class="secondary">Факты только для чтения из существующих пакетов команд.</div>
-                </div>
-                <span class="chip neutral"><span class="dot"></span>только чтение</span>
+          <div class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-only">
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
+                <div><h3>Runtime / Mode</h3><p>Наблюдаемый режим без изменения политики.</p></div>
+                <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
-              <div class="settings-hub-kv">
-                <div><label>Желаемый режим</label><div id="settingsDesiredMode">-</div></div>
-                <div><label>Фактический режим</label><div id="settingsEffectiveMode">-</div></div>
-                <div><label>Статус runtime</label><div id="settingsRuntimeStatus">-</div></div>
-                <div><label>Машинный код</label><div id="settingsMachineCode">-</div></div>
+              <div class="settings-card-facts">
+                <div><span>desired</span><strong id="settingsDesiredMode">-</strong></div>
+                <div><span>effective</span><strong id="settingsEffectiveMode">-</strong></div>
+                <div><span>status</span><strong id="settingsRuntimeStatus">-</strong></div>
               </div>
+              <button class="button small disabled" type="button" disabled title="Mode changes require a separate admitted command surface.">missing surface</button>
+              <span id="settingsMachineCode" class="settings-hidden-field">-</span>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="client-launch">
-              <div class="section-head">
-                <div>
-                  <h3>Client & Launch</h3>
-                  <div class="secondary">Запуск остаётся командным запросом, не настройкой.</div>
-                </div>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="client-launch">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true"></span>
+                <div><h3>Client / Launch</h3><p>Клиент и запуск остаются command-owned.</p></div>
                 <span class="chip blue"><span class="dot"></span>bounded</span>
               </div>
-              <div class="form-row"><label>Наблюдаемый endpoint</label><div id="settingsEndpoint" class="mono-value">-</div></div>
-              <div class="form-row"><label>Запуск клиента</label><div id="settingsLaunchAvailability">метаданные недоступны</div></div>
+              <div class="settings-card-facts">
+                <div><span>client</span><strong>Codex Custom</strong></div>
+                <div><span>endpoint</span><strong id="settingsEndpoint">-</strong></div>
+                <div><span>launch</span><strong id="settingsLaunchAvailability">метаданные недоступны</strong></div>
+              </div>
+              <button class="button small disabled" type="button" disabled title="Browser Settings does not accept arbitrary app paths.">manual picker deferred</button>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="data-storage">
-              <div class="section-head">
-                <div>
-                  <h3>Данные и хранение</h3>
-                  <div class="secondary">Пути и каталоги не вводятся и не открываются из web UI.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="accounts-policy">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true"></span>
+                <div><h3>Accounts Policy</h3><p>Смысл пулов и проверок без lifecycle mutation.</p></div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
               </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Каталог данных</span><strong>прямой доступ к файловой системе отложен</strong></div>
-                <div class="settings-section-row"><span>Support artifacts</span><strong>только метаданные командных пакетов</strong></div>
-                <div class="settings-section-row"><span>Открыть папку</span><strong>нет bounded open-location контракта</strong></div>
+              <div class="settings-card-facts">
+                <div><span>active</span><strong>рабочий пул</strong></div>
+                <div><span>reserve</span><strong>запас без promote из Settings</strong></div>
+                <div><span>held</span><strong>операторская пауза</strong></div>
               </div>
+              <button class="button small disabled" type="button" disabled title="Lifecycle commands stay on Accounts.">readonly policy</button>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="probe-recovery">
-              <div class="section-head">
-                <div>
-                  <h3>Probe & Recovery</h3>
-                  <div class="secondary">Политики восстановления не меняются из Settings.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>частично</span>
-              </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Probe limits</span><strong>изменение политики требует owner command surface</strong></div>
-                <div class="settings-section-row"><span>Recovery plan</span><strong>доступен только dry-run план ремонта</strong></div>
-                <div class="settings-section-row"><span>Apply repair</span><strong>отсутствует в этом контуре</strong></div>
-              </div>
-            </section>
-
-            <section class="card form-section settings-hub-card" data-settings-section="account-defaults">
-              <div class="section-head">
-                <div>
-                  <h3>Account Defaults</h3>
-                  <div class="secondary">Lifecycle управляется отдельными account actions.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
-              </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Проверки при старте</span><strong>изменение стартовой политики отложено</strong></div>
-                <div class="settings-section-row"><span>Lifecycle defaults</span><strong>мутации остаются на экране аккаунтов</strong></div>
-                <div class="settings-section-row"><span>Auto placement</span><strong>нет настройки без command packet truth</strong></div>
-              </div>
-            </section>
-
-            <section class="card form-section settings-hub-card" data-settings-section="api-routes">
-              <div class="section-head">
-                <div>
-                  <h3>API Routes</h3>
-                  <div class="secondary">Registry виден на отдельном экране API-подключений.</div>
-                </div>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="api-routes">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true"></span>
+                <div><h3>API Routes</h3><p>Маршруты редактируются только на своём экране.</p></div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Route editor</span><strong>сырой route config не отправляется из браузера</strong></div>
-                <div class="settings-section-row"><span>Route operations</span><strong>действия остаются на API-подключениях</strong></div>
-                <div class="settings-section-row"><span>Key setup</span><strong>секреты и токены не вводятся в UI</strong></div>
+              <div class="settings-card-facts">
+                <div><span>routes</span><strong>bounded registry</strong></div>
+                <div><span>attention</span><strong>см. API-подключения</strong></div>
+                <div><span>raw config</span><strong>не отправляется</strong></div>
               </div>
+              <a class="button small settings-card-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть</a>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="security-boundary">
-              <div class="section-head">
-                <div>
-                  <h3>Безопасность</h3>
-                  <div class="secondary">Учётные данные не показываются и не принимаются браузером.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>граница</span>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="diagnostics-privacy">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true"></span>
+                <div><h3>Diagnostics / Privacy</h3><p>Экспорт и redaction без просмотра сырого текста.</p></div>
+                <span class="chip blue"><span class="dot"></span>redacted</span>
               </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Ключи доступа</span><strong>нет полей ввода и просмотра</strong></div>
-                <div class="settings-section-row"><span>Локальные секреты</span><strong>не пишутся и не читаются из Settings</strong></div>
-                <div class="settings-section-row"><span>Redaction</span><strong>проверяется командами поддержки, не этим экраном</strong></div>
+              <div class="settings-card-facts">
+                <div><span>export</span><strong>support artifact</strong></div>
+                <div><span>redaction</span><strong>enforced by packet</strong></div>
+                <div><span>bundle</span><strong>только метаданные</strong></div>
               </div>
+              <a class="button small settings-card-link" href="?screen=diagnostics" data-screen-link="diagnostics">Открыть</a>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="import-setup">
-              <div class="section-head">
-                <div>
-                  <h3>Import & Setup</h3>
-                  <div class="secondary">Setup/import остаются инертными до отдельного admission.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="security-boundary">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                <div><h3>Security</h3><p>Учётные данные не показываются и не вводятся.</p></div>
+                <span class="chip amber"><span class="dot"></span>boundary</span>
               </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Legacy import</span><strong>не принимает исходный каталог из браузера</strong></div>
-                <div class="settings-section-row"><span>First run</span><strong>визуальный каркас уже есть, execution отложен</strong></div>
-                <div class="settings-section-row"><span>Rollback</span><strong>требует отдельный dry-run/import contract</strong></div>
+              <div class="settings-card-facts">
+                <div><span>credentials</span><strong>values hidden</strong></div>
+                <div><span>browser input</span><strong>disabled</strong></div>
+                <div><span>redaction</span><strong>support-command owned</strong></div>
               </div>
+              <button class="button small disabled" type="button" disabled title="Security edits require owner approval and a dedicated command surface.">owner approval</button>
             </section>
 
-            <section class="card form-section settings-hub-card" data-settings-section="advanced-boundary">
-              <div class="section-head">
-                <div>
-                  <h3>Advanced</h3>
-                  <div class="secondary">Низкоуровневые параметры не редактируются в web prototype.</div>
-                </div>
-                <span class="chip neutral"><span class="dot"></span>закрыто</span>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="advanced-boundary">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
+                <div><h3>Advanced</h3><p>Опасные действия не выполняются из Settings.</p></div>
+                <span class="chip amber"><span class="dot"></span>deferred</span>
               </div>
-              <div class="settings-section-list">
-                <div class="settings-section-row"><span>Raw config</span><strong>нет формы редактирования</strong></div>
-                <div class="settings-section-row"><span>Runtime files</span><strong>прямое чтение запрещено</strong></div>
-                <div class="settings-section-row"><span>Rollback policy</span><strong>решается отдельным command contour</strong></div>
+              <div class="settings-card-facts">
+                <div><span>repair</span><strong>execution blocked</strong></div>
+                <div><span>rollback</span><strong>separate contour</strong></div>
+                <div><span>runtime files</span><strong>direct read blocked</strong></div>
               </div>
+              <button class="button small disabled" type="button" disabled title="Dangerous operations require owner approval.">missing surface</button>
             </section>
 
-            <section class="card form-section settings-hub-card settings-hub-card-wide about-license-card" data-settings-section="about-license" data-about-license-mode="readonly">
-              <div class="section-head">
-                <div>
-                  <h3>About / License</h3>
-                  <div class="secondary">Минимальная notice без package verification, update checker или runtime truth.</div>
-                </div>
+            <section class="card settings-hub-card" data-settings-card="true" data-settings-section="about">
+              <div class="settings-card-head">
+                <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                <div><h3>About</h3><p>Сведения о приложении без package verification.</p></div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
-              <div class="about-license-grid" aria-label="About and license readonly metadata">
-                <div class="about-license-item"><span>Product</span><strong>Wild Boar Proxy</strong></div>
-                <div class="about-license-item"><span>Build channel</span><strong>experimental web design UI</strong></div>
-                <div class="about-license-item"><span>Version</span><strong>not declared by package metadata in this UI</strong></div>
-                <div class="about-license-item"><span>License</span><strong>AGPL-3.0-or-later</strong></div>
+              <div class="settings-card-facts">
+                <div><span>product</span><strong>Wild Boar Proxy</strong></div>
+                <div><span>schema</span><strong>web design UI</strong></div>
+                <div><span>license</span><strong>AGPL-3.0-or-later</strong></div>
               </div>
-              <div class="settings-section-list about-license-notes">
-                <div class="settings-section-row"><span>Repo-authored code/docs</span><strong>licensed under AGPL-3.0-or-later</strong></div>
-                <div class="settings-section-row"><span>CLIProxyAPI boundary</span><strong>third-party engine dependency; MIT-at-bootstrap terms are not relicensed by Wild Boar Proxy</strong></div>
-                <div class="settings-section-row"><span>External/helper components</span><strong>when present, remain under their own upstream terms</strong></div>
-                <div class="settings-section-row"><span>Notice scope</span><strong>text-only notice; packaging contents are not verified here</strong></div>
-                <div class="settings-section-row"><span>Runtime truth</span><strong>not applicable; About does not read runtime state</strong></div>
-              </div>
-            </section>
-
-            <section class="card form-section settings-safe-actions settings-hub-card settings-hub-card-wide">
-              <div class="section-head">
-                <div>
-                  <h3>Безопасные доступные действия</h3>
-                  <div class="secondary">Это запросы действий, а не сохранённые настройки.</div>
-                </div>
-                <span class="chip blue"><span class="dot"></span>в allowlist</span>
-              </div>
-              <div class="settings-action-grid">
-                <button class="action-tile live-action" type="button" data-ui-action="set_mode_stable">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
-                  </svg>
-                  <span>Запросить стабильный режим</span>
-                </button>
-                <button class="action-tile live-action" type="button" data-ui-action="set_mode_managed">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 12h5l2-4 2 8 2-4h5"></path>
-                  </svg>
-                  <span>Запросить управляемый режим</span>
-                </button>
-                <button class="action-tile live-action" type="button" data-ui-action="stable_repair_plan">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M12 21s7-3.5 7-11V5l-7-3-7 3v5c0 7.5 7 11 7 11z"></path>
-                  </svg>
-                  <span>План ремонта</span>
-                </button>
-                <button class="action-tile live-action" type="button" data-ui-action="launch_smoke">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M20 6 9 17l-5-5"></path>
-                  </svg>
-                  <span>Smoke-проверка запуска</span>
-                </button>
-                <button class="action-tile live-action" type="button" data-ui-action="launch_client_dispatch">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"></path>
-                  </svg>
-                  <span>Запросить запуск клиента</span>
-                </button>
-                <button class="action-tile live-action" type="button" data-ui-action="export_diagnostics">
-                  <svg class="ui-icon tile-icon" aria-hidden="true" viewBox="0 0 24 24">
-                    <path d="M4 13h3l3-7 5 13 2-6h3"></path>
-                  </svg>
-                  <span>Экспорт диагностики</span>
-                </button>
-              </div>
-            </section>
-
-            <section class="card form-section settings-deferred settings-hub-card settings-hub-card-wide">
-              <div class="section-head">
-                <div>
-                  <h3>Отложенные элементы настроек</h3>
-                  <div class="secondary">Видимые элементы макета без безопасных командных поверхностей.</div>
-                </div>
-                <span class="chip amber"><span class="dot"></span>отложено</span>
-              </div>
-              <div class="deferred-list">
-                <div class="deferred-row"><span>Выбор клиента</span><span>браузер не отправляет произвольные пути</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Каталог данных приложения</span><span>прямой доступ к файловой системе отложен</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Legacy import</span><span>исходный каталог не принимается из browser payload</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Сетевой host / port</span><span>изменение конфигурации runtime вне границ контура</span><button class="button small disabled" type="button" disabled>Только чтение</button></div>
-                <div class="deferred-row"><span>Политика автовосстановления</span><span>изменение политики требует owner command surface</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                <div class="deferred-row"><span>Безопасность</span><span>секреты и токены не вводятся в UI</span><button class="button small disabled" type="button" disabled>Нет ввода</button></div>
-                <div class="deferred-row"><span>Advanced</span><span>низкоуровневые параметры остаются вне web UI</span><button class="button small disabled" type="button" disabled>Закрыто</button></div>
-              </div>
+              <button class="button small disabled" type="button" disabled title="About does not read runtime state or package metadata.">readonly</button>
             </section>
           </div>
         </section>
