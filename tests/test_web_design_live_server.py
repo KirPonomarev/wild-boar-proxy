@@ -1718,8 +1718,42 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "wild-boar-proxy-diagnostics-secret",
         )
         self.assertEqual(diagnostics["result"]["changed_files"], ["diagnostics_bundle"])
+        self.assertEqual(diagnostics["result"]["data"]["redaction_status"], "unreported")
+        self.assertEqual(diagnostics["result"]["data"]["claim_scope"], "support_artifact_only")
         self.assertNotIn("/private/tmp", json.dumps(diagnostics))
         self.assertEqual(runner.calls[-1], ("diagnostics", "export", "--json"))
+
+    def test_diagnostics_export_normalizes_redaction_status_without_widening_scope(self) -> None:
+        passed_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("diagnostics", "export", "--json"): command_packet(
+                    changed_files=["/private/tmp/wbp-diagnostics"],
+                    bundle_path="/private/tmp/wbp-diagnostics.zip",
+                    redaction_status="passed",
+                ),
+            }
+        )
+        failed_runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("diagnostics", "export", "--json"): command_packet(
+                    changed_files=["/private/tmp/wbp-diagnostics"],
+                    bundle_path="/private/tmp/wbp-diagnostics.zip",
+                    diagnostics_redaction_status="failed",
+                ),
+            }
+        )
+
+        passed = run_ui_action(passed_runner, {"ui_action": "export_diagnostics"})
+        failed = run_ui_action(failed_runner, {"ui_action": "export_diagnostics"})
+
+        self.assertEqual(passed["result"]["data"]["redaction_status"], "enabled")
+        self.assertEqual(failed["result"]["data"]["redaction_status"], "failed")
+        self.assertEqual(passed["result"]["data"]["claim_scope"], "support_artifact_only")
+        self.assertEqual(failed["result"]["data"]["claim_scope"], "support_artifact_only")
+        self.assertNotIn("/private/tmp", json.dumps(passed))
+        self.assertNotIn("/private/tmp", json.dumps(failed))
 
     def test_http_action_endpoint_uses_ui_action_not_command_id(self) -> None:
         runner = MappingRunner(live_payloads())

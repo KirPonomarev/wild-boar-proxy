@@ -1103,6 +1103,8 @@ def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, 
             bundle_path = data.get("bundle_path")
         if isinstance(bundle_path, str) and bundle_path:
             data["bundle_path"] = Path(bundle_path).name
+        data["redaction_status"] = _diagnostics_redaction_status(packet, data)
+        data["claim_scope"] = "support_artifact_only"
         if isinstance(changed_files, list):
             changed_files = ["diagnostics_bundle"] * len(changed_files)
     payload = {
@@ -1116,6 +1118,21 @@ def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, 
     if ui_action == "onboard_account":
         payload["onboarding"] = _onboarding_summary(packet, command_status=str(result["status"]))
     return payload
+
+
+def _diagnostics_redaction_status(packet: dict[str, Any], data: dict[str, Any]) -> str:
+    raw_status = (
+        packet.get("redaction_status")
+        or packet.get("diagnostics_redaction_status")
+        or data.get("redaction_status")
+        or data.get("diagnostics_redaction_status")
+    )
+    normalized = str(raw_status or "").strip().lower()
+    if normalized in {"passed", "enabled", "enforced", "ok", "true"}:
+        return "enabled"
+    if normalized in {"failed", "failure", "error", "redaction_failed", "false"}:
+        return "failed"
+    return "unreported"
 
 
 def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any]:

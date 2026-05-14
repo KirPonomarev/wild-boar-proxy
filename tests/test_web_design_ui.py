@@ -1783,8 +1783,8 @@ if (!profileSupport.support.includes("writes_external_config=false") || !profile
 if (!evidenceSupport.support.includes("wbp-deepseek-v3.json") || evidenceSupport.support.includes("/tmp/wbp-evidence/")) {
   throw new Error(`evidence support should show only artifact basename metadata: ${JSON.stringify(evidenceSupport)}`);
 }
-if (diagnosticsSupport.panel !== "action-panel compact-action-panel blue") {
-  throw new Error(`diagnostics support artifact ok should be blue, not runtime green: ${JSON.stringify(diagnosticsSupport)}`);
+if (diagnosticsSupport.panel !== "action-panel compact-action-panel amber" || diagnosticsSupport.display !== "redaction_unreported") {
+  throw new Error(`diagnostics support artifact without redaction proof should be amber, not runtime green: ${JSON.stringify(diagnosticsSupport)}`);
 }
 if (!diagnosticsSupport.support.includes("wbp-diagnostics-secret") || diagnosticsSupport.support.includes("/private/tmp/")) {
   throw new Error(`diagnostics support should show only artifact basename metadata: ${JSON.stringify(diagnosticsSupport)}`);
@@ -2057,14 +2057,14 @@ sandbox.setActionPanel({
 });
 
 const domText = JSON.stringify(elements);
-if (elements.diagnosticsStatusChip.className !== "chip blue") {
-  throw new Error(`diagnostics status chip must be support blue: ${elements.diagnosticsStatusChip.className}`);
+if (elements.diagnosticsStatusChip.className !== "chip amber") {
+  throw new Error(`diagnostics status chip must be amber when redaction is unreported: ${elements.diagnosticsStatusChip.className}`);
 }
-if (elements.diagnosticsBanner.className !== "fixture-banner blue") {
-  throw new Error(`diagnostics banner must be support blue: ${elements.diagnosticsBanner.className}`);
+if (elements.diagnosticsBanner.className !== "fixture-banner amber") {
+  throw new Error(`diagnostics banner must be amber when redaction is unreported: ${elements.diagnosticsBanner.className}`);
 }
-if (elements.actionPanel.className !== "action-panel compact-action-panel blue") {
-  throw new Error(`action panel must be support blue: ${elements.actionPanel.className}`);
+if (elements.actionPanel.className !== "action-panel compact-action-panel amber") {
+  throw new Error(`action panel must be amber when redaction is unreported: ${elements.actionPanel.className}`);
 }
 if (elements.diagnosticsChangedFiles.textContent !== "1") {
   throw new Error(`changed_files should render count only: ${elements.diagnosticsChangedFiles.textContent}`);
@@ -2075,8 +2075,161 @@ if (!elements.diagnosticsBundleRef.textContent.includes("wild-boar-proxy-diagnos
 if (elements.diagnosticsBundleRef.textContent.includes("/private/tmp/") || domText.includes("/private/tmp/")) {
   throw new Error(`diagnostics DOM leaked full local path: ${domText}`);
 }
-if (!elements.diagnosticsBanner.textContent.includes("Истина о здоровье runtime не изменялась")) {
+if (!elements.diagnosticsBanner.textContent.includes("runtime health truth")) {
   throw new Error(`diagnostics banner broadened truth claim: ${elements.diagnosticsBanner.textContent}`);
+}
+if (!elements.diagnosticsBanner.textContent.includes("redaction не подтверждена")) {
+  throw new Error(`diagnostics banner should not invent redaction proof: ${elements.diagnosticsBanner.textContent}`);
+}
+if (!elements.actionSupportDetails.textContent.includes("redaction=unreported")) {
+  throw new Error(`support details should show unreported redaction: ${elements.actionSupportDetails.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_diagnostics_export_result_maps_redaction_states_without_runtime_green(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "diagnosticsStatusChip",
+  "diagnosticsMessage",
+  "diagnosticsPacketStatus",
+  "diagnosticsExitCode",
+  "diagnosticsMachineCode",
+  "diagnosticsNextAction",
+  "diagnosticsChangedFiles",
+  "diagnosticsBundleRef",
+  "diagnosticsBanner"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.diagnosticsStatusChip.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "diagnostics", source: "fixture" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=diagnostics" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+function render(redactionStatus) {
+  sandbox.setActionPanel({
+    status: "ok",
+    ui_action: "export_diagnostics",
+    action_role: "support_artifact",
+    mutates_runtime: false,
+    affects_primary_truth: false,
+    post_action_refresh_required: false,
+    result: {
+      status: "ok",
+      machine_error_code: "OK",
+      human_message: "Diagnostics exported.",
+      exit_code: 0,
+      next_action: "none",
+      changed_files: ["diagnostics_bundle"],
+      data: {
+        bundle_path: "wbp-diagnostics.zip",
+        redaction_status: redactionStatus
+      }
+    }
+  });
+}
+
+render("enabled");
+if (elements.actionPanel.className !== "action-panel compact-action-panel blue") {
+  throw new Error(`enabled redaction should be blue support artifact: ${elements.actionPanel.className}`);
+}
+if (elements.actionDisplayState.textContent !== "created") {
+  throw new Error(`enabled redaction should render created: ${elements.actionDisplayState.textContent}`);
+}
+if (elements.actionPanel.className.includes("green") || elements.diagnosticsStatusChip.className.includes("green")) {
+  throw new Error("support artifact must not render runtime-health green");
+}
+if (!elements.diagnosticsBanner.textContent.includes("support artifact")) {
+  throw new Error(`enabled copy should preserve support-artifact scope: ${elements.diagnosticsBanner.textContent}`);
+}
+
+render("failed");
+if (elements.actionPanel.className !== "action-panel compact-action-panel red") {
+  throw new Error(`failed redaction should be red: ${elements.actionPanel.className}`);
+}
+if (elements.actionDisplayState.textContent !== "redaction_failed") {
+  throw new Error(`failed redaction should render redaction_failed: ${elements.actionDisplayState.textContent}`);
+}
+if (!elements.diagnosticsBanner.textContent.includes("redaction failure")) {
+  throw new Error(`failed copy should name redaction failure: ${elements.diagnosticsBanner.textContent}`);
 }
 """
         result = subprocess.run(

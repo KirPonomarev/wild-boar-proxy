@@ -517,6 +517,10 @@ function actionDisplayLabel(displayState) {
     invalid_json: "invalid JSON",
     timeout: "timeout",
     integration_failure: "ошибка интеграции",
+    created: "артефакт создан",
+    redaction_unreported: "redaction не подтверждена",
+    redaction_failed: "redaction failed",
+    artifact_unavailable: "artifact unavailable",
     partial_success: "частично",
     unsupported: "недоступно",
     missing_surface: "missing surface",
@@ -1031,6 +1035,9 @@ function setActionPanel(payload, refreshState = "none") {
   const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
+  const exportModel = payload.ui_action === "export_diagnostics"
+    ? diagnosticsExportResultModel(payload)
+    : null;
   const safeUiAction = safeLedgerText(payload.ui_action || "unknown", "unknown");
   const safeRole = safeLedgerText(payload.action_role || "unknown", "unknown");
   const safeTarget = safeLedgerText(payload.account_id || payload.route_id || "-", "-");
@@ -1039,9 +1046,13 @@ function setActionPanel(payload, refreshState = "none") {
   const safeNextAction = safeLedgerText(result.next_action || "none", "none");
   const safeSupportDetails = safeLedgerText(actionSupportDetails(payload), "-");
   const panel = document.getElementById("actionPanel");
-  const panelVisualClass = payload.ui_action === "onboard_account"
+  const panelVisualClass = exportModel
+    ? exportModel.visual
+    : payload.ui_action === "onboard_account"
     ? actionPanelVisualForOnboarding(onboardingModel, display)
     : display.visualClass;
+  const displayStateLabel = exportModel ? exportModel.state : display.displayState;
+  const truthNote = exportModel ? exportModel.copy : display.truthNote;
   if (panel) {
     panel.className = `action-panel compact-action-panel ${panelVisualClass}`;
   }
@@ -1049,7 +1060,7 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionRole", safeRole);
   text("actionAccountId", safeTarget);
   text("actionStatus", display.status);
-  text("actionDisplayState", display.displayState);
+  text("actionDisplayState", displayStateLabel);
   text("actionMachineCode", safeMachineCode);
   text("actionMessage", safeMessage);
   text("actionNextAction", safeNextAction);
@@ -1057,13 +1068,13 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionSupportDetails", safeSupportDetails);
   const refreshLabel = actionRefreshLabel(payload, refreshState);
   text("actionRefreshStatus", refreshLabel);
-  text("actionTruthNote", display.truthNote);
+  text("actionTruthNote", truthNote);
   text("actionOnboardingOutcome", onboardingModel.finalOutcome || "-");
   text("actionOnboardingReserveProof", onboardingModel.reserveFirst);
   text("actionOnboardingBackend", safeLedgerText(onboardingModel.selectedBackendId, "-"));
-  setStatusChip("actionDisplayChip", actionDisplayLabel(display.displayState), panelVisualClass);
+  setStatusChip("actionDisplayChip", actionDisplayLabel(displayStateLabel), panelVisualClass);
   text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
-  text("actionSummaryMeta", `target ${safeTarget} · ${display.displayState}`);
+  text("actionSummaryMeta", `target ${safeTarget} · ${displayStateLabel}`);
   text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
   text("actionSummaryTarget", safeTarget);
   text("actionSummaryRefresh", refreshLabel);
@@ -1322,20 +1333,23 @@ function setStatusChip(id, label, visual) {
 
 function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
   const result = payload.result || {};
+  const exportModel = payload.ui_action === "export_diagnostics"
+    ? diagnosticsExportResultModel(payload)
+    : null;
   const entry = {
     key: actionLedgerKey(payload, result),
     uiAction: payload.ui_action || "unknown",
     role: payload.action_role || metadataFor(payload.ui_action || "unknown").action_role || "unknown",
     target: safeLedgerText(payload.account_id || payload.route_id || "-", "-"),
     status: display.status,
-    displayState: display.displayState,
-    visualClass: display.visualClass,
+    displayState: exportModel ? exportModel.state : display.displayState,
+    visualClass: exportModel ? exportModel.visual : display.visualClass,
     machineCode: safeLedgerText(result.machine_error_code || "-", "-"),
     message: safeLedgerText(result.human_message || "-", "-"),
     nextAction: safeLedgerText(result.next_action || "none", "none"),
     changedFilesCount: changedFiles.length,
     refreshStatus: actionRefreshLabel(payload, refreshState),
-    truthNote: display.truthNote,
+    truthNote: exportModel ? exportModel.copy : display.truthNote,
     supportDetails: safeLedgerText(actionSupportDetails(payload), "-"),
     specialDetails: safeLedgerText(actionSpecialDetails(payload), "-"),
     timestamp: actionLedgerTimestamp()
@@ -1502,10 +1516,12 @@ function actionSpecialDetails(payload) {
   }
   if (payload.ui_action === "export_diagnostics") {
     const data = result.data || {};
+    const exportModel = diagnosticsExportResultModel(payload);
     return [
       `artifact_ref=${artifactReference(data.bundle_path)}`,
-      `redaction=${data.redaction_status || "unknown"}`,
-      `changed_files=${Array.isArray(result.changed_files) ? result.changed_files.length : 0}`
+      `redaction=${exportModel.redactionStatus}`,
+      `changed_files=${Array.isArray(result.changed_files) ? result.changed_files.length : 0}`,
+      "claim_scope=support_artifact_only"
     ].join(" · ");
   }
   return "-";
@@ -1555,7 +1571,8 @@ function actionSupportDetails(payload) {
     return `локальный artifact · ${artifactReference(data.evidence_path)}`;
   }
   if (payload.ui_action === "export_diagnostics") {
-    return `локальный artifact · ${artifactReference(data.bundle_path)}`;
+    const exportModel = diagnosticsExportResultModel(payload);
+    return `support artifact · ${artifactReference(data.bundle_path)} · redaction=${exportModel.redactionStatus}`;
   }
   return "-";
 }
@@ -1563,17 +1580,16 @@ function actionSupportDetails(payload) {
 function renderDiagnosticsAction(payload) {
   const result = payload.result || {};
   const data = result.data || {};
-  const status = result.status || payload.status || "unknown";
+  const exportModel = diagnosticsExportResultModel(payload);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
-  const visual = status === "ok" ? "blue" : (status === "running" ? "amber" : "red");
   const chip = document.getElementById("diagnosticsStatusChip");
   if (!chip) {
     return;
   }
-  chip.className = `chip ${visual}`;
-  chip.lastElementChild.textContent = diagnosticsStatusLabel(status);
+  chip.className = `chip ${exportModel.visual}`;
+  chip.lastElementChild.textContent = exportModel.label;
   text("diagnosticsMessage", safeLedgerText(result.human_message || "Команда диагностики не вернула сообщение."));
-  text("diagnosticsPacketStatus", status);
+  text("diagnosticsPacketStatus", exportModel.state);
   text("diagnosticsExitCode", result.exit_code ?? "-");
   text("diagnosticsMachineCode", safeLedgerText(result.machine_error_code || "-"));
   text("diagnosticsNextAction", safeLedgerText(result.next_action || "none", "none"));
@@ -1581,19 +1597,98 @@ function renderDiagnosticsAction(payload) {
   text("diagnosticsBundleRef", artifactReference(data.bundle_path));
 
   const banner = document.getElementById("diagnosticsBanner");
-  banner.className = `fixture-banner ${visual}`;
-  banner.textContent = status === "ok"
-    ? "Диагностический пакет поддержки экспортирован. Истина о здоровье runtime не изменялась."
-    : "Команда диагностики не создала успешный пакет поддержки. Истина о здоровье runtime не изменялась.";
+  banner.className = `fixture-banner ${exportModel.visual}`;
+  banner.textContent = exportModel.copy;
 }
 
-function diagnosticsStatusLabel(status) {
+function diagnosticsExportResultModel(payload) {
+  const result = payload.result || {};
+  const data = result.data || {};
+  const status = String(result.status || payload.status || "unknown");
+  const redactionStatus = normalizeDiagnosticsRedactionStatus(data.redaction_status);
+  const artifactRef = artifactReference(data.bundle_path);
+  const hasArtifact = artifactRef !== "не предоставлено";
+  if (status === "ok" && redactionStatus === "failed") {
+    return {
+      state: "redaction_failed",
+      label: "Redaction failed",
+      visual: "red",
+      redactionStatus,
+      copy: "Экспорт вернул redaction failure. Artifact не считается безопасным, UI не читает bundle и не меняет runtime truth."
+    };
+  }
+  if (status === "ok" && !hasArtifact) {
+    return {
+      state: "artifact_unavailable",
+      label: "Artifact unavailable",
+      visual: "amber",
+      redactionStatus,
+      copy: "Команда не вернула reference артефакта. Это не runtime health truth; повторите export или откройте журнал действий."
+    };
+  }
+  if (status === "ok" && redactionStatus === "unreported") {
+    return {
+      state: "redaction_unreported",
+      label: "Redaction not reported",
+      visual: "amber",
+      redactionStatus,
+      copy: "Артефакт диагностики создан, но redaction не подтверждена packet-ом. Это support artifact, не runtime health truth."
+    };
+  }
+  if (status === "ok") {
+    return {
+      state: "created",
+      label: "Артефакт создан",
+      visual: "blue",
+      redactionStatus,
+      copy: "Артефакт диагностики создан. Пути и секреты скрыты; это support artifact, не runtime health truth."
+    };
+  }
+  if (status === "timeout") {
+    return {
+      state: "timeout",
+      label: "Timeout",
+      visual: "amber",
+      redactionStatus,
+      copy: "Экспорт диагностики истёк по времени. Успех не выводится; можно повторить команду."
+    };
+  }
+  if (status === "invalid_json") {
+    return {
+      state: "invalid_json",
+      label: "Invalid JSON",
+      visual: "red",
+      redactionStatus,
+      copy: "Экспорт вернул invalid JSON. Это ошибка интеграции, а не результат диагностики."
+    };
+  }
+  if (status === "running") {
+    return {
+      state: "running",
+      label: "Выполняется",
+      visual: "amber",
+      redactionStatus,
+      copy: "Экспорт диагностики выполняется. UI не меняет runtime truth и не читает bundle."
+    };
+  }
   return {
-    ok: "Артефакт экспортирован",
-    running: "Выполняется",
-    command_error: "Ошибка команды",
-    integration_failure: "Ошибка интеграции"
-  }[status] || "Неизвестно";
+    state: status === "command_error" ? "command_error" : (status === "integration_failure" ? "integration_failure" : "command_error"),
+    label: status === "integration_failure" ? "Ошибка интеграции" : "Ошибка команды",
+    visual: "red",
+    redactionStatus,
+    copy: "Команда диагностики не создала успешный support artifact. Истина о здоровье runtime не изменялась."
+  };
+}
+
+function normalizeDiagnosticsRedactionStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["enabled", "passed", "enforced", "ok", "true"].includes(normalized)) {
+    return "enabled";
+  }
+  if (["failed", "failure", "error", "redaction_failed", "false"].includes(normalized)) {
+    return "failed";
+  }
+  return "unreported";
 }
 
 function artifactReference(value) {
