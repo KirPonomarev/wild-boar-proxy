@@ -1,0 +1,92 @@
+{
+  "contour": "UI_WEB_ACTION_LEDGER_CANONICAL_PANEL_PASS",
+  "date": "2026-05-15",
+  "branch": "codex/external-agent-lab-isolated",
+  "pre_commit_head": "bc7eede507f0181c4b199fd15a6d99ccdba1ca34",
+  "scope": {
+    "web_only": true,
+    "runtime_changed": false,
+    "live_server_changed": false,
+    "command_adapter_changed": false,
+    "allowlist_changed": false,
+    "desktop_changed": false,
+    "persistent_audit_history_added": false
+  },
+  "implementation_checks": [
+    {
+      "check": "existing_ledger_reused",
+      "status": "pass",
+      "evidence": "recordActionLedgerEntry/renderActionLedger/actionLedgerRow were hardened instead of adding a second ledger"
+    },
+    {
+      "check": "collapsed_rows",
+      "status": "pass",
+      "evidence": "actionLedgerRow sets row.open = false and closed meta is operator-readable"
+    },
+    {
+      "check": "response_text_sanitized",
+      "status": "pass",
+      "evidence": "safeLedgerText is applied to compact summary and ledger entry fields"
+    },
+    {
+      "check": "raw_dispatch_redacted",
+      "status": "pass",
+      "evidence": "raw argv/raw_json/stack_trace/browser command id echoes are redacted before display"
+    },
+    {
+      "check": "private_path_secret_redaction",
+      "status": "pass",
+      "evidence": "ledger tests inject path and secret-like values and assert no rendered leak"
+    },
+    {
+      "check": "changed_files_count_only",
+      "status": "pass",
+      "evidence": "changed_files values are rendered as metadata count only"
+    },
+    {
+      "check": "refresh_truth_semantics",
+      "status": "pass",
+      "evidence": "refresh-required ok stays amber pending and only refresh complete becomes green"
+    },
+    {
+      "check": "duplicate_blocked",
+      "status": "pass",
+      "evidence": "test_action_ledger_blocks_duplicate_dispatch_in_ui_session verifies no second fetch"
+    }
+  ],
+  "screenshots": [
+    "audit_results/ui_web_action_ledger_canonical_panel_pass_2026-05-15/screenshots/empty_ledger.png",
+    "audit_results/ui_web_action_ledger_canonical_panel_pass_2026-05-15/screenshots/success_refresh_complete_ledger.png",
+    "audit_results/ui_web_action_ledger_canonical_panel_pass_2026-05-15/screenshots/command_error_sanitized_ledger.png"
+  ],
+  "node_smoke_only_states": [
+    "duplicate_blocked",
+    "ok_refresh_pending",
+    "ok_refresh_failed",
+    "refresh_mismatch",
+    "invalid_json",
+    "timeout",
+    "onboarding reserve-first and non-success states",
+    "diagnostics export metadata"
+  ],
+  "commands": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "pass"
+    },
+    {
+      "command": "python3 -m unittest tests.test_web_design_ui tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "status": "pass",
+      "result": "Ran 88 tests"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    }
+  ],
+  "known_limits": [
+    "Browser screenshots use a bounded fake-live runner and do not execute real runtime mutations.",
+    "Invalid JSON, timeout, duplicate blocked, and refresh mismatch are covered by Node smoke tests rather than browser screenshots to avoid adding test-only server endpoints."
+  ],
+  "verdict": "pass"
+}

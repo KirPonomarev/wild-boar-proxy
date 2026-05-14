@@ -1262,6 +1262,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("renderActionLedger", js)
         self.assertIn("openActionLedgerPanel", js)
         self.assertIn("setActionLedgerFilter", js)
+        self.assertIn("safeLedgerText", js)
+        self.assertIn("row.open = false", js)
         self.assertIn("changedFilesCount", js)
         self.assertIn('duplicate_blocked: "neutral"', js)
         self.assertIn('ok_refresh_pending: "amber"', js)
@@ -2209,7 +2211,7 @@ const firstText = JSON.stringify(first);
 if (!first.className.includes("amber") || !firstText.includes("ok_refresh_pending")) {
   throw new Error(`ok command packet requiring refresh should stay amber pending: ${first.className} ${firstText}`);
 }
-if (!firstText.includes("changed_files=2")) {
+if (!firstText.includes("changed files") || !firstText.includes("2 metadata entries")) {
   throw new Error(`ledger should show changed_files count only: ${firstText}`);
 }
 if (firstText.includes("/tmp/runtime-state") || firstText.includes("runtime-state-b.json")) {
@@ -2217,6 +2219,9 @@ if (firstText.includes("/tmp/runtime-state") || firstText.includes("runtime-stat
 }
 if (!firstText.includes("command packet outcome only")) {
   throw new Error(`ledger did not keep not-runtime-truth copy: ${firstText}`);
+}
+if (!firstText.includes("target - · machine OK · refresh canonical refresh pending")) {
+  throw new Error(`ledger collapsed meta should be operator-readable, not debug key/value dump: ${firstText}`);
 }
 
 sandbox.setActionPanel({
@@ -2252,6 +2257,37 @@ sandbox.setActionPanel({
 });
 if (!elements.actionLedgerList.children[0].className.includes("red")) {
   throw new Error("command_error ledger row must not be green");
+}
+const commandErrorText = JSON.stringify(elements.actionLedgerList.children[0]);
+if (commandErrorText.includes("command_id=") || commandErrorText.includes("argv=")) {
+  throw new Error(`ledger leaked raw dispatch fields: ${commandErrorText}`);
+}
+
+sandbox.setActionPanel({
+  status: "command_error",
+  ui_action: "export_diagnostics",
+  action_role: "support_artifact",
+  post_action_refresh_required: false,
+  result: {
+    status: "command_error",
+    machine_error_code: "COMMAND_FAILED",
+    human_message: "failed command_id=diagnostics_export argv=diagnostics secret=VERYSECRET /Users/kirill/private.log",
+    next_action: "retry /tmp/private-state.json",
+    changed_files: []
+  }
+});
+const sensitiveLedgerText = JSON.stringify(elements.actionLedgerList.children[0]);
+const sensitiveCompactText = [
+  elements.actionSummaryMessage.textContent,
+  elements.actionMessage.textContent,
+  elements.actionNextAction.textContent,
+  elements.actionSupportDetails.textContent
+].join(" ");
+if (sensitiveLedgerText.includes("diagnostics_export") || sensitiveLedgerText.includes("argv=diagnostics") || sensitiveLedgerText.includes("VERYSECRET") || sensitiveLedgerText.includes("/Users/") || sensitiveLedgerText.includes("/tmp/private-state")) {
+  throw new Error(`ledger leaked sensitive or raw dispatch text: ${sensitiveLedgerText}`);
+}
+if (sensitiveCompactText.includes("diagnostics_export") || sensitiveCompactText.includes("argv=diagnostics") || sensitiveCompactText.includes("VERYSECRET") || sensitiveCompactText.includes("/Users/") || sensitiveCompactText.includes("/tmp/private-state")) {
+  throw new Error(`compact action summary leaked sensitive or raw dispatch text: ${sensitiveCompactText}`);
 }
 
 sandbox.setActionPanel({

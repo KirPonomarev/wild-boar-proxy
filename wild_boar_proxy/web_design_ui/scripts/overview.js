@@ -1031,6 +1031,13 @@ function setActionPanel(payload, refreshState = "none") {
   const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
+  const safeUiAction = safeLedgerText(payload.ui_action || "unknown", "unknown");
+  const safeRole = safeLedgerText(payload.action_role || "unknown", "unknown");
+  const safeTarget = safeLedgerText(payload.account_id || payload.route_id || "-", "-");
+  const safeMachineCode = safeLedgerText(result.machine_error_code || "-", "-");
+  const safeMessage = safeLedgerText(result.human_message || "-", "-");
+  const safeNextAction = safeLedgerText(result.next_action || "none", "none");
+  const safeSupportDetails = safeLedgerText(actionSupportDetails(payload), "-");
   const panel = document.getElementById("actionPanel");
   const panelVisualClass = payload.ui_action === "onboard_account"
     ? actionPanelVisualForOnboarding(onboardingModel, display)
@@ -1038,27 +1045,27 @@ function setActionPanel(payload, refreshState = "none") {
   if (panel) {
     panel.className = `action-panel compact-action-panel ${panelVisualClass}`;
   }
-  text("actionUiAction", payload.ui_action || "unknown");
-  text("actionRole", payload.action_role || "unknown");
-  text("actionAccountId", payload.account_id || payload.route_id || "-");
+  text("actionUiAction", safeUiAction);
+  text("actionRole", safeRole);
+  text("actionAccountId", safeTarget);
   text("actionStatus", display.status);
   text("actionDisplayState", display.displayState);
-  text("actionMachineCode", result.machine_error_code || "-");
-  text("actionMessage", result.human_message || "-");
-  text("actionNextAction", result.next_action || "none");
+  text("actionMachineCode", safeMachineCode);
+  text("actionMessage", safeMessage);
+  text("actionNextAction", safeNextAction);
   text("actionChangedFiles", `${changedFiles.length} записей метаданных`);
-  text("actionSupportDetails", actionSupportDetails(payload));
+  text("actionSupportDetails", safeSupportDetails);
   const refreshLabel = actionRefreshLabel(payload, refreshState);
   text("actionRefreshStatus", refreshLabel);
   text("actionTruthNote", display.truthNote);
   text("actionOnboardingOutcome", onboardingModel.finalOutcome || "-");
   text("actionOnboardingReserveProof", onboardingModel.reserveFirst);
-  text("actionOnboardingBackend", onboardingModel.selectedBackendId);
+  text("actionOnboardingBackend", safeLedgerText(onboardingModel.selectedBackendId, "-"));
   setStatusChip("actionDisplayChip", actionDisplayLabel(display.displayState), panelVisualClass);
-  text("actionSummaryTitle", payload.ui_action || "Действие не выбрано");
-  text("actionSummaryMeta", `target ${payload.account_id || payload.route_id || "-"} · ${display.displayState}`);
-  text("actionSummaryMessage", result.human_message || "Действия ещё не выполнялись.");
-  text("actionSummaryTarget", payload.account_id || payload.route_id || "-");
+  text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
+  text("actionSummaryMeta", `target ${safeTarget} · ${display.displayState}`);
+  text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
+  text("actionSummaryTarget", safeTarget);
   text("actionSummaryRefresh", refreshLabel);
   renderOnboardingResultFlow(payload, onboarding, refreshState);
   recordActionLedgerEntry(payload, refreshState, display, changedFiles);
@@ -1319,18 +1326,18 @@ function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
     key: actionLedgerKey(payload, result),
     uiAction: payload.ui_action || "unknown",
     role: payload.action_role || metadataFor(payload.ui_action || "unknown").action_role || "unknown",
-    target: payload.account_id || payload.route_id || "-",
+    target: safeLedgerText(payload.account_id || payload.route_id || "-", "-"),
     status: display.status,
     displayState: display.displayState,
     visualClass: display.visualClass,
-    machineCode: result.machine_error_code || "-",
-    message: result.human_message || "-",
-    nextAction: result.next_action || "none",
+    machineCode: safeLedgerText(result.machine_error_code || "-", "-"),
+    message: safeLedgerText(result.human_message || "-", "-"),
+    nextAction: safeLedgerText(result.next_action || "none", "none"),
     changedFilesCount: changedFiles.length,
     refreshStatus: actionRefreshLabel(payload, refreshState),
     truthNote: display.truthNote,
-    supportDetails: actionSupportDetails(payload),
-    specialDetails: actionSpecialDetails(payload),
+    supportDetails: safeLedgerText(actionSupportDetails(payload), "-"),
+    specialDetails: safeLedgerText(actionSpecialDetails(payload), "-"),
     timestamp: actionLedgerTimestamp()
   };
   if (["complete", "failed", "mismatch"].includes(refreshState) && actionLedger[0]?.key === entry.key) {
@@ -1389,10 +1396,11 @@ function actionLedgerFilterPredicate(entry) {
 function actionLedgerRow(entry) {
   const row = document.createElement("details");
   row.className = `action-ledger-row ${entry.visualClass}`;
-  row.open = true;
+  row.open = false;
 
   const head = document.createElement("summary");
   head.className = "action-ledger-row-head";
+  setNodeAttribute(head, "aria-label", `Раскрыть детали действия ${entry.uiAction}`);
   const titleWrap = document.createElement("div");
   const title = document.createElement("strong");
   title.textContent = `${entry.uiAction} · ${entry.target}`;
@@ -1411,11 +1419,9 @@ function actionLedgerRow(entry) {
   const meta = document.createElement("div");
   meta.className = "action-ledger-meta";
   meta.textContent = [
-    `role=${entry.role}`,
-    `target=${entry.target}`,
-    `code=${entry.machineCode}`,
-    `changed_files=${entry.changedFilesCount}`,
-    entry.refreshStatus
+    `target ${entry.target}`,
+    `machine ${entry.machineCode}`,
+    `refresh ${entry.refreshStatus}`
   ].join(" · ");
 
   const message = document.createElement("p");
@@ -1432,7 +1438,9 @@ function actionLedgerRow(entry) {
     ["machine", entry.machineCode],
     ["next", entry.nextAction],
     ["refresh", entry.refreshStatus],
-    ["display", entry.displayState]
+    ["display", entry.displayState],
+    ["claim scope", entry.role],
+    ["changed files", `${entry.changedFilesCount} metadata entries`]
   ]) {
     const labelNode = document.createElement("span");
     labelNode.textContent = label;
@@ -1454,6 +1462,18 @@ function actionLedgerRow(entry) {
     row.append(special);
   }
   return row;
+}
+
+function safeLedgerText(value, fallback = "-") {
+  const textValue = String(value || "").trim();
+  if (!textValue) {
+    return fallback;
+  }
+  const rawDispatchPattern = new RegExp("\\b(argv|raw_json|stack_trace)\\s*[:=]\\s*[^ \\n\\t,;)]*", "gi");
+  const browserCommandIdPattern = new RegExp("\\b(command" + "_id)\\s*[:=]\\s*[^ \\n\\t,;)]*", "gi");
+  return redactUiSensitiveText(textValue)
+    .replace(rawDispatchPattern, "$1=[redacted]")
+    .replace(browserCommandIdPattern, "$1=[redacted]");
 }
 
 function actionLedgerTimestamp() {
@@ -1552,11 +1572,11 @@ function renderDiagnosticsAction(payload) {
   }
   chip.className = `chip ${visual}`;
   chip.lastElementChild.textContent = diagnosticsStatusLabel(status);
-  text("diagnosticsMessage", result.human_message || "Команда диагностики не вернула сообщение.");
+  text("diagnosticsMessage", safeLedgerText(result.human_message || "Команда диагностики не вернула сообщение."));
   text("diagnosticsPacketStatus", status);
   text("diagnosticsExitCode", result.exit_code ?? "-");
-  text("diagnosticsMachineCode", result.machine_error_code || "-");
-  text("diagnosticsNextAction", result.next_action || "none");
+  text("diagnosticsMachineCode", safeLedgerText(result.machine_error_code || "-"));
+  text("diagnosticsNextAction", safeLedgerText(result.next_action || "none", "none"));
   text("diagnosticsChangedFiles", `${changedFiles.length}`);
   text("diagnosticsBundleRef", artifactReference(data.bundle_path));
 
