@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_PACKAGE_INTAKE_LOCK",
+  "date": "2026-05-14",
+  "head_before": "da2b00b",
+  "input_labels": {
+    "design_package": "owner_supplied_final_design_package",
+    "icon_package": "owner_supplied_phosphor_regular_icons",
+    "logo_asset": "owner_supplied_logo_asset"
+  },
+  "source_package_hashes": {
+    "design_package_sha256": "ba8103d76274e5825f74f63d14f35c965f1bd8eff3ca32cc1fed0a1550b9d35e",
+    "icon_package_sha256": "d4dabb1e4c5aeb67ed67d9dc3f47d8b9e7c57cff37d9c35da75a1fc17eaa11ea"
+  },
+  "package_inventory": {
+    "spec_files": [
+      "specs/design_tokens.json",
+      "specs/screen_manifest.json",
+      "specs/DESIGN_TRANSFER_SPEC.md"
+    ],
+    "screen_count": 35,
+    "contact_sheets": [
+      "contact_sheets/contact_sheet_24_34_advanced_states.png",
+      "contact_sheets/contact_sheet_12_23_settings_api.png",
+      "contact_sheets/contact_sheet_00_11_core.png",
+      "contact_sheets/contact_sheet_all_00_34.png"
+    ],
+    "raw_archive_copied_to_repo": false,
+    "full_icon_archive_copied_to_repo": false
+  },
+  "design_tokens": {
+    "frame": {
+      "working": [
+        1600,
+        1000
+      ],
+      "export": [
+        3200,
+        2000
+      ]
+    },
+    "spacing": [
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      32,
+      40,
+      48,
+      64
+    ],
+    "radii": {
+      "window": 24,
+      "card": 18,
+      "button": 12,
+      "chip": 999
+    },
+    "colors": {
+      "canvas": "#F6F1EA",
+      "surface": "#FCFAF7",
+      "surfaceMuted": "#F1EBE3",
+      "border": "#D9D0C3",
+      "borderStrong": "#C7BCAE",
+      "text": "#1E1B18",
+      "secondary": "#6E675F",
+      "muted": "#8D857B",
+      "blue": "#315C99",
+      "green": "#2D7A4B",
+      "amber": "#A86A10",
+      "red": "#B6402C"
+    },
+    "typography": {
+      "font_family": "SF Mono, SFMono-Regular, ui-monospace, Noto Sans Mono, Menlo, Consolas, monospace",
+      "page_title": "34/40 700",
+      "section_title": "18/24 700",
+      "card_title": "15/20 700",
+      "body": "14/20 regular",
+      "secondary": "13/19 regular",
+      "eyebrow": "11/14 700 uppercase tracking .06em",
+      "kpi": "32/34 700"
+    },
+    "icons": {
+      "source_label": "owner_supplied_phosphor_regular_icons",
+      "weight": "regular",
+      "format": "PNGs/regular"
+    },
+    "logo": {
+      "source_label": "owner_supplied_logo_asset",
+      "locked": true,
+      "width_in_sidebar": 92
+    }
+  },
+  "frame": {
+    "working": [
+      1600,
+      1000
+    ],
+    "export": [
+      3200,
+      2000
+    ],
+    "window": {
+      "x": 28,
+      "y": 28,
+      "w": 1544,
+      "h": 944,
+      "radius": 24
+    },
+    "sidebar": {
+      "w": 304
+    },
+    "main": {
+      "x": 304,
+      "padding": [
+        46,
+        40,
+        34,
+        40
+      ]
+    }
+  },
+  "screen_ids": [
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34"
+  ],
+  "screen_count": 35,
+  "sanitization": {
+    "private_absolute_paths_removed": true,
+    "repo_safe_source_labels_used": true,
+    "forbidden_private_paths": [
+      "owner home directory paths",
+      "raw design package source path",
+      "raw icon package source path",
+      "raw logo source path"
+    ]
+  },
+  "icon_archive_summary": {
+    "source_label": "owner_supplied_phosphor_regular_icons",
+    "recommended_weight": "regular",
+    "recommended_folder": "PNGs/regular",
+    "regular_png_file_count": 1513,
+    "full_archive_file_count": 27281,
+    "copy_policy": "copy only selected icons later by implemented screen need"
+  },
+  "next_contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "resume_from_here": "Start UI_FINAL_DESIGN_SYSTEM_REBASE after owner confirms intake lock."
+}

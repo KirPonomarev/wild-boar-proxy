@@ -1,0 +1,1075 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_DESIGN_PACKAGE_INTAKE_LOCK",
+  "date": "2026-05-14",
+  "screen_count": 35,
+  "implementation_buckets": [
+    "implemented_rebase_required",
+    "new_screen_required",
+    "deferred_visual_only",
+    "requires_command_admission",
+    "component_library_only"
+  ],
+  "screens": [
+    {
+      "screen_id": "00",
+      "screen_title": "Brand lockup",
+      "source_render": "screens/00_brand_lockup.png",
+      "role": "Фиксация айдентики и токенов",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "00_brand_lockup",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "strict JSON command packets when admitted"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "01",
+      "screen_title": "Обзор",
+      "source_render": "screens/01_overview_dashboard.png",
+      "role": "Операторская сводка",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "overview",
+      "target_ui_surface": "01_overview_dashboard",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "status --json",
+        "healthcheck --json",
+        "mode get --json",
+        "accounts list --json"
+      ],
+      "active_actions_allowed_now": [
+        "refresh_health_detail",
+        "set_mode_stable",
+        "set_mode_managed",
+        "sync_runtime",
+        "launch_smoke",
+        "stable_repair_plan",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "02",
+      "screen_title": "Аккаунты",
+      "source_render": "screens/02_accounts_table.png",
+      "role": "Сканирование пула аккаунтов",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "accounts",
+      "target_ui_surface": "02_accounts_table",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "accounts list --json"
+      ],
+      "active_actions_allowed_now": [
+        "validate_account",
+        "hold_account",
+        "release_account",
+        "promote_account",
+        "demote_account",
+        "retire_account",
+        "onboard_account"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "03",
+      "screen_title": "Аккаунты",
+      "source_render": "screens/03_account_detail_drawer.png",
+      "role": "Понять один аккаунт и допустимые lifecycle действия",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "03_account_detail_drawer",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "accounts list --json"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "04",
+      "screen_title": "Диагностика",
+      "source_render": "screens/04_diagnostics_signal_detail.png",
+      "role": "Восстановить референс diagnostics master-detail",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "diagnostics",
+      "target_ui_surface": "04_diagnostics_signal_detail",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "diagnostics export --json",
+        "future bounded diagnostics signal packet for live regions"
+      ],
+      "active_actions_allowed_now": [
+        "export_diagnostics",
+        "refresh_health_detail"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "05",
+      "screen_title": "Журнал диагностики",
+      "source_render": "screens/05_diagnostics_live_history.png",
+      "role": "Live history visualization",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "05_diagnostics_live_history",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "future bounded diagnostics history JSON packet"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "06",
+      "screen_title": "Экспорт диагностики",
+      "source_render": "screens/06_diagnostics_export_result.png",
+      "role": "Показать результат diagnostics export",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": "diagnostics_export_region",
+      "target_ui_surface": "06_diagnostics_export_result",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "diagnostics export --json"
+      ],
+      "active_actions_allowed_now": [
+        "export_diagnostics"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "07",
+      "screen_title": "Command ledger",
+      "source_render": "screens/07_action_command_ledger.png",
+      "role": "Универсальный ledger команд",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "07_action_command_ledger",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "ui_action result packets",
+        "post-action canonical refresh packets"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "08",
+      "screen_title": "Ошибка интеграции",
+      "source_render": "screens/08_global_error_integration_failure.png",
+      "role": "Глобальные failure states",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "08_global_error_integration_failure",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "strict JSON command packets and integration failure states"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "09",
+      "screen_title": "Добавление аккаунта",
+      "source_render": "screens/09_onboarding_result_flow.png",
+      "role": "Отдельный result screen onboarding",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "onboard-modal/action-result-partial",
+      "target_ui_surface": "09_onboarding_result_flow",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "accounts onboard --json",
+        "accounts list --json",
+        "status --json"
+      ],
+      "active_actions_allowed_now": [
+        "onboard_account"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "10",
+      "screen_title": "Первичная настройка",
+      "source_render": "screens/10_first_run_setup_wizard.png",
+      "role": "First run setup wizard",
+      "bucket": [
+        "deferred_visual_only"
+      ],
+      "current_repo_surface": "setup",
+      "target_ui_surface": "10_first_run_setup_wizard",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "future installer/setup command packets"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "11",
+      "screen_title": "Выбор клиента",
+      "source_render": "screens/11_select_client_screen.png",
+      "role": "Выбор client candidate",
+      "bucket": [
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": "select-client",
+      "target_ui_surface": "11_select_client_screen",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "future command-owned client candidate packet"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "12",
+      "screen_title": "Импорт существующей настройки",
+      "source_render": "screens/12_import_existing_wizard.png",
+      "role": "Transactional import wizard",
+      "bucket": [
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": "import-existing",
+      "target_ui_surface": "12_import_existing_wizard",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "legacy import --json via admitted source contract"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "13",
+      "screen_title": "Installer / Data layout",
+      "source_render": "screens/13_installer_data_layout.png",
+      "role": "Data layout and installer states",
+      "bucket": [
+        "new_screen_required",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "13_installer_data_layout",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "installer init --json",
+        "future data-layout command packets"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "14",
+      "screen_title": "Настройки",
+      "source_render": "screens/14_settings_main_hub.png",
+      "role": "Settings navigation hub",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "settings",
+      "target_ui_surface": "14_settings_main_hub",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "status --json",
+        "mode get --json",
+        "ui_action metadata"
+      ],
+      "active_actions_allowed_now": [
+        "set_mode_stable",
+        "set_mode_managed",
+        "stable_repair_plan",
+        "launch_smoke",
+        "export_diagnostics"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "15",
+      "screen_title": "Runtime / Mode",
+      "source_render": "screens/15_settings_runtime_mode.png",
+      "role": "Runtime mode settings",
+      "bucket": [
+        "new_screen_required",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "15_settings_runtime_mode",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "mode get --json",
+        "mode set stable --json",
+        "mode set managed --json"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "16",
+      "screen_title": "Client / Launch",
+      "source_render": "screens/16_settings_client_launch.png",
+      "role": "Client launch flow",
+      "bucket": [
+        "new_screen_required",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "16_settings_client_launch",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "launch client --json via bounded server-owned path"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "17",
+      "screen_title": "Accounts policy",
+      "source_render": "screens/17_settings_accounts_policy.png",
+      "role": "Accounts policy screen",
+      "bucket": [
+        "new_screen_required",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "17_settings_accounts_policy",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "accounts list --json"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "18",
+      "screen_title": "Diagnostics / Privacy",
+      "source_render": "screens/18_settings_diagnostics_privacy.png",
+      "role": "Diagnostics privacy settings",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "18_settings_diagnostics_privacy",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "diagnostics export --json redaction policy metadata"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "19",
+      "screen_title": "Advanced",
+      "source_render": "screens/19_settings_advanced.png",
+      "role": "Advanced settings",
+      "bucket": [
+        "new_screen_required",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "19_settings_advanced",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "explicitly admitted advanced command metadata only"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "20",
+      "screen_title": "API-подключения",
+      "source_render": "screens/20_api_routes_list.png",
+      "role": "API route list",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "api-connections",
+      "target_ui_surface": "20_api_routes_list",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "external-models routes list --json"
+      ],
+      "active_actions_allowed_now": [
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "21",
+      "screen_title": "Route detail",
+      "source_render": "screens/21_api_route_detail.png",
+      "role": "API route detail",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "21_api_route_detail",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "external-models route/profile/check packet surfaces"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "22",
+      "screen_title": "Remove disabled route",
+      "source_render": "screens/22_api_route_remove_disabled.png",
+      "role": "Remove disabled route flow",
+      "bucket": [
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "api_route_remove_action",
+      "target_ui_surface": "22_api_route_remove_disabled",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "external-models routes list --json",
+        "external-models routes remove --route <id> --json"
+      ],
+      "active_actions_allowed_now": [
+        "api_route_remove"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "23",
+      "screen_title": "Route builder draft",
+      "source_render": "screens/23_api_route_builder_draft.png",
+      "role": "Route builder draft",
+      "bucket": [
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "23_api_route_builder_draft",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "not admitted for active UI; future bounded route builder contract"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "24",
+      "screen_title": "Secret references",
+      "source_render": "screens/24_secret_ref_selector.png",
+      "role": "Secret ref selector",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "24_secret_ref_selector",
+      "visual_priority": "P1",
+      "command_truth_source": [
+        "not admitted; future secret_ref selector contract"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "25",
+      "screen_title": "Human-open diagnostics",
+      "source_render": "screens/25_human_open_support_actions.png",
+      "role": "Human-open support actions",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "25_human_open_support_actions",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "future bounded human-open command surfaces"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "26",
+      "screen_title": "Runtime attestation",
+      "source_render": "screens/26_runtime_attestation_detail.png",
+      "role": "Runtime attestation detail",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "26_runtime_attestation_detail",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "healthcheck --json attestation",
+        "status --json attestation summary"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "27",
+      "screen_title": "Recovery center",
+      "source_render": "screens/27_recovery_center.png",
+      "role": "Recovery center",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "27_recovery_center",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "stable repair --dry-run --json",
+        "stable repair --apply --json"
+      ],
+      "active_actions_allowed_now": [
+        "stable_repair_plan",
+        "stable_repair_apply after existing strong confirmation policy"
+      ],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "28",
+      "screen_title": "Rollout / Scale gate",
+      "source_render": "screens/28_rollout_scale_gate.png",
+      "role": "Rollout/scale gate",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "28_rollout_scale_gate",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "rollout stage prove/advance surfaces after separate admission"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "29",
+      "screen_title": "Evidence packets",
+      "source_render": "screens/29_evidence_packets.png",
+      "role": "Evidence packets screen",
+      "bucket": [
+        "new_screen_required",
+        "deferred_visual_only",
+        "requires_command_admission"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "29_evidence_packets",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "rollout evidence capture/support artifact packets after separate admission"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": true,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "30",
+      "screen_title": "Audit / Activity history",
+      "source_render": "screens/30_audit_activity_history.png",
+      "role": "Audit/activity history",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "30_audit_activity_history",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "ui_action result summaries; no raw logs"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "31",
+      "screen_title": "About",
+      "source_render": "screens/31_about_license_version.png",
+      "role": "About/version/license",
+      "bucket": [
+        "new_screen_required"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "31_about_license_version",
+      "visual_priority": "P2",
+      "command_truth_source": [
+        "static app/build/schema/license metadata"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "32",
+      "screen_title": "State surfaces",
+      "source_render": "screens/32_state_surfaces_library.png",
+      "role": "State surface library",
+      "bucket": [
+        "component_library_only"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "32_state_surfaces_library",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "component library only"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "33",
+      "screen_title": "Dropdowns / Popovers",
+      "source_render": "screens/33_dropdowns_popovers_library.png",
+      "role": "Dropdown/popover library",
+      "bucket": [
+        "component_library_only"
+      ],
+      "current_repo_surface": null,
+      "target_ui_surface": "33_dropdowns_popovers_library",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "component library only"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    },
+    {
+      "screen_id": "34",
+      "screen_title": "Modals / Confirmations",
+      "source_render": "screens/34_modals_confirmations_library.png",
+      "role": "Modal and confirmation library",
+      "bucket": [
+        "component_library_only",
+        "implemented_rebase_required"
+      ],
+      "current_repo_surface": "confirm-action-modal/onboard-modal",
+      "target_ui_surface": "34_modals_confirmations_library",
+      "visual_priority": "P0",
+      "command_truth_source": [
+        "component library only"
+      ],
+      "active_actions_allowed_now": [],
+      "deferred_actions": [],
+      "command_admission_needed": false,
+      "desktop_dependency": "desktop_deferred_until_owner_approval",
+      "privacy_notes": [
+        "source private paths sanitized",
+        "no secret/token values admitted"
+      ],
+      "implementation_notes": [
+        "visual baseline only in this contour",
+        "do not infer runtime truth from design state",
+        "browser payload remains ui_action plus bounded structured payload only"
+      ]
+    }
+  ],
+  "next_contour": "UI_FINAL_DESIGN_SYSTEM_REBASE",
+  "resume_from_here": "Use this matrix to transfer design tokens, shell geometry, sidebar, typography, and minimal icon pipeline."
+}
