@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "The current-session action ledger is already bounded to command packet outcome summaries, but no durable server-owned activity JSON packet/index exists for the final design screen."
+    },
+    {
+      "agent": "Hume",
+      "role": "independent repo fact scanner",
+      "finding": "Repo facts support a split state: current UI has a session-scoped action summary, while the dedicated audit/activity-history contour remains deferred because there is no durable server-owned activity packet/index."
+    },
+    {
+      "agent": "Rawls",
+      "role": "post-artifact closeout auditor",
+      "finding": "No canon drift, verdict inflation, layer mix, or JSON issue was found in the spec, matrix, or audit. The only block was pre-commit closeout overclaim on head/commit/push wording, corrected before commit."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "UI_READINESS_SPEC.md:15-17",
+      "fact": "The UI must consume strict JSON command packets and must not infer runtime truth from local files, logs, cached UI state, exit code alone, or narrative memory."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:31-38",
+      "fact": "The UI must not parse logs as an API or synthesize healthy status from cached UI state."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:57-62",
+      "fact": "stdout must be exactly one JSON object, stderr must not be parsed as truth, and previous green status must not survive invalid/missing/stale/contradictory evidence."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:87-89",
+      "fact": "changed_files may be shown as audit/support signal, but it is not the UI success source."
+    },
+    {
+      "source": "COMMAND_API.md:10-14",
+      "fact": "Command API forbids plain-text parsing or log parsing fallback."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:404-417",
+      "fact": "The current UI downgrades an ok action result to stale when required post-action refresh fails."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:429-455",
+      "fact": "Action truth notes explicitly block runtime truth inference from running, ok, stale, timeout, invalid_json, command_error, and integration_failure display states."
+    },
+    {
+      "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:771-898",
+      "fact": "The current action panel and ledger record bounded current-session command packet summaries and render changed_files count plus command-packet-outcome-only copy."
+    },
+    {
+      "source": "tests/test_web_design_ui.py:1508-1585",
+      "fact": "Tests verify changed_files count-only rendering, no changed path identity leak, command_error not green, failed refresh becomes stale amber, and ledger stays bounded to five rows."
+    },
+    {
+      "source": "tests/test_web_design_ui.py:309,651,906",
+      "fact": "Tests forbid localStorage in the UI script and relevant screen sections."
+    },
+    {
+      "source": "audit_results/ui_final_render_package_completeness_matrix_2026-05-14.json:1438-1471",
+      "fact": "Screen 30 Audit / Activity history remains admission-required with no current web surfaces, no repo surfaces, no truth sources, no allowed UI actions, and a note requiring a bounded JSON activity packet."
+    },
+    {
+      "source": "audit_results/ui_final_action_command_ledger_transfer_closeout_2026-05-14.md:20-25",
+      "fact": "The prior ledger contour intentionally added only current-session action memory with no backend history, no persisted browser ledger, no browser storage, no direct file reads, and changed_files count only."
+    }
+  ],
+  "checks": [
+    {
+      "check": "current_session_summary_exists_today",
+      "verdict": "PASS",
+      "reason": "The current web design UI already records bounded in-memory action summaries from command packet results."
+    },
+    {
+      "check": "current_session_summary_not_current_truth",
+      "verdict": "PASS",
+      "reason": "The ledger copy and tests keep rows as command packet outcome only, with stale handling after failed refresh."
+    },
+    {
+      "check": "raw_log_parsing_blocked",
+      "verdict": "PASS",
+      "reason": "Canon, UI readiness, and command API forbid log/plain-text fallback as machine truth."
+    },
+    {
+      "check": "durable_activity_packet_exists_today",
+      "verdict": "FAIL",
+      "reason": "No current owner surface exposes a bounded server-owned activity JSON packet/index for the final design screen."
+    },
+    {
+      "check": "browser_storage_truth_blocked",
+      "verdict": "PASS",
+      "reason": "Existing tests forbid localStorage/sessionStorage patterns; this contour also forbids IndexedDB/browser cache as activity truth."
+    },
+    {
+      "check": "verdict_reconciliation",
+      "verdict": "PASS",
+      "reason": "Current-session summaries can stay admitted, while the durable dedicated Audit / Activity History screen remains deferred pending a bounded activity packet."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_CURRENT_SESSION_SUMMARY_ONLY_AND_DURABLE_HISTORY_DEFERRED"
+}

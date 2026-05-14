@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "contour": "AUDIT_ACTIVITY_HISTORY_ADMISSION",
+  "date": "2026-05-14",
+  "final_verdict": {
+    "current_session_summary": "AUDIT_ACTIVITY_HISTORY_CURRENT_SESSION_SUMMARY_ONLY_ADMITTED",
+    "durable_activity_history_screen": "AUDIT_ACTIVITY_HISTORY_DEFERRED_PENDING_BOUNDED_ACTIVITY_PACKET"
+  },
+  "screen_id": "30_audit_activity_history",
+  "screen_role": "operator_actions_command_packet_summary_failure_states_no_raw_logs",
+  "layers": [
+    {
+      "layer": "current_session_action_summary",
+      "current_admission": "ADMITTED_SUMMARY_ONLY",
+      "current_owner_surface": "existing UI action packet results",
+      "allowed_fields": [
+        "ui_action",
+        "action_role",
+        "target id if already present",
+        "packet status",
+        "display state",
+        "machine_error_code",
+        "human_message",
+        "next_action",
+        "post_action_refresh_required",
+        "refresh failed/stale marker",
+        "changed_files count"
+      ],
+      "required_copy_boundary": [
+        "command packet outcome only",
+        "current-session activity",
+        "historical action result",
+        "not current runtime truth"
+      ],
+      "blocking_reasons_for_wider_use": [
+        "not server-owned durable history",
+        "not cross-session truth",
+        "not a proof or verification surface"
+      ]
+    },
+    {
+      "layer": "durable_activity_history_screen",
+      "current_admission": "DEFERRED_PENDING_BOUNDED_ACTIVITY_PACKET",
+      "current_owner_surface": "none",
+      "allowed_fields": [],
+      "required_future_contract": [
+        "server-owned activity id",
+        "server-owned timestamp",
+        "bounded activity family",
+        "packet-owned status summary",
+        "machine_error_code",
+        "next_action",
+        "stale/historical marker",
+        "no raw argv",
+        "no raw stdout/stderr/log body",
+        "no raw file paths"
+      ],
+      "blocking_reasons": [
+        "final screen matrix lists no current web surfaces, repo surfaces, truth sources, or allowed actions",
+        "raw logs are forbidden",
+        "current-session browser memory cannot become durable activity truth"
+      ]
+    }
+  ],
+  "field_classification": [
+    {
+      "field": "changed_files",
+      "current_session": "COUNT_ONLY_ADMITTED",
+      "durable_screen": "DEFERRED_PENDING_PACKET",
+      "notes": "raw paths remain forbidden"
+    },
+    {
+      "field": "stderr_stdout_or_raw_logs",
+      "current_session": "NOT_ADMITTED",
+      "durable_screen": "NOT_ADMITTED",
+      "notes": "may not be parsed into structured activity events"
+    },
+    {
+      "field": "browser_storage_ledger",
+      "current_session": "NOT_ADMITTED",
+      "durable_screen": "NOT_ADMITTED",
+      "notes": "localStorage/sessionStorage/IndexedDB must not become activity truth"
+    },
+    {
+      "field": "command_packet_summary",
+      "current_session": "SUMMARY_ONLY_ADMITTED",
+      "durable_screen": "DEFERRED_PENDING_PACKET",
+      "notes": "historical until refreshed by owner truth"
+    }
+  ],
+  "browser_payload_rules": {
+    "allowed_now": [
+      "ui_action",
+      "already admitted bounded action args such as account_id or route_id"
+    ],
+    "potentially_allowed_only_after_future_contract": [
+      "bounded readonly activity page/view selector"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "path",
+      "log_query",
+      "regex",
+      "raw_packet_fragment",
+      "token",
+      "secret"
+    ]
+  },
+  "copy_boundary": {
+    "allowed": [
+      "command packet summary",
+      "historical action result",
+      "current-session activity",
+      "operator action history",
+      "stale",
+      "unavailable",
+      "refresh required",
+      "support/audit signal"
+    ],
+    "forbidden": [
+      "verified",
+      "proven",
+      "runtime healthy",
+      "route ready",
+      "rollout ready",
+      "recovered",
+      "active now",
+      "current truth confirmed"
+    ]
+  }
+}
