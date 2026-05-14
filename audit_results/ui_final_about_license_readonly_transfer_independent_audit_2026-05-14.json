@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "contour": "UI_FINAL_ABOUT_LICENSE_READONLY_TRANSFER",
+  "date": "2026-05-14",
+  "auditor": "independent_repo_fact_check",
+  "status": "PASS",
+  "verdict": "readonly_copy_is_honest_and_repo_grounded",
+  "findings": [
+    {
+      "id": "repo_license_boundary",
+      "status": "PASS",
+      "evidence": [
+        "README.md:74",
+        "RELICENSING_DECISION.md:9",
+        "LICENSE:1"
+      ],
+      "note": "Repo-authored Wild Boar Proxy material is represented as AGPL-3.0-or-later."
+    },
+    {
+      "id": "third_party_engine_boundary",
+      "status": "PASS",
+      "evidence": [
+        "THIRD_PARTY_NOTICES.md:14",
+        "THIRD_PARTY_NOTICES.md:20",
+        "RELICENSING_DECISION.md:21",
+        "LICENSES/CLIProxyAPI-MIT.txt:3"
+      ],
+      "note": "CLIProxyAPI remains an upstream third-party engine dependency and is not relicensed by Wild Boar Proxy."
+    },
+    {
+      "id": "package_version_source",
+      "status": "PASS_WITH_LIMIT",
+      "evidence": [
+        "external_agent_lab/__init__.py:3",
+        "external_agent_lab/__init__.py:7"
+      ],
+      "note": "No canonical package-version source for Wild Boar Proxy was found; the UI must not display a concrete version value."
+    },
+    {
+      "id": "readonly_copy_scope",
+      "status": "PASS",
+      "evidence": [
+        "wild_boar_proxy/web_design_ui/index.html:887",
+        "wild_boar_proxy/web_design_ui/index.html:898",
+        "wild_boar_proxy/web_design_ui/index.html:903",
+        "tests/test_web_design_ui.py:767"
+      ],
+      "note": "The About / License section is readonly, avoids package verification claims, and does not assert runtime truth."
+    }
+  ],
+  "blocked_risks": [
+    "No canonical package metadata source exists for a truthful Wild Boar Proxy version field in this UI."
+  ],
+  "forbidden_claims_absent": [
+    "package verified",
+    "release ready",
+    "runtime truth",
+    "CLIProxyAPI relicensed"
+  ],
+  "resume_from_here": "commit and push UI_FINAL_ABOUT_LICENSE_READONLY_TRANSFER, then start DIAGNOSTICS_HISTORY_BOUNDED_PACKET_ADMISSION"
+}

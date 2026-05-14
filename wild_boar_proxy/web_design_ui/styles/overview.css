@@ -2105,6 +2105,44 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.about-license-card {
+  min-height: 0;
+}
+
+.about-license-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.about-license-item {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
+  min-height: 72px;
+  padding: 12px;
+}
+
+.about-license-item span {
+  color: var(--secondary);
+  display: block;
+  font-size: 11px;
+  line-height: 14px;
+  margin-bottom: 8px;
+}
+
+.about-license-item strong {
+  color: var(--text);
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.about-license-notes {
+  margin-top: 12px;
+}
+
 .settings-hub-card:not(.settings-hub-card-wide) .deferred-row {
   align-items: start;
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.35fr);
@@ -2644,6 +2682,7 @@ button:disabled {
   .import-phase-row,
   .settings-hub,
   .settings-action-grid,
+  .about-license-grid,
   .deferred-row {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -752,6 +752,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
             "security-boundary",
             "import-setup",
             "advanced-boundary",
+            "about-license",
         ]:
             self.assertIn(f'data-settings-section="{section}"', settings_markup)
         self.assertIn("Runtime & Mode", settings_markup)
@@ -763,6 +764,19 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Безопасность", settings_markup)
         self.assertIn("Import & Setup", settings_markup)
         self.assertIn("Advanced", settings_markup)
+        self.assertIn("About / License", settings_markup)
+        self.assertIn('data-about-license-mode="readonly"', settings_markup)
+        self.assertIn("Wild Boar Proxy", settings_markup)
+        self.assertIn("experimental web design UI", settings_markup)
+        self.assertIn("not declared by package metadata in this UI", settings_markup)
+        self.assertIn("AGPL-3.0-or-later", settings_markup)
+        self.assertIn("CLIProxyAPI boundary", settings_markup)
+        self.assertIn("MIT-at-bootstrap", settings_markup)
+        self.assertIn("not relicensed by Wild Boar Proxy", settings_markup)
+        self.assertIn("External/helper components", settings_markup)
+        self.assertIn("when present, remain under their own upstream terms", settings_markup)
+        self.assertIn("text-only notice; packaging contents are not verified here", settings_markup)
+        self.assertIn("About does not read runtime state", settings_markup)
         self.assertIn("Безопасные доступные действия", settings_markup)
         self.assertIn("Отложенные элементы настроек", settings_markup)
         self.assertIn("Настройки в этом контуре доступны только для чтения", settings_markup + js)
@@ -796,6 +810,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("требует отдельный dry-run/import contract", settings_markup)
         self.assertIn("Raw config", settings_markup)
         self.assertIn("прямое чтение запрещено", settings_markup)
+        self.assertNotIn("версия и лицензия требуют отдельного readonly packet", settings_markup)
         self.assertNotIn("Save settings", settings_markup)
         self.assertNotIn("Cancel settings", settings_markup)
         self.assertNotIn("Finder", settings_markup)
@@ -818,6 +833,20 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("supervisor-state", settings_markup)
         self.assertNotIn("routes.json", settings_markup)
         self.assertNotIn("secrets.env", settings_markup)
+        for forbidden_claim in [
+            "verified package",
+            "package verified",
+            "release ready",
+            "desktop ready",
+            "runtime version confirmed",
+            "installed version",
+            "update available",
+            "all dependencies compliant",
+            "third-party notices complete",
+            "license audit passed",
+            "packaging contents verified",
+        ]:
+            self.assertNotIn(forbidden_claim, settings_markup.lower())
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         self.assertIn(".settings-layout", css)
         self.assertIn(".settings-hub", css)
@@ -825,6 +854,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-hub-card .form-row", css)
         self.assertIn(".settings-section-list", css)
         self.assertIn(".settings-section-row", css)
+        self.assertIn(".about-license-card", css)
+        self.assertIn(".about-license-grid", css)
+        self.assertIn(".about-license-item", css)
         self.assertIn("min-height: 38px", css)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
