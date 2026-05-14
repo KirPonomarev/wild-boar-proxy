@@ -106,6 +106,10 @@ Treat thread context as volatile. Treat repo packets and commits as durable.
   replaying long chat history.
 - Before committing a new or changed closeout artifact, run:
   `python3 tools/check_closeout_resilience.py`
+- Enable automatic enforcement in local clones:
+  `bash tools/install_git_hooks.sh`
+- Commit-time hook must block staged closeout artifacts that keep placeholder
+  values for `Contour Capsule` fields or `resume from here`.
 
 ## 4. Assumptions Explicit
 

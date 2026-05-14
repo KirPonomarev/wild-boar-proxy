@@ -98,3 +98,15 @@ For any completed contour, require:
 - final closeout note
 
 Local-only truth is not a closed contour.
+
+## Forget-Proof Enforcement
+
+Closeout resilience is enforced both by policy and by git hooks.
+
+- One-time setup per clone/session:
+  `bash tools/install_git_hooks.sh`
+- Commit-time gate:
+  `.githooks/pre-commit` runs
+  `python3 tools/check_closeout_resilience.py --staged-only`
+- Any commit with a changed `audit_results/*closeout*.md` and missing/placeholder
+  `Contour Capsule` or `resume from here` fields must fail.

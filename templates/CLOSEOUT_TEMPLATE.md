@@ -55,4 +55,7 @@
 - blockers encountered:
 - follow-up contour:
 - resume from here: CLOSED / [exact next contour or command]
+
+> Fill all `Contour Capsule` fields with concrete values before commit.
+> Placeholder values are not accepted by resilience checks.
 ```
