@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION",
+  "mode": "admission/spec-only",
+  "date": "2026-05-14",
+  "final_verdict": "HUMAN_OPEN_SUPPORT_ACTIONS_DEFERRED_PENDING_REFERENCE_CONTRACT",
+  "current_repo_facts": [
+    "UI_READINESS_SPEC acknowledges support/open-file actions",
+    "older web_ui.py implements support-only server-side open targets",
+    "web design UI currently has no bounded open-reference contract",
+    "diagnostics bundle basename is sanitized in web-design live server",
+    "route evidence path is still exposed as a raw path in current live-server action results"
+  ],
+  "areas": [
+    {
+      "surface": "diagnostics_bundle_artifact_reference",
+      "risk_class": "lower",
+      "current_admission": "DEFERRED_PENDING_REFERENCE_CONTRACT",
+      "notes": [
+        "basename-only rendering already exists",
+        "future candidate for server-owned bounded reference id",
+        "must not return file contents to browser"
+      ]
+    },
+    {
+      "surface": "latest_evidence_artifact_reference",
+      "risk_class": "lower",
+      "current_admission": "DEFERRED_PENDING_REFERENCE_CONTRACT",
+      "blocking_reasons": [
+        "current live-server action results still expose raw evidence_path",
+        "no safe bounded reference id contract exists yet",
+        "browser UI must not receive direct path semantics"
+      ]
+    },
+    {
+      "surface": "state_file_open",
+      "risk_class": "higher",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "high risk of becoming de facto truth input",
+        "private path disclosure risk",
+        "web phase lacks stronger bounded contract"
+      ]
+    },
+    {
+      "surface": "registry_file_open",
+      "risk_class": "higher",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "high risk of config-truth confusion",
+        "private path disclosure risk",
+        "web phase lacks stronger bounded contract"
+      ]
+    },
+    {
+      "surface": "logs_directory_or_latest_log_open",
+      "risk_class": "higher",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "logs may be opened for humans but must not become API truth",
+        "high risk of truth drift and private path disclosure",
+        "no bounded reference contract exists in current web design UI"
+      ]
+    },
+    {
+      "surface": "managed_data_folder_open",
+      "risk_class": "higher",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "folder browsing semantics are too broad for current web phase",
+        "private path disclosure risk",
+        "drifts toward generic file-manager behavior"
+      ]
+    },
+    {
+      "surface": "arbitrary_path_or_file_open",
+      "risk_class": "forbidden",
+      "current_admission": "NOT_ADMITTED",
+      "blocking_reasons": [
+        "browser path payloads are forbidden",
+        "generic file browsing is out of scope",
+        "violates strict server-owned reference boundary"
+      ]
+    }
+  ],
+  "future_reference_contract_requirements": [
+    "server-owned bounded reference id",
+    "allowlisted target class",
+    "path resolution entirely server-side",
+    "no raw file contents in browser response",
+    "no raw private path disclosure in browser UI",
+    "support-only copy that disclaims truth ownership"
+  ],
+  "browser_payload_rules": {
+    "allowed_if_future_admitted": [
+      "ui_action",
+      "bounded support target id",
+      "server-owned reference id"
+    ],
+    "forbidden": [
+      "command_id",
+      "argv",
+      "shell",
+      "absolute_path",
+      "relative_path",
+      "glob",
+      "regex",
+      "arbitrary_filename",
+      "bundle_member_path",
+      "token",
+      "secret"
+    ]
+  },
+  "implementation_allowed_in_this_contour": false
+}
+

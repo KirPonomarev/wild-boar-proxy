@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "contour": "HUMAN_OPEN_SUPPORT_ACTIONS_ADMISSION",
+  "date": "2026-05-14",
+  "audit_type": "independent_fact_and_canon_reconciliation",
+  "auditors": [
+    {
+      "agent": "Codex local verification",
+      "role": "repo fact reconciliation",
+      "finding": "Canon and older repo precedent allow support/open-file ideas in principle, but the web design UI still lacks a bounded server-owned open-reference contract."
+    },
+    {
+      "agent": "Rawls",
+      "role": "independent repo fact checker",
+      "finding": "The correct contour-level verdict is deferred pending a reference contract: support/open-file actions are canonically acknowledged, but browser path submission, direct file truth, parsing, and private path disclosure remain forbidden."
+    },
+    {
+      "agent": "Heisenberg",
+      "role": "post-artifact closeout auditor",
+      "finding": "The initial artifact set had a closeout-resilience defect: the closeout claimed closure while Git fields were still pending and the resume path was not exact. The closeout was corrected before commit."
+    }
+  ],
+  "evidence": [
+    {
+      "source": "UI_READINESS_SPEC.md:113-123",
+      "fact": "Open Logs, Open State, Open Registry, Open Data Folder, and Open Diagnostics Bundle are acknowledged as operator support actions and not primary truth sources."
+    },
+    {
+      "source": "UI_READINESS_SPEC.md:327-328",
+      "fact": "Diagnostics bundles are support snapshots, and logs may be opened for humans but must not be parsed as API."
+    },
+    {
+      "source": "wild_boar_proxy/web_ui.py:132-207",
+      "fact": "Older support/open-file actions resolve fixed targets server-side and open them without parsing them into truth."
+    },
+    {
+      "source": "audit_results/external_models_c6_independent_audit_2026-05-12.json:18-19",
+      "fact": "Independent audit previously confirmed support/open-file actions do not parse files and are not used as truth inputs."
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:1655-1688",
+      "fact": "Browser-submitted bundle_path and log_path payloads are explicitly rejected in the web design UI action surface."
+    },
+    {
+      "source": "tests/test_web_design_live_server.py:1000-1022",
+      "fact": "Current route evidence support result still carries raw evidence_path, so it is not yet a safe bounded open-reference contract."
+    },
+    {
+      "source": "audit_results/ui_setup_select_import_decision_matrix_2026-05-13.json:248-259",
+      "fact": "A prior admission contour already deferred show-in-file-manager behavior because web contour lacked a safe server-owned open-location contract."
+    }
+  ],
+  "checks": [
+    {
+      "check": "artifact_reference_opening_ready_today",
+      "verdict": "BLOCK",
+      "reason": "The web design UI still lacks a dedicated bounded reference-id contract, and evidence_path is still path-shaped in current support results."
+    },
+    {
+      "check": "high_risk_internal_files",
+      "verdict": "PASS",
+      "reason": "Artifacts keep state, registry, logs, and data-folder opening out of current web admission."
+    },
+    {
+      "check": "browser_path_submission_forbidden",
+      "verdict": "PASS",
+      "reason": "Artifacts preserve the no-path browser payload rule."
+    },
+    {
+      "check": "support_actions_not_truth_inputs",
+      "verdict": "PASS",
+      "reason": "Artifacts preserve support-only semantics and forbid truth derivation from opened material."
+    },
+    {
+      "check": "closeout_resilience_consistency",
+      "verdict": "PASS",
+      "reason": "Post-artifact audit found and the final artifact set fixed the closeout status/Git/resume mismatch before commit."
+    }
+  ],
+  "final_audit_verdict": "PASS_FOR_DEFERRED_PENDING_REFERENCE_CONTRACT"
+}
