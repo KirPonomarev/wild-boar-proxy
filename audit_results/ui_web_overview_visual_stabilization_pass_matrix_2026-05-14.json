@@ -1,0 +1,46 @@
+{
+  "contour": "UI_WEB_OVERVIEW_VISUAL_STABILIZATION_PASS",
+  "date": "2026-05-14",
+  "viewport": "1600x1000",
+  "scope": {
+    "web_visual_layer": "pass",
+    "runtime_layer_modified": false,
+    "command_adapter_modified": false,
+    "live_server_modified": false,
+    "desktop_modified": false
+  },
+  "design_inputs": {
+    "overview_render": "/Users/kirillponomarev/Downloads/кабан дизайн/final_design_package.zip:final_design_package/screens/01_overview_dashboard.png",
+    "design_tokens": "/Users/kirillponomarev/Downloads/кабан дизайн/final_design_package.zip:final_design_package/specs/design_tokens.json",
+    "locked_logo_source": "/Users/kirillponomarev/Downloads/дикий кабан.png",
+    "icon_source_format": "phosphor regular PNG"
+  },
+  "asset_checks": {
+    "logo_sha256": "457aa10175f2f56f7d68010f0f33cfd4fee890902f5288f7d9a3cc983b5b6a29",
+    "logo_byte_identical_to_source": true,
+    "phosphor_png_count": 13,
+    "full_icon_archive_imported": false,
+    "full_design_package_imported": false
+  },
+  "screenshots": [
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/baseline_overview_healthy_1600x1000.png",
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_healthy_1600x1000.png",
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_degraded_1600x1000.png",
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_down_1600x1000.png",
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_stale_1600x1000.png",
+    "audit_results/ui_web_overview_visual_stabilization_pass_screenshots/after_overview_live_integration_failure_1600x1000.png"
+  ],
+  "verification": {
+    "node_check_overview_js": "pass",
+    "web_design_unittest_subset": "pass",
+    "git_diff_check": "pass",
+    "external_reference_trace_scan": "pass"
+  },
+  "acceptance": {
+    "one_primary_header_action": "pass",
+    "dev_controls_secondary": "pass",
+    "runtime_truth_boundary_preserved": "pass",
+    "live_failure_not_healthy_zero": "pass",
+    "viewport_first_screen_visual_review": "pass"
+  }
+}

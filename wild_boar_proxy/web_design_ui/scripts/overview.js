@@ -738,6 +738,11 @@ function setSourceCopy(source) {
     );
   document.getElementById("sourceFooter").textContent = sourceFooter;
   document.getElementById("subtitleText").textContent = subtitle;
+  const sourcePill = document.getElementById("sourcePill");
+  if (sourcePill) {
+    sourcePill.textContent = source === "live" ? "Live" : "Demo";
+    sourcePill.className = source === "live" ? "source-pill live" : "source-pill";
+  }
   updateDiagnosticsDetailSource(source);
 }
 

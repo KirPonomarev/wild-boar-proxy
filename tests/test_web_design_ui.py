@@ -167,7 +167,7 @@ class WebDesignUiTests(unittest.TestCase):
             process.terminate()
             process.wait(timeout=5)
 
-    def test_preview_uses_desktop_containment_and_svg_icons(self) -> None:
+    def test_preview_uses_desktop_containment_and_icon_hooks(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -182,7 +182,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("height: min(var(--window-height), calc(100vh - 56px));", css)
         self.assertIn("padding: 66px 24px 28px;", css)
         self.assertIn("width: 92px;", css)
-        self.assertIn("padding: 46px 40px 34px;", css)
+        self.assertIn("padding: 48px 40px 32px;", css)
         self.assertIn("--radius-window: 24px;", css)
         self.assertIn("--radius-card: 18px;", css)
         self.assertIn("--radius-button: 12px;", css)
@@ -205,7 +205,7 @@ class WebDesignUiTests(unittest.TestCase):
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
-        self.assertIn("max-width: min(100%, 840px);", css)
+        self.assertIn("max-width: min(100%, 660px);", css)
         self.assertIn("width: min(236px, 100%);", css)
         self.assertIn("overflow-x: auto;", css)
         self.assertIn("min-width: 980px;", css)
