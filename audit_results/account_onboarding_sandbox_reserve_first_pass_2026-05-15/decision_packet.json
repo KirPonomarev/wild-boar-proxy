@@ -1,0 +1,18 @@
+{
+  "contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "decided_at": "2026-05-15T14:49:08.742800+00:00",
+  "head_expected": "278f8c9 Finalize sandbox binding closeout metadata",
+  "precondition_status": "binding_go_confirmed",
+  "onboard_command_machine_error_code": "MISSING_ONBOARD_BIN",
+  "onboard_command_status": "error",
+  "reserve_first_proven": false,
+  "new_backend_ids": [],
+  "selected_backend_id": "",
+  "active_routing_changed": null,
+  "post_refresh_collected": false,
+  "forbidden_live_path_drift_detected": false,
+  "changed_files": [],
+  "stop_reason": "sandbox-local owner onboarding binary and post-proof binaries are not materialized; using the work-contour external binary would break sandbox isolation because that binary hardcodes ~/.codex-custom-cli and ~/.cli-proxy-api paths.",
+  "next_contour": "STOP_AND_DIAGNOSE"
+}

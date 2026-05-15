@@ -1,0 +1,72 @@
+{
+  "checked_at": "2026-05-15T14:47:31.919045+00:00",
+  "drift_detected": false,
+  "comparisons": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "unchanged": true,
+      "before": {
+        "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 29277,
+        "mtime_ns": 1778512853646445643,
+        "sha256": "7481fec19ea89891ac20c8747a416210cfda1f9d109eb0db59ade2ac0bdbfe91"
+      },
+      "after": {
+        "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 29277,
+        "mtime_ns": 1778512853646445643,
+        "sha256": "7481fec19ea89891ac20c8747a416210cfda1f9d109eb0db59ade2ac0bdbfe91"
+      }
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "unchanged": true,
+      "before": {
+        "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 2323,
+        "mtime_ns": 1778523843095903592,
+        "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c"
+      },
+      "after": {
+        "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 2323,
+        "mtime_ns": 1778523843095903592,
+        "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c"
+      }
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "unchanged": true,
+      "before": {
+        "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 577,
+        "mtime_ns": 1778332551870097299,
+        "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2"
+      },
+      "after": {
+        "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+        "exists": true,
+        "is_file": true,
+        "is_dir": false,
+        "size": 577,
+        "mtime_ns": 1778332551870097299,
+        "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2"
+      }
+    }
+  ]
+}

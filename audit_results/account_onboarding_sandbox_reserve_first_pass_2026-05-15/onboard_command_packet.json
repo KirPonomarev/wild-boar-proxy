@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "accounts",
+    "onboard",
+    "--json",
+    "--auth-ref",
+    "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "--non-interactive"
+  ],
+  "returncode": 1,
+  "stdout": "{\"status\": \"error\", \"exit_code\": 1, \"human_message\": \"Missing onboarding command: /Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard\", \"machine_error_code\": \"MISSING_ONBOARD_BIN\", \"changed_files\": [], \"next_action\": \"user_action\", \"liveness\": \"unknown\", \"severity\": \"fatal\", \"operator_action\": \"user_action\"}\n",
+  "stderr": "",
+  "parsed_json": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Missing onboarding command: /Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+    "machine_error_code": "MISSING_ONBOARD_BIN",
+    "changed_files": [],
+    "next_action": "user_action",
+    "liveness": "unknown",
+    "severity": "fatal",
+    "operator_action": "user_action"
+  }
+}

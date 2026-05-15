@@ -1,0 +1,6 @@
+{
+  "status": "not_collected",
+  "reason": "onboarding command stopped before reserve-first mutation due pre-command blocker",
+  "blocker_machine_error_code": "MISSING_ONBOARD_BIN",
+  "collected_at": "2026-05-15T14:49:08.741859+00:00"
+}
