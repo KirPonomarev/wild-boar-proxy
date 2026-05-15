@@ -1,0 +1,12 @@
+{
+  "contour": "SANDBOX_OWNER_ONBOARDING_BINARY_ISOLATION_REPAIR_PASS",
+  "decided_at": "2026-05-15T15:04:43.964730+00:00",
+  "decision": "GO_TO_RERUN_ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "owner_lane_materialized": true,
+  "owner_lane_executable": true,
+  "unsafe_live_strings_detected": false,
+  "forbidden_live_path_drift_detected": false,
+  "installer_init_machine_error_code": "OK",
+  "installer_idempotence_changed_files": [],
+  "next_contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS"
+}

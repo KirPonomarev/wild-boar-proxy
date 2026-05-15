@@ -349,6 +349,96 @@ class CliTests(unittest.TestCase):
             command_path="installer init",
         )
 
+    def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+
+        result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        installer_result = payload["installer_result"]
+        self.assertEqual(installer_result["final_outcome"], "baseline_initialized")
+        self.assertCountEqual(
+            installer_result["owner_helper_paths"],
+            [
+                str(self.accounts_bin),
+                str(self.onboard_bin),
+                str(status_bin),
+                str(self.sync_script),
+            ],
+        )
+        for path in (self.accounts_bin, self.onboard_bin, self.sync_script, status_bin):
+            self.assertTrue(path.exists(), str(path))
+            self.assertTrue(os.access(path, os.X_OK), str(path))
+            text = path.read_text(encoding="utf-8")
+            self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, text)
+            self.assertNotIn("~/.codex-custom-cli", text)
+            self.assertNotIn("~/.cli-proxy-api", text)
+
+    def test_installer_materialized_owner_helpers_support_explicit_auth_onboarding_lane(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "codex-sandbox-owner.json"
+        auth_ref.write_text(
+            json.dumps(
+                {
+                    "type": "codex",
+                    "email": "sandbox@example.com",
+                    "access_token": "token-sandbox",
+                    "account_id": "acct-sandbox",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        backends = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_ref)
+        ]
+        self.assertEqual(len(backends), 1)
+        self.assertEqual(backends[0]["pool"], "reserve")
+
+        validate_result = subprocess.run(
+            [str(self.accounts_bin), "validate", backends[0]["id"]],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
+        self.assertIn("OK", validate_result.stdout)
+
     def test_legacy_import_requires_json_flag(self) -> None:
         result = self.run_cli("legacy", "import", "--source-dir", "/tmp/example")
         self.assertEqual(result.returncode, 2)

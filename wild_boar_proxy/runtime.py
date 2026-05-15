@@ -49,9 +49,13 @@ REPO_MANAGED_DEFAULT_LAUNCHER_MARKER = "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER=v1"
 REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
     "# WBP_REPO_MANAGED_DEFAULT_LAUNCHER_SHA256="
 )
+REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
+REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
+REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_SHA256="
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
+REPO_ROOT = Path(__file__).resolve().parent.parent
 ROTATION_EVIDENCE_SCHEMA_VERSION = 1
 ROTATION_EVIDENCE_FRESHNESS_SECONDS = 15 * 60
 SCALE_EVIDENCE_PACKET_SCHEMA_VERSION = 1
@@ -322,6 +326,8 @@ def sanitized_env() -> dict[str, str]:
     env["PATH"] = DETERMINISTIC_RUNTIME_PATH
     env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
     env.setdefault("no_proxy", env["NO_PROXY"])
+    env.setdefault("WBP_PYTHON_BIN", get_repo_owned_python_bin())
+    env.setdefault("WBP_REPO_ROOT", str(REPO_ROOT))
     return env
 
 
@@ -865,6 +871,10 @@ def default_launcher_script_path(profile_dir: Path) -> Path:
     return profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME
 
 
+def managed_status_script_path(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "bin" / "codex-managed-status"
+
+
 def launcher_path_is_default(paths: RuntimePaths) -> bool:
     return paths.launcher_script == default_launcher_script_path(paths.profile_dir)
 
@@ -1032,6 +1042,112 @@ def repo_managed_default_launcher_recognized(path: Path) -> bool:
     if script_payload is None:
         return False
     return repo_managed_default_launcher_payload_recognized(script_payload)
+
+
+def compute_repo_managed_owner_helper_digest(script_payload: str) -> str:
+    return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
+
+
+def build_repo_owned_owner_helper_script_payload(helper_kind: str) -> str:
+    if helper_kind not in {"accounts", "onboard", "status", "sync"}:
+        raise RuntimeError(f"Unsupported owner helper kind: {helper_kind}")
+    helper_command = helper_kind
+    python_bin = get_repo_owned_python_bin()
+    return "\n".join(
+        [
+            "set -eu",
+            f'PY_BIN="${{WBP_PYTHON_BIN:-{python_bin}}}"',
+            f'REPO_ROOT="${{WBP_REPO_ROOT:-{REPO_ROOT}}}"',
+            'if [ -n "${PYTHONPATH:-}" ]; then',
+            '  export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"',
+            "else",
+            '  export PYTHONPATH="$REPO_ROOT"',
+            "fi",
+            (
+                'exec "$PY_BIN" -m wild_boar_proxy.sandbox_owner_helpers '
+                f"{helper_command} \"$@\""
+            ),
+        ]
+    )
+
+
+def render_repo_owned_owner_helper_script_text(helper_kind: str) -> str:
+    script_payload = build_repo_owned_owner_helper_script_payload(helper_kind)
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            REPO_MANAGED_OWNER_HELPER_MARKER,
+            f"{REPO_MANAGED_OWNER_HELPER_KIND_PREFIX}{helper_kind}",
+            (
+                f"{REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX}"
+                f"{compute_repo_managed_owner_helper_digest(script_payload)}"
+            ),
+            script_payload,
+        ]
+    )
+
+
+def repo_managed_owner_helper_payload_if_valid(
+    path: Path, helper_kind: str
+) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 5:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_OWNER_HELPER_MARKER:
+        return None
+    if lines[2] != f"{REPO_MANAGED_OWNER_HELPER_KIND_PREFIX}{helper_kind}":
+        return None
+    digest_line = lines[3]
+    if not digest_line.startswith(REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX)
+    script_payload = "\n".join(lines[4:])
+    if expected_digest != compute_repo_managed_owner_helper_digest(script_payload):
+        return None
+    return script_payload
+
+
+def repo_managed_owner_helper_recognized(path: Path, helper_kind: str) -> bool:
+    script_payload = repo_managed_owner_helper_payload_if_valid(path, helper_kind)
+    if script_payload is None:
+        return False
+    return script_payload == build_repo_owned_owner_helper_script_payload(helper_kind)
+
+
+def ensure_repo_owned_owner_helper(path: Path, helper_kind: str) -> None:
+    expected_text = render_repo_owned_owner_helper_script_text(helper_kind)
+    if not path.exists():
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not repo_managed_owner_helper_recognized(path, helper_kind):
+        return
+    current_text = path.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not os.access(path, os.X_OK):
+        path.chmod(0o755)
+
+
+def installer_owner_helper_paths(paths: RuntimePaths) -> list[Path]:
+    return [
+        paths.accounts_bin,
+        paths.onboard_bin,
+        managed_status_script_path(paths),
+        paths.sync_script,
+    ]
+
+
+def ensure_repo_owned_owner_helper_chain(paths: RuntimePaths) -> None:
+    ensure_repo_owned_owner_helper(paths.accounts_bin, "accounts")
+    ensure_repo_owned_owner_helper(paths.onboard_bin, "onboard")
+    ensure_repo_owned_owner_helper(managed_status_script_path(paths), "status")
+    ensure_repo_owned_owner_helper(paths.sync_script, "sync")
 
 
 def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
@@ -12199,6 +12315,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             paths.config_toml,
             paths.runtime_mode_file,
             paths.runtime_effective_mode_file,
+            *installer_owner_helper_paths(paths),
             *installer_managed_paths(external_paths),
         ]
     )
@@ -12216,6 +12333,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             write_json_atomic(paths.state_file, build_installer_default_state_payload())
         if not paths.config_toml.exists():
             write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
+        ensure_repo_owned_owner_helper_chain(paths)
         ensure_installed_layout(external_paths)
     changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
     return build_command_payload(
@@ -12230,6 +12348,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             "installer_result": {
                 "status": "owner_path_emitted",
                 "final_outcome": "baseline_initialized",
+                "owner_helper_paths": [str(path) for path in installer_owner_helper_paths(paths)],
             },
             "external_models_result": {
                 "status": "owner_path_emitted",

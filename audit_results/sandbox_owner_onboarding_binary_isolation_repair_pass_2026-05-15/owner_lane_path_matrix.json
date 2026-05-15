@@ -1,0 +1,66 @@
+[
+  {
+    "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard",
+    "exists": true,
+    "is_file": true,
+    "is_dir": false,
+    "size": 531,
+    "mtime_ns": 1778857409234726361,
+    "sha256": "9c1dcce3e55d0623d972ea4979b56d362ffb2da0c952eaab874d9ffa2dcb8bd6",
+    "executable": true,
+    "content_checks": {
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    }
+  },
+  {
+    "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts",
+    "exists": true,
+    "is_file": true,
+    "is_dir": false,
+    "size": 533,
+    "mtime_ns": 1778857409234494566,
+    "sha256": "a04eb6c38e848c5de9f877b6ff98474c1cc45cbcdf07ad40f58b455cd3f69da5",
+    "executable": true,
+    "content_checks": {
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    }
+  },
+  {
+    "path": "/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status",
+    "exists": true,
+    "is_file": true,
+    "is_dir": false,
+    "size": 529,
+    "mtime_ns": 1778857409234927365,
+    "sha256": "8f22ee6f4bf8877d42027e37d7782102fa15b3c8f97a8ae3fcd6c67454f5ce07",
+    "executable": true,
+    "content_checks": {
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    }
+  },
+  {
+    "path": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh",
+    "exists": true,
+    "is_file": true,
+    "is_dir": false,
+    "size": 525,
+    "mtime_ns": 1778857409235160077,
+    "sha256": "a02d83f44d03f19e516a66860e02f01eb19248dfea3cb689cc79635b3bb29c63",
+    "executable": true,
+    "content_checks": {
+      "contains_home_codex_custom_cli": false,
+      "contains_home_cli_proxy_api": false,
+      "contains_repo_marker": true,
+      "contains_module_entrypoint": true
+    }
+  }
+]
