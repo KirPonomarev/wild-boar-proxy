@@ -1,0 +1,36 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "basis_source": "audit_results/readonly_truth_packet_baseline_pass_2026-05-15/owner_truth_drift_observation.json",
+  "prior_blocker": {
+    "baseline_contour_decision": "STOP_AND_DIAGNOSE",
+    "material_owner_truth_flip_detected": true,
+    "intermediate_failure_capture": {
+      "status_status": "error",
+      "status_machine_error_code": "ATTESTATION_FAILED",
+      "status_liveness": "degraded",
+      "status_last_error": "timed out",
+      "healthcheck_status": "error",
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "responses_ok": false,
+      "launch_readiness_status": "blocked",
+      "launch_blocking_reason": "responses_probe_failed",
+      "observed_at_utc": "2026-05-15T18:37:36.196646+00:00"
+    },
+    "retry_capture": {
+      "status_status": "ok",
+      "status_machine_error_code": "OK",
+      "status_liveness": "healthy",
+      "status_last_error": "",
+      "healthcheck_status": "error",
+      "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+      "responses_ok": false,
+      "launch_readiness_status": "blocked",
+      "launch_blocking_reason": "responses_probe_failed",
+      "observed_at_utc": "2026-05-15T18:40:47.996424+00:00"
+    }
+  },
+  "owner_truth_rule": {
+    "runtime_truth_owner": "healthcheck --json",
+    "delegated_runtime_summary": "status --json"
+  }
+}

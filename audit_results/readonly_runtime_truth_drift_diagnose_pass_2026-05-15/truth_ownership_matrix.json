@@ -1,0 +1,65 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "truth_owners": {
+    "healthcheck": {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "cli_dispatch": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:299",
+      "runtime_function": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:5503",
+      "ownership": "owner_runtime_truth",
+      "observed_properties": [
+        "direct live listener/models/responses attestation",
+        "launch_readiness owner surface",
+        "effectful owner path by default"
+      ]
+    },
+    "status": {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "cli_dispatch": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:301",
+      "runtime_function": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:5148",
+      "ownership": "delegated_runtime_summary",
+      "observed_properties": [
+        "calls run_healthcheck(paths) when no health_payload is supplied",
+        "adds pool_summary, policy_drift, registry_identity_summary, claim_gate",
+        "emits attestation_summary delegated from healthcheck payload"
+      ]
+    },
+    "rollout": {
+      "command": "python3 -m wild_boar_proxy rollout rotation inspect --json",
+      "ownership": "supporting_rollout_evidence_only",
+      "notes": [
+        "does not own runtime health truth",
+        "warning evidence may coexist with healthy runtime truth"
+      ]
+    },
+    "external_models": {
+      "commands": [
+        "python3 -m wild_boar_proxy external-models status --json",
+        "python3 -m wild_boar_proxy external-models models --json",
+        "python3 -m wild_boar_proxy external-models routes list --json"
+      ],
+      "ownership": "supporting_local_adapter_evidence_only",
+      "notes": [
+        "runtime_claim_blocked remains true",
+        "not admissible as runtime owner truth"
+      ]
+    }
+  },
+  "design_facts": [
+    {
+      "fact": "standalone status and standalone healthcheck are separate attestation observations by design",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:299",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:301",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:5152"
+      ]
+    },
+    {
+      "fact": "status can be fully aligned with healthcheck when a shared health_payload is explicitly passed internally",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:6350",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:7697",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:8537"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "decision": "GO_TO_READONLY_TRUTH_PACKET_BASELINE_RERUN_PASS",
+  "observed_facts": [
+    "prior drift evidence from READONLY_TRUTH_PACKET_BASELINE_PASS was preserved and used as the diagnostic basis",
+    "current bounded repeated sampling did not reproduce the earlier ATTESTATION_FAILED drift",
+    "standalone status --json invokes summarize_status(paths), which itself calls run_healthcheck(paths) when no shared health_payload is supplied",
+    "healthcheck --json remains the owner runtime truth surface; status --json remains a delegated summary surface"
+  ],
+  "root_cause_hypotheses": [
+    "the earlier blocker was a transient flip across separate owner-path observations rather than a reproduced current contract bug",
+    "separate standalone healthcheck and status invocations can legitimately observe different moments because status performs its own delegated healthcheck path"
+  ],
+  "not_earned": [
+    "RUNTIME_TRUTH_SUMMARY_ALIGNMENT_REPAIR_PASS",
+    "RUNTIME_ATTESTATION_PROBE_REPAIR_PASS"
+  ],
+  "next_step_reason": "The narrowest honest next contour is to rerun the blocked readonly baseline with explicit owner/delegated truth discipline, not to open a repair contour that current evidence did not earn."
+}

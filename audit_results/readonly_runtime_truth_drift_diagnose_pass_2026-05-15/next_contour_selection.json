@@ -1,0 +1,32 @@
+{
+  "contour": "READONLY_RUNTIME_TRUTH_DRIFT_DIAGNOSE_PASS",
+  "candidate_contours": [
+    {
+      "name": "READONLY_TRUTH_PACKET_BASELINE_RERUN_PASS",
+      "admissibility": "yes",
+      "reason": "current bounded repeated sampling did not reproduce the prior drift; runtime owner truth is currently stable enough to rerun the readonly baseline with healthcheck retained as the owner surface"
+    },
+    {
+      "name": "RUNTIME_TRUTH_SUMMARY_ALIGNMENT_REPAIR_PASS",
+      "admissibility": "not_earned",
+      "reason": "no reproducible summary-vs-owner contract bug was observed in current bounded sampling"
+    },
+    {
+      "name": "RUNTIME_ATTESTATION_PROBE_REPAIR_PASS",
+      "admissibility": "not_earned",
+      "reason": "no reproducible attestation failure was observed in current bounded sampling"
+    },
+    {
+      "name": "STOP_AND_DIAGNOSE",
+      "admissibility": "not_selected",
+      "reason": "diagnostic contour localized the prior blocker narrowly enough to choose a smaller next step"
+    }
+  ],
+  "selected_next_contour": "GO_TO_READONLY_TRUTH_PACKET_BASELINE_RERUN_PASS",
+  "selection_basis": [
+    "prior blocker evidence was preserved",
+    "10 bounded readonly command invocations in current contour did not reproduce the earlier drift",
+    "code inspection explains why independent status and healthcheck invocations can observe different moments without proving a current contract failure",
+    "the narrowest canon-supported next step is to rerun the blocked baseline contour rather than open a repair contour"
+  ]
+}
