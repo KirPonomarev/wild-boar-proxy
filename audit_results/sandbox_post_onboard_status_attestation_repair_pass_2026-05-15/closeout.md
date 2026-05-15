@@ -16,7 +16,7 @@ already-proven reserve-first onboarding success.
 
 - goal: separate launch-readiness degradation from reserve-only lifecycle-admission truth after successful sandbox onboarding
 - branch: `codex/external-agent-lab-isolated`
-- head: `033ca57 Audit sandbox onboarding rerun2 status blocker`
+- head: `c506fa7 Repair post-onboard lifecycle admission classification`
 - touched files: `wild_boar_proxy/runtime.py`, `tests/test_cli.py`, `audit_results/sandbox_post_onboard_status_attestation_repair_pass_2026-05-15/*`
 - tests run: `python3 -m py_compile wild_boar_proxy/runtime.py tests/test_cli.py`; 6 targeted CLI tests around onboarding lifecycle admission; 2 targeted UI/live-server no-overclaim regressions; `git diff --check`
 - blocked risks: raw `status --json` remains degraded and must stay degraded; only the narrow reserve-only launch-gap case is admitted for lifecycle handoff
@@ -39,8 +39,8 @@ already-proven reserve-first onboarding success.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
-- pushed: pending
+- commit: `c506fa7 Repair post-onboard lifecycle admission classification`
+- pushed: yes
 
 ## Scope Check
 
