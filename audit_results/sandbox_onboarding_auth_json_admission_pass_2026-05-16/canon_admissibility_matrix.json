@@ -1,0 +1,31 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_JSON_ADMISSION_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_SANDBOX_AUTH_JSON_MATERIALIZATION_PASS",
+      "admissible": false,
+      "why": [
+        "no upstream source class is admitted yet",
+        "all currently observed auth-like candidates are outside the sandbox root",
+        "jumping to materialization would silently widen source scope"
+      ]
+    },
+    {
+      "outcome": "GO_TO_SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+      "admissible": true,
+      "why": [
+        "the destination is already fixed",
+        "observed candidates currently live in forbidden live/working roots",
+        "the next honest step is to narrow an exact upstream source surface before any secret-bearing write"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": false,
+      "why": [
+        "the blocker is localized enough to name the next narrower contour",
+        "current evidence is sufficient to reject direct materialization without reopening the whole lane"
+      ]
+    }
+  ]
+}
