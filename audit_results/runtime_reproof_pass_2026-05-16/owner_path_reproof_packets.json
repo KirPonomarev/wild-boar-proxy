@@ -1,0 +1,45 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "healthcheck_packet": {
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "launch_readiness_status": "ready",
+    "deterministic_stable_recovery_status": "not_invoked",
+    "changed_files_count": 0
+  },
+  "status_after_healthcheck": {
+    "machine_error_code": "OK",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "policy_drift_machine_error_code": "STABLE_POLICY_DRIFT",
+    "desired_source_status": "approved_target_selected",
+    "desired_source_kind": "approved_repair_target",
+    "effective_source_status": "observed_source_active",
+    "effective_source_kind": "observed_stable_inventory_source",
+    "activation_readiness_status": "activation_pending",
+    "activation_readiness_reason": "desired_consumer_source_differs_from_effective_observation",
+    "snapshot_status": null,
+    "snapshot_freshness": null,
+    "snapshot_activation_outcome": null
+  },
+  "launch_smoke_packet": {
+    "machine_error_code": "OK",
+    "launcher_exit_code": 0,
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+    ],
+    "desired_source_kind": "approved_repair_target",
+    "effective_source_status": "approved_target_active_by_activation_evidence",
+    "effective_source_kind": "approved_repair_target",
+    "activation_evidence_status": "snapshot_present",
+    "snapshot_freshness": "fresh",
+    "snapshot_activation_outcome": "approved_target_activated",
+    "consumer_activation_readiness_status": "aligned"
+  }
+}

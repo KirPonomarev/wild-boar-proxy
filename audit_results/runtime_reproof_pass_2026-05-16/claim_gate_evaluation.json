@@ -1,0 +1,35 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "rotation_inspect_after_reproof": {
+    "exit_code": 1,
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "evidence_status": "participation_evidence_stale",
+    "evidence_reason": "selected_backend_snapshot_stale",
+    "evidence_freshness": "stale",
+    "participation_status": "stale",
+    "policy_drift_status": "clear",
+    "policy_drift_claim_surface_source": "approved_repair_target",
+    "selected_backend_count": 9,
+    "selected_backend_ids": [
+      "beep-outlook-team",
+      "gpt2026bis-team",
+      "k-gpt-pro-2",
+      "k-gpt-pro-3k",
+      "k-ponomarev-photo",
+      "kip85905-team",
+      "new-gpt-bis",
+      "new-new22222",
+      "pig-outlook-team"
+    ]
+  },
+  "status_claim_gate_after_reproof": {
+    "status": "clear",
+    "sources": []
+  },
+  "evaluation": {
+    "runtime_claim_gate_cleared": true,
+    "participation_selector_fresh": false,
+    "singleton_exact_source_basis_present": false,
+    "exact_auth_source_admission_earned_now": false
+  }
+}

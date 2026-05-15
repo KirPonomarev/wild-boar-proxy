@@ -1,0 +1,22 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "status": "completed",
+  "runtime_reproof_succeeded": true,
+  "healthcheck_machine_error_code": "OK",
+  "launch_smoke_machine_error_code": "OK",
+  "launch_smoke_launcher_exit_code": 0,
+  "approved_target_effective_runtime_status": "approved_target_active_by_activation_evidence",
+  "activation_snapshot_outcome": "approved_target_activated",
+  "claim_gate_status_after_reproof": "clear",
+  "policy_drift_status_after_reproof": "clear",
+  "rotation_machine_error_code_after_reproof": "ROTATION_EVIDENCE_STALE",
+  "rotation_selected_backend_count": 9,
+  "rotation_selector_fresh": false,
+  "exact_source_admission_earned_now": false,
+  "selector_refresh_earned_now": false,
+  "sandbox_materialization_earned_now": false,
+  "next_contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "next_contour_class": "stop_and_diagnose",
+  "reason": "runtime reproof successfully promoted the approved repair target to effective runtime truth and cleared claim-gate and policy-drift blockers, but the remaining selector surface is still stale and family-level only, so one exact auth source is not yet named honestly for sandbox auth materialization"
+}
