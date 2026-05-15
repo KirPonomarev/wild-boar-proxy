@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS",
+  "selected_outcome": "OPEN_AUTH_SOURCE_REPAIR_PASS",
+  "next_contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "selection_rationale": {
+    "primary_blocker": "sandbox auth source truth",
+    "primary_evidence": [
+      "healthcheck/status both fail with HTTP 401 Invalid API key",
+      "healthcheck/status read Bearer auth from sandbox auth file",
+      "materialization surfaces remain secondary and currently unproven"
+    ],
+    "why_not_materialization_first": [
+      "launch/materialization verification would still route through a live attestation owner currently blocked by HTTP 401",
+      "sync keeps stable and does not own deterministic active-lane success truth"
+    ],
+    "why_not_combined": [
+      "would fuse two repair domains with different write surfaces",
+      "would enlarge rollback blast radius without a canon-fused owner primitive"
+    ]
+  },
+  "declared_write_surfaces": {
+    "required": [
+      "/Users/kirillponomarev/.codex-custom-test/auth.json"
+    ],
+    "conditional": [
+      "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+    ],
+    "forbidden_in_next_contour_without_rescope": [
+      "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+      "/Users/kirillponomarev/.codex-custom-test/managed/stable-runtime-config.generated.yaml",
+      "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+      "/Users/kirillponomarev/.codex-custom-test/managed/approved-repair-target.json",
+      "/Users/kirillponomarev/.codex-custom-test/managed/target-switch-transaction.json"
+    ]
+  },
+  "declared_rollback_expectations": [
+    "snapshot sandbox auth.json before mutation and restore it byte-for-byte on failure",
+    "if registry auth_ref rebinding is attempted, snapshot and restore backend-registry.json atomically",
+    "do not proceed into launch smoke or lifecycle rerun inside the auth-source repair pass"
+  ],
+  "verification_gate_for_follow_on": [
+    "healthcheck --json must clear the current HTTP 401 blocker or localize a new truthful blocker",
+    "status --json must agree with healthcheck owner truth",
+    "only after auth-source repair GO may a later materialization contour be opened if still needed"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS",
+  "status": "ok",
+  "final_verdict": "GO_TO_EXACT_NEXT_REPAIR_CONTOUR",
+  "next_contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "machine_rationale": {
+    "primary_blocker_localized": "sandbox_auth_source_truth",
+    "secondary_blocker_localized": "active_lane_materialization_missing",
+    "healthcheck_owner_truth_preserved": true,
+    "status_summary_did_not_override_owner_truth": true,
+    "combined_scope_required": false,
+    "further_stop_required": false
+  },
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/auth.json"
+  ],
+  "conditional_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+  ],
+  "rollback_expectations": [
+    "snapshot and restore sandbox auth.json on failure",
+    "snapshot and restore backend-registry.json if auth_ref rebinding is attempted",
+    "do not open launcher/materialization writes inside the auth-source repair contour"
+  ],
+  "evidence": {
+    "healthcheck_http_401": true,
+    "status_http_401": true,
+    "sync_stable_only": true,
+    "managed_listener_absent": true,
+    "external_models_empty_foundation": true
+  }
+}

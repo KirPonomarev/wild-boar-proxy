@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS",
+  "basis": {
+    "healthcheck": {
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "launch_readiness_blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "auth_pool_hygiene_status": "launch_capable_empty",
+      "auth_file": "/Users/kirillponomarev/.codex-custom-test/auth.json"
+    },
+    "status": {
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    "sync": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "changed_files": [
+        "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+        "/Users/kirillponomarev/.codex-custom-test/config.toml",
+        "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt"
+      ],
+      "stderr_summary": "sync-stable:8318"
+    },
+    "stable_target_switch_dry_run": {
+      "status": "ok",
+      "machine_error_code": "TARGET_SWITCH_CONTRACT_READY",
+      "approved_repair_target_reference_status": "fixed_not_materialized",
+      "writes": []
+    },
+    "stable_repair_dry_run": {
+      "status": "ok",
+      "machine_error_code": "STABLE_REPAIR_NOT_NEEDED",
+      "would_change": false,
+      "eligible_registry_auth_refs": [],
+      "writes": []
+    },
+    "external_models": {
+      "status_packet": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "adapter_state": "stopped",
+        "routes_count": 0,
+        "local_token_present": false,
+        "secrets_file": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env"
+      },
+      "routes_list_packet": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "count": 0
+      },
+      "models_packet": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "count": 0,
+        "source": "local_routes_registry"
+      }
+    },
+    "filesystem_observation": {
+      "sandbox_auth_file_exists": true,
+      "sandbox_auth_file_keys": [
+        "OPENAI_API_KEY",
+        "auth_mode"
+      ],
+      "sandbox_auth_file_has_openai_api_key": true,
+      "sandbox_auth_file_openai_api_key_len": 35,
+      "managed_listener_8320_listening": false,
+      "stable_runtime_generated_config_exists": false,
+      "approved_repair_target_exists": false,
+      "stable_repair_target_exists": false,
+      "launcher_script_exists": true
+    }
+  }
+}

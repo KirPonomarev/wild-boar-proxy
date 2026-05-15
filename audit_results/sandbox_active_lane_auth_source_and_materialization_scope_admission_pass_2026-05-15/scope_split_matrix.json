@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS",
+  "candidates": [
+    {
+      "scope": "auth_source",
+      "primary_or_secondary": "primary",
+      "problem_statement": "Live attestation sends Bearer auth from sandbox auth file and currently receives HTTP 401.",
+      "owner_truth_basis": [
+        "wild_boar_proxy/runtime.py:561",
+        "wild_boar_proxy/runtime.py:5340",
+        "wild_boar_proxy/runtime.py:5649"
+      ],
+      "required_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/auth.json"
+      ],
+      "conditional_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json"
+      ],
+      "verification_owner_surfaces": [
+        "healthcheck --json",
+        "status --json"
+      ],
+      "rollback_expectations": [
+        "capture byte-for-byte snapshot of sandbox auth.json before mutation",
+        "restore previous auth.json if live attestation remains blocked",
+        "if backend auth_ref rebinding is attempted, restore backend-registry.json atomically on failure"
+      ],
+      "admissibility_note": "This is the narrowest primary repair lane because live attestation currently fails before any managed active-lane proof can be earned."
+    },
+    {
+      "scope": "materialization",
+      "primary_or_secondary": "secondary",
+      "problem_statement": "Managed active lane is not materialized: sync keeps sandbox on stable, 8320 is absent, generated config/approved target are absent.",
+      "owner_truth_basis": [
+        "COMMAND_API.md:1127",
+        "COMMAND_API.md:1166",
+        "RUNTIME_CONTRACT.md:43",
+        "RUNTIME_CONTRACT.md:53"
+      ],
+      "required_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+        "/Users/kirillponomarev/.codex-custom-test/managed/stable-runtime-config.generated.yaml",
+        "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+      ],
+      "conditional_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+        "/Users/kirillponomarev/.codex-custom-test/managed/approved-repair-target.json",
+        "/Users/kirillponomarev/.codex-custom-test/managed/target-switch-transaction.json"
+      ],
+      "verification_owner_surfaces": [
+        "launch smoke --json",
+        "healthcheck --json"
+      ],
+      "rollback_expectations": [
+        "restore launcher/materialization artifacts to their prior states if live activation proof fails",
+        "remove generated/scratch materialization files on rollback",
+        "do not claim effective managed truth without post-launch live attestation"
+      ],
+      "admissibility_note": "This remains a later repair lane because materialization alone cannot truthfully clear the current HTTP 401 blocker."
+    },
+    {
+      "scope": "combined",
+      "primary_or_secondary": "rejected_as_next_step",
+      "problem_statement": "A fused auth+materialization repair would mix secret/source mutation with launcher/materialization mutation in one pass.",
+      "owner_truth_basis": [
+        "COMMAND_API.md:1113",
+        "COMMAND_API.md:1166",
+        "RUNTIME_CONTRACT.md:63",
+        "RUNTIME_CONTRACT.md:114"
+      ],
+      "required_write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/auth.json",
+        "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+        "/Users/kirillponomarev/.codex-custom-test/managed/stable-runtime-config.generated.yaml",
+        "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+      ],
+      "verification_owner_surfaces": [
+        "healthcheck --json",
+        "launch smoke --json"
+      ],
+      "rollback_expectations": [
+        "would require dual rollback domains: auth source and materialization artifacts",
+        "would need to prove no partial cross-domain success is misreported"
+      ],
+      "admissibility_note": "Rejected as the immediate next contour because canon does not provide a fused owner primitive here and risk shapes are different."
+    }
+  ]
+}
