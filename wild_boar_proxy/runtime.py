@@ -11789,6 +11789,78 @@ def summarize_onboarding_status_observation(status_payload: dict[str, Any]) -> d
     return summarize_owner_path_status_observation(status_payload)
 
 
+def summarize_onboarding_lifecycle_admission(
+    *,
+    selected_backend_id: str,
+    reserve_first_enforced: bool,
+    active_routing_changed: bool,
+    after_registry: dict[str, Any],
+    status_payload: dict[str, Any],
+) -> dict[str, Any]:
+    observed = summarize_owner_path_status_observation(status_payload)
+    auth_pool_hygiene = status_payload.get("auth_pool_hygiene")
+    if not isinstance(auth_pool_hygiene, dict):
+        auth_pool_hygiene = {}
+    launch_readiness = status_payload.get("launch_readiness")
+    if not isinstance(launch_readiness, dict):
+        launch_readiness = {}
+    pool_summary = status_payload.get("pool_summary")
+    if not isinstance(pool_summary, dict):
+        pool_summary = {}
+    backend_matches = (
+        get_registry_backends_by_id(after_registry, selected_backend_id)
+        if selected_backend_id
+        else []
+    )
+    selected_backend = backend_matches[0] if len(backend_matches) == 1 else None
+    selected_backend_pool = (
+        str(selected_backend.get("pool", "")) if isinstance(selected_backend, dict) else ""
+    )
+    launch_failed_checks = [
+        str(item) for item in launch_readiness.get("failed_checks", []) or []
+    ]
+    reserve_only_launch_gap_failed_checks = {
+        "usable_auth_pool_empty",
+        "models_surface_unavailable_or_invalid",
+        "responses_probe_failed",
+    }
+    lifecycle_status = "blocked"
+    lifecycle_reason = "status_proof_failed"
+    if observed["command_status"] == "ok":
+        lifecycle_status = "ready"
+        lifecycle_reason = "post_onboard_status_ok"
+    elif (
+        reserve_first_enforced
+        and not active_routing_changed
+        and selected_backend_pool == "reserve"
+        and observed["machine_error_code"] == "ATTESTATION_FAILED"
+        and str(status_payload.get("liveness", "unknown")) == "degraded"
+        and str(auth_pool_hygiene.get("status", "")) == "launch_capable_empty"
+        and str(auth_pool_hygiene.get("blocking_reason", ""))
+        == "no_live_capable_active_backends"
+        and int(pool_summary.get("active", 0) or 0) == 0
+        and launch_failed_checks
+        and set(launch_failed_checks).issubset(reserve_only_launch_gap_failed_checks)
+    ):
+        lifecycle_status = "ready"
+        lifecycle_reason = "reserve_only_launch_gap"
+    return {
+        "status": lifecycle_status,
+        "reason": lifecycle_reason,
+        "selected_backend_id": selected_backend_id,
+        "selected_backend_pool": selected_backend_pool,
+        "status_observed_command_status": observed["command_status"],
+        "status_observed_machine_error_code": observed["machine_error_code"],
+        "status_observed_liveness": observed["liveness"],
+        "launch_blocking_reason": str(launch_readiness.get("blocking_reason", "")),
+        "launch_failed_checks": launch_failed_checks,
+        "auth_pool_hygiene_status": str(auth_pool_hygiene.get("status", "")),
+        "auth_pool_hygiene_blocking_reason": str(
+            auth_pool_hygiene.get("blocking_reason", "")
+        ),
+    }
+
+
 def summarize_registry_pool_counts(registry: dict[str, Any]) -> dict[str, int]:
     counts = {"active": 0, "reserve": 0, "retired": 0}
     for backend in registry.get("backends", []):
@@ -12023,6 +12095,7 @@ def run_onboard(
         "sync_attempted": False,
         "sync_outcome": "not_attempted",
         "status_observed": None,
+        "lifecycle_admission": None,
         "external_command_exit_code": int(result.returncode),
         "external_command_status": "ok" if result.returncode == 0 else "nonzero",
         "active_routing_changed": active_routing_changed,
@@ -12173,6 +12246,15 @@ def run_onboard(
         status_payload = summarize_status(paths)
         onboarding_result["status_observed"] = summarize_onboarding_status_observation(
             status_payload
+        )
+        onboarding_result["lifecycle_admission"] = (
+            summarize_onboarding_lifecycle_admission(
+                selected_backend_id=selected_backend_id,
+                reserve_first_enforced=reserve_first_enforced,
+                active_routing_changed=active_routing_changed,
+                after_registry=after_registry,
+                status_payload=status_payload,
+            )
         )
     except RuntimeErrorInfo as exc:
         onboarding_result["final_outcome"] = "status_failed"

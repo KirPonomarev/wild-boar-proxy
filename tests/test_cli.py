@@ -7014,6 +7014,10 @@ class CliTests(unittest.TestCase):
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
         )
         self.assertIsNotNone(onboarding["status_observed"])
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "blocked")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "status_proof_failed"
+        )
         registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
         added = [item for item in registry["backends"] if item["id"] == "backend-new"]
         self.assertEqual(len(added), 1)
@@ -7058,6 +7062,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["final_outcome"], "reserve_only_success")
         self.assertIsNotNone(onboarding["status_observed"])
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "ready")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "post_onboard_status_ok"
+        )
         self.assertFalse(onboarding["active_routing_changed"])
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
@@ -7241,6 +7249,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(onboarding["sync_outcome"], "ok")
         self.assertIsNotNone(onboarding["status_observed"])
         self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+        self.assertEqual(onboarding["lifecycle_admission"]["status"], "ready")
+        self.assertEqual(
+            onboarding["lifecycle_admission"]["reason"], "post_onboard_status_ok"
+        )
         self.assertEqual(
             onboarding["final_outcome"], "explicit_auth_imported_to_reserve"
         )
@@ -7250,6 +7262,136 @@ class CliTests(unittest.TestCase):
         self.assertEqual(added[0]["pool"], "reserve")
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
+
+    def test_onboarding_lifecycle_admission_marks_reserve_only_launch_gap_ready(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "models_surface_unavailable_or_invalid",
+                "failed_checks": ["models_surface_unavailable_or_invalid"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_empty",
+                "blocking_reason": "no_live_capable_active_backends",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "ready")
+        self.assertEqual(admission["reason"], "reserve_only_launch_gap")
+        self.assertEqual(admission["selected_backend_pool"], "reserve")
+        self.assertEqual(
+            admission["auth_pool_hygiene_blocking_reason"],
+            "no_live_capable_active_backends",
+        )
+        self.assertEqual(
+            admission["launch_failed_checks"],
+            ["models_surface_unavailable_or_invalid"],
+        )
+
+    def test_onboarding_lifecycle_admission_blocks_non_reserve_attestation_failure(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "responses_probe_failed",
+                "failed_checks": ["responses_probe_failed"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_available",
+                "blocking_reason": "",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["reason"], "status_proof_failed")
+        self.assertEqual(
+            admission["status_observed_machine_error_code"], "ATTESTATION_FAILED"
+        )
+
+    def test_onboarding_lifecycle_admission_blocks_truth_drift_even_when_pool_empty(
+        self,
+    ) -> None:
+        registry = {
+            "version": 2,
+            "schema_version": 2,
+            "backends": [
+                self.build_backend(
+                    backend_id="backend-reserve",
+                    auth_ref="/tmp/codex-reserve.json",
+                    pool="reserve",
+                )
+            ],
+        }
+        status_payload = {
+            "status": "error",
+            "machine_error_code": "ATTESTATION_FAILED",
+            "liveness": "degraded",
+            "launch_readiness": {
+                "status": "blocked",
+                "blocking_reason": "proxy_truth_drift",
+                "failed_checks": ["proxy_truth_drift"],
+            },
+            "auth_pool_hygiene": {
+                "status": "launch_capable_empty",
+                "blocking_reason": "no_live_capable_active_backends",
+            },
+            "pool_summary": {"active": 0, "reserve": 1, "retired": 0},
+        }
+        admission = runtime_mod.summarize_onboarding_lifecycle_admission(
+            selected_backend_id="backend-reserve",
+            reserve_first_enforced=True,
+            active_routing_changed=False,
+            after_registry=registry,
+            status_payload=status_payload,
+        )
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["reason"], "status_proof_failed")
+        self.assertEqual(admission["launch_failed_checks"], ["proxy_truth_drift"])
 
     def test_accounts_onboard_loop_mode_forwards_flag_and_keeps_reserve_first_proof(
         self,

@@ -1,0 +1,21 @@
+python3 -m py_compile wild_boar_proxy/runtime.py tests/test_cli.py
+OK
+
+python3 -m unittest \
+  tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync \
+  tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof \
+  tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof \
+  tests.test_cli.CliTests.test_onboarding_lifecycle_admission_marks_reserve_only_launch_gap_ready \
+  tests.test_cli.CliTests.test_onboarding_lifecycle_admission_blocks_non_reserve_attestation_failure \
+  tests.test_cli.CliTests.test_onboarding_lifecycle_admission_blocks_truth_drift_even_when_pool_empty
+Ran 6 tests in 4.559s
+OK
+
+python3 -m unittest \
+  tests.test_web_design_live_server.WebDesignLiveServerTests.test_onboard_outcomes_do_not_overclaim_success_without_reserve_proof \
+  tests.test_web_design_ui.WebDesignUiTests.test_onboarding_result_flow_renders_reserve_first_without_active_claim
+Ran 2 tests in 0.493s
+OK
+
+git diff --check
+OK
