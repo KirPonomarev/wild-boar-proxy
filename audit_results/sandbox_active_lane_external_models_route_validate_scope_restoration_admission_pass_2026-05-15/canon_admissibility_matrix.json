@@ -1,0 +1,25 @@
+{
+  "canon_basis": [
+    "WORKFLOW_OS_V1_2.md: one contour should do one logical thing",
+    "AGENTS.md: declared write surfaces and rollback expectations are required",
+    "DELIVERY_RULES.md: one bounded write contour at a time"
+  ],
+  "admissibility": [
+    {
+      "candidate": "route-restore-only contour",
+      "admissible": true,
+      "reason": "restores the missing executable precondition without mixing in provider-evidence execution"
+    },
+    {
+      "candidate": "combined restore+validate contour",
+      "admissible": false,
+      "reason": "fuses registry mutation and provider-evidence mutation despite separate write and rollback domains"
+    },
+    {
+      "candidate": "further stop",
+      "admissible": false,
+      "reason": "current code and prior route payload already prove route restoration is concrete and bounded"
+    }
+  ],
+  "chosen_outcome": "OPEN_ROUTE_RESTORE_ONLY_CONTOUR"
+}

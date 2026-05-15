@@ -1,0 +1,15 @@
+{
+  "validate_surface": "external-models routes validate --json --route wbp-claude-sonnet-4-6-thinking",
+  "current_route_required": true,
+  "code_basis": [
+    "wild_boar_proxy/external_models/validate.py:176",
+    "wild_boar_proxy/external_models/routes.py:185"
+  ],
+  "mechanics": {
+    "validate_entrypoint": "route = find_route(load_routes_file(paths.routes_file), route_id)",
+    "missing_routes_file_behavior": "load_routes_file returns default empty routes payload",
+    "missing_route_behavior": "find_route raises route_not_found"
+  },
+  "current_precondition_status": "false",
+  "conclusion": "ROUTE_VALIDATE_EVIDENCE_PASS is not directly executable on current rollback truth"
+}

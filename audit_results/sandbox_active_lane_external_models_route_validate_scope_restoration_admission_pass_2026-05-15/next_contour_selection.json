@@ -1,0 +1,19 @@
+{
+  "decision": "GO_TO_EXACT_NEXT_REPAIR_CONTOUR",
+  "selected_next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_RESTORE_REPAIR_PASS",
+  "declared_command_surfaces": [
+    "external-models routes add --json --stdin|--file"
+  ],
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+  ],
+  "declared_rollback_expectations": [
+    "capture routes.json snapshot before restore",
+    "restore routes.json byte-for-byte if post-restore proof fails or contradicts current route shape claim"
+  ],
+  "why_selected": [
+    "current validate precondition is false because the route was rolled back",
+    "restore and validate are separate write/rollback domains in code",
+    "canon prefers the narrower executable contour before provider-evidence execution"
+  ]
+}

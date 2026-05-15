@@ -1,0 +1,19 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_VALIDATE_SCOPE_RESTORATION_ADMISSION_PASS",
+  "status": "complete",
+  "final_verdict": "GO_TO_EXACT_NEXT_REPAIR_CONTOUR",
+  "selected_next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_RESTORE_REPAIR_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "f4b817f Audit external-models provider evidence scope admission",
+  "decision_basis": [
+    "route-add rollback left current routes_count=0 and models_count=0",
+    "validate requires a current route in routes.json",
+    "route restore and validate mutate different files and rollback domains",
+    "canon prefers the narrower executable split"
+  ],
+  "declared_next_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+  ],
+  "declared_next_rollback_domain": "routes.json only",
+  "deferred_contour_after_restore": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_VALIDATE_EVIDENCE_PASS"
+}

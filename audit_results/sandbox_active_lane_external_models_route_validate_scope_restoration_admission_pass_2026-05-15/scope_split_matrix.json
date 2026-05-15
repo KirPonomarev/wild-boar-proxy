@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "candidate": "route-restore-only contour",
+      "command_surfaces": [
+        "external-models routes add --json --stdin|--file"
+      ],
+      "write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ],
+      "rollback_domain": "routes.json only",
+      "admissibility_bias": "narrow split preferred"
+    },
+    {
+      "candidate": "combined route-restore-plus-validate contour",
+      "command_surfaces": [
+        "external-models routes add --json --stdin|--file",
+        "external-models routes validate --json --route ..."
+      ],
+      "write_surfaces": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "rollback_domain": "routes.json plus state/evidence",
+      "admissibility_bias": "too wide unless canon proves fusion is necessary"
+    },
+    {
+      "candidate": "further stop",
+      "command_surfaces": [],
+      "write_surfaces": [],
+      "rollback_domain": "none",
+      "admissibility_bias": "only if route restoration itself becomes non-admissible"
+    }
+  ]
+}
