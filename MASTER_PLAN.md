@@ -4,7 +4,7 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.47
+PLAN_VERSION: 1.48
 PLAN_DATE: 2026-05-16
 PLAN_OWNER: Product and Platform Team
 PLAN_STATUS: Stable/sandbox truth recalibration wave active; recent contours truthfully narrowed sandbox onboarding auth blockers through family repair and runtime reproof, but canonical selector refresh via `sync --json` reopened a managed-lane policy/runtime contradiction; next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`; exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until stable policy/runtime truth is reconciled and cross-lane drift is cleared
@@ -155,6 +155,68 @@ The following are forbidden as progress claims by themselves:
 If a contour changes the blocker wording but does not improve at least two of
 the surfaces above, the chain must be treated as loop risk and moved back to
 `STOP_AND_DIAGNOSE`.
+
+## Active Truth State
+
+This section is the active execution pointer for the current contour chain.
+When lower sections contain historical closeout notes with older `next primary
+contour` text, this section wins.
+
+Current active truth:
+
+- stable sandbox auth chain is not currently admission-ready
+- canonical selector refresh through `sync --json` already happened
+- selected-backend participation evidence is fresh
+- refreshed participation evidence is contradicted by active `policy_drift`
+- `claim_gate` is blocked
+- post-sync runtime truth is currently in the managed lane
+- stable repair again reports pending reconciliation work
+
+Current active implication:
+
+- the next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`
+- no further selector refresh by inertia
+- no exact auth-source admission
+- no sandbox `auth.json` materialization
+- no onboarding rerun
+
+## Lane Authority Quick Map
+
+The current chain crosses two operational lanes. They must not be merged by
+narrative convenience.
+
+| Surface | Lane | Current role | Authority for next step |
+| --- | --- | --- | --- |
+| `stable repair --dry-run --json` | stable | policy/source-copy reconciliation truth | authoritative |
+| `status --json` | runtime | current mode, claim-gate, effective-source truth | authoritative |
+| `rollout rotation inspect --json` | participation | validates selected-backend evidence against policy/runtime truth | authoritative |
+| `sync --json` selected-backend snapshot | managed participation | refreshes bounded selector evidence only | not sufficient by itself |
+| `launch smoke --json` activation evidence | stable runtime activation | proved prior runtime activation success | historical support only, not current selector authority |
+
+Current interpretation rule:
+
+- fresh selector evidence does not outrank contradicted rotation truth
+- managed-lane refresh does not by itself restore stable-lane auth readiness
+- exact auth-source work may resume only after stable policy/runtime
+  reconciliation clears the active contradiction
+
+## Historical Next-Contour Marker Rule
+
+Lower sections in this document contain historical closeout notes such as:
+
+- `the next primary contour is ...`
+
+Those notes remain valuable chronology, but they are not the active execution
+pointer once a newer top-level correction or recalibration section exists.
+
+Interpretation rule:
+
+- top-level `PLAN_STATUS`
+- `Current Recalibration Correction`
+- `Anti-Loop Rule`
+- `Active Truth State`
+
+all outrank historical milestone-closeout `next primary contour` text below.
 
 ## Managed Pool Operating Contour
 
