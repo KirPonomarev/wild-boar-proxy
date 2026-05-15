@@ -1,0 +1,29 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+  ],
+  "final_verdict": "GO_TO_EXACT_NEXT_REPAIR_CONTOUR",
+  "machine_rationale": {
+    "browser_ui_route_builder_deferred_not_blocking_cli_owner_surface": true,
+    "combined_scope_required": false,
+    "healthcheck_owner_truth_preserved": true,
+    "local_token_primary_by_current_fact": false,
+    "primary_gap_localized": "external_models_local_route_registry_empty",
+    "provider_profile_standalone_mutation_exists": false,
+    "status_summary_did_not_override_owner_truth": true
+  },
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_PASS",
+  "owner_verification_surfaces": [
+    "external-models routes list --json",
+    "external-models models --json",
+    "healthcheck --json",
+    "status --json"
+  ],
+  "rollback_expectations": [
+    "snapshot routes.json before mutation",
+    "restore routes.json byte-for-byte if post-add proof remains blocked or contradictory"
+  ],
+  "schema_version": 1,
+  "status": "ok"
+}

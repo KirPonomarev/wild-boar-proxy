@@ -1,0 +1,45 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "external_models_packets": {
+    "models": {
+      "count": 0,
+      "machine_error_code": "OK",
+      "source": "local_routes_registry"
+    },
+    "routes": {
+      "count": 0,
+      "machine_error_code": "OK"
+    },
+    "status": {
+      "adapter_runtime_available": false,
+      "adapter_state": "stopped",
+      "foundation_phase": "C3",
+      "listener_proven": false,
+      "local_auth": {
+        "token_created_at_utc": null,
+        "token_present": false,
+        "token_ref": "managed_local_token"
+      },
+      "machine_error_code": "OK",
+      "observed_routes_count": 0,
+      "paths": {
+        "evidence_dir": "/Users/kirillponomarev/.codex-custom-test/external-models/evidence",
+        "routes_file": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+        "secrets_file": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+        "state_file": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json"
+      },
+      "profile_ready": false,
+      "routes_count": 0,
+      "runtime_claim_blocked": true
+    }
+  },
+  "post_import_owner_truth": {
+    "healthcheck_blocking_reason": "usable_auth_pool_empty",
+    "healthcheck_last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+    "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+    "status_attestation_source": "healthcheck --json",
+    "status_machine_error_code": "ATTESTATION_FAILED"
+  },
+  "rollback_completed": true,
+  "schema_version": 1
+}

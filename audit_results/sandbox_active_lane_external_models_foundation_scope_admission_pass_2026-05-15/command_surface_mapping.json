@@ -1,0 +1,110 @@
+{
+  "admission_boundary_note": "browser/UI route builder admission remains deferred and does not negate CLI owner mutation surfaces for runtime repair contours",
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "schema_version": 1,
+  "surfaces": [
+    {
+      "command": "external-models routes add --json --file|--stdin",
+      "kind": "mutation",
+      "reason_relevant_now": "yes_primary",
+      "rollback_domain": [
+        "routes.json"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ]
+    },
+    {
+      "command": "external-models routes update --json --route <route_id> --file|--stdin",
+      "kind": "mutation",
+      "reason_relevant_now": "only_if_route_already_exists_later",
+      "rollback_domain": [
+        "routes.json"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ]
+    },
+    {
+      "command": "external-models routes enable --json --route <route_id>",
+      "kind": "mutation",
+      "reason_relevant_now": "not_primary_without_existing_route",
+      "rollback_domain": [
+        "routes.json"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+      ]
+    },
+    {
+      "command": "external-models routes remove --json --route <route_id>",
+      "kind": "mutation",
+      "reason_relevant_now": "cleanup_only",
+      "rollback_domain": [
+        "routes.json",
+        "state.json"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json"
+      ]
+    },
+    {
+      "command": "external-models routes validate --json --route <route_id>",
+      "kind": "evidence_mutation",
+      "reason_relevant_now": "requires_existing_route_and_secret",
+      "rollback_domain": [
+        "state.json",
+        "evidence/*"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ]
+    },
+    {
+      "command": "external-models check --json --route <route_id>",
+      "kind": "evidence_mutation",
+      "reason_relevant_now": "requires_existing_route_and_secret",
+      "rollback_domain": [
+        "state.json",
+        "evidence/*"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ]
+    },
+    {
+      "command": "external-models profile codex-desktop --json --route <route_id>",
+      "kind": "read_only",
+      "reason_relevant_now": "not_mutation_surface",
+      "rollback_domain": [],
+      "writes": []
+    },
+    {
+      "command": "external-models evidence capture --json --route <route_id>",
+      "kind": "evidence_mutation",
+      "reason_relevant_now": "requires_existing_route",
+      "rollback_domain": [
+        "evidence/*"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ]
+    },
+    {
+      "command": "external-models start --json",
+      "kind": "mutation",
+      "reason_relevant_now": "local_token_only_secondary_not_primary",
+      "rollback_domain": [
+        "secrets.env",
+        "state.json"
+      ],
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json"
+      ]
+    }
+  ]
+}

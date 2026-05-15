@@ -1,0 +1,37 @@
+{
+  "conditional_write_surfaces": [],
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_FOUNDATION_SCOPE_ADMISSION_PASS",
+  "declared_owner_verification_surfaces": [
+    "external-models routes list --json",
+    "external-models models --json",
+    "healthcheck --json",
+    "status --json"
+  ],
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+  ],
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_PASS",
+  "rollback_expectations": [
+    "snapshot routes.json before mutation",
+    "restore routes.json byte-for-byte if post-add proof remains blocked or contradictory"
+  ],
+  "schema_version": 1,
+  "selected_outcome": "OPEN_EXACT_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_CONTOUR",
+  "selection_rationale": {
+    "why_not_combined": [
+      "combined path broadens rollback domain into secrets/state without current necessity"
+    ],
+    "why_not_local_token": [
+      "token-only would not populate local route registry or resolve unknown provider naming"
+    ],
+    "why_not_provider_profile": [
+      "provider/profile fields live inside route payload, not a standalone owner mutation path"
+    ],
+    "why_route_add": [
+      "routes list and models list both show zero entries from local_routes_registry",
+      "route add is the first real mutation surface that can change model registry truth",
+      "profile command is read-only and cannot be the next mutation contour",
+      "local token creation lives in start --json and is secondary while no routes exist"
+    ]
+  }
+}
