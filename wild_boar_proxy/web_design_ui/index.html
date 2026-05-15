@@ -124,6 +124,10 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
               <span>Проверить всё</span>
             </button>
+            <button id="dataLayoutOpenFinderAction" class="button settings-only" type="button" disabled title="Показать в Finder доступно только через desktop/native или admitted human-open surface." hidden>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true">
+              <span>Показать в Finder</span>
+            </button>
           </div>
         </div>
 
@@ -978,7 +982,7 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-only">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
@@ -1100,9 +1104,131 @@
                 <div><span>data</span><strong>display deferred</strong></div>
                 <div><span>setup</span><strong>separate packet</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Data and installer changes need a separate admitted surface.">missing surface</button>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=data-layout" data-settings-section-link="data-layout">Открыть data layout</a>
             </section>
           </div>
+
+          <section id="dataLayoutPanel" class="settings-data-layout" data-settings-subflow="data-layout" data-installer-layout-mode="preview-only" hidden>
+            <div class="data-layout-topline">
+              <div class="data-layout-subflow-title"><strong>Данные приложения</strong><span>Installer Data Layout · preview-only subflow</span></div>
+              <span id="dataLayoutModeChip" class="chip neutral"><span class="dot"></span><span>preview</span></span>
+              <button id="dataLayoutBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="data-layout-grid" aria-label="Installer data layout settings subflow">
+              <section class="card data-layout-card data-layout-card-large" data-data-layout-card="install-state">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Состояние установки</h3>
+                    <p>Package state показан только как preview или future packet summary.</p>
+                  </div>
+                  <span id="dataLayoutPackageChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="data-layout-kv">
+                  <div><span>Package status</span><strong id="dataLayoutPackageStatus">unknown</strong></div>
+                  <div><span>Schema version</span><strong id="dataLayoutSchemaVersion">unknown</strong></div>
+                  <div><span>Writable</span><strong id="dataLayoutWritable">not_proven</strong></div>
+                  <div><span>Snapshot available</span><strong id="dataLayoutSnapshotAvailable">unknown</strong></div>
+                  <div><span>Rollback point</span><strong id="dataLayoutRollbackPoint">unknown</strong></div>
+                  <div><span>Last checked</span><strong id="dataLayoutLastChecked">—</strong></div>
+                </div>
+              </section>
+
+              <section class="card data-layout-card" data-data-layout-card="directory">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Каталог данных</h3>
+                    <p>Inert display. Web UI не меняет путь и не сканирует папки.</p>
+                  </div>
+                  <span id="dataLayoutDirectoryChip" class="chip neutral"><span class="dot"></span><span>not inspected</span></span>
+                </div>
+                <div id="dataLayoutPath" class="data-layout-path mono-value" title="preview path">Каталог не подтверждён</div>
+                <div class="data-layout-note">Путь является display-only; browser payload с path запрещён.</div>
+              </section>
+
+              <section class="card data-layout-card data-layout-structure-card" data-data-layout-card="structure">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Структура пакета</h3>
+                    <p>Command-owned summary, не прямое чтение папок UI-слоем.</p>
+                  </div>
+                  <span id="dataLayoutStructureChip" class="chip neutral"><span class="dot"></span><span>not inspected</span></span>
+                </div>
+                <div class="data-layout-table" aria-label="Expected package structure">
+                  <div class="data-layout-table-head"><span>area</span><span>purpose</span><span>status</span></div>
+                  <div class="data-layout-row"><span>config/</span><span>bounded configuration summary</span><span id="dataLayoutConfigStatus" class="chip neutral"><span class="dot"></span><span>not inspected</span></span></div>
+                  <div class="data-layout-row"><span>accounts/</span><span>account registry summary</span><span id="dataLayoutAccountsStatus" class="chip neutral"><span class="dot"></span><span>not inspected</span></span></div>
+                  <div class="data-layout-row"><span>snapshots/</span><span>rollback snapshots</span><span id="dataLayoutSnapshotsStatus" class="chip neutral"><span class="dot"></span><span>not inspected</span></span></div>
+                  <div class="data-layout-row"><span>logs/</span><span>human-open only</span><span id="dataLayoutLogsStatus" class="chip neutral"><span class="dot"></span><span>human-open only</span></span></div>
+                  <div class="data-layout-row"><span>registry/</span><span>readonly registry summary</span><span id="dataLayoutRegistryStatus" class="chip neutral"><span class="dot"></span><span>not inspected</span></span></div>
+                </div>
+              </section>
+
+              <section class="card data-layout-card" data-data-layout-card="permissions">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Permissions</h3>
+                    <p>Не является браузерной проверкой доступа.</p>
+                  </div>
+                  <span id="dataLayoutPermissionsChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="data-layout-list">
+                  <div><span>Read access</span><strong id="dataLayoutReadAccess">Не проверено</strong></div>
+                  <div><span>Write access</span><strong id="dataLayoutWriteAccess">Не проверено</strong></div>
+                  <div><span>Owner</span><strong id="dataLayoutOwner">unknown</strong></div>
+                  <div><span>Mode</span><strong id="dataLayoutMode">unknown</strong></div>
+                  <div><span>Secrets isolation</span><strong id="dataLayoutSecretsIsolation">values never shown</strong></div>
+                </div>
+              </section>
+
+              <section class="card data-layout-card" data-data-layout-card="snapshot-rollback">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Snapshot / rollback</h3>
+                    <p>Снимок не считается backup без command packet.</p>
+                  </div>
+                  <span id="dataLayoutSnapshotChip" class="chip neutral"><span class="dot"></span><span>no snapshot</span></span>
+                </div>
+                <div class="data-layout-list">
+                  <div><span>Последний снимок</span><strong id="dataLayoutSnapshotCopy">не подтверждён</strong></div>
+                  <div><span>Rollback</span><strong id="dataLayoutRollbackCopy">недоступен без rollback point</strong></div>
+                </div>
+                <div class="data-layout-actions">
+                  <button class="button small disabled" type="button" disabled title="Snapshot требует отдельного admitted command surface.">Создать snapshot</button>
+                  <button class="button small disabled" type="button" disabled title="Rollback требует server-owned rollback point и admitted command surface.">Откатить</button>
+                </div>
+              </section>
+
+              <section class="card data-layout-card data-layout-danger-card" data-data-layout-card="danger">
+                <div class="data-layout-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Опасные операции</h3>
+                    <p>Reset/reinitialize остаются owner-gated и disabled.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>owner approval</span>
+                </div>
+                <div class="data-layout-danger-actions">
+                  <button class="button small danger disabled" type="button" disabled title="Reinitialize требует strong confirmation и admitted command surface.">Переинициализировать</button>
+                  <button class="button small danger disabled" type="button" disabled title="Очистка данных недоступна из web preview.">Очистить данные</button>
+                  <button class="button small danger disabled" type="button" disabled title="Сброс layout недоступен без rollback semantics.">Сбросить layout</button>
+                </div>
+                <div class="data-layout-note danger-note">disabled · missing command surface · no browser filesystem mutation</div>
+              </section>
+            </div>
+
+            <div id="dataLayoutFooter" class="data-layout-footer">
+              Последняя проверка: — · Все значения являются preview/deferred summary, не прямым чтением файлов.
+            </div>
+          </section>
         </section>
 
         <section id="setupScreen" class="screen setup-screen setup-final-screen" data-screen="setup" data-setup-mode="admission-wizard" hidden>

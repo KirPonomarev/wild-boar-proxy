@@ -967,7 +967,22 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('id="settingsScreen"', html)
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-only"', settings_markup)
+        self.assertIn('id="settingsHub"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-data-layout"', settings_markup)
+        self.assertIn('id="dataLayoutPanel"', settings_markup)
+        self.assertIn('data-settings-subflow="data-layout"', settings_markup)
+        self.assertIn('data-installer-layout-mode="preview-only"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=data-layout"', settings_markup)
+        self.assertIn('data-settings-section-link="data-layout"', settings_markup)
+        self.assertIn("Данные приложения", settings_markup)
+        self.assertIn("Состояние установки", settings_markup)
+        self.assertIn("Каталог данных", settings_markup)
+        self.assertIn("Структура пакета", settings_markup)
+        self.assertIn("Permissions", settings_markup)
+        self.assertIn("Snapshot / rollback", settings_markup)
+        self.assertIn("Опасные операции", settings_markup)
+        self.assertIn("Показать в Finder", html)
+        self.assertIn("desktop/native или admitted human-open surface", html)
         for section in [
             "runtime-mode",
             "client-launch",
@@ -1030,7 +1045,6 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("Install now", settings_markup)
         self.assertNotIn("Сохранить", settings_markup)
         self.assertNotIn("Отмена", settings_markup)
-        self.assertNotIn("Finder", settings_markup)
         self.assertNotIn('data-ui-action=', settings_markup)
         self.assertNotIn("live-action", settings_markup)
         self.assertNotIn("account-action", settings_markup)
@@ -1047,6 +1061,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("save_selection", settings_markup + js)
         self.assertNotIn("import_apply", settings_markup + js)
         self.assertNotIn("showOpenFilePicker", settings_markup + js)
+        self.assertNotIn("showDirectoryPicker", settings_markup + js)
         self.assertNotIn("webkitdirectory", settings_markup + js)
         self.assertNotIn("readAsText", settings_markup + js)
         self.assertNotIn("localStorage", settings_markup + js)
@@ -1107,6 +1122,82 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-card-icon", css)
         self.assertIn(".settings-card-facts", css)
         self.assertIn(".settings-hidden-field", css)
+        self.assertIn(".settings-data-layout", css)
+        self.assertIn(".data-layout-grid", css)
+        self.assertIn("grid-template-areas:", css)
+        self.assertIn(".data-layout-danger-card", css)
+
+    def test_settings_data_layout_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "data-layout"]', js)
+        self.assertIn("settingsSectionFromLocation", js)
+        self.assertIn("setSettingsSection", js)
+        self.assertIn('url.searchParams.set("section", "data-layout")', js)
+        self.assertIn('if (key !== "section")', js)
+        self.assertIn('data-settings-section-link="data-layout"', settings_markup)
+        self.assertNotIn('data-screen-link="data-layout"', html)
+        nav_markup = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+        self.assertNotIn('id="dataLayoutNav"', nav_markup)
+        self.assertNotIn(">Data Layout<", nav_markup)
+        self.assertNotIn('section=data-layout', nav_markup)
+
+        self.assertIn("DATA_LAYOUT_FIXTURES", js)
+        self.assertIn("initialized_healthy", js)
+        self.assertIn("permissions_warning", js)
+        self.assertIn("no_data_dir_known", js)
+        self.assertIn("rollback_required", js)
+        self.assertIn("live_integration_failure", js)
+        self.assertIn('"stale"', js)
+        self.assertIn("renderDataLayoutSnapshot", js)
+        self.assertIn("Live-readonly статус данных недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Stale preview не является зелёным состоянием", js)
+
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "showDirectoryPicker",
+            "showOpenFilePicker",
+            "webkitdirectory",
+            "readAsText",
+            "localStorage",
+            "sessionStorage",
+            "window.open",
+            "data-ui-action",
+            "stable_repair_apply",
+            "installer_init",
+            "settings_write",
+            "save_settings",
+            "raw_command",
+            "target_path",
+            "source_dir",
+            "client_path",
+            "config_path",
+            "auth_file",
+            "token value",
+            "secret value",
+            "config.toml",
+            "state.json",
+            "routes.json",
+            "secrets.env",
+        ]:
+            self.assertNotIn(forbidden, settings_markup)
+        self.assertNotIn("showDirectoryPicker", js)
+        self.assertNotIn("showOpenFilePicker", js)
+        self.assertNotIn("webkitdirectory", js)
+
+        self.assertIn("Snapshot требует отдельного admitted command surface", settings_markup)
+        self.assertIn("Rollback требует server-owned rollback point", settings_markup)
+        self.assertIn("Reinitialize требует strong confirmation", settings_markup)
+        self.assertIn("Очистка данных недоступна из web preview", settings_markup)
+        self.assertIn("Сброс layout недоступен без rollback semantics", settings_markup)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

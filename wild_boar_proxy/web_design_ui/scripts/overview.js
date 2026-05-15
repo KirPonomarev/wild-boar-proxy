@@ -93,6 +93,213 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
+const SETTINGS_SECTIONS = ["hub", "data-layout"];
+const DATA_LAYOUT_FIXTURES = {
+  healthy: {
+    key: "initialized_healthy",
+    visual: "green",
+    mode: "fixture preview",
+    packageStatus: "init preview",
+    schemaVersion: "v1 preview",
+    writable: "ok preview",
+    snapshotAvailable: "yes preview",
+    rollbackPoint: "available preview",
+    lastChecked: "Сегодня, 12:45",
+    directoryStatus: "available",
+    directoryVisual: "green",
+    directoryPath: "~/Library/Application Support/Wild Boar Proxy",
+    structureVisual: "green",
+    structure: {
+      config: ["ok preview", "green"],
+      accounts: ["ok preview", "green"],
+      snapshots: ["ok preview", "green"],
+      logs: ["human-open only", "neutral"],
+      registry: ["readonly preview", "neutral"]
+    },
+    permissionsVisual: "green",
+    permissions: {
+      read: "ok preview",
+      write: "ok preview",
+      owner: "current user preview",
+      mode: "bounded summary",
+      secrets: "isolated by policy"
+    },
+    snapshotVisual: "green",
+    snapshotLabel: "snapshot ready",
+    snapshotCopy: "preview snapshot marker",
+    rollbackCopy: "rollback point preview"
+  },
+  degraded: {
+    key: "permissions_warning",
+    visual: "amber",
+    mode: "fixture preview",
+    packageStatus: "init preview",
+    schemaVersion: "v1 preview",
+    writable: "missing_permission preview",
+    snapshotAvailable: "yes preview",
+    rollbackPoint: "available preview",
+    lastChecked: "Сегодня, 12:38",
+    directoryStatus: "missing permission",
+    directoryVisual: "amber",
+    directoryPath: "~/Library/Application Support/Wild Boar Proxy",
+    structureVisual: "amber",
+    structure: {
+      config: ["ok preview", "green"],
+      accounts: ["ok preview", "green"],
+      snapshots: ["ok preview", "green"],
+      logs: ["human-open only", "neutral"],
+      registry: ["readonly preview", "neutral"]
+    },
+    permissionsVisual: "amber",
+    permissions: {
+      read: "ok preview",
+      write: "not_proven preview",
+      owner: "not proven",
+      mode: "not proven",
+      secrets: "values never shown"
+    },
+    snapshotVisual: "green",
+    snapshotLabel: "snapshot ready",
+    snapshotCopy: "preview snapshot marker",
+    rollbackCopy: "rollback point preview"
+  },
+  unknown: {
+    key: "no_data_dir_known",
+    visual: "neutral",
+    mode: "fixture preview",
+    packageStatus: "unknown",
+    schemaVersion: "unknown",
+    writable: "unknown",
+    snapshotAvailable: "unknown",
+    rollbackPoint: "unknown",
+    lastChecked: "—",
+    directoryStatus: "not inspected",
+    directoryVisual: "neutral",
+    directoryPath: "Каталог не подтверждён",
+    structureVisual: "neutral",
+    structure: {
+      config: ["not inspected", "neutral"],
+      accounts: ["not inspected", "neutral"],
+      snapshots: ["not inspected", "neutral"],
+      logs: ["human-open only", "neutral"],
+      registry: ["not inspected", "neutral"]
+    },
+    permissionsVisual: "neutral",
+    permissions: {
+      read: "Не проверено",
+      write: "Не проверено",
+      owner: "unknown",
+      mode: "unknown",
+      secrets: "values never shown"
+    },
+    snapshotVisual: "neutral",
+    snapshotLabel: "no snapshot",
+    snapshotCopy: "не подтверждён",
+    rollbackCopy: "недоступен без rollback point"
+  },
+  down: {
+    key: "rollback_required",
+    visual: "amber",
+    mode: "fixture preview",
+    packageStatus: "pending preview",
+    schemaVersion: "unknown",
+    writable: "not_proven preview",
+    snapshotAvailable: "no preview",
+    rollbackPoint: "none preview",
+    lastChecked: "Сегодня, 12:30",
+    directoryStatus: "attention",
+    directoryVisual: "amber",
+    directoryPath: "~/Library/Application Support/Wild Boar Proxy",
+    structureVisual: "amber",
+    structure: {
+      config: ["missing preview", "amber"],
+      accounts: ["ok preview", "green"],
+      snapshots: ["missing preview", "amber"],
+      logs: ["human-open only", "neutral"],
+      registry: ["readonly preview", "neutral"]
+    },
+    permissionsVisual: "amber",
+    permissions: {
+      read: "not_proven preview",
+      write: "not_proven preview",
+      owner: "unknown",
+      mode: "unknown",
+      secrets: "values never shown"
+    },
+    snapshotVisual: "amber",
+    snapshotLabel: "rollback required",
+    snapshotCopy: "snapshot missing preview",
+    rollbackCopy: "rollback point не подтверждён"
+  },
+  stale: {
+    key: "stale",
+    visual: "amber",
+    mode: "stale preview",
+    packageStatus: "stale",
+    schemaVersion: "unknown",
+    writable: "stale",
+    snapshotAvailable: "stale",
+    rollbackPoint: "stale",
+    lastChecked: "устарело",
+    directoryStatus: "stale",
+    directoryVisual: "amber",
+    directoryPath: "Каталог не подтверждён",
+    structureVisual: "amber",
+    structure: {
+      config: ["stale", "amber"],
+      accounts: ["stale", "amber"],
+      snapshots: ["stale", "amber"],
+      logs: ["human-open only", "neutral"],
+      registry: ["stale", "amber"]
+    },
+    permissionsVisual: "amber",
+    permissions: {
+      read: "stale",
+      write: "stale",
+      owner: "stale",
+      mode: "stale",
+      secrets: "values never shown"
+    },
+    snapshotVisual: "amber",
+    snapshotLabel: "stale",
+    snapshotCopy: "устаревший preview",
+    rollbackCopy: "требуется обновление"
+  },
+  integration_failure: {
+    key: "live_integration_failure",
+    visual: "red",
+    mode: "live unavailable",
+    packageStatus: "unknown",
+    schemaVersion: "unknown",
+    writable: "unknown",
+    snapshotAvailable: "unknown",
+    rollbackPoint: "unknown",
+    lastChecked: "live-readonly failed",
+    directoryStatus: "unavailable",
+    directoryVisual: "red",
+    directoryPath: "Каталог не подтверждён",
+    structureVisual: "neutral",
+    structure: {
+      config: ["not inspected", "neutral"],
+      accounts: ["not inspected", "neutral"],
+      snapshots: ["not inspected", "neutral"],
+      logs: ["human-open only", "neutral"],
+      registry: ["not inspected", "neutral"]
+    },
+    permissionsVisual: "neutral",
+    permissions: {
+      read: "Не проверено",
+      write: "Не проверено",
+      owner: "unknown",
+      mode: "unknown",
+      secrets: "values never shown"
+    },
+    snapshotVisual: "neutral",
+    snapshotLabel: "no data",
+    snapshotCopy: "не подтверждён",
+    rollbackCopy: "недоступен без rollback point"
+  }
+};
 const ACCOUNT_UI_ACTIONS = new Set([
   "validate_account",
   "promote_account",
@@ -248,8 +455,18 @@ function screenFromLocation() {
   return SCREENS.includes(screen) ? screen : "overview";
 }
 
+function settingsSectionFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get("section") || "hub";
+  return SETTINGS_SECTIONS.includes(section) ? section : "hub";
+}
+
 function currentScreen() {
   return document.querySelector(".desktop").dataset.screen || "overview";
+}
+
+function currentSettingsSection() {
+  return document.querySelector(".desktop").dataset.settingsSection || "hub";
 }
 
 async function loadFixture(stateId) {
@@ -843,13 +1060,14 @@ function renderEvents(events) {
 
 function setSourceCopy(source) {
   const screen = currentScreen();
+  const settingsSection = currentSettingsSection();
   const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
   const footerByScreen = {
     "quick-start": "Quick Start · summary control panel",
     accounts: "Аккаунты · live только чтение",
     "api-connections": "API-подключения · список маршрутов",
     diagnostics: "Диагностика · detail screen",
-    settings: "Настройки · hub разделов",
+    settings: settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов",
     setup: "Setup · admission preview",
     "select-client": "Select Client · candidate preview",
     "import-existing": "Import · transaction preview"
@@ -859,7 +1077,9 @@ function setSourceCopy(source) {
     accounts: "Пул аккаунтов, статусы проверки и распределение по режимам.",
     "api-connections": "Маршруты внешних моделей, статусы проверки и безопасные действия.",
     diagnostics: "Проверка цепочки подключения, аккаунтов и режима прокси.",
-    settings: "Конфигурация клиента, данных приложения и безопасных действий.",
+    settings: settingsSection === "data-layout"
+      ? "Состояние каталога данных, разрешений и безопасных операций установки."
+      : "Конфигурация клиента, данных приложения и безопасных действий.",
     setup: "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
     "select-client": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
     "import-existing": "Перенесите найденную конфигурацию без изменения рабочих файлов Codex."
@@ -1975,6 +2195,7 @@ function renderSettingsSnapshot(snapshot) {
     };
     banner.textContent = copy[visualState] || copy.unknown;
   }
+  renderDataLayoutSnapshot(snapshot);
 }
 
 function updateSettingsActionMetadata() {
@@ -1986,6 +2207,102 @@ function updateSettingsActionMetadata() {
   target.textContent = launch.available === false
     ? `недоступно · ${launch.unavailable_reason || "server-owned path не предоставлен"}`
     : "доступно · server-owned bounded dispatch";
+}
+
+function setSettingsSection(section) {
+  const normalized = SETTINGS_SECTIONS.includes(section) ? section : "hub";
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.settingsSection = normalized;
+  const hub = document.getElementById("settingsHub");
+  const panel = document.getElementById("dataLayoutPanel");
+  const finder = document.getElementById("dataLayoutOpenFinderAction");
+  const isDataLayout = normalized === "data-layout" && currentScreen() === "settings";
+  if (hub) {
+    hub.hidden = isDataLayout;
+  }
+  if (panel) {
+    panel.hidden = !isDataLayout;
+  }
+  if (finder) {
+    finder.hidden = !isDataLayout;
+    finder.disabled = true;
+    finder.title = "Показать в Finder доступно только через desktop/native или admitted human-open surface.";
+  }
+}
+
+function dataLayoutModelFromSnapshot(snapshot) {
+  const visualState = snapshot?.runtime?.visual_state || snapshot?.state_id || snapshot?.ui_state || "unknown";
+  const key = snapshot?.source === "live_readonly" && snapshot?.status === "integration_failure"
+    ? "integration_failure"
+    : canonicalState(visualState);
+  return DATA_LAYOUT_FIXTURES[key] || DATA_LAYOUT_FIXTURES.unknown;
+}
+
+function setDataLayoutChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function renderDataLayoutSnapshot(snapshot) {
+  const model = dataLayoutModelFromSnapshot(snapshot || {});
+  const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
+  setDataLayoutChip("dataLayoutModeChip", model.visual, model.mode);
+  setDataLayoutChip("dataLayoutPackageChip", model.visual, model.packageStatus);
+  setDataLayoutChip("dataLayoutDirectoryChip", model.directoryVisual, model.directoryStatus);
+  setDataLayoutChip("dataLayoutStructureChip", model.structureVisual, model.structureVisual === "green" ? "summary preview" : "not confirmed");
+  setDataLayoutChip("dataLayoutPermissionsChip", model.permissionsVisual, model.permissionsVisual === "green" ? "preview ok" : model.permissions.read);
+  setDataLayoutChip("dataLayoutSnapshotChip", model.snapshotVisual, model.snapshotLabel);
+
+  text("dataLayoutPackageStatus", model.packageStatus);
+  text("dataLayoutSchemaVersion", model.schemaVersion);
+  text("dataLayoutWritable", model.writable);
+  text("dataLayoutSnapshotAvailable", model.snapshotAvailable);
+  text("dataLayoutRollbackPoint", model.rollbackPoint);
+  text("dataLayoutLastChecked", model.lastChecked);
+  text("dataLayoutPath", model.directoryPath);
+  const pathNode = document.getElementById("dataLayoutPath");
+  if (pathNode) {
+    pathNode.title = model.directoryPath;
+  }
+
+  setDataLayoutChip("dataLayoutConfigStatus", model.structure.config[1], model.structure.config[0]);
+  setDataLayoutChip("dataLayoutAccountsStatus", model.structure.accounts[1], model.structure.accounts[0]);
+  setDataLayoutChip("dataLayoutSnapshotsStatus", model.structure.snapshots[1], model.structure.snapshots[0]);
+  setDataLayoutChip("dataLayoutLogsStatus", model.structure.logs[1], model.structure.logs[0]);
+  setDataLayoutChip("dataLayoutRegistryStatus", model.structure.registry[1], model.structure.registry[0]);
+
+  text("dataLayoutReadAccess", model.permissions.read);
+  text("dataLayoutWriteAccess", model.permissions.write);
+  text("dataLayoutOwner", model.permissions.owner);
+  text("dataLayoutMode", model.permissions.mode);
+  text("dataLayoutSecretsIsolation", model.permissions.secrets);
+  text("dataLayoutSnapshotCopy", model.snapshotCopy);
+  text("dataLayoutRollbackCopy", model.rollbackCopy);
+  text(
+    "dataLayoutFooter",
+    source === "live" && model.key === "live_integration_failure"
+      ? "Последняя проверка: live-readonly failed · Предыдущие fixture-данные не используются."
+      : `Последняя проверка: ${model.lastChecked} · Все значения являются preview/deferred summary, не прямым чтением файлов.`
+  );
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner && currentScreen() === "settings" && currentSettingsSection() === "data-layout") {
+    banner.className = `fixture-banner ${ACCOUNT_VISUAL_CLASS[model.visual] || VISUAL_CLASS[model.visual] || "neutral"}`;
+    banner.textContent = source === "live"
+      ? "Live-readonly статус данных недоступен. Предыдущие fixture-данные не используются."
+      : (
+        model.key === "stale"
+          ? "Данные layout устарели. Stale preview не является зелёным состоянием."
+          : "Демо-режим. Layout данных показан как preview, не как состояние файловой системы."
+      );
+  }
 }
 
 function setActionsBusy(isBusy) {
@@ -2185,10 +2502,14 @@ function runOnboardFromModal() {
   maybeConfirmAndRun("onboard_account");
 }
 
-function setScreen(screen, updateUrl = false) {
+function setScreen(screen, updateUrl = false, settingsSection = null) {
   const nextScreen = SCREENS.includes(screen) ? screen : "overview";
+  const nextSettingsSection = nextScreen === "settings"
+    ? (settingsSection || (updateUrl ? "hub" : settingsSectionFromLocation()))
+    : "hub";
   const desktop = document.querySelector(".desktop");
   desktop.dataset.screen = nextScreen;
+  desktop.dataset.settingsSection = nextSettingsSection;
   if (nextScreen !== "accounts") {
     closeAccountDrawer();
   }
@@ -2211,6 +2532,7 @@ function setScreen(screen, updateUrl = false) {
   for (const node of document.querySelectorAll(".quick-start-only")) {
     node.hidden = nextScreen !== "quick-start";
   }
+  setSettingsSection(nextSettingsSection);
   for (const link of document.querySelectorAll("[data-screen-link]")) {
     const active = link.dataset.screenLink === nextScreen;
     link.classList.toggle("active", active);
@@ -2236,7 +2558,7 @@ function setScreen(screen, updateUrl = false) {
           ? "Диагностика"
           : (
             nextScreen === "settings"
-              ? "Настройки"
+              ? (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
               : (
                 nextScreen === "setup"
                   ? "Настройка Wild Boar Proxy"
@@ -2256,6 +2578,17 @@ function setScreen(screen, updateUrl = false) {
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("screen", nextScreen);
+    if (nextScreen === "settings" && nextSettingsSection === "data-layout") {
+      url.searchParams.set("section", "data-layout");
+    } else {
+      const params = new URLSearchParams();
+      for (const [key, value] of url.searchParams.entries()) {
+        if (key !== "section") {
+          params.append(key, value);
+        }
+      }
+      url.search = params.toString();
+    }
     window.history.replaceState({}, "", url);
   }
 }
@@ -3970,6 +4303,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       refreshCurrentSource();
     });
   }
+  for (const link of document.querySelectorAll("[data-settings-section-link]")) {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setScreen("settings", true, link.dataset.settingsSectionLink);
+      refreshCurrentSource();
+    });
+  }
+  document.getElementById("dataLayoutBackAction")?.addEventListener("click", () => {
+    setScreen("settings", true, "hub");
+    refreshCurrentSource();
+  });
   for (const button of document.querySelectorAll(".live-action")) {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }

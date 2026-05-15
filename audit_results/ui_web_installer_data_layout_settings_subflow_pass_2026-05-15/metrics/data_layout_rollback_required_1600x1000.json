@@ -1,0 +1,117 @@
+{
+  "url": "http://127.0.0.1:8766/?screen=settings&section=data-layout&source=fixture&state=down",
+  "screen": "settings",
+  "settingsSection": "data-layout",
+  "title": "Данные приложения",
+  "subtitle": "Состояние каталога данных, разрешений и безопасных операций установки.",
+  "bannerClass": "fixture-banner amber",
+  "banner": "Демо-режим. Layout данных показан как preview, не как состояние файловой системы.",
+  "hubHidden": true,
+  "panelHidden": false,
+  "modeChip": "fixture preview",
+  "modeChipClass": "chip amber",
+  "packageChip": "pending preview",
+  "packageChipClass": "chip amber",
+  "directoryChip": "attention",
+  "directoryChipClass": "chip amber",
+  "snapshotChip": "rollback required",
+  "snapshotChipClass": "chip amber",
+  "dataPath": "~/Library/Application Support/Wild Boar Proxy",
+  "dataPathClientWidth": 619,
+  "dataPathScrollWidth": 619,
+  "documentScrollHeight": 1000,
+  "documentScrollWidth": 1600,
+  "mainClientHeight": 942,
+  "mainScrollHeight": 942,
+  "dataLayoutRect": {
+    "top": 194,
+    "bottom": 898,
+    "left": 373,
+    "right": 1531,
+    "width": 1158,
+    "height": 704
+  },
+  "dataLayoutBottom": 898,
+  "visibleSvgIcons": 0,
+  "visibleImgIcons": 8,
+  "hasInput": 0,
+  "hasFileInput": 0,
+  "hasTextarea": 0,
+  "hasSelect": 0,
+  "hasCanvas": 0,
+  "hasPre": 0,
+  "activeForbiddenActions": 0,
+  "finder": {
+    "hidden": false,
+    "disabled": true,
+    "text": "Показать в Finder"
+  },
+  "buttons": [
+    {
+      "id": "dataLayoutOpenFinderAction",
+      "text": "Показать в Finder",
+      "className": "button settings-only",
+      "clientWidth": 190,
+      "scrollWidth": 190,
+      "clientHeight": 38,
+      "scrollHeight": 38
+    },
+    {
+      "id": "dataLayoutBackAction",
+      "text": "Назад к настройкам",
+      "className": "button small",
+      "clientWidth": 179,
+      "scrollWidth": 179,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
+      "id": "",
+      "text": "Создать snapshot",
+      "className": "button small disabled",
+      "clientWidth": 139,
+      "scrollWidth": 139,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
+      "id": "",
+      "text": "Откатить",
+      "className": "button small disabled",
+      "clientWidth": 82,
+      "scrollWidth": 82,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
+      "id": "",
+      "text": "Переинициализировать",
+      "className": "button small danger disabled",
+      "clientWidth": 168,
+      "scrollWidth": 168,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
+      "id": "",
+      "text": "Очистить данные",
+      "className": "button small danger disabled",
+      "clientWidth": 132,
+      "scrollWidth": 132,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
+      "id": "",
+      "text": "Сбросить layout",
+      "className": "button small danger disabled",
+      "clientWidth": 132,
+      "scrollWidth": 132,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    }
+  ],
+  "buttonOverflow": [],
+  "chipOverflow": [],
+  "clippedPath": false
+}
