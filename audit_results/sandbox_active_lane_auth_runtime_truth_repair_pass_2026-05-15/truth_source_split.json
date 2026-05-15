@@ -1,0 +1,242 @@
+{
+  "primary_truth_owner": "healthcheck --json",
+  "summary_owner": "status --json",
+  "materialization_boundary_owner": "sync --json",
+  "control_layer_inventory_surfaces": {
+    "stable_target_switch_dry_run": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Target switch contract surface is available.",
+      "machine_error_code": "TARGET_SWITCH_CONTRACT_READY",
+      "changed_files": [],
+      "next_action": "review_target_switch_contract",
+      "liveness": "unknown",
+      "severity": "recoverable",
+      "operator_action": "user_action",
+      "command_mode": "dry_run",
+      "target_surface": {
+        "status": "declared_review_only",
+        "observed_stable_inventory_source": {
+          "source": "stable_config_parent",
+          "path": "/Users/kirillponomarev/.codex-custom-test/stable",
+          "path_resolution": "fallback",
+          "exists": true
+        },
+        "approved_repair_target_reference": {
+          "status": "fixed_not_materialized",
+          "schema_version": 1,
+          "target_identity": "companion_managed_stable_auth_inventory",
+          "target_kind": "control_owned_inventory_path",
+          "inventory_dir": "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+          "reference_file": "/Users/kirillponomarev/.codex-custom-test/managed/approved-repair-target.json",
+          "ownership": "control_layer",
+          "location_scope": "companion_managed_data",
+          "reference_file_exists": false,
+          "inventory_dir_exists": false
+        },
+        "target_switch_transaction_metadata_surface": {
+          "status": "reserved_not_materialized",
+          "schema_version": 1,
+          "transaction_file": "/Users/kirillponomarev/.codex-custom-test/managed/target-switch-transaction.json",
+          "ownership": "control_layer",
+          "location_scope": "companion_managed_data",
+          "transaction_file_exists": false
+        },
+        "mode_set_is_target_switch": false
+      },
+      "write_surface_declared": true,
+      "declared_write_surfaces": [
+        "approved_control_target_reference_surface",
+        "target_switch_transaction_metadata"
+      ],
+      "forbidden_surfaces": [
+        "~/.cli-proxy-api",
+        "engine_baseline_auth_storage",
+        "backend-registry.json",
+        "supervisor-state.json"
+      ],
+      "transaction_phases": [
+        "snapshot",
+        "stage",
+        "verify",
+        "switch",
+        "rollback"
+      ],
+      "verify_scope": [
+        "target_reference_correctness",
+        "switch_completion_only",
+        "transaction_completeness"
+      ]
+    },
+    "stable_repair_dry_run": {
+      "status": "ok",
+      "exit_code": 0,
+      "human_message": "Stable repair dry-run completed; no repair needed.",
+      "machine_error_code": "STABLE_REPAIR_NOT_NEEDED",
+      "changed_files": [],
+      "next_action": "none",
+      "liveness": "unknown",
+      "severity": "recoverable",
+      "operator_action": "none",
+      "would_change": false,
+      "transaction_plan": {
+        "mode": "dry_run",
+        "snapshot_required": true,
+        "lock_required": true,
+        "lock_preflight": {
+          "status": "available",
+          "machine_error_code": "OK",
+          "holder_pid": null
+        },
+        "repair_apply_authority": {
+          "status": "contract_ready",
+          "source_of_copy_authority": {
+            "source_kind": "eligible_registry_auth_refs",
+            "policy_input_surface": "backend-registry.json",
+            "source_files_mutable": false,
+            "registry_auth_ref_source_mutation_authority": false,
+            "observed_source_delete_authority": false,
+            "engine_owned_delete_authority": false
+          },
+          "target_mutation_authority": {
+            "target_identity": "companion_managed_stable_auth_inventory",
+            "target_kind": "control_owned_inventory_path",
+            "inventory_dir": "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+            "write_scope": "approved_target_inventory_only",
+            "exactness": "exact_approved_set",
+            "prune_authority": "control_owned_target_entries_only"
+          },
+          "field_mapping": {
+            "observed_source_fields": [
+              "observed_source_matching_allowed_auths",
+              "observed_source_disallowed_auths",
+              "observed_source_missing_allowed_auths",
+              "observed_source_unknown_auths"
+            ],
+            "target_reconciliation_fields": [
+              "target_would_add",
+              "target_would_prune",
+              "target_would_keep"
+            ]
+          }
+        },
+        "registry_source_inputs": {
+          "eligible_registry_auth_refs": [],
+          "source_copy_missing_auth_refs": [],
+          "source_copy_basename_collisions": []
+        },
+        "repair_observation": {
+          "status": "clear",
+          "machine_error_code": "OK",
+          "stable_auth_inventory_source": {
+            "source": "stable_config_parent",
+            "path": "/Users/kirillponomarev/.codex-custom-test/stable",
+            "path_resolution": "fallback",
+            "exists": true
+          },
+          "observed_source_matching_allowed_auths": [],
+          "observed_source_disallowed_auths": [],
+          "observed_source_missing_allowed_auths": [],
+          "observed_source_unknown_auths": []
+        },
+        "repair_target_contract_surface": {
+          "approved_repair_target_reference": {
+            "status": "fixed_not_materialized",
+            "schema_version": 1,
+            "target_identity": "companion_managed_stable_auth_inventory",
+            "target_kind": "control_owned_inventory_path",
+            "inventory_dir": "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+            "reference_file": "/Users/kirillponomarev/.codex-custom-test/managed/approved-repair-target.json",
+            "ownership": "control_layer",
+            "location_scope": "companion_managed_data",
+            "reference_file_exists": false,
+            "inventory_dir_exists": false
+          },
+          "target_switch_transaction_metadata_surface": {
+            "status": "reserved_not_materialized",
+            "schema_version": 1,
+            "transaction_file": "/Users/kirillponomarev/.codex-custom-test/managed/target-switch-transaction.json",
+            "ownership": "control_layer",
+            "location_scope": "companion_managed_data",
+            "transaction_file_exists": false
+          }
+        },
+        "target_reconciliation_plan": {
+          "target_exactness": "exact_approved_set",
+          "target_inventory_dir": "/Users/kirillponomarev/.codex-custom-test/managed/stable-repair-target",
+          "target_inventory_entries": [],
+          "target_would_add": [],
+          "target_would_prune": [],
+          "target_would_keep": []
+        },
+        "blocked_reasons": []
+      }
+    }
+  },
+  "primary_blockers": [
+    {
+      "kind": "auth_runtime_truth",
+      "evidence": {
+        "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+        "healthcheck_blocking_reason": "models_surface_unavailable_or_invalid",
+        "healthcheck_last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+        "status_machine_error_code": "ATTESTATION_FAILED",
+        "status_blocking_reason": "models_surface_unavailable_or_invalid",
+        "status_last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+      }
+    },
+    {
+      "kind": "active_lane_materialization",
+      "evidence": {
+        "sync_effective_mode": "stable",
+        "sync_endpoint": "http://127.0.0.1:8318/v1",
+        "selected_backend_ids_after_sync": [],
+        "managed_listener_8320_listening": false,
+        "repo_owned_default_consumer_provisioned": false,
+        "external_launcher_readiness_status": "default_path_present_ownership_unverified"
+      }
+    },
+    {
+      "kind": "control_layer_repair_paths_not_sufficient",
+      "evidence": {
+        "target_switch_machine_error_code": "TARGET_SWITCH_CONTRACT_READY",
+        "target_switch_approved_target_status": "fixed_not_materialized",
+        "stable_repair_machine_error_code": "STABLE_REPAIR_NOT_NEEDED",
+        "stable_repair_would_change": false,
+        "stable_repair_eligible_registry_auth_refs": []
+      }
+    }
+  ],
+  "code_evidence": [
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "line": 197,
+      "fact": "live attestation owned by healthcheck --json"
+    },
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "line": 751,
+      "fact": "models_surface_unavailable_or_invalid emitted when listener is reachable but models probe fails"
+    },
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "line": 5417,
+      "fact": "failed runtime attestation falls back to ATTESTATION_FAILED"
+    },
+    {
+      "file": "wild_boar_proxy/sandbox_owner_helpers.py",
+      "line": 233,
+      "fact": "sync helper writes effective_mode stable and rewrites base_url to stable port"
+    },
+    {
+      "file": "COMMAND_API.md",
+      "line": 1050,
+      "fact": "stable repair apply is limited to approved target inventory reconciliation only"
+    },
+    {
+      "file": "COMMAND_API.md",
+      "line": 1112,
+      "fact": "stable-runtime consumer activation path is only through launch smoke --json"
+    }
+  ]
+}

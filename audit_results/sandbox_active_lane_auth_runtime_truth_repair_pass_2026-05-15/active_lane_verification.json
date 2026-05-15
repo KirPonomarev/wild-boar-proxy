@@ -1,0 +1,22 @@
+{
+  "decision": "STOP_AND_DIAGNOSE",
+  "go_to_rerun_account_lifecycle_sandbox_actions_pass": false,
+  "earned": [
+    "active-lane blocker reconfirmed on fresh sandbox owner packets",
+    "stable target switch and stable repair dry-run contracts inspected",
+    "no code changes required to establish current truth"
+  ],
+  "not_earned": [
+    "verified active routing",
+    "managed listener readiness",
+    "an admissible in-scope repair path"
+  ],
+  "root_cause_localization": {
+    "primary": "auth_runtime_truth",
+    "secondary": [
+      "active_lane_materialization_missing",
+      "control_layer_repair_path_not_applicable_in_current_scope"
+    ]
+  },
+  "next_contour_candidate": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_AND_MATERIALIZATION_SCOPE_ADMISSION_PASS"
+}

@@ -1,0 +1,2 @@
+python3 -m unittest -q   tests.test_cli.CliTests.test_accounts_promote_status_verification_failure_rolls_back   tests.test_cli.CliTests.test_status_reports_stable_runtime_consumer_contract_when_approved_target_not_ready   tests.test_cli.CliTests.test_stable_target_switch_dry_run_returns_contract_without_mutation   tests.test_cli.CliTests.test_stable_repair_dry_run_reports_not_needed_when_target_matches_eligible_registry_auths
+RESULT: OK (4 tests, 1.651s)
