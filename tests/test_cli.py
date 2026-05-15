@@ -8637,7 +8637,7 @@ class CliTests(unittest.TestCase):
             selected_backend_ids=["backend-a", "backend-b"]
         )
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             sync_result = self.run_cli("sync", "--json")
@@ -14793,22 +14793,27 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["external_models_result"]["secrets_preserved"])
 
     def test_sync_returns_single_json_object(self) -> None:
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, "managed listener should remain absent")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
         self.assertEqual(payload["liveness"], "down")
         self.assertEqual(payload["effective_mode"], "stable")
-        self.assertEqual(payload["endpoint"], "http://127.0.0.1:8318/v1")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
         self.assertIn(str(self.managed_dir / "supervisor-state.json"), payload["changed_files"])
-        self.assertEqual(result.stderr.strip(), "sync-ran")
+        self.assertEqual(result.stderr.strip(), f"sync-stable:{port}")
+        helper_text = self.sync_script.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
+        self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
 
     def test_sync_materializes_selected_backend_snapshot_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]
         )
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             result = self.run_cli("sync", "--json")
@@ -14845,6 +14850,38 @@ class CliTests(unittest.TestCase):
             state.get("selected_backend_ids_observed_at"),
         )
 
+    def test_sync_repopulates_selected_backend_ids_from_live_capable_registry(self) -> None:
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["selected_backend_ids"] = []
+        state.pop("selected_backend_ids_observed_at", None)
+        state.pop("selected_backend_snapshot", None)
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("sync", "--json")
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        state_after = json.loads(state_path.read_text())
+        self.assertEqual(state_after.get("selected_backend_ids"), ["backend-a"])
+        snapshot = state_after.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertEqual(snapshot.get("selected_backend_ids"), ["backend-a"])
+        self.assertEqual(
+            snapshot.get("selected_backends_digest"),
+            runtime_mod.get_selected_backend_ids_digest(["backend-a"]),
+        )
+
     def test_sync_refreshes_selected_backend_snapshot_observed_at_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]
@@ -14864,7 +14901,7 @@ class CliTests(unittest.TestCase):
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
 
         port = free_port()
-        self.configure_managed_runtime_probe(port)
+        self.configure_stable_runtime_probe(port)
         server, thread = self.start_probe_server(port)
         try:
             result = self.run_cli("sync", "--json")
@@ -14899,6 +14936,7 @@ class CliTests(unittest.TestCase):
         )
         state["selected_backend_snapshot"] = expected_snapshot
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        self.configure_stable_runtime_probe(free_port())
 
         result = self.run_cli("sync", "--json")
 
@@ -15064,6 +15102,125 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{port}/v1")
         self.assertIn(str(self.profile_dir / "config.toml"), payload["changed_files"])
         self.assertEqual(result.stderr.strip(), "sync-promoted")
+
+    def test_sync_preserves_stable_runtime_truth_when_activation_evidence_exists(self) -> None:
+        self.configure_rotation_evidence_fixture(
+            selected_backend_ids=["backend-a", "backend-b"]
+        )
+        stable_port = free_port()
+        managed_port = free_port()
+        repair_target_dir = self.managed_dir / "stable-repair-target"
+        repair_target_dir.mkdir(parents=True, exist_ok=True)
+        generated_config = self.managed_dir / "stable-runtime-config.generated.yaml"
+        generated_config.write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n"
+            f'auth-dir: "{repair_target_dir}"\n',
+            encoding="utf-8",
+        )
+        (self.stable_dir / "config.yaml").write_text(
+            "host: 127.0.0.1\n"
+            f"port: {stable_port}\n",
+            encoding="utf-8",
+        )
+        runtime_effective_mode = self.profile_dir / "runtime-effective-mode.txt"
+        runtime_effective_mode.write_text("stable\n", encoding="utf-8")
+        config_toml_path = self.profile_dir / "config.toml"
+        runtime_mod.write_toml_string_atomic(
+            config_toml_path, "base_url", f"http://127.0.0.1:{stable_port}/v1"
+        )
+        state_path = self.managed_dir / "supervisor-state.json"
+        state = json.loads(state_path.read_text())
+        state["effective_mode"] = "stable"
+        state["status"] = "unknown"
+        state["last_error"] = ""
+        state["stable_runtime_consumer_snapshot"] = {
+            "schema_version": 1,
+            "activation_method": "process_local_env_override",
+            "selected_config_file": str(generated_config),
+            "selected_source_kind": "approved_repair_target",
+            "selected_source_path": str(repair_target_dir),
+            "activation_outcome": "approved_target_activated",
+            "fallback_reason": "",
+            "observed_at_utc": runtime_mod.now_iso(),
+        }
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+        sync_script = self.profile_dir / "sync-promotes-managed-truth.sh"
+        sync_script.write_text(
+            "#!/bin/sh\n"
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "port = os.environ['WBP_TEST_MANAGED_PORT']\n"
+            "state_path = Path(os.environ['WBP_STATE_FILE'])\n"
+            "state = json.loads(state_path.read_text())\n"
+            "state['effective_mode'] = 'managed'\n"
+            "state['status'] = 'healthy'\n"
+            "state['last_error'] = ''\n"
+            "state['managed_port'] = int(port)\n"
+            "state_path.write_text(json.dumps(state) + '\\n')\n"
+            "Path(os.environ['WBP_RUNTIME_EFFECTIVE_MODE_FILE']).write_text('managed\\n')\n"
+            "Path(os.environ['WBP_MANAGED_CONFIG_FILE']).write_text(f'host: 127.0.0.1\\nport: {port}\\n')\n"
+            "config_path = Path(os.environ['WBP_CONFIG_TOML'])\n"
+            "lines = config_path.read_text().splitlines()\n"
+            "out = []\n"
+            "for line in lines:\n"
+            "    if line.strip().startswith('base_url = '):\n"
+            "        out.append(f'base_url = \\\"http://127.0.0.1:{port}/v1\\\"')\n"
+            "    else:\n"
+            "        out.append(line)\n"
+            "config_path.write_text('\\n'.join(out) + '\\n')\n"
+            "PY\n"
+            "echo sync-promoted-managed >&2\n",
+            encoding="utf-8",
+        )
+        sync_script.chmod(0o755)
+        env = self.env()
+        env["WBP_SYNC_SCRIPT"] = str(sync_script)
+        env["WBP_TEST_MANAGED_PORT"] = str(managed_port)
+        stable_server = ThreadingHTTPServer(("127.0.0.1", stable_port), ProbeHandler)
+        stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
+        managed_server = ThreadingHTTPServer(("127.0.0.1", managed_port), ProbeHandler)
+        managed_thread = threading.Thread(target=managed_server.serve_forever, daemon=True)
+        stable_thread.start()
+        managed_thread.start()
+        try:
+            result = subprocess.run(
+                ["python3", "-m", "wild_boar_proxy", "sync", "--json"],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            stable_server.shutdown()
+            stable_thread.join()
+            stable_server.server_close()
+            managed_server.shutdown()
+            managed_thread.join()
+            managed_server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["effective_mode"], "stable")
+        self.assertEqual(payload["endpoint"], f"http://127.0.0.1:{stable_port}/v1")
+        self.assertEqual(
+            (self.profile_dir / "runtime-effective-mode.txt").read_text(encoding="utf-8").strip(),
+            "stable",
+        )
+        state_after = json.loads(state_path.read_text())
+        self.assertEqual(state_after.get("effective_mode"), "stable")
+        self.assertEqual(
+            runtime_mod.read_toml_string(self.profile_dir / "config.toml", "base_url"),
+            f"http://127.0.0.1:{stable_port}/v1",
+        )
+        snapshot = state_after.get("selected_backend_snapshot")
+        self.assertIsInstance(snapshot, dict)
+        self.assertEqual(snapshot.get("source_name"), "sync --json")
+        self.assertEqual(result.stderr.strip(), "sync-promoted-managed")
 
     def test_mode_get_reports_stable_when_managed_listener_is_absent(self) -> None:
         (self.profile_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")

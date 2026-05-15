@@ -1,0 +1,32 @@
+{
+  "contour": "SYNC_MANAGED_MODE_WRITE_SURFACE_REPAIR_PASS",
+  "status": "completed",
+  "final_verdict": "GO_TO_RUNTIME_REPROOF_PASS",
+  "next_action": "refresh live runtime activation evidence now that sync no longer restamps managed truth",
+  "summary": {
+    "sync_packet": {
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "status_packet": {
+      "machine_error_code": "OK",
+      "effective_mode": "stable",
+      "claim_gate_status": "blocked",
+      "policy_drift_status": "detected",
+      "consumer_activation_readiness_status": "activation_pending"
+    },
+    "rotation_packet": {
+      "machine_error_code": "OK",
+      "evidence_freshness": "fresh",
+      "policy_drift_status": "clear"
+    },
+    "post_status_selector_snapshot": {
+      "selected_backend_ids_field_status": "cleared",
+      "selected_backend_snapshot_status": "preserved_valid"
+    }
+  },
+  "why_not_selector_refresh": "selector freshness and participation evidence are already present and fresh",
+  "why_not_stop": "the repaired seam is causally verified, selector evidence still survives as a valid nested snapshot, and the remaining blocker is a narrower runtime reproof gap"
+}

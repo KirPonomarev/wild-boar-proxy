@@ -875,8 +875,16 @@ def managed_status_script_path(paths: RuntimePaths) -> Path:
     return paths.managed_dir / "bin" / "codex-managed-status"
 
 
+def default_sync_script_path(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "supervisor-sync.sh"
+
+
 def launcher_path_is_default(paths: RuntimePaths) -> bool:
     return paths.launcher_script == default_launcher_script_path(paths.profile_dir)
+
+
+def sync_script_path_is_default(paths: RuntimePaths) -> bool:
+    return paths.sync_script == default_sync_script_path(paths)
 
 
 def compute_repo_managed_default_launcher_digest(script_payload: str) -> str:
@@ -1132,6 +1140,21 @@ def ensure_repo_owned_owner_helper(path: Path, helper_kind: str) -> None:
         return
     if not os.access(path, os.X_OK):
         path.chmod(0o755)
+
+
+def ensure_repo_owned_default_sync_helper(paths: RuntimePaths) -> None:
+    if not sync_script_path_is_default(paths):
+        return
+    expected_text = render_repo_owned_owner_helper_script_text("sync")
+    if not paths.sync_script.exists():
+        write_executable_text_atomic(paths.sync_script, expected_text)
+        return
+    current_text = paths.sync_script.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(paths.sync_script, expected_text)
+        return
+    if not os.access(paths.sync_script, os.X_OK):
+        paths.sync_script.chmod(0o755)
 
 
 def installer_owner_helper_paths(paths: RuntimePaths) -> list[Path]:
@@ -6721,6 +6744,7 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
 
 
 def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
+    ensure_repo_owned_default_sync_helper(paths)
     if not paths.sync_script.exists():
         raise RuntimeErrorInfo(
             f"Missing sync script: {paths.sync_script}",
@@ -6730,6 +6754,12 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
     before = snapshot_known_files(paths)
     command = [str(paths.sync_script), model or get_model(paths)]
     with serialized_lock(paths):
+        pre_sync_state = read_json(paths.state_file, required=False)
+        pre_sync_effective_mode = get_effective_mode(paths, pre_sync_state)
+        pre_sync_has_stable_activation_evidence = (
+            pre_sync_effective_mode == "stable"
+            and snapshot_confirms_approved_target_activation(paths, pre_sync_state)
+        )
         result = subprocess.run(
             command,
             capture_output=True,
@@ -6737,6 +6767,22 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             env=sanitized_env(),
             check=False,
         )
+        state = read_json(paths.state_file, required=False)
+        if pre_sync_has_stable_activation_evidence:
+            stable_endpoint = get_endpoint(paths, "stable")[2]
+            state_effective_mode = str(state.get("effective_mode", ""))
+            artifact_effective_mode = read_effective_mode_artifact(paths)
+            configured_base_url = read_toml_string(paths.config_toml, "base_url")
+            if (
+                state_effective_mode != "stable"
+                or artifact_effective_mode != "stable"
+                or configured_base_url != stable_endpoint
+            ):
+                state["effective_mode"] = "stable"
+                write_json_atomic(paths.state_file, state)
+                write_text_atomic(paths.runtime_effective_mode_file, "stable")
+                write_toml_string_atomic(paths.config_toml, "base_url", stable_endpoint)
+                state = read_json(paths.state_file, required=False)
     if result.stderr:
         sys.stderr.write(result.stderr)
     if result.stdout:
@@ -6750,7 +6796,6 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
         paths.runtime_effective_mode_file,
         managed_pid_path(paths),
     ]
-    state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
     host, port, endpoint = get_endpoint(paths, effective_mode)
@@ -9785,6 +9830,7 @@ def selected_backend_ids_from_state(state: dict[str, Any]) -> list[str]:
 
 
 def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
+    ensure_repo_owned_default_sync_helper(paths)
     if not paths.sync_script.exists():
         raise RuntimeErrorInfo(
             f"Missing sync script: {paths.sync_script}",
@@ -11585,6 +11631,7 @@ def run_promote(
 
         promotion_result["sync_attempted"] = True
         try:
+            ensure_repo_owned_default_sync_helper(paths)
             if not paths.sync_script.exists():
                 raise RuntimeErrorInfo(
                     f"Missing sync script: {paths.sync_script}",

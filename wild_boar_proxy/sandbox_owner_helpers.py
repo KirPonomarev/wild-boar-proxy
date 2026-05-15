@@ -13,6 +13,7 @@ from typing import Any
 
 from .runtime import (
     RuntimePaths,
+    get_launch_capable_backend_ids,
     now_iso,
     read_json,
     read_yaml_value,
@@ -435,6 +436,7 @@ def cmd_sync(paths: RuntimePaths, args: argparse.Namespace) -> int:
     state["last_error"] = ""
     state["current_proxy_url"] = ""
     state["last_sync_at"] = now_iso()
+    state["selected_backend_ids"] = get_launch_capable_backend_ids(registry)
     sync_state_counts_from_registry(registry, state)
     save_state(paths, state)
     write_text_atomic(paths.runtime_effective_mode_file, "stable")

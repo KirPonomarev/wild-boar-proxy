@@ -1,0 +1,57 @@
+{
+  "repair_target": "default sync owner helper path",
+  "repo_changes": [
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "lines": "878-887",
+      "purpose": "declare the control-owned default sync helper path and its default-path predicate"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "lines": "1145-1157",
+      "purpose": "reprovision the default sync helper to the repo-owned helper payload even when a legacy script is present"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "lines": "6746-6785",
+      "purpose": "ensure sync owner-path execution uses the repo-owned default helper before subprocess execution"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "lines": "9830-9836 and 11631-11637",
+      "purpose": "apply the same default-helper reprovisioning to other sync-owner invocation sites"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/sandbox_owner_helpers.py",
+      "lines": "16 and 439",
+      "purpose": "repopulate selected_backend_ids from the live-capable registry lane so sync can materialize a fresh nested selector snapshot on the real default helper path"
+    }
+  ],
+  "test_changes": [
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "lines": "14795-14809",
+      "purpose": "prove default sync path gets reprovisioned to the repo-owned helper"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "lines": "14811-14909 and 8635-8666",
+      "purpose": "move default sync success tests onto stable listener semantics"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "lines": "15074-15191",
+      "purpose": "regress a sync override that tries to restamp managed truth after stable activation evidence exists"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+      "lines": "14853-14879",
+      "purpose": "prove the default repo-owned sync helper repopulates selected_backend_ids from the live-capable registry when prior state was empty"
+    }
+  ],
+  "non_goals": [
+    "do not modify selector snapshot materialization logic",
+    "do not change explicit WBP_SYNC_SCRIPT override semantics",
+    "do not reopen auth-source work inside this contour"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "status_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "effective_stable_runtime_consumer_source_status": "observed_source_active",
+    "effective_stable_runtime_consumer_source_matches_desired": false,
+    "consumer_activation_readiness_status": "activation_pending"
+  },
+  "live_runtime_files": {
+    "runtime_effective_mode_file": "stable",
+    "config_toml_base_url": "http://127.0.0.1:8318/v1"
+  },
+  "post_status_state_excerpt": {
+    "selected_backend_ids": [],
+    "selected_backend_snapshot_present": true,
+    "selected_backend_snapshot_source_name": "sync --json",
+    "status": "failed",
+    "effective_mode": "stable"
+  },
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt"
+  ],
+  "interpretation": "managed truth reassertion is repaired and selector snapshot survives status, but approved-target activation evidence is still stale for effective consumer truth"
+}
