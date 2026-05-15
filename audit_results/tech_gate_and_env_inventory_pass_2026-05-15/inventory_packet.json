@@ -1,0 +1,105 @@
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "repo": {
+    "branch": "codex/external-agent-lab-isolated",
+    "head": "42f1c16",
+    "tracked_clean": true,
+    "hooks_configured": true
+  },
+  "command_surfaces": {
+    "canon_required_total": 30,
+    "repo_wired_required": 17,
+    "missing_required": 13,
+    "readonly": [
+      "accounts list --json",
+      "healthcheck --json",
+      "mode get --json",
+      "rollout rotation inspect --json",
+      "status --json"
+    ],
+    "mutation": [
+      "accounts demote <id> --json",
+      "accounts hold <id> --json",
+      "accounts onboard --json",
+      "accounts promote <id> --json",
+      "accounts release <id> --json",
+      "accounts retire <id> --json",
+      "launch client --json",
+      "mode set managed --json",
+      "mode set stable --json",
+      "sync --json"
+    ],
+    "missing_required_commands": [
+      "policy stage set <10|15|20> --json",
+      "rollout posture inspect <15|20> --json",
+      "rollout evidence capture 16 --json",
+      "rollout stage prove 10 --json",
+      "rollout stage prove 15 --json",
+      "rollout stage advance 15 <id> --json",
+      "rollout stage advance 20 <id> --json",
+      "installer init --json",
+      "legacy import --source-dir <path> --json",
+      "companion reset --json",
+      "companion uninstall --json",
+      "package experimental build --output-dir <path> --json",
+      "package experimental verify --manifest <path> --json"
+    ]
+  },
+  "ui_actions": {
+    "admitted": [
+      "api_route_allow",
+      "api_route_check",
+      "api_route_disable",
+      "api_route_evidence_capture",
+      "api_route_profile",
+      "api_route_remove",
+      "api_route_validate",
+      "demote_account",
+      "export_diagnostics",
+      "hold_account",
+      "launch_client_dispatch",
+      "launch_smoke",
+      "onboard_account",
+      "promote_account",
+      "refresh_health_detail",
+      "release_account",
+      "retire_account",
+      "set_mode_managed",
+      "set_mode_stable",
+      "stable_repair_plan",
+      "sync_runtime",
+      "validate_account"
+    ],
+    "deferred_or_missing_examples": [
+      "stable_repair_apply",
+      "launch_client",
+      "save_settings",
+      "legacy_import",
+      "installer_init",
+      "policy_stage_set",
+      "api_route_create",
+      "api_route_update"
+    ]
+  },
+  "json_contract": {
+    "strict_json_required": true,
+    "invalid_json_is_hard_failure": true,
+    "required_fields": [
+      "status",
+      "exit_code",
+      "human_message",
+      "machine_error_code",
+      "changed_files",
+      "next_action"
+    ]
+  },
+  "next_step": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "decision": "GO",
+  "decision_basis": [
+    "tracked repo clean",
+    "readonly endpoints are localized in live server wiring",
+    "ui actions use strict payload guards with only ui_action/account_id/route_id admitted",
+    "mutation actions are visible and classifiable without executing them",
+    "no contradiction blocks readonly live admission"
+  ]
+}

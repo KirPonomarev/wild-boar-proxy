@@ -1,0 +1,18 @@
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "decision": "GO_TO_WEB_LIVE_SERVER_READONLY_ADMISSION",
+  "blocked_by": [],
+  "reasons": [
+    "tracked repo clean",
+    "readonly endpoints are localized in live server wiring",
+    "ui actions use strict payload guards with only ui_action/account_id/route_id admitted",
+    "mutation actions are visible and classifiable without executing them",
+    "no contradiction blocks readonly live admission"
+  ],
+  "required_next_preconditions": [
+    "keep contour readonly",
+    "do not invoke mutating ui actions",
+    "treat launch_client_dispatch as bounded and server-owned-path only",
+    "keep fixture separate from live truth"
+  ]
+}
