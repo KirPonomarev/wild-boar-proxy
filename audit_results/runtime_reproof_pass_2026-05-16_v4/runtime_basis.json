@@ -1,0 +1,23 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v4",
+  "pre_reproof_basis": {
+    "status_machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate": "blocked",
+    "policy_drift": "detected",
+    "effective_stable_runtime_consumer_source": "observed_source_active",
+    "consumer_activation_readiness": "activation_pending",
+    "selected_backend_snapshot_observed_at_utc": "2026-05-15T23:13:26.050963+00:00",
+    "stable_runtime_consumer_snapshot_observed_at_utc": "2026-05-15T23:19:25.347606+00:00",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "rotation_selected_backend_count": 15
+  },
+  "runtime_primary_reason": [
+    "claim_gate blockage came from policy_drift on status rather than from selector freshness directly",
+    "effective stable runtime consumer truth had fallen back to observed_source_active",
+    "consumer activation readiness was still pending before the owner-path reproof"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v4",
+  "classification": {
+    "healthcheck_owner_path_outcome": "attestation_green_but_runtime_consumer_gap_unresolved",
+    "launch_smoke_owner_path_outcome": "runtime_consumer_truth_recovered",
+    "desired_stable_runtime_consumer_source": "approved_target_selected",
+    "effective_stable_runtime_consumer_source_before": "observed_source_active",
+    "effective_stable_runtime_consumer_source_after": "approved_target_active_by_activation_evidence",
+    "matches_desired_after": true,
+    "consumer_activation_readiness_before": "activation_pending",
+    "consumer_activation_readiness_after": "aligned"
+  },
+  "why": [
+    "healthcheck left deterministic_stable_recovery_result.status at not_invoked",
+    "launch smoke produced fresh activation evidence for the approved repair target",
+    "post-smoke status adopted the approved-target policy drift surface and cleared the runtime lane"
+  ]
+}

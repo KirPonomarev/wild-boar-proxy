@@ -1,0 +1,21 @@
+{
+  "before": {
+    "claim_gate": "blocked",
+    "claim_gate_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "blocked_claims": [
+      "active-only-traffic",
+      "pool-participation-correct",
+      "stable-15-proved"
+    ],
+    "policy_drift": "detected",
+    "policy_drift_surface": "observed_auth_dir"
+  },
+  "after": {
+    "claim_gate": "clear",
+    "claim_gate_machine_error_code": "OK",
+    "blocked_claims": [],
+    "policy_drift": "clear",
+    "policy_drift_surface": "approved_repair_target"
+  },
+  "decision": "runtime_reproof_cleared_claim_gate_and_policy_drift_on_status_surface"
+}
