@@ -1,0 +1,55 @@
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
+  "work_contour_paths": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.codex-custom-cli/managed",
+    "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
+  ],
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+  "sandbox_paths": [
+    "/Users/kirillponomarev/.codex-custom-test",
+    "/Users/kirillponomarev/.codex-custom-test/managed",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "/Users/kirillponomarev/.codex-custom-test/external-models"
+  ],
+  "forbidden_paths": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.codex-custom-cli/managed",
+    "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+    "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
+  ],
+  "write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/managed",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-test/stable",
+    "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "/Users/kirillponomarev/.codex-custom-test/external-models",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/evidence"
+  ],
+  "rollback_ready": false,
+  "owner_gate_passed": false,
+  "execution_phase_started": false,
+  "candidate_reuse_root_exists": true,
+  "decision": "STOP_AND_DIAGNOSE"
+}
