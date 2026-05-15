@@ -1,0 +1,19 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "status": "completed",
+  "exact_owner_refresh_surface": "sync --json",
+  "selector_refresh_succeeded": true,
+  "selector_snapshot_fresh_after_refresh": true,
+  "selected_backend_count_after_refresh": 15,
+  "rotation_machine_error_code_after_refresh": "ROTATION_EVIDENCE_CONTRADICTED",
+  "rotation_evidence_reason_after_refresh": "policy_drift_detected",
+  "status_effective_mode_after_refresh": "managed",
+  "status_claim_gate_after_refresh": "blocked",
+  "status_policy_drift_after_refresh": "detected",
+  "effective_stable_runtime_source_after_refresh": "observed_stable_inventory_source",
+  "exact_source_admission_earned_now": false,
+  "next_contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "next_contour_class": "stop_and_diagnose",
+  "reason": "the canonical selector refresh surface refreshed the snapshot successfully, but the refreshed participation evidence is now fresh-yet-contradicted by policy drift and the runtime state moved to managed mode with claim-gate blocked; exact-source admission remains unearned until that contradiction is diagnosed"
+}

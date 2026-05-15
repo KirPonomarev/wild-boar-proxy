@@ -1,0 +1,14 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "exact_owner_refresh_surface": "python3 -m wild_boar_proxy sync --json",
+  "canon_basis": {
+    "command_api": "runtime_state.selected_backend_snapshot may be materialized only by the serialized runtime-state owner path in sync --json, and only after sync succeeded with managed-listener health verified",
+    "state_schema": "supervisor-state.json.selected_backend_snapshot may be materialized or refreshed only by the serialized runtime-state owner path in sync --json"
+  },
+  "forbidden_alternatives": [
+    "manual supervisor-state edits",
+    "synthetic selected_backend_ids",
+    "rollout rotation inspect --json as a mutation surface",
+    "runtime reproof success as an implicit selector refresh"
+  ]
+}

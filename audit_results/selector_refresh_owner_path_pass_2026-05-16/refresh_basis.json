@@ -1,0 +1,15 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "head_before_contour": "1666f7e",
+  "basis_from_previous_contour": {
+    "runtime_truth_aligned_to_approved_target": true,
+    "claim_gate_clear": true,
+    "policy_drift_clear": true,
+    "remaining_blocker": "selected_backend_snapshot_stale"
+  },
+  "pre_refresh_runtime_state": {
+    "selected_backend_ids_observed_at": "2026-05-11T07:52:10.916285+00:00",
+    "selected_backend_snapshot_observed_at": "2026-05-11T07:52:10.916285+00:00",
+    "selected_backend_snapshot_source_name": "sync --json"
+  }
+}
