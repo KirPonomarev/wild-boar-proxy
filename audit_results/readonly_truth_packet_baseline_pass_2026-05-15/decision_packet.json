@@ -2,18 +2,19 @@
   "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
   "decision": "STOP_AND_DIAGNOSE",
   "blocked_by": [
-    "overview live UI claim does not reflect canonical/live readonly truth for runtime mode, endpoint, pool counts, or warning propagation"
+    "owner truth instability across repeated readonly captures",
+    "healthcheck/status drift between healthy OK and ATTESTATION_FAILED in the same contour"
   ],
   "reasons": [
-    "canonical readonly packets and live GET packets matched on the primary baseline topics that were checked",
-    "accounts screen matched live readonly truth",
-    "api-connections screen matched live readonly truth",
-    "quick-start summary matched live readonly truth",
-    "overview screen stayed on fixture/unknown placeholders while source=live and healthy live packet were present"
+    "all required readonly command surfaces were captured as valid JSON",
+    "mode/accounts/external-models support packets remained structurally coherent",
+    "rollout contradiction remained warning evidence only",
+    "but healthcheck --json and delegated status --json flipped materially across repeated captures inside the same baseline contour"
   ],
   "required_next_preconditions": [
-    "localize and repair overview live source binding before sandbox boundary work",
-    "re-run readonly baseline after repair",
-    "keep POST /api/action forbidden during diagnosis and repair validation"
-  ]
+    "preserve owner truth drift evidence",
+    "diagnose runtime attestation instability before sandbox-boundary work",
+    "do not treat a later transient OK packet as stable baseline truth without drift adjudication"
+  ],
+  "recommended_follow_up": "STOP_AND_DIAGNOSE on readonly runtime truth drift before SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS"
 }

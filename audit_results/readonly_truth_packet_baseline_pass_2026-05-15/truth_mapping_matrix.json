@@ -1,190 +1,20 @@
-[
-  {
-    "truth_topic": "runtime_mode",
-    "canonical_source": "status --json + mode get --json",
-    "live_source": "/api/live-readonly",
-    "ui_screen": "overview",
-    "canonical_value": {
-      "desired_mode": "stable",
-      "effective_mode": "stable"
-    },
-    "live_value": {
-      "desired_mode": "stable",
-      "effective_mode": "stable"
-    },
-    "ui_claim": {
-      "desired_mode": "-",
-      "effective_mode": "-"
-    },
-    "verdict": "live/UI mismatch",
-    "notes": "UI overview stayed on placeholder dashes while command and live packet both reported stable/stable."
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "owner_truth_surfaces": {
+    "runtime_attestation": "healthcheck --json",
+    "runtime_summary_delegated": "status --json",
+    "mode_truth": "mode get --json",
+    "account_registry_truth": "accounts list --json",
+    "rollout_evidence_truth": "rollout rotation inspect --json",
+    "external_models_support_truth": [
+      "external-models status --json",
+      "external-models models --json",
+      "external-models routes list --json"
+    ]
   },
-  {
-    "truth_topic": "runtime_endpoint",
-    "canonical_source": "status --json",
-    "live_source": "/api/live-readonly",
-    "ui_screen": "overview",
-    "canonical_value": {
-      "endpoint": "http://127.0.0.1:8318/v1"
-    },
-    "live_value": {
-      "endpoint": "http://127.0.0.1:8318/v1"
-    },
-    "ui_claim": {
-      "endpoint": "-"
-    },
-    "verdict": "live/UI mismatch",
-    "notes": "UI overview showed \"-\" instead of the live endpoint."
-  },
-  {
-    "truth_topic": "overview_pool_summary",
-    "canonical_source": "status --json + accounts list --json",
-    "live_source": "/api/live-readonly",
-    "ui_screen": "overview",
-    "canonical_value": {
-      "active": 17,
-      "reserve": 0,
-      "hold": 0,
-      "problem": 14
-    },
-    "live_value": {
-      "active": 17,
-      "reserve": 0,
-      "hold": 0,
-      "problem": 14
-    },
-    "ui_claim": {
-      "active": "0",
-      "reserve": "0",
-      "hold": "0",
-      "problem": "0"
-    },
-    "verdict": "live/UI mismatch",
-    "notes": "Overview UI showed zeroes while command/live baseline reported active=17 reserve=0 hold=0 problem=14."
-  },
-  {
-    "truth_topic": "rollout_warning_propagation",
-    "canonical_source": "rollout rotation inspect --json",
-    "live_source": "/api/live-readonly",
-    "ui_screen": "overview",
-    "canonical_value": {
-      "status": "error",
-      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED"
-    },
-    "live_value": {
-      "has_warnings": true,
-      "warnings": [
-        {
-          "command_id": "rollout_rotation_inspect",
-          "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
-          "label": "rollout rotation inspect --json",
-          "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
-          "role": "rollout_evidence",
-          "severity": "warning"
-        }
-      ]
-    },
-    "ui_claim": {
-      "sidebar_status": "Демо-состояние неизвестно"
-    },
-    "verdict": "live/UI mismatch",
-    "notes": "Live packet preserved rotation contradiction as warning, but overview UI remained on demo/unknown copy."
-  },
-  {
-    "truth_topic": "accounts_summary",
-    "canonical_source": "accounts list --json",
-    "live_source": "/api/accounts-readonly",
-    "ui_screen": "accounts",
-    "canonical_value": {
-      "visible_count": 25,
-      "active": 17,
-      "reserve": 0,
-      "hold": 0,
-      "problem": 14,
-      "healthy": 11
-    },
-    "live_value": {
-      "visible_count": 25,
-      "active": 17,
-      "reserve": 0,
-      "hold": 0,
-      "problem": 14,
-      "healthy": 11
-    },
-    "ui_claim": {
-      "visible_count": "Показано 25 из 25",
-      "active_chip": "17 активных",
-      "reserve_chip": "0 резерв",
-      "hold_chip": "0 удержание",
-      "problem_chip": "14 проблемных"
-    },
-    "verdict": "match",
-    "notes": "Accounts screen matched the readonly packet counts."
-  },
-  {
-    "truth_topic": "accounts_registry_identity",
-    "canonical_source": "accounts list --json",
-    "live_source": "/api/accounts-readonly",
-    "ui_screen": "accounts",
-    "canonical_value": {
-      "status": "clear",
-      "machine_error_code": "OK"
-    },
-    "live_value": {
-      "machine_error_code": "OK",
-      "next_action": "none",
-      "status": "clear"
-    },
-    "ui_claim": {
-      "registry_status": "Идентичность registry: clear · OK"
-    },
-    "verdict": "match",
-    "notes": "Accounts registry identity propagated cleanly."
-  },
-  {
-    "truth_topic": "quick_start_accounts_summary",
-    "canonical_source": "accounts list --json",
-    "live_source": "/api/accounts-readonly",
-    "ui_screen": "quick-start",
-    "canonical_value": {
-      "connected": 25,
-      "working": 11,
-      "to_check": 14
-    },
-    "live_value": {
-      "connected": 25,
-      "working": 11,
-      "to_check": 14
-    },
-    "ui_claim": {
-      "connected": "25",
-      "working": "11",
-      "to_check": "14"
-    },
-    "verdict": "match",
-    "notes": "Quick Start account summary matched accounts readonly packet."
-  },
-  {
-    "truth_topic": "api_connections_summary",
-    "canonical_source": "external-models status/models/routes list --json",
-    "live_source": "/api/api-connections-readonly",
-    "ui_screen": "api-connections",
-    "canonical_value": {
-      "routes_count": 0,
-      "models_source": "local_routes_registry",
-      "adapter_state": "stopped"
-    },
-    "live_value": {
-      "routes_count": 0,
-      "models_source": "local_routes_registry",
-      "adapter_state": "stopped"
-    },
-    "ui_claim": {
-      "routes_count": "0",
-      "registry_status": "Контур: C3 · models source: local_routes_registry",
-      "visible_count": "Показано 0 из 0"
-    },
-    "verdict": "match",
-    "notes": "API-connections screen matched zero-route synthetic readonly state."
-  }
-]
+  "supporting_surfaces_only": [
+    "/api/live-readonly",
+    "/api/accounts-readonly",
+    "/api/api-connections-readonly"
+  ]
+}

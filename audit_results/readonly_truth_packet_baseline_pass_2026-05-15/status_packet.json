@@ -872,6 +872,6 @@
     "status": "ok",
     "machine_error_code": "OK",
     "attestation_source": "healthcheck --json",
-    "observed_at_utc": "2026-05-15T13:08:52.795040+00:00"
+    "observed_at_utc": "2026-05-15T18:40:27.694155+00:00"
   }
 }

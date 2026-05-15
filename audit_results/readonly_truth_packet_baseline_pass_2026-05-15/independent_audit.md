@@ -2,41 +2,40 @@
 
 ## Auditor
 
-- agent: `019e2bc0-5481-7d52-ba00-b0b530731235`
-- nickname: `Pasteur`
-- model: `gpt-5.4-mini`
-- role: readonly truth-chain cross-check
+- agent: `019e2cd6-50ff-7cc0-bb90-ea935faf2fa2`
+- nickname: `Hooke`
+- role: readonly packet-lane cross-check
 
-## Auditor Findings
+## Auditor Facts Confirmed Locally
 
-- `live_readonly` packet is fed by:
+- the canonical baseline command set is correctly rooted in:
   - `status --json`
   - `mode get --json`
   - `accounts list --json`
   - `healthcheck --json`
   - `rollout rotation inspect --json`
-- `accounts_readonly` packet is fed only by `accounts list --json`
-- `api_connections_readonly` packet is fed by:
   - `external-models status --json`
   - `external-models models --json`
   - `external-models routes list --json`
-- The auditor flagged several mismatch hotspots:
-  - overview/account `problem` semantics can drift
-  - API latest-check is structurally weak
-  - quick-start primary-route detection is heuristic
-  - account redaction is split across server/UI helpers
-  - overview hard-fails on status/mode disagreement
+- `healthcheck --json` remains the runtime owner truth surface
+- `status --json` remains a delegated runtime summary surface
+- external-models readonly packets remain supporting evidence only, not runtime
+  owner truth
 
-## Auditor Verdict
+## Truthfulness Check
 
-- verdict: `STOP_AND_DIAGNOSE`
+- independent auditor lied: `no`
+- independent auditor overclaimed: `slightly`
+- details:
+  - the auditor gave a likely `GO` path if direct packet capture stayed
+    coherent
+  - live execution in this contour found owner-truth drift after that static
+    assessment
 
-## Adjudication
+## Audit Verdict
 
-Main contour adjudication agrees with the auditor verdict.
-
-The blocking reason is narrower and factual:
-
-- canonical command truth and live GET truth were sufficiently aligned for this contour
-- but the `overview` screen in `source=live` did not reflect that truth
-- therefore sandbox boundary work must wait until the live overview truth chain is repaired and re-baselined
+- the independent audit helped confirm the correct command surfaces and truth
+  ownership
+- the final contour verdict must be narrower than the auditor's likely `GO`
+  path
+- contour result: `STOP_AND_DIAGNOSE`

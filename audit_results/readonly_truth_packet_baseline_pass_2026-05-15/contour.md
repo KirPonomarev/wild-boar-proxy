@@ -2,37 +2,13 @@
 
 ## Goal
 
-Build a semantic baseline across three readonly truth layers:
-
-- canonical command packets
-- live server normalized GET packets
-- core UI live truth claims
-
-without invoking any mutation surface.
+Capture the canonical readonly baseline packet set from direct command surfaces
+ and compare it against the previously admitted live-readonly summaries without
+ entering any mutation lane.
 
 ## Scope
 
-- canonical readonly command capture
-- live server GET packet capture
-- semantic mapping for `quick-start`, `overview`, `accounts`, and `api-connections`
-- screenshots and mismatch classification only
-
-Out of scope:
-
-- sandbox creation
-- any `POST /api/action`
-- any live-action click
-- any runtime/config/auth/state/log write
-
-## Preflight
-
-- `git status --short --untracked-files=no` -> clean
-- `git log --oneline -n 10` -> latest contour `3f52cc8 Add web live readonly admission audit`
-- `bash tools/install_git_hooks.sh` -> hooks path configured
-
-## Fact Summary
-
-- Canonical packets captured successfully:
+- direct command packets:
   - `status --json`
   - `mode get --json`
   - `accounts list --json`
@@ -41,51 +17,53 @@ Out of scope:
   - `external-models status --json`
   - `external-models models --json`
   - `external-models routes list --json`
-- Live packets captured successfully:
-  - `/api/live-readonly`
-  - `/api/accounts-readonly`
-  - `/api/api-connections-readonly`
-- Core semantic result:
-  - `quick-start` matched readonly baseline for account summary and zero-route API summary
-  - `accounts` matched readonly baseline
-  - `api-connections` matched readonly baseline
-  - `overview` did **not** match readonly baseline
+- readonly summary comparison against the prior
+  `WEB_LIVE_SERVER_READONLY_ADMISSION_PASS`
+- drift localization only
 
-## Blocking Mismatch
+Out of scope:
 
-With `?screen=overview&source=live`:
+- sandbox creation/binding
+- runtime repair
+- UI repair
+- any action execution or mutation contour
 
-- page URL kept `source=live`
-- source picker showed `live`
-- but `.desktop.dataset.source` stayed `fixture`
-- overview runtime fields stayed at placeholder values:
-  - desired mode `-`
-  - effective mode `-`
-  - endpoint `-`
-  - active `0`
-  - reserve `0`
-  - hold `0`
-  - problem `0`
-- sidebar/runtime copy stayed on fixture-like unknown state
+## Findings
 
-At the same time:
-
-- canonical packets reported `stable/stable`
-- live normalized packet reported a healthy runtime summary
-- live normalized packet preserved the rollout contradiction warning
-
-## Interpretation
-
-This is not a command/live contradiction.
-It is a `live/UI mismatch` on a primary readonly truth screen.
-
-Because `overview` is one of the four core baseline screens, this contour cannot
-honestly authorize moving into sandbox boundary work yet.
+- all required readonly command surfaces emitted valid JSON packets
+- `mode get --json`, `accounts list --json`, rollout evidence, and
+  external-models support packets remained structurally coherent
+- account count and readonly summary count matched at `25`
+- external-models support packets still matched the readonly API-connections
+  summary on:
+  - `routes_count = 0`
+  - `runtime_claim_blocked = true`
+- the blocking fact is not packet-shape failure and not fixture fallback
+- the blocking fact is owner-truth instability:
+  - previous readonly admission snapshot showed healthy readonly truth
+  - an intermediate direct capture recorded:
+    - `status --json -> ATTESTATION_FAILED`
+    - `healthcheck --json -> ATTESTATION_FAILED`
+    - `responses_ok = false`
+    - `launch_readiness_status = blocked`
+    - `launch_blocking_reason = responses_probe_failed`
+  - the later retry still did not produce a stable canonical pair:
+    - `status --json -> OK`
+    - `healthcheck --json -> ATTESTATION_FAILED`
 
 ## Decision
 
 - status: `STOP_AND_DIAGNOSE`
 - reason:
-  - readonly packet chain is mostly sound
-  - but `overview` in live mode does not consume that truth correctly
-  - baseline trust in UI is therefore incomplete
+  - the baseline contour cannot honestly authorize sandbox boundary work while
+    direct readonly owner truth flips inside the same contour
+  - `healthcheck --json` remains the runtime owner surface and it is not stable
+    enough here to call the baseline closed
+
+## Next Guardrails
+
+- preserve owner-truth drift evidence
+- do not treat the delegated `status --json` packet as stronger than the
+  owner `healthcheck --json`
+- do not proceed to `SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS` until the
+  readonly runtime-truth drift is localized
