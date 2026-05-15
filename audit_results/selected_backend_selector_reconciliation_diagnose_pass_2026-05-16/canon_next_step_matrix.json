@@ -1,0 +1,44 @@
+{
+  "contour": "SELECTED_BACKEND_SELECTOR_RECONCILIATION_DIAGNOSE_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+      "admissible": false,
+      "why": [
+        "refreshing selector evidence alone would not reconcile the current policy/source-copy family drift",
+        "the current dominant issue is not missing selector machinery but family drift between approved target and owner-eligible source inputs"
+      ]
+    },
+    {
+      "outcome": "GO_TO_EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+      "admissible": false,
+      "why": [
+        "exact-source admission is premature while current family-level drift is unresolved",
+        "no singleton family exists yet"
+      ]
+    },
+    {
+      "outcome": "GO_TO_STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+      "admissible": true,
+      "why": [
+        "the dominant divergence is between the approved target family and the current owner-path policy/source-copy family",
+        "status already reports observed source as desired/effective because approved target is not ready for runtime consumption",
+        "reconciling the family-level policy/source surfaces is narrower and more canonical than reopening selector narrowing"
+      ]
+    },
+    {
+      "outcome": "GO_TO_NARROWER_POLICY_SOURCE_FAMILY_PASS",
+      "admissible": false,
+      "why": [
+        "the current divergence is already localized enough to name the stable-policy/source reconciliation contour directly"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": false,
+      "why": [
+        "the divergence source is localized narrowly enough to name a concrete next contour"
+      ]
+    }
+  ]
+}
