@@ -1,0 +1,40 @@
+{
+  "contour": "UI_WEB_VISUAL_QA_REPAIR_PASS",
+  "static_cases": 19,
+  "interaction_cases": 6,
+  "section_checks": [
+    {
+      "section": "runtime",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "client",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "accounts-policy",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "diagnostics-privacy",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "advanced",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    },
+    {
+      "section": "data-layout",
+      "visiblePanel": 1,
+      "hubVisible": 1
+    }
+  ],
+  "static_failures": [],
+  "interaction_failures": [],
+  "pass": true
+}

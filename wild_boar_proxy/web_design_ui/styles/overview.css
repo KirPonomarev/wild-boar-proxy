@@ -3120,9 +3120,9 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 16px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
-  height: 78px;
+  min-height: 92px;
   overflow: hidden;
-  padding: 10px 14px;
+  padding: 12px 14px;
   position: relative;
 }
 
@@ -3510,8 +3510,8 @@ button:disabled {
 .settings-card-head p {
   color: var(--secondary);
   display: -webkit-box;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   margin: 2px 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -3551,14 +3551,14 @@ button:disabled {
 
 .settings-card-facts span {
   color: var(--secondary);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .settings-card-facts strong {
   color: var(--text);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -3748,7 +3748,7 @@ button:disabled {
     "checks disabled"
     "recovery disabled";
   grid-template-columns: minmax(0, 1.12fr) minmax(340px, .88fr);
-  grid-template-rows: 228px 142px 118px minmax(0, 1fr);
+  grid-template-rows: 218px 174px 112px minmax(106px, 1fr);
   min-height: 0;
 }
 
@@ -3757,7 +3757,7 @@ button:disabled {
   gap: 8px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -3822,8 +3822,8 @@ button:disabled {
 .runtime-mode-kv span,
 .runtime-mode-list span {
   color: var(--secondary);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .runtime-mode-kv strong,
@@ -3897,8 +3897,8 @@ button:disabled {
 .runtime-mode-message,
 .runtime-mode-footer {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
@@ -3939,14 +3939,14 @@ button:disabled {
 
 .runtime-mode-source-card .runtime-mode-list span,
 .runtime-mode-action-card .runtime-mode-list span {
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .runtime-mode-source-card .runtime-mode-list strong,
 .runtime-mode-action-card .runtime-mode-list strong {
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
 }
 
 .runtime-mode-footer {
@@ -3997,7 +3997,7 @@ button:disabled {
     "danger owner"
     "danger notes";
   grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
-  grid-template-rows: 140px 160px 200px minmax(0, 1fr);
+  grid-template-rows: 132px 188px 190px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -4007,7 +4007,7 @@ button:disabled {
   gap: 7px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -4034,13 +4034,9 @@ button:disabled {
 
 .advanced-settings-card-head p {
   color: var(--secondary);
-  display: -webkit-box;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   margin: 2px 0 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .advanced-settings-kv,
@@ -4068,15 +4064,15 @@ button:disabled {
 .advanced-settings-kv span,
 .advanced-settings-list span {
   color: var(--secondary);
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .advanced-settings-kv strong,
 .advanced-settings-list strong {
   color: var(--text);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -4092,12 +4088,11 @@ button:disabled {
   border-radius: 10px;
   color: var(--text);
   display: block;
-  font-size: 10px;
-  line-height: 12px;
-  overflow: hidden;
+  font-size: 11px;
+  line-height: 14px;
+  overflow: visible;
   padding: 5px 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .advanced-settings-pill-list {
@@ -4112,14 +4107,14 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 999px;
   color: var(--secondary);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
   padding: 4px 7px;
 }
 
 .advanced-settings-pill-list.compact span {
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
   padding: 3px 6px;
 }
 
@@ -4147,9 +4142,9 @@ button:disabled {
 
 .advanced-settings-disabled-list strong {
   color: var(--text);
-  font-size: 9px;
+  font-size: 10px;
   grid-area: label;
-  line-height: 11px;
+  line-height: 13px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4158,10 +4153,10 @@ button:disabled {
 
 .advanced-settings-disabled-list em {
   color: var(--secondary);
-  font-size: 8px;
+  font-size: 10px;
   font-style: normal;
   grid-area: reason;
-  line-height: 10px;
+  line-height: 13px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4169,10 +4164,10 @@ button:disabled {
 }
 
 .advanced-settings-disabled-list .chip {
-  font-size: 9px;
+  font-size: 10px;
   grid-area: chip;
   justify-self: start;
-  line-height: 11px;
+  line-height: 13px;
   min-height: 18px;
   padding: 3px 6px;
   white-space: nowrap;
@@ -4202,8 +4197,8 @@ button:disabled {
 .advanced-settings-message,
 .advanced-settings-footer {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 13px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -4255,7 +4250,7 @@ button:disabled {
     "readiness action"
     "dispatch deferred";
   grid-template-columns: minmax(0, 1.12fr) minmax(360px, .88fr);
-  grid-template-rows: 248px 190px minmax(0, 1fr);
+  grid-template-rows: 244px 184px minmax(176px, 1fr);
   min-height: 0;
 }
 
@@ -4264,7 +4259,7 @@ button:disabled {
   gap: 8px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -4332,16 +4327,16 @@ button:disabled {
 .client-launch-list span,
 .client-launch-checklist span {
   color: var(--secondary);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .client-launch-kv strong,
 .client-launch-list strong,
 .client-launch-checklist strong {
   color: var(--text);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -4414,8 +4409,8 @@ button:disabled {
 .client-launch-message,
 .client-launch-footer {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
@@ -4441,13 +4436,13 @@ button:disabled {
 }
 
 .client-launch-action-card .client-launch-list span {
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .client-launch-action-card .client-launch-list strong {
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
 }
 
 .client-launch-footer {
@@ -4498,7 +4493,7 @@ button:disabled {
     "bundle ledger"
     "never ledger";
   grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr);
-  grid-template-rows: 200px 160px 150px minmax(0, 1fr);
+  grid-template-rows: 190px 178px 142px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -4507,7 +4502,7 @@ button:disabled {
   gap: 7px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -4534,13 +4529,9 @@ button:disabled {
 
 .diagnostics-privacy-card-head p {
   color: var(--secondary);
-  display: -webkit-box;
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   margin: 2px 0 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
 }
 
 .diagnostics-privacy-kv,
@@ -4572,16 +4563,16 @@ button:disabled {
 .diagnostics-privacy-list span,
 .diagnostics-privacy-checklist span {
   color: var(--secondary);
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .diagnostics-privacy-kv strong,
 .diagnostics-privacy-list strong,
 .diagnostics-privacy-checklist strong {
   color: var(--text);
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -4639,12 +4630,15 @@ button:disabled {
 
 .diagnostics-privacy-pill-list span,
 .diagnostics-privacy-disabled-list span {
+  align-items: center;
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 999px;
   color: var(--secondary);
-  font-size: 8px;
-  line-height: 10px;
+  display: inline-flex;
+  font-size: 10px;
+  line-height: 13px;
+  min-height: 24px;
   min-width: 0;
   overflow: hidden;
   padding: 5px 7px;
@@ -4662,8 +4656,8 @@ button:disabled {
 .diagnostics-privacy-message,
 .diagnostics-privacy-footer {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
@@ -4671,13 +4665,10 @@ button:disabled {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 10px;
-  display: -webkit-box;
   min-height: 30px;
-  overflow: hidden;
+  overflow: visible;
   overflow-wrap: anywhere;
   padding: 6px 9px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .diagnostics-privacy-ledger-card .button {
@@ -4732,7 +4723,7 @@ button:disabled {
     "validation command"
     "hold targets";
   grid-template-columns: minmax(0, 1.12fr) minmax(350px, .88fr);
-  grid-template-rows: 146px 190px 172px minmax(0, 1fr);
+  grid-template-rows: 154px 206px 178px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -4741,7 +4732,7 @@ button:disabled {
   gap: 6px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 9px;
 }
 
@@ -4769,13 +4760,9 @@ button:disabled {
 
 .accounts-policy-card-head p {
   color: var(--secondary);
-  display: -webkit-box;
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 11px;
+  line-height: 14px;
   margin: 2px 0 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
 }
 
 .accounts-policy-kv,
@@ -4815,16 +4802,16 @@ button:disabled {
 .accounts-policy-snapshot-grid span {
   color: var(--secondary);
   flex: 0 0 auto;
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .accounts-policy-kv strong,
 .accounts-policy-list strong,
 .accounts-policy-snapshot-grid strong {
   color: var(--text);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 11px;
+  line-height: 14px;
   min-width: 0;
   overflow: hidden;
   text-align: right;
@@ -4859,7 +4846,7 @@ button:disabled {
   border-radius: 999px;
   display: inline-flex;
   flex: 0 0 76px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   justify-content: center;
   line-height: 13px;
@@ -4883,8 +4870,8 @@ button:disabled {
 
 .accounts-policy-meanings strong {
   color: var(--text);
-  font-size: 9px;
-  line-height: 11px;
+  font-size: 10px;
+  line-height: 13px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4902,8 +4889,8 @@ button:disabled {
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 999px;
   color: var(--secondary);
-  font-size: 9px;
-  line-height: 12px;
+  font-size: 10px;
+  line-height: 13px;
   min-width: 0;
   overflow: hidden;
   padding: 5px 8px;
@@ -4914,8 +4901,8 @@ button:disabled {
 .accounts-policy-message,
 .accounts-policy-footer {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 15px;
   margin: 0;
 }
 
@@ -4923,12 +4910,9 @@ button:disabled {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
   border-radius: 10px;
-  display: -webkit-box;
   min-height: 22px;
-  overflow: hidden;
+  overflow: visible;
   padding: 4px 7px;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .accounts-policy-command-card .button,
@@ -4952,14 +4936,14 @@ button:disabled {
 
 .accounts-policy-command-card .accounts-policy-list span,
 .accounts-policy-targets-card .accounts-policy-list span {
-  font-size: 8px;
-  line-height: 10px;
+  font-size: 10px;
+  line-height: 13px;
 }
 
 .accounts-policy-command-card .accounts-policy-list strong,
 .accounts-policy-targets-card .accounts-policy-list strong {
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
 }
 
 .accounts-policy-footer {
@@ -5009,7 +4993,7 @@ button:disabled {
     "state permissions"
     "directory snapshot"
     "structure danger";
-  grid-template-rows: 218px 156px minmax(0, 1fr);
+  grid-template-rows: 214px 168px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -5018,7 +5002,7 @@ button:disabled {
   gap: 8px;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   padding: 10px;
 }
 
@@ -5045,8 +5029,8 @@ button:disabled {
 .data-layout-card-head p {
   color: var(--secondary);
   display: -webkit-box;
-  font-size: 10px;
-  line-height: 12px;
+  font-size: 11px;
+  line-height: 14px;
   margin: 2px 0 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -5095,7 +5079,7 @@ button:disabled {
 .data-layout-list span {
   color: var(--secondary);
   font-size: 10px;
-  line-height: 12px;
+  line-height: 13px;
 }
 
 .data-layout-kv strong,
@@ -5122,8 +5106,8 @@ button:disabled {
 
 .data-layout-note {
   color: var(--secondary);
-  font-size: 10px;
-  line-height: 13px;
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .data-layout-table {
@@ -5146,7 +5130,7 @@ button:disabled {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .04em;
-  line-height: 12px;
+  line-height: 13px;
   text-transform: uppercase;
 }
 
@@ -5208,9 +5192,10 @@ button:disabled {
 .setup-flow-layout {
   align-items: start;
   display: grid;
-  gap: 20px;
-  grid-template-columns: 276px minmax(0, 1fr);
-  max-width: 1160px;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 236px) minmax(0, 1fr);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .setup-flow-rail {
@@ -5220,6 +5205,7 @@ button:disabled {
   box-shadow: var(--shadow);
   display: grid;
   gap: 10px;
+  min-width: 0;
   padding: 20px;
   position: sticky;
   top: 0;
@@ -5297,6 +5283,7 @@ button:disabled {
   display: grid;
   gap: 8px;
   min-width: 0;
+  overflow: visible;
 }
 
 .setup-grid {
@@ -5698,11 +5685,17 @@ button:disabled {
 
 .candidate-path {
   direction: ltr;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.select-client-candidate-row .candidate-path,
+#importCandidateSource {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .select-client-detail-grid {
@@ -5715,7 +5708,7 @@ button:disabled {
 }
 
 .desktop[data-screen="select-client"] .setup-flow-layout {
-  gap: 16px;
+  gap: 12px;
 }
 
 .desktop[data-screen="select-client"] .setup-workbench {
@@ -5747,6 +5740,30 @@ button:disabled {
   grid-column: 1 / -1;
   justify-self: start;
   min-height: 30px;
+}
+
+.desktop[data-screen="setup"] .setup-flow-rail {
+  padding: 16px;
+}
+
+.desktop[data-screen="setup"] .flow-step {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.desktop[data-screen="setup"] .deferred-row {
+  gap: 8px;
+  grid-template-columns: minmax(92px, .72fr) minmax(0, 1fr);
+  padding: 7px 9px;
+}
+
+.desktop[data-screen="setup"] .deferred-row .button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.desktop[data-screen="setup"] .form-section {
+  padding: 12px;
 }
 
 .form-section {
@@ -5786,6 +5803,7 @@ button:disabled {
   border-radius: 18px;
   box-shadow: var(--shadow);
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: flex-end;
   min-height: 46px;
@@ -5801,7 +5819,7 @@ button:disabled {
 }
 
 .import-flow .deferred-row {
-  grid-template-columns: minmax(124px, .75fr) minmax(0, 1.5fr) auto;
+  grid-template-columns: minmax(108px, .72fr) minmax(0, 1.45fr) auto;
 }
 
 .import-phase-list {
@@ -5867,9 +5885,10 @@ button:disabled {
 
 .import-transaction-layout {
   display: grid;
-  gap: 16px;
-  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 14px;
+  grid-template-columns: minmax(220px, 228px) minmax(0, 1fr);
   min-height: 0;
+  min-width: 0;
 }
 
 .import-step-rail {
@@ -5888,9 +5907,9 @@ button:disabled {
   color: var(--secondary);
   display: grid;
   gap: 10px;
-  grid-template-columns: 28px minmax(0, 1fr);
-  min-height: 52px;
-  padding: 7px 9px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  min-height: 48px;
+  padding: 7px 8px;
 }
 
 .import-step span {
@@ -5908,6 +5927,7 @@ button:disabled {
 .import-step strong,
 .import-step small {
   display: block;
+  grid-column: 2;
 }
 
 .import-step strong {
@@ -5996,7 +6016,7 @@ button:disabled {
   border-top: 1px solid rgba(217, 208, 195, .72);
   display: grid;
   gap: 8px;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   min-height: 29px;
   padding-top: 6px;
 }
@@ -6013,8 +6033,7 @@ button:disabled {
   font-size: 12px;
   line-height: 16px;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .import-checklist,

@@ -120,7 +120,7 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
               <span>Полная проверка</span>
             </button>
-            <button id="quickStartCheckAllAction" class="button primary quick-start-only" type="button" disabled title="Общая проверка требует отдельной admitted aggregate command surface." hidden>
+            <button id="quickStartCheckAllAction" class="button quick-start-only" type="button" disabled title="Общая проверка требует отдельной admitted aggregate command surface." hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
               <span>Проверить всё</span>
             </button>
@@ -1067,7 +1067,7 @@
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="advanced-boundary">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
-                <div><h3>Advanced</h3><p>Operator boundaries, deferred gates и безопасные command surfaces.</p></div>
+                <div><h3>Advanced</h3><p>Boundaries, deferred gates и safe surfaces.</p></div>
                 <span class="chip amber"><span class="dot"></span>deferred</span>
               </div>
               <div class="settings-card-facts">
@@ -1131,8 +1131,8 @@
                 <div class="accounts-policy-kv">
                   <div><span>Reserve-first</span><strong id="accountsPolicyReserveFirst">enforced by canon / preview</strong></div>
                   <div><span>Auto-promote</span><strong id="accountsPolicyAutoPromote">not admitted</strong></div>
-                  <div><span>Lifecycle actions</span><strong>Accounts / Account Detail only</strong></div>
-                  <div><span>Policy source</span><strong id="accountsPolicySource">future policy packet / unavailable</strong></div>
+                  <div><span>Lifecycle actions</span><strong>Accounts / Detail only</strong></div>
+                  <div><span>Policy source</span><strong id="accountsPolicySource">future policy packet</strong></div>
                 </div>
               </section>
 
@@ -1264,7 +1264,7 @@
             </div>
 
             <div id="accountsPolicyFooter" class="accounts-policy-footer">
-              Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Account Detail.
+              Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Detail.
             </div>
           </section>
 
@@ -1488,8 +1488,8 @@
                   <span>raw auth files</span>
                   <span>secret values</span>
                   <span>private command argv</span>
-                  <span>unredacted local locations</span>
-                  <span>raw diagnostics logs in UI</span>
+                  <span>unredacted local paths</span>
+                  <span>raw logs in UI</span>
                 </div>
               </section>
 
@@ -2172,7 +2172,7 @@
                     <span class="candidate-icon amber"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
                     <div>
                       <strong>Codex Custom</strong>
-                      <span class="candidate-path" title="/Applications/Codex Custom.app">/Applications/Codex Custom.app</span>
+                      <span class="candidate-path" title="/Applications/Codex Custom.app">/Applications/.../Codex Custom.app</span>
                       <small>source: fixture candidate display</small>
                     </div>
                     <span class="chip amber"><span class="dot"></span>Рекомендуется</span>
@@ -2192,7 +2192,7 @@
                     <span class="candidate-icon red"><img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
                     <div>
                       <strong>Unavailable candidate</strong>
-                      <span class="candidate-path" title="/Applications/Codex Beta.app">/Applications/Codex Beta.app</span>
+                      <span class="candidate-path" title="/Applications/Codex Beta.app">/Applications/.../Codex Beta.app</span>
                       <small>reason: missing candidate proof</small>
                     </div>
                     <span class="chip red"><span class="dot"></span>Недоступен</span>
@@ -2213,7 +2213,7 @@
                   </div>
                   <div class="setup-boundary-grid selected-client-grid">
                     <div><span>Название</span><strong>Codex Custom</strong></div>
-                    <div><span>Путь</span><strong class="candidate-path" title="/Applications/Codex Custom.app">/Applications/Codex Custom.app</strong></div>
+                    <div><span>Путь</span><strong class="candidate-path" title="/Applications/Codex Custom.app">/.../Codex Custom.app</strong></div>
                     <div><span>Источник</span><strong>fixture candidate display</strong></div>
                   </div>
                 </section>
@@ -2267,10 +2267,10 @@
           <div class="import-transaction-layout" data-visual-reference="12_import_existing_wizard" data-legacy-reference="08_import_existing" data-setup-flow-frame="left-step-rail">
             <aside class="import-step-rail" aria-label="Шаги импорта">
               <div class="eyebrow">Transaction wizard</div>
-              <div class="import-step active" data-import-step="find"><span>1</span><strong>Найти</strong><small>candidate preview</small></div>
-              <div class="import-step" data-import-step="dry-run"><span>2</span><strong>Проверить</strong><small>dry-run required</small></div>
-              <div class="import-step" data-import-step="snapshot"><span>3</span><strong>Снимок</strong><small>rollback required</small></div>
-              <div class="import-step muted" data-import-step="apply"><span>4</span><strong>Применить</strong><small>disabled now</small></div>
+              <div class="import-step active" data-import-step="find"><span>1</span><strong>Найти</strong><small>candidate</small></div>
+              <div class="import-step" data-import-step="dry-run"><span>2</span><strong>Проверить</strong><small>dry-run</small></div>
+              <div class="import-step" data-import-step="snapshot"><span>3</span><strong>Снимок</strong><small>rollback</small></div>
+              <div class="import-step muted" data-import-step="apply"><span>4</span><strong>Применить</strong><small>disabled</small></div>
               <div id="importRailNote" class="setup-flow-note">Импорт требует command-owned discovery, dry-run, snapshot и rollback packet.</div>
             </aside>
 

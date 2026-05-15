@@ -423,6 +423,27 @@ function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
 }
 
+function pathText(id, value) {
+  const node = document.getElementById(id);
+  if (!node) {
+    return;
+  }
+  const fullValue = String(value ?? "-");
+  node.textContent = middleTruncatePath(fullValue);
+  node.title = fullValue;
+}
+
+function middleTruncatePath(value) {
+  const path = String(value || "");
+  if (path.length <= 34 || !path.includes("/")) {
+    return path || "-";
+  }
+  const parts = path.split("/").filter(Boolean);
+  const file = parts.at(-1) || path.slice(-18);
+  const first = parts[0] ? `/${parts[0]}` : "";
+  return `${first}/.../${file}`;
+}
+
 function setClassName(node, base, visualState) {
   node.className = `${base} ${VISUAL_CLASS[visualState] || "neutral"}`;
 }
@@ -1189,7 +1210,7 @@ function updateImportExistingCopy(source) {
   setImportChip("importSafetyChip", state.safetyVisual, state.safetyChip);
   setImportChip("importResultChip", state.resultVisual, state.resultChip);
   text("importCandidateClient", state.client);
-  text("importCandidateSource", state.sourcePath);
+  pathText("importCandidateSource", state.sourcePath);
   text("importCandidateData", state.dataStatus);
   text("importCandidateAccounts", state.accountsPreview);
   text("importCandidateStatus", state.candidateStatus);
@@ -2402,7 +2423,7 @@ function accountsPolicyModelFromSnapshot(snapshot) {
     snapshotCopy: liveFailure
       ? "Observed pool snapshot недоступен. Предыдущие fixture counts не используются как policy truth."
       : "Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.",
-    footerCopy: "Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Account Detail.",
+    footerCopy: "Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Detail.",
     bannerCopy: liveFailure
       ? "Accounts policy недоступна. Предыдущие fixture-данные не используются."
       : (stale
@@ -2420,7 +2441,7 @@ function renderAccountsPolicySnapshot(snapshot) {
 
   text("accountsPolicyReserveFirst", "enforced by canon / preview");
   text("accountsPolicyAutoPromote", "not admitted");
-  text("accountsPolicySource", "future policy packet / unavailable");
+  text("accountsPolicySource", "future policy packet");
   text("accountsPolicyCapacityTarget", model.capacityTarget);
   text("accountsPolicyReserveTarget", model.reserveTarget);
   text("accountsPolicyValidationStart", model.validationStart);
@@ -3910,9 +3931,24 @@ function routeIdentity(route) {
   main.textContent = route.route_id || "unknown-route";
   const sub = document.createElement("div");
   sub.className = "account-sub";
-  sub.textContent = [route.display_name, route.role_label].filter(Boolean).join(" · ") || "route registry entry";
+  const subtitle = routeSubtitle(route);
+  sub.textContent = subtitle;
+  sub.title = subtitle;
   wrap.append(main, sub);
   return wrap;
+}
+
+function routeSubtitle(route) {
+  const parts = [];
+  const displayName = String(route.display_name || "").trim();
+  const roleLabel = String(route.role_label || "").trim();
+  if (displayName) {
+    parts.push(displayName.replace(/\s*registry entry\s*$/i, "").trim() || displayName);
+  }
+  if (roleLabel && roleLabel.toLowerCase() !== "registry entry") {
+    parts.push(roleLabel);
+  }
+  return parts.filter(Boolean).join(" · ") || "registry entry";
 }
 
 function routeStatusChip(route) {

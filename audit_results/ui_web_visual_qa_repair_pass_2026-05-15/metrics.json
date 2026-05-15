@@ -1,0 +1,507 @@
+[
+  {
+    "name": "quick-start",
+    "url": "http://127.0.0.1:8799/?screen=quick-start&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 19,
+      "primaryButtons": [
+        {
+          "text": "Добавить аккаунт",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "quick-start-stale",
+    "url": "http://127.0.0.1:8799/?screen=quick-start&source=fixture&state=stale",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 19,
+      "primaryButtons": [
+        {
+          "text": "Добавить аккаунт",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "overview",
+    "url": "http://127.0.0.1:8799/?screen=overview&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 17,
+      "primaryButtons": [
+        {
+          "text": "Запустить клиент",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "overview-degraded",
+    "url": "http://127.0.0.1:8799/?screen=overview&source=fixture&state=degraded",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 17,
+      "primaryButtons": [
+        {
+          "text": "Запустить клиент",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "overview-down",
+    "url": "http://127.0.0.1:8799/?screen=overview&source=fixture&state=down",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 17,
+      "primaryButtons": [
+        {
+          "text": "Запустить клиент",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "accounts",
+    "url": "http://127.0.0.1:8799/?screen=accounts&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 15,
+      "primaryButtons": [
+        {
+          "text": "Добавить аккаунт",
+          "disabled": true
+        }
+      ],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "api-connections",
+    "url": "http://127.0.0.1:8799/?screen=api-connections&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 11,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "diagnostics",
+    "url": "http://127.0.0.1:8799/?screen=diagnostics&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 22,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "diagnostics-live-failure",
+    "url": "http://127.0.0.1:8799/?screen=diagnostics&source=live&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 22,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-hub",
+    "url": "http://127.0.0.1:8799/?screen=settings&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 17,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-runtime",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=runtime&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 23,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-client",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=client&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 19,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-accounts-policy",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=accounts-policy&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 19,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-diagnostics-privacy",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=diagnostics-privacy&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 18,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-advanced",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=advanced&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 17,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "settings-data-layout",
+    "url": "http://127.0.0.1:8799/?screen=settings&section=data-layout&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 16,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "setup",
+    "url": "http://127.0.0.1:8799/?screen=setup&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 19,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "select-client",
+    "url": "http://127.0.0.1:8799/?screen=select-client&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 15,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  },
+  {
+    "name": "import-existing",
+    "url": "http://127.0.0.1:8799/?screen=import-existing&source=fixture&state=healthy",
+    "metrics": {
+      "visibleScreen": "",
+      "doc": {
+        "clientWidth": 1600,
+        "scrollWidth": 1600,
+        "clientHeight": 1000,
+        "scrollHeight": 1000
+      },
+      "main": {
+        "clientHeight": 942,
+        "scrollHeight": 942
+      },
+      "screenBottom": 1000,
+      "brokenImages": [],
+      "visibleSvgIcons": 0,
+      "visibleImgIcons": 25,
+      "primaryButtons": [],
+      "horizontalOverflow": [],
+      "clipped": [],
+      "tinyText": []
+    }
+  }
+]

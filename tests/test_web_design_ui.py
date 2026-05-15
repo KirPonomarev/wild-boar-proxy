@@ -28,6 +28,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertTrue((WEB_DESIGN_UI / "scripts" / "overview.js").is_file())
         self.assertTrue((WEB_DESIGN_UI / "assets" / "boar_mark.png").is_file())
 
+    def test_referenced_phosphor_png_assets_exist_and_tokens_are_declared(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        icon_refs = set(re.findall(r'assets/icons/phosphor/([^"\']+\.png)', html + css))
+        self.assertIn("folder.png", icon_refs)
+        for icon_ref in icon_refs:
+            self.assertTrue((WEB_DESIGN_UI / "assets" / "icons" / "phosphor" / icon_ref).is_file(), icon_ref)
+        self.assertNotIn("var(--mono)", css)
+
     def test_fixture_states_are_present_and_distinct(self) -> None:
         expected = {
             "healthy",
@@ -328,7 +337,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("min-height: 86px", css)
         self.assertIn("min-height: 112px", css)
         self.assertIn(".quick-start-route-hint", css)
-        self.assertIn(".quick-start-card-actions .button.primary:disabled", css)
+        self.assertIn('id="quickStartCheckAllAction" class="button quick-start-only"', html)
+        self.assertNotIn('id="quickStartCheckAllAction" class="button primary', html)
+        self.assertIn(".header-actions #quickStartCheckAllAction:disabled", css)
 
         for forbidden in (
             "<canvas",
@@ -1029,7 +1040,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("reserve-first", accounts_policy_markup.lower())
         self.assertIn("Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.", accounts_policy_markup)
         self.assertIn("Lifecycle actions", accounts_policy_markup)
-        self.assertIn("Accounts / Account Detail only", accounts_policy_markup)
+        self.assertIn("Accounts / Detail only", accounts_policy_markup)
         self.assertIn("missing admitted policy command surface", accounts_policy_markup)
         self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
         self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
@@ -1627,7 +1638,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("raw auth files", diagnostics_privacy_markup)
         self.assertIn("secret values", diagnostics_privacy_markup)
         self.assertIn("private command argv", diagnostics_privacy_markup)
-        self.assertIn("raw diagnostics logs in UI", diagnostics_privacy_markup)
+        self.assertIn("raw logs in UI", diagnostics_privacy_markup)
         self.assertIn("requires human-open admission", diagnostics_privacy_markup)
         self.assertIn("server-owned bounded target", diagnostics_privacy_markup)
         self.assertIn("Artifact created is support readiness, not runtime health.", diagnostics_privacy_markup)
@@ -1938,7 +1949,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("command_id", import_section)
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         self.assertIn(".setup-flow-layout", css)
-        self.assertIn("grid-template-columns: 276px minmax(0, 1fr)", css)
+        self.assertIn("grid-template-columns: minmax(220px, 236px) minmax(0, 1fr)", css)
         self.assertIn(".setup-flow-rail", css)
         self.assertIn(".setup-bottom-bar", css)
         self.assertIn(".setup-card-head", css)
