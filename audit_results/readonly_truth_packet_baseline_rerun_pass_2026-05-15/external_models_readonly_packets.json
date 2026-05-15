@@ -1,0 +1,82 @@
+{
+  "status": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "foundation_phase": "C3",
+      "adapter_runtime_available": false,
+      "lifecycle_mode": "synthetic",
+      "adapter_state": "stopped",
+      "listener_proven": false,
+      "runtime_claim_blocked": true,
+      "profile_ready": false,
+      "routes_count": 0,
+      "observed_routes_count": 0,
+      "paths": {
+        "routes_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+        "state_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json",
+        "secrets_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/secrets.env",
+        "evidence_dir": "/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence"
+      },
+      "adapter": {
+        "lifecycle_mode": "synthetic",
+        "state": "stopped",
+        "host": "127.0.0.1",
+        "port": null,
+        "base_url": null,
+        "listener_proven": false,
+        "runtime_claim_blocked": true,
+        "started_at_utc": null,
+        "last_transition": "init"
+      },
+      "local_auth": {
+        "token_ref": "managed_local_token",
+        "token_present": false,
+        "token_created_at_utc": null
+      }
+    },
+    "timestamp_utc": "2026-05-15T18:55:27Z"
+  },
+  "models": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models route models listed from local registry.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "models": [],
+      "count": 0,
+      "source": "local_routes_registry",
+      "listener_proven": false,
+      "runtime_claim_blocked": true
+    },
+    "timestamp_utc": "2026-05-15T18:55:27Z"
+  },
+  "routes": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models routes listed from local registry.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "routes": [],
+      "count": 0
+    },
+    "timestamp_utc": "2026-05-15T18:55:27Z"
+  }
+}

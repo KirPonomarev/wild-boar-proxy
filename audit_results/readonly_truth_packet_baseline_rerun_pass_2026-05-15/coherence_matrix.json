@@ -1,0 +1,19 @@
+{
+  "owner_surface": "healthcheck --json",
+  "delegated_surface": "status --json",
+  "ordered_pair_respected": true,
+  "semantic_fields": {
+    "healthcheck.status": "ok",
+    "status.status": "ok",
+    "healthcheck.machine_error_code": "OK",
+    "status.machine_error_code": "OK",
+    "healthcheck.liveness": "healthy",
+    "status.liveness": "healthy",
+    "status.attestation_summary.status": "ok",
+    "status.attestation_summary.machine_error_code": "OK",
+    "status.attestation_summary.attestation_source": "healthcheck --json"
+  },
+  "semantic_coherence": true,
+  "owner_truth_stable_in_rerun": true,
+  "material_contradiction": false
+}
