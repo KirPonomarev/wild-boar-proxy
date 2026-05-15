@@ -1,0 +1,19 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_INPUT_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "rollback_comparison": {
+    "explicit_auth_ref": {
+      "reference_surface": "user-supplied --auth-ref path",
+      "root_local_by_default": false,
+      "rollback_unit": "not guaranteed to stay inside the sandbox root if the referenced auth file lives elsewhere",
+      "forbidden_root_risk": "elevated unless a later contour separately narrows and admits the external source"
+    },
+    "sandbox_auth_json": {
+      "reference_surface": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+      "root_local_by_default": true,
+      "rollback_unit": "delete auth.json or remove the whole sandbox root tree under the existing rollback runbook",
+      "forbidden_root_risk": "bounded if later writes remain inside the declared sandbox root"
+    }
+  },
+  "current_narrower_lane": "sandbox_auth_json"
+}

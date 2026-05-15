@@ -1,0 +1,21 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_INPUT_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "owner_surface": "accounts onboard --json",
+  "default_owner_input_path": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "default_owner_input_present": false,
+  "stable_inventory_dir": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable",
+  "stable_inventory_entries": [],
+  "prior_owner_stop": {
+    "machine_error_code": "ONBOARD_FAILED",
+    "final_outcome": "import_failed",
+    "selection_status": "no_new_backend_detected",
+    "stderr_sideband": "No sandbox-local auth candidate is available."
+  },
+  "live_auth_shortcut_outside_owner_surface_admitted": false,
+  "supporting_evidence": [
+    "audit_results/account_onboarding_sandbox_reserve_first_pass_2026-05-15/onboarding_owner_packet.json",
+    "audit_results/sandbox_onboarding_auth_candidate_diagnose_pass_2026-05-15/decision_packet.json",
+    "audit_results/sandbox_live_server_binding_pass_2026-05-15/sandbox_env_binding.json"
+  ]
+}
