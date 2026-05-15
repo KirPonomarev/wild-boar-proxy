@@ -1,0 +1,23 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "run_label": "v2",
+  "head": "4630d1f",
+  "basis": {
+    "sync_machine_error_code": "OK",
+    "sync_effective_mode": "managed",
+    "rotation_machine_error_code": "OK",
+    "rotation_evidence_status": "participation_evidence_present",
+    "rotation_evidence_freshness": "fresh",
+    "rotation_evidence_reason": "multi_backend_snapshot",
+    "status_machine_error_code": "OK",
+    "status_desired_mode": "stable",
+    "status_effective_mode": "managed",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "effective_source_status": "observed_source_active",
+    "consumer_activation_readiness_status": "activation_pending"
+  }
+}

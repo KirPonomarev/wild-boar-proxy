@@ -1,0 +1,19 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "run_label": "v2",
+  "status": "completed",
+  "final_verdict": "GO_TO_MANAGED_SYNC_MODE_DRIFT_DIAGNOSE_PASS",
+  "why": [
+    "sync restored fresh selector evidence and rotation inspect now reports participation_evidence_present with fresh multi_backend_snapshot",
+    "the same post-sync state re-blocks claim_gate and regresses effective runtime truth to managed/observed_source_active with activation_pending",
+    "rotation inspect still shows policy_drift clear on the approved-target claim surface, so the contradiction is not selector freshness and not policy-surface-wide",
+    "the narrowest honest next contour is lane-specific managed sync mode drift diagnosis, not auth-source work and not a generic repeat of prior stable/runtime reconciliation"
+  ],
+  "next_contour": "MANAGED_SYNC_MODE_DRIFT_DIAGNOSE_PASS",
+  "next_exact_command": "python3 -m wild_boar_proxy status --json",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+    "sandbox auth.json materialization"
+  ]
+}

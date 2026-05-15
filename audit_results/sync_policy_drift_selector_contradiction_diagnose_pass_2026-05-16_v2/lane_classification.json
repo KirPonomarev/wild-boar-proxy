@@ -1,0 +1,13 @@
+{
+  "classification": "lane_specific_contradiction",
+  "alternatives_considered": [
+    "expected transient lane side effect",
+    "policy surface wide contradiction"
+  ],
+  "chosen_reason": [
+    "rotation inspect judges the approved-target stable claim surface as clear",
+    "status reverts to managed runtime observation and blocks claim_gate on policy_drift",
+    "tests document that approved-target activation can coexist with observed auth-dir drift as observation-only when live activation evidence remains valid",
+    "after sync, the controlling runtime lane changed back to managed, so the blocked claim is tied to lane selection rather than selector freshness itself"
+  ]
+}

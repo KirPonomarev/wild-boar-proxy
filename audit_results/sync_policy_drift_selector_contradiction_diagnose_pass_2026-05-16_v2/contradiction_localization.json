@@ -1,0 +1,15 @@
+{
+  "root_cause": "sync refreshed managed-lane selector evidence but left the active runtime lane on observed-source managed truth, reopening blocked claim-gate despite clear approved-target claim-surface truth",
+  "localization": {
+    "selector_surface": "fresh and valid",
+    "stable_claim_surface": "clear on approved_repair_target",
+    "runtime_surface": "managed and observed_source_active",
+    "auth_chain_ready": false
+  },
+  "why_not_auth_work": [
+    "fresh selector evidence remains multi-backend, not singleton",
+    "claim_gate is blocked",
+    "effective source is observed_source_active",
+    "consumer_activation_readiness returned to activation_pending"
+  ]
+}
