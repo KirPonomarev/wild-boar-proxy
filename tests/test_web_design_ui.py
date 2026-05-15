@@ -2865,6 +2865,152 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_overview_live_readonly_sets_pending_live_state_before_fetch_resolves(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.value = "";
+    this.dataset = {};
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      add: () => {},
+      remove: () => {},
+      toggle: () => {},
+      contains: () => false
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  setAttribute(name, value) {
+    this[name] = value;
+  }
+  removeAttribute(name) {
+    delete this[name];
+  }
+}
+
+const ids = [
+  "sourcePicker",
+  "statePicker",
+  "brandCaption",
+  "sourceFooter",
+  "subtitleText",
+  "sourcePill",
+  "runtimeChip",
+  "desiredMode",
+  "effectiveMode",
+  "endpoint",
+  "lastError",
+  "activeCount",
+  "reserveCount",
+  "holdCount",
+  "problemCount",
+  "activeNote",
+  "reserveNote",
+  "holdNote",
+  "problemNote",
+  "fixtureBanner",
+  "sidebarDot",
+  "sidebarStatus"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.runtimeChip.lastElementChild = { textContent: "" };
+elements.sourcePill.lastElementChild = { textContent: "" };
+elements.sourcePicker.value = "fixture";
+elements.statePicker.value = "healthy";
+const desktop = new Node("div");
+desktop.dataset = { screen: "overview", source: "fixture", fixtureState: "healthy", settingsSection: "hub" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      return elements[id] || null;
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "?screen=overview&source=live", href: "http://127.0.0.1/?screen=overview&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url !== "api/live-readonly") {
+      throw new Error(`unexpected fetch ${url}`);
+    }
+    return new Promise(() => {});
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.setLiveReadonly(false);
+
+if (desktop.dataset.source !== "live") {
+  throw new Error(`desktop source must switch to live immediately: ${desktop.dataset.source}`);
+}
+if (elements.sourcePicker.value !== "live") {
+  throw new Error(`source picker must switch to live immediately: ${elements.sourcePicker.value}`);
+}
+if (elements.statePicker.disabled !== true) {
+  throw new Error("state picker must be disabled while live readonly is pending");
+}
+if (elements.brandCaption.textContent !== "live только чтение") {
+  throw new Error(`overview live caption missing: ${elements.brandCaption.textContent}`);
+}
+if (elements.runtimeChip.lastElementChild.textContent !== "Загрузка") {
+  throw new Error(`runtime chip must show loading while fetch pending: ${elements.runtimeChip.lastElementChild.textContent}`);
+}
+if (elements.activeCount.textContent !== "—" || elements.problemCount.textContent !== "—") {
+  throw new Error(`overview counters must not keep fixture values while live fetch pending: active=${elements.activeCount.textContent}, problem=${elements.problemCount.textContent}`);
+}
+if (!elements.fixtureBanner.textContent.includes("Загрузка live-readonly")) {
+  throw new Error(`overview banner must show live pending copy: ${elements.fixtureBanner.textContent}`);
+}
+if (elements.sidebarStatus.textContent !== "Загрузка live-readonly…") {
+  throw new Error(`sidebar status must show live pending copy: ${elements.sidebarStatus.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_diagnostics_export_result_renders_safe_artifact_metadata(self) -> None:
         script = r"""
 const fs = require("fs");

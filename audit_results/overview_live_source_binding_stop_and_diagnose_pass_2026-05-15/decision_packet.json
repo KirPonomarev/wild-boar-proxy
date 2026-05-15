@@ -1,0 +1,19 @@
+{
+  "contour": "OVERVIEW_LIVE_SOURCE_BINDING_STOP_AND_DIAGNOSE_PASS",
+  "status": "ok",
+  "decision": "GO_TO_RERUN_READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "root_cause": "live/UI handoff defect during pending overview fetch; final live packet was correct but the UI left fixture/demo state visible until resolution",
+  "touched_files": [
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_ui.py"
+  ],
+  "runtime_mutations_performed": false,
+  "post_action_calls_made": false,
+  "regression_summary": {
+    "quick_start_live": "pass",
+    "accounts_live": "pass",
+    "api_connections_live": "pass",
+    "overview_fixture": "pass"
+  },
+  "next_contour": "RERUN_READONLY_TRUTH_PACKET_BASELINE_PASS"
+}

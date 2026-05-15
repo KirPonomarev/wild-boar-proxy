@@ -1144,6 +1144,59 @@ function setSourceCopy(source) {
   updateImportExistingCopy(source);
 }
 
+function liveBrandCaptionForScreen(screen) {
+  return {
+    "quick-start": "quick start · live readonly",
+    accounts: "аккаунты · live только чтение",
+    "api-connections": "API-подключения · список маршрутов",
+    overview: "live только чтение"
+  }[screen] || "live только чтение";
+}
+
+function setLiveReadonlyPendingUi() {
+  const screen = currentScreen();
+  const desktop = document.querySelector(".desktop");
+  const sourcePicker = document.getElementById("sourcePicker");
+  const statePicker = document.getElementById("statePicker");
+  const brandCaption = document.getElementById("brandCaption");
+  desktop.dataset.source = "live";
+  if (sourcePicker) {
+    sourcePicker.value = "live";
+  }
+  if (statePicker) {
+    statePicker.disabled = true;
+  }
+  if (brandCaption) {
+    brandCaption.textContent = liveBrandCaptionForScreen(screen);
+  }
+  setSourceCopy("live");
+}
+
+function renderOverviewLivePendingState() {
+  const runtimeChip = document.getElementById("runtimeChip");
+  setClassName(runtimeChip, "chip", "neutral");
+  runtimeChip.lastElementChild.textContent = "Загрузка";
+  text("desiredMode", "—");
+  text("effectiveMode", "—");
+  text("endpoint", "—");
+  text("lastError", "ожидание live-readonly");
+  document.getElementById("lastError").className = "last-error";
+  text("activeCount", "—");
+  text("reserveCount", "—");
+  text("holdCount", "—");
+  text("problemCount", "—");
+  text("activeNote", "загрузка");
+  text("reserveNote", "загрузка");
+  text("holdNote", "загрузка");
+  text("problemNote", "загрузка");
+  const banner = document.getElementById("fixtureBanner");
+  setClassName(banner, "fixture-banner", "neutral");
+  banner.textContent = "Загрузка live-readonly. Предыдущие fixture-данные не используются как truth.";
+  const sidebarDot = document.getElementById("sidebarDot");
+  setClassName(sidebarDot, "dot", "neutral");
+  text("sidebarStatus", "Загрузка live-readonly…");
+}
+
 function updateSetupAdmissionCopy(source) {
   const banner = document.getElementById("setupBanner");
   if (!banner) {
@@ -4815,7 +4868,10 @@ async function setFixtureState(stateId, updateUrl = false) {
 }
 
 async function setLiveReadonly(updateUrl = false) {
-  setSourceCopy("live");
+  setLiveReadonlyPendingUi();
+  if (currentScreen() === "overview") {
+    renderOverviewLivePendingState();
+  }
   const snapshot = currentScreen() === "quick-start"
     ? {
       accounts: await loadAccountsReadonly(),
