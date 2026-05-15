@@ -1,26 +1,42 @@
 # Independent Audit
 
-- auditor: `Kant` (`gpt-5.4-mini` explorer)
-- mode: read-only artifact inspection
-- result: `STOP_AND_DIAGNOSE`
+Auditor: `Hooke`
 
-## Findings
+## Auditor factual findings
 
-1. Work paths and candidate sandbox paths are correctly separated.
-   - work contour remains under `/Users/kirillponomarev/.codex-custom-cli` and `/Users/kirillponomarev/.cli-proxy-api/config.yaml`
-   - candidate sandbox remains under `/Users/kirillponomarev/.codex-custom-test`
-   - caveat: the sandbox root already exists but is not yet a complete WBP sandbox because its managed/runtime/stable/external-models subtree is still missing
+- current candidate sandbox root `/Users/kirillponomarev/.codex-custom-test` is
+  path-isolated from working/live roots
+- current candidate sandbox root is **not** admissible as the active sandbox
+  root because it already contains mutable prior-experiment runtime and
+  external-models state
+- runtime and external-models path override surfaces are explicit in code
+- the narrow guardrail is `fresh-root-required`
 
-2. Owner gate absence is a real blocker under `CANON.md`.
-   - the active thread includes `начинай работу`, but canon explicitly says generic start/go phrases do not authorize live commands
-   - no standing approval phrase or narrower one-off owner marker is present for external sandbox writes
+## Where the auditor was right
 
-3. Verdict stays `STOP_AND_DIAGNOSE`.
-   - `owner_gate_passed = false`
-   - `execution_phase_started = false`
-   - `rollback_ready = false`
-   - there is no factual basis for `GO_TO_SANDBOX_LIVE_SERVER_BINDING_PASS`
+The auditor correctly refused silent reuse of `.codex-custom-test`.
+That is the important safety boundary in this contour.
 
-## Auditor conclusion
+## Final adjudication
 
-No hidden-write signal is present in the artifacts. The contour is clean as a boundary-design pass, and the honest next step is explicit owner authorization before any external sandbox write.
+I agree with the auditor on the safety rule:
+
+- `.codex-custom-test` must not be reused as the active sandbox root
+
+I narrow the final contour result one step differently:
+
+- this contour already selected and declared a fresh dedicated root:
+  `/Users/kirillponomarev/.codex-custom-sandbox-20260515`
+- because contour 3 is boundary planning, not scaffold execution, selecting that
+  root and quarantining the old one is sufficient to earn the next contour
+
+So the auditor did not lie.
+
+Its key factual verdict was:
+
+```text
+fresh-root-required
+```
+
+And this contour satisfied that requirement by declaring the fresh root and
+forbidding writes into the old sandbox root.

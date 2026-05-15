@@ -1,37 +1,58 @@
 # Write Surface Declaration
 
-## Work contour surfaces that remain forbidden
+## Declared Active Sandbox Root
 
-- `/Users/kirillponomarev/.codex-custom-cli`
-- `/Users/kirillponomarev/.codex-custom-cli/managed`
-- `/Users/kirillponomarev/.cli-proxy-api/config.yaml`
-- `/Users/kirillponomarev/.codex-custom-cli/auth.json`
-- `/Users/kirillponomarev/.codex-custom-cli/config.toml`
-- `/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt`
-- `/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt`
-- `/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh`
-- `/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json`
-- `/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json`
-- `/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml`
+`/Users/kirillponomarev/.codex-custom-sandbox-20260515`
 
-## Candidate sandbox write surfaces
+This root is declared for the active sandbox wave because it is:
 
-These are the first non-repo paths that would require owner-approved writes:
+- not equal to any working/live root
+- not nested under any working/live root
+- currently absent, so no prior mutable state must be trusted or cleaned in
+  place
 
-- `/Users/kirillponomarev/.codex-custom-test/managed`
-- `/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt`
-- `/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt`
-- `/Users/kirillponomarev/.codex-custom-test/stable/`
-- `/Users/kirillponomarev/.codex-custom-test/stable/config.yaml`
-- `/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh`
-- `/Users/kirillponomarev/.codex-custom-test/external-models/`
-- `/Users/kirillponomarev/.codex-custom-test/external-models/routes.json`
-- `/Users/kirillponomarev/.codex-custom-test/external-models/state.json`
-- `/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env`
-- `/Users/kirillponomarev/.codex-custom-test/external-models/evidence/`
+## Writable Surfaces For The Next Sandbox Wave
 
-## Owner gate status
+Only paths under the declared root are admissible for later sandbox writes.
 
-- owner approved mutation: no
-- reason: the active thread contains `начинай работу`, but `CANON.md` requires the explicit standing approval phrase `разрешаю тебе любые законные действия в рамках разработки проекта` or a narrower one-off owner marker for live filesystem mutation outside repo.
-- consequence: this contour may describe the sandbox and rollback design, but it must not create the external sandbox skeleton yet.
+### Runtime companion surfaces
+
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/config.toml`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-mode.txt`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-effective-mode.txt`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/codex-custom-launch.sh`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/backend-registry.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-state.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/managed-config.yaml`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/wild-boar-proxy.lock`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-sync.sh`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/stable-repair-target/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/approved-repair-target.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/target-switch-transaction.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/stable-runtime-config.generated.yaml`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable/config.yaml`
+
+### External-models surfaces
+
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/routes.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/state.json`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/secrets.env`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/evidence/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/routes.lock`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/state.lock`
+
+### Host-client local-only sandbox surfaces
+
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/launch-logs/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/logs_2.sqlite*`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/state_5.sqlite*`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/sessions/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/shell_snapshots/`
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515/tmp/`
+
+## Explicit Non-Write Rule
+
+No later sandbox contour may write outside the declared sandbox root unless a
+new contour explicitly re-admits that surface.

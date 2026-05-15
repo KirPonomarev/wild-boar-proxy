@@ -1,41 +1,38 @@
 # Rollback Runbook
 
-## Snapshot point before first external write
+## Scope
 
-Before any sandbox filesystem mutation outside repo:
+This contour performed no sandbox mutation. Rollback is therefore declarative
+for the next sandbox contour.
 
-1. record existence and metadata of `/Users/kirillponomarev/.codex-custom-test`
-2. record non-existence or existence of the planned WBP sandbox paths under that root
-3. record that no paths under `/Users/kirillponomarev/.codex-custom-cli` or `/Users/kirillponomarev/.cli-proxy-api` are modified
+## Rollback Unit
 
-## Minimal approved execution shape
+The rollback unit for the next sandbox wave is the declared fresh root:
 
-If owner gate is later passed, the first allowed writes should be limited to:
+`/Users/kirillponomarev/.codex-custom-sandbox-20260515`
 
-1. create `/Users/kirillponomarev/.codex-custom-test/managed`
-2. create empty or baseline sandbox files under the candidate sandbox root only
-3. create sandbox-local `stable/config.yaml`
-4. create sandbox-local `external-models` skeleton
+## Rollback Rule
 
-## Rollback steps
+If the next contour creates or mutates only paths inside the declared sandbox
+root, rollback is:
 
-If sandbox prep writes start and must be reverted:
+1. stop any sandbox-scoped processes started by that contour
+2. verify no working/live roots were touched
+3. remove the fresh sandbox root tree in full
+4. re-check that working/live roots remain unchanged
 
-1. remove only sandbox-local files created under `/Users/kirillponomarev/.codex-custom-test/managed`
-2. remove only sandbox-local `stable` subtree created by the contour
-3. remove only sandbox-local `external-models` subtree created by the contour
-4. remove only sandbox-local launcher file created by the contour
-5. verify no mtimes changed under `/Users/kirillponomarev/.codex-custom-cli`
-6. verify `/Users/kirillponomarev/.cli-proxy-api/config.yaml` checksum unchanged
+## Why This Rollback Is Credible
 
-## Residue check
+- the active sandbox root is dedicated and absent before the next contour
+- working/live roots are outside it
+- the old sandbox candidate root is quarantined and excluded from active writes
 
-After rollback or teardown, verify:
+## Rollback Verification
 
-- no new WBP-managed files remain under `/Users/kirillponomarev/.codex-custom-test`
-- no files under `/Users/kirillponomarev/.codex-custom-cli` changed
-- no files under `/Users/kirillponomarev/.cli-proxy-api` changed
+After a future rollback:
 
-## Current contour status
-
-Rollback design is defined, but it is not yet exercised because owner gate is not passed and execution phase never started.
+- `/Users/kirillponomarev/.codex-custom-sandbox-20260515` must be absent again
+- `/Users/kirillponomarev/.codex-custom-cli` must remain untouched
+- `/Users/kirillponomarev/.cli-proxy-api` must remain untouched
+- `/Users/kirillponomarev/.wild-boar-proxy/external-models` must remain
+  untouched

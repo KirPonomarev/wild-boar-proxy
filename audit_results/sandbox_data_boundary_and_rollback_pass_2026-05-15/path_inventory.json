@@ -1,170 +1,88 @@
-[
-  {
-    "path_role": "work_profile_dir",
-    "path": "/Users/kirillponomarev/.codex-custom-cli",
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
+  "observed_working_live_roots": {
+    "profile_root": "/Users/kirillponomarev/.codex-custom-cli",
+    "stable_root": "/Users/kirillponomarev/.cli-proxy-api",
+    "external_models_root": "/Users/kirillponomarev/.wild-boar-proxy/external-models"
+  },
+  "observed_runtime_path_override_surfaces": {
+    "runtime_paths_from_env": [
+      "WBP_PROFILE_DIR",
+      "WBP_MANAGED_DIR",
+      "WBP_STABLE_CONFIG",
+      "WBP_AUTH_FILE",
+      "WBP_CONFIG_TOML",
+      "WBP_RUNTIME_MODE_FILE",
+      "WBP_RUNTIME_EFFECTIVE_MODE_FILE",
+      "WBP_REGISTRY_FILE",
+      "WBP_STATE_FILE",
+      "WBP_MANAGED_CONFIG_FILE",
+      "WBP_LAUNCHER_SCRIPT",
+      "WBP_SYNC_SCRIPT",
+      "WBP_ACCOUNTS_BIN",
+      "WBP_ONBOARD_BIN",
+      "WBP_LOCK_FILE"
+    ],
+    "runtime_paths_code_refs": [
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:159",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:187",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:312"
+    ],
+    "external_models_paths_from_env": [
+      "WBP_EXTERNAL_MODELS_DIR",
+      "WBP_EXTERNAL_MODELS_ROUTES",
+      "WBP_EXTERNAL_MODELS_STATE",
+      "WBP_EXTERNAL_MODELS_SECRETS",
+      "WBP_EXTERNAL_MODELS_EVIDENCE",
+      "WBP_EXTERNAL_MODELS_ROUTES_LOCK",
+      "WBP_EXTERNAL_MODELS_STATE_LOCK"
+    ],
+    "external_models_code_refs": [
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/external_models/paths.py:14",
+      "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/external_models/paths.py:34"
+    ]
+  },
+  "observed_existing_sandbox_candidate": {
+    "root": "/Users/kirillponomarev/.codex-custom-test",
     "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Primary live Wild Boar / Codex custom profile root. Contains auth, logs, sessions, launch scripts, and runtime state."
+    "path_overlap_with_working_roots": false,
+    "mutable_state_present": true,
+    "mutable_state_summary": {
+      "auth_json_exists": true,
+      "config_toml_exists": true,
+      "runtime_mode_exists": true,
+      "runtime_effective_mode_exists": true,
+      "managed_registry_exists": true,
+      "managed_state_exists": true,
+      "stable_config_exists": true,
+      "external_models_routes_exists": true,
+      "external_models_state_exists": true,
+      "external_models_secrets_exists": true,
+      "logs_sqlite_exists": true,
+      "state_sqlite_exists": true
+    },
+    "sandbox_local_registry_refs": [
+      {
+        "backend_id": "auth",
+        "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+        "pool": "reserve",
+        "status": "unknown"
+      }
+    ],
+    "stale_configuration_signals": {
+      "config_model": "claude-sonnet-4-6-thinking",
+      "config_provider": "vibeproxy",
+      "config_sandbox_mode": "read-only",
+      "stable_port": 8318,
+      "managed_port": 8320,
+      "launcher_script_behavior": "sandbox scaffold only; not launch-ready"
+    },
+    "admissibility_for_active_wave": "no"
   },
-  {
-    "path_role": "work_managed_dir",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/managed",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Primary managed runtime directory. Contains registry, supervisor state, managed config, logs, and repair-target inventory."
-  },
-  {
-    "path_role": "work_stable_config",
-    "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Real stable CLIProxy config. Master plan forbids development/test mutation without explicit live-runtime approval."
-  },
-  {
-    "path_role": "work_auth_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live auth file. Sensitive; do not copy, print, or mutate by default."
-  },
-  {
-    "path_role": "work_config_toml",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live profile config."
-  },
-  {
-    "path_role": "work_runtime_mode_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live desired-mode truth file."
-  },
-  {
-    "path_role": "work_runtime_effective_mode_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live effective-mode truth file."
-  },
-  {
-    "path_role": "work_registry_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live account registry."
-  },
-  {
-    "path_role": "work_state_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live supervisor state."
-  },
-  {
-    "path_role": "work_managed_config_file",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live managed runtime config."
-  },
-  {
-    "path_role": "work_launcher_script",
-    "path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
-    "exists": true,
-    "classification": "forbidden",
-    "write_allowed_in_this_contour": false,
-    "notes": "Live launcher path surface."
-  },
-  {
-    "path_role": "work_external_models_dir",
-    "path": "/Users/kirillponomarev/.wild-boar-proxy/external-models",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Canonical external-models root path from command packets; currently absent, but future sandbox must not fall back to real default under ~/.wild-boar-proxy."
-  },
-  {
-    "path_role": "host_client_app",
-    "path": "/Applications/Codex.app",
-    "exists": true,
-    "classification": "read_only",
-    "write_allowed_in_this_contour": false,
-    "notes": "Installed host client app bundle. Read-only reference only; not a sandbox write target."
-  },
-  {
-    "path_role": "candidate_sandbox_profile_root",
-    "path": "/Users/kirillponomarev/.codex-custom-test",
-    "exists": true,
-    "classification": "read_only",
-    "write_allowed_in_this_contour": false,
-    "notes": "Pre-existing isolated profile root distinct from ~/.codex-custom-cli. Contains its own auth.json/config.toml/state sqlite files, but no WBP managed subtree yet."
-  },
-  {
-    "path_role": "candidate_sandbox_managed_dir",
-    "path": "/Users/kirillponomarev/.codex-custom-test/managed",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Required future managed subtree for sandbox WBP env. Missing today; would require first external write."
-  },
-  {
-    "path_role": "candidate_sandbox_runtime_mode_file",
-    "path": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Desired-mode file for sandbox profile. Missing today."
-  },
-  {
-    "path_role": "candidate_sandbox_runtime_effective_mode_file",
-    "path": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Effective-mode file for sandbox profile. Missing today."
-  },
-  {
-    "path_role": "candidate_sandbox_stable_config",
-    "path": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Sandbox stable CLIProxy config override required by master plan. Missing today."
-  },
-  {
-    "path_role": "candidate_sandbox_launcher_script",
-    "path": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Canonical default launcher path for sandbox profile. Missing; existing codex-vibe-test.sh is not treated as the repo-owned WBP launcher surface."
-  },
-  {
-    "path_role": "candidate_sandbox_external_models_dir",
-    "path": "/Users/kirillponomarev/.codex-custom-test/external-models",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Sandbox external-models root required if later contours touch API connections and secret_ref surfaces."
-  },
-  {
-    "path_role": "candidate_sandbox_external_models_secrets",
-    "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
-    "exists": false,
-    "classification": "must_isolate",
-    "write_allowed_in_this_contour": false,
-    "notes": "Must be created as sandbox-local file if external-models contour later needs it; never copy real secrets by default."
+  "declared_active_sandbox_root": {
+    "root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+    "exists_now": false,
+    "path_overlap_with_working_roots": false,
+    "selection_reason": "fresh dedicated root avoids prior mutable-state contamination while preserving strong path isolation"
   }
-]
+}

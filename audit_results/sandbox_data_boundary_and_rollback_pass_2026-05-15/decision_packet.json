@@ -1,14 +1,23 @@
 {
   "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
-  "status": "completed",
-  "decision": "STOP_AND_DIAGNOSE",
-  "reason": "Boundary discovery and rollback design are complete, but the hard owner gate for external sandbox writes is not passed, so execution phase cannot begin honestly.",
-  "owner_gate_passed": false,
-  "execution_phase_started": false,
-  "candidate_sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
-  "blocking_items": [
-    "Explicit project-scoped standing approval phrase or narrower one-off owner marker for live filesystem writes is absent.",
-    "Candidate sandbox root exists, but required WBP managed subtree and isolated stable-config override are still missing and would require external writes."
+  "decision": "GO_TO_SANDBOX_LIVE_SERVER_BINDING_PASS",
+  "observed_facts": [
+    "working/live roots were mapped to /Users/kirillponomarev/.codex-custom-cli, /Users/kirillponomarev/.cli-proxy-api, and /Users/kirillponomarev/.wild-boar-proxy/external-models",
+    "runtime and external-models support explicit env override path surfaces",
+    "the old sandbox candidate root /Users/kirillponomarev/.codex-custom-test is path-isolated but contains mutable prior-experiment state",
+    "the old sandbox candidate root carries stale experiment-specific configuration and is not suitable as the active sandbox root",
+    "the selected fresh root /Users/kirillponomarev/.codex-custom-sandbox-20260515 does not currently exist and does not overlap with working/live roots",
+    "repo tests already prove isolated layout bootstrap under env overrides"
   ],
-  "next_contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS (execution-phase rerun after owner gate)"
+  "policy_decisions": [
+    "active sandbox root = /Users/kirillponomarev/.codex-custom-sandbox-20260515",
+    "old sandbox candidate root = quarantined evidence only",
+    "live auth copy/import by default remains forbidden",
+    "next contour may bind live server and command runner only against the declared fresh sandbox root"
+  ],
+  "not_earned": [
+    "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+    "ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS",
+    "any live auth import/copy contour"
+  ]
 }

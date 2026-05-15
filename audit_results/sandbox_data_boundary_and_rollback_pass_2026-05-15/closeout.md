@@ -2,50 +2,90 @@
 
 ## Goal
 
-Map the real work contour paths, classify sandbox boundaries, declare write surfaces, and design rollback before any external filesystem write for sandbox prep.
+Define a safe sandbox boundary, declared write surfaces, rollback, and teardown
+before the sandbox mutation wave begins.
 
 ## Result
 
-- status: completed
-- final verdict: STOP_AND_DIAGNOSE
-- next action: obtain explicit owner authorization for external sandbox writes, then rerun the execution phase of this contour
+- status: `GO`
+- final verdict: `GO_TO_SANDBOX_LIVE_SERVER_BINDING_PASS`
+- next action: open the sandbox binding contour against the declared fresh root
 
 ## Contour Capsule
 
-- goal: separate live work paths from a candidate sandbox path and decide whether sandbox skeleton writes can begin safely
+- goal: separate observed paths from declared sandbox policy, classify the old
+  sandbox candidate root, and decide whether a fresh sandbox root can carry the
+  next binding contour safely
 - branch: `codex/external-agent-lab-isolated`
-- head: `Sandbox data boundary and rollback audit (current contour commit)`
-- touched files: `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/*`
-- tests run: `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/closeout.md`; `python3 tools/check_closeout_resilience.py --staged-only`
-- blocked risks: no explicit standing owner approval phrase is present for external sandbox writes; real work contour defaults still point at `~/.codex-custom-cli` and `~/.cli-proxy-api`
-- next exact command: `git status --short --untracked-files=no`
+- head: `a92a421 Rerun readonly truth baseline with owner discipline`
+- touched files:
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/contour.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/path_inventory.json`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/write_surface_declaration.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/forbidden_surface_declaration.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/sandbox_boundary_packet.json`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/rollback_runbook.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/teardown_runbook.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/separation_proof.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/decision_packet.json`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/independent_audit.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/closeout.md`
+- tests run:
+  - `python3 -m unittest -q tests.test_external_models.ExternalModelContractTests.test_paths_from_env_uses_isolated_overrides tests.test_cli.CliTests.test_installer_init_creates_baseline_companion_layout`
+  - `git diff --check`
+  - `python3 tools/check_closeout_resilience.py audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/closeout.md`
+  - `python3 tools/check_closeout_resilience.py --staged-only`
+- blocked risks:
+  - no active blocker remains after declaring a fresh dedicated sandbox root and quarantining the old candidate root
+- next exact command: `python3 -m wild_boar_proxy installer init --json`
 
 ## Verification
 
-- tests: not applicable beyond artifact/resilience checks; this contour performed read-only discovery only
-- build: not applicable
-- manual: verified actual existence and separation of `/Users/kirillponomarev/.codex-custom-cli`, `/Users/kirillponomarev/.cli-proxy-api/config.yaml`, `/Applications/Codex.app`, and the pre-existing candidate root `/Users/kirillponomarev/.codex-custom-test`
-- live verification: no live runtime commands or external filesystem writes executed
+- tests:
+  - isolated path override test passed
+  - isolated installer bootstrap test passed
+- build:
+  - `git diff --check`
+- manual:
+  - working/live roots were observed directly
+  - old sandbox candidate root contents were enumerated without mutation
+  - path overlap was checked directly
+  - fresh root absence was verified directly
+- live verification:
+  - not applicable; this contour is boundary planning only
 
 ## Artifacts
 
-- spec: `/Volumes/Work/wild-boar-proxy/audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/contour.md`
-- packet: `/Volumes/Work/wild-boar-proxy/audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/decision_packet.json`
-- report: `/Volumes/Work/wild-boar-proxy/audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/risk_matrix.md`
+- spec:
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/contour.md`
+- packet:
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/path_inventory.json`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/sandbox_boundary_packet.json`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/decision_packet.json`
+- report:
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/write_surface_declaration.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/forbidden_surface_declaration.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/rollback_runbook.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/teardown_runbook.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/separation_proof.md`
+  - `audit_results/sandbox_data_boundary_and_rollback_pass_2026-05-15/independent_audit.md`
 
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `Sandbox data boundary and rollback audit (current contour commit)`
-- pushed: pending at artifact generation time
+- commit: `pending`
+- pushed: `pending`
 
 ## Scope Check
 
-- unrelated work mixed in: no
-- private-data risk reviewed: yes; artifacts record only path metadata and boundary classification, not auth contents or raw runtime dumps
+- unrelated work mixed in: `no`
+- private-data risk reviewed: `yes; only path and size facts were recorded, no
+  secret payloads were copied into artifacts`
 
 ## Notes
 
-- blockers encountered: owner gate absent for external writes; candidate sandbox root exists but is not yet a complete WBP sandbox
-- follow-up contour: rerun `SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS` execution phase after explicit owner approval, then continue to `SANDBOX_LIVE_SERVER_BINDING_PASS`
-- resume from here: obtain explicit owner approval for sandbox writes, then rerun `SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS`
+- blockers encountered:
+  - old sandbox candidate root was found inadmissible for active-wave reuse
+- follow-up contour:
+  - `SANDBOX_LIVE_SERVER_BINDING_PASS`
+- resume from here: `bind the live server and command runner only against /Users/kirillponomarev/.codex-custom-sandbox-20260515`

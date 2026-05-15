@@ -1,55 +1,22 @@
 {
   "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS",
-  "work_contour_paths": [
-    "/Users/kirillponomarev/.codex-custom-cli",
-    "/Users/kirillponomarev/.codex-custom-cli/managed",
-    "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
-    "/Users/kirillponomarev/.codex-custom-cli/auth.json",
-    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
-    "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
-    "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
-  ],
-  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
-  "sandbox_paths": [
-    "/Users/kirillponomarev/.codex-custom-test",
-    "/Users/kirillponomarev/.codex-custom-test/managed",
-    "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
-    "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
-    "/Users/kirillponomarev/.codex-custom-test/external-models"
-  ],
-  "forbidden_paths": [
-    "/Users/kirillponomarev/.codex-custom-cli",
-    "/Users/kirillponomarev/.codex-custom-cli/managed",
-    "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
-    "/Users/kirillponomarev/.codex-custom-cli/auth.json",
-    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
-    "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
-    "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
-  ],
-  "write_surfaces": [
-    "/Users/kirillponomarev/.codex-custom-test/managed",
-    "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
-    "/Users/kirillponomarev/.codex-custom-test/stable",
-    "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
-    "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
-    "/Users/kirillponomarev/.codex-custom-test/external-models",
-    "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
-    "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
-    "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
-    "/Users/kirillponomarev/.codex-custom-test/external-models/evidence"
-  ],
-  "rollback_ready": false,
-  "owner_gate_passed": false,
-  "execution_phase_started": false,
-  "candidate_reuse_root_exists": true,
-  "decision": "STOP_AND_DIAGNOSE"
+  "decision_basis": {
+    "readonly_baseline_rerun_passed": true,
+    "working_live_roots_observed": [
+      "/Users/kirillponomarev/.codex-custom-cli",
+      "/Users/kirillponomarev/.cli-proxy-api",
+      "/Users/kirillponomarev/.wild-boar-proxy/external-models"
+    ],
+    "existing_sandbox_candidate_root": "/Users/kirillponomarev/.codex-custom-test",
+    "existing_candidate_is_path_isolated": true,
+    "existing_candidate_is_active_wave_admissible": false,
+    "fresh_active_sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+    "fresh_root_exists_now": false
+  },
+  "declared_policy": {
+    "active_sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+    "quarantined_old_sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+    "live_auth_copy_default": "forbidden",
+    "sandbox_binding_contour_next": true
+  }
 }
