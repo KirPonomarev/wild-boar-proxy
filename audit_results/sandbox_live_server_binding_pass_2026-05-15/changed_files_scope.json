@@ -1,0 +1,28 @@
+{
+  "bootstrap_changed_files": [
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/config.toml",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-accounts",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-account-onboard",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/bin/codex-managed-status",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-sync.sh",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/routes.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/state.json",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/secrets.env",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models/evidence"
+  ],
+  "status_changed_files": [],
+  "mode_changed_files": [],
+  "accounts_changed_files": [],
+  "external_models_status_changed_files": [],
+  "external_models_models_changed_files": [],
+  "external_models_routes_list_changed_files": [],
+  "forbidden_live_path_drift": false,
+  "scope_rule": "no observed changed_files escaped the declared fresh sandbox root"
+}

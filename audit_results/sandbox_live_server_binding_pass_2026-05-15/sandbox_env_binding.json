@@ -1,0 +1,35 @@
+{
+  "contour": "SANDBOX_LIVE_SERVER_BINDING_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "server_port": 8791,
+  "server_listen_pid": 597,
+  "env": {
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/stable/config.yaml",
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/config.toml",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-mode.txt",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/runtime-effective-mode.txt",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/backend-registry.json",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-state.json",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/managed-config.yaml",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/codex-custom-launch.sh",
+    "WBP_SYNC_SCRIPT": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/supervisor-sync.sh",
+    "WBP_LOCK_FILE": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/managed/wild-boar-proxy.lock",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/external-models"
+  },
+  "forbidden_write_roots": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.cli-proxy-api",
+    "/Users/kirillponomarev/.wild-boar-proxy/external-models",
+    "/Users/kirillponomarev/.codex-custom-test"
+  ],
+  "runtime_green_required_for_success": false,
+  "binding_success_basis": [
+    "command_packets",
+    "server_process_env",
+    "readonly_get_packets",
+    "changed_files_scope"
+  ]
+}
