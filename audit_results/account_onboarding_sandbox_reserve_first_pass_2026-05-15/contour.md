@@ -2,28 +2,11 @@
 
 ## Goal
 
-Prove reserve-first sandbox onboarding through `accounts onboard --json` without leaving `/Users/kirillponomarev/.codex-custom-test` and without overclaiming success before packet-plus-refresh evidence.
+Attempt the first sandbox onboarding mutation through `accounts onboard --json` on the preserved fresh sandbox root `/Users/kirillponomarev/.codex-custom-sandbox-20260515` and accept success only if reserve-first proof is machine-readable and confirmed by post-refresh truth.
 
-## Outcome
+## Result Shape
 
-`STOP_AND_DIAGNOSE`
-
-## Decisive blocker
-
-The sandbox-local owner onboarding lane is not fully materialized:
-
-- `/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-account-onboard` is missing
-- `/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-accounts` is missing
-- `/Users/kirillponomarev/.codex-custom-test/managed/bin/codex-managed-status` is missing
-- `/Users/kirillponomarev/.codex-custom-test/managed/supervisor-sync.sh` is missing
-
-The current owner packet proves the blocker directly:
-
-- `machine_error_code = MISSING_ONBOARD_BIN`
-- `changed_files = []`
-
-The only existing external owner binaries live under `/Users/kirillponomarev/.codex-custom-cli/managed/bin/` and are hardwired to `Path.home()` plus `~/.codex-custom-cli` and `~/.cli-proxy-api`, so using them would break sandbox isolation.
-
-## Next honest move
-
-Run a dedicated stop-and-diagnose repair contour to materialize sandbox-safe onboarding owner binaries and post-proof helpers before rerunning `ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS`.
+- owner surface only
+- post-refresh proof mandatory
+- UI/action-ledger evidence optional only if ambiguity remains
+- stop immediately if sandbox-local auth is missing or reserve-first proof is absent

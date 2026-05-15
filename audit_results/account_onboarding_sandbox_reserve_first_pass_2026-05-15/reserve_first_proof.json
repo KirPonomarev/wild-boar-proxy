@@ -1,0 +1,21 @@
+{
+  "owner_surface_used": "accounts onboard --json",
+  "onboarding_attempted": true,
+  "unique_backend_selected": false,
+  "selected_backend_id": "",
+  "new_backend_ids": [],
+  "selection_status": "no_new_backend_detected",
+  "reserve_first_enforced": false,
+  "pool_after_onboarding": {
+    "active": 0,
+    "reserve": 0,
+    "retired": 0
+  },
+  "active_routing_changed": "",
+  "validate_attempted": false,
+  "sync_attempted": false,
+  "post_refresh_backend_present": false,
+  "post_refresh_accounts_empty": true,
+  "reserve_first_proven": false,
+  "blocking_reason": "sandbox-local auth candidate missing inside owner onboarding lane"
+}
