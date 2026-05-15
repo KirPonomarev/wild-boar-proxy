@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "selected_outcome": "OPEN_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "exact_external_source_path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+  "declared_read_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/auth.json"
+  ],
+  "declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/auth.json"
+  ],
+  "conditional_write_surfaces": [],
+  "rollback_expectations": [
+    "snapshot sandbox auth.json before mutation",
+    "restore sandbox auth.json byte-for-byte if post-import owner truth remains blocked",
+    "do not mutate the external source path"
+  ],
+  "selection_rationale": {
+    "why_import": [
+      "current owner truth shows the problem is auth-source content, not binding",
+      "read-only override proves this exact source path clears the primary 401 blocker",
+      "registry currently points at the target sandbox auth.json path already"
+    ],
+    "why_not_rebind": [
+      "no different sandbox-local target auth path is evidenced",
+      "rebind would not change the secret content in the currently bound file"
+    ],
+    "why_not_combined": [
+      "no current evidence requires registry mutation",
+      "combined contour would widen secret-bearing rollback scope without necessity"
+    ]
+  }
+}

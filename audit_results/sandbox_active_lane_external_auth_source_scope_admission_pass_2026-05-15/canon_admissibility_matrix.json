@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "adjudication": {
+    "import_only": {
+      "admissible_as_next_contour": true,
+      "priority": "first",
+      "why": [
+        "Real runtime config protection allows a live-runtime operation when exact real read paths, write paths, and rollback expectations are declared.",
+        "The next contour would read, not mutate, the external source path.",
+        "Current facts show the external source path clears the primary 401 blocker without any registry mutation."
+      ],
+      "references": [
+        "MASTER_PLAN.md:298",
+        "wild_boar_proxy/runtime.py:216",
+        "wild_boar_proxy/runtime.py:561",
+        "audit_results/sandbox_active_lane_auth_source_repair_pass_2026-05-15/attestation_verification.json"
+      ]
+    },
+    "rebind_only": {
+      "admissible_as_next_contour": false,
+      "priority": "not_primary",
+      "why": [
+        "Registry already points to the current sandbox auth.json.",
+        "No different sandbox-local valid auth file is evidenced.",
+        "Path equality for explicit auth refs is strict; rebinding without a different target path would not repair the current secret content."
+      ],
+      "references": [
+        "wild_boar_proxy/runtime.py:11887",
+        "audit_results/sandbox_active_lane_auth_source_repair_pass_2026-05-15/blocker_confirmation.json"
+      ]
+    },
+    "import_and_rebind": {
+      "admissible_as_next_contour": false,
+      "priority": "conditional_only",
+      "why": [
+        "Current risk shapes are split and current facts only prove import necessity.",
+        "Combined scope widens rollback without current evidence that registry mutation is required.",
+        "Canon prefers the narrower contour when fusion is not necessary."
+      ],
+      "references": [
+        "DELIVERY_RULES.md:4",
+        "STATE_SCHEMA.md:379",
+        "MASTER_PLAN.md:289"
+      ]
+    },
+    "stop": {
+      "admissible_as_next_contour": false,
+      "priority": "not_needed",
+      "why": [
+        "An exact narrower next contour can be named truthfully.",
+        "Exact source path, write surfaces, and rollback expectations are now localizable."
+      ],
+      "references": [
+        "MASTER_PLAN.md:298",
+        "audit_results/sandbox_active_lane_auth_source_repair_pass_2026-05-15/decision_packet.json"
+      ]
+    }
+  }
+}
