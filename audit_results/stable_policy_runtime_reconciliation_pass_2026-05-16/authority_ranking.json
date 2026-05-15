@@ -1,0 +1,41 @@
+{
+  "authoritative_surfaces": [
+    {
+      "surface": "stable repair --apply/--dry-run --json",
+      "lane": "stable",
+      "role": "policy and approved-target reconciliation truth",
+      "authority": "authoritative"
+    },
+    {
+      "surface": "status --json",
+      "lane": "runtime",
+      "role": "claim-gate, desired/effective consumer truth, activation-readiness truth",
+      "authority": "authoritative"
+    },
+    {
+      "surface": "rollout rotation inspect --json",
+      "lane": "participation",
+      "role": "selected-backend evidence validation against policy/runtime truth",
+      "authority": "authoritative"
+    }
+  ],
+  "supporting_only": [
+    {
+      "surface": "sync --json selected_backend_snapshot",
+      "lane": "managed_participation",
+      "role": "freshness evidence only after this contour",
+      "authority": "supporting_only"
+    },
+    {
+      "surface": "stable_runtime_consumer_snapshot",
+      "lane": "stable_runtime_snapshot",
+      "role": "snapshot evidence only",
+      "authority": "supporting_only_when_stale"
+    }
+  ],
+  "winning_interpretation": {
+    "pre_reconciliation_primary_blocker": "stable_policy_drift_with_cross_lane_runtime_split",
+    "owner_action_selected": "stable_repair_apply",
+    "post_reconciliation_remaining_blocker": "runtime_activation_reproof_needed"
+  }
+}

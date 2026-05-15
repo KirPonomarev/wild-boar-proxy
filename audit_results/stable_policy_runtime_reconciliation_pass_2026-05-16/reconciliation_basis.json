@@ -1,0 +1,34 @@
+{
+  "contour": "STABLE_POLICY_RUNTIME_RECONCILIATION_PASS",
+  "pre_state": {
+    "head": "b739b81",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "status_policy_drift_status": "detected",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_reason": "policy_drift_detected",
+    "rotation_selected_backend_count": 15,
+    "rotation_active_routing_candidate_count": 15,
+    "stable_repair_dry_run_would_change": true,
+    "stable_repair_dry_run_target_would_add_backend_ids": [
+      "k-gpt-pro-3k",
+      "new-new11111",
+      "new-new44444",
+      "k-ponomarev-pro",
+      "kabanui7070",
+      "kp8750410"
+    ],
+    "stable_repair_dry_run_target_would_prune_count": 2
+  },
+  "authorization_basis": {
+    "operator_authorized_live_mutation": true,
+    "owner_mutation_surface": "python3 -m wild_boar_proxy stable repair --apply --json",
+    "write_scope_expected": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/codex-*.json"
+    ]
+  }
+}

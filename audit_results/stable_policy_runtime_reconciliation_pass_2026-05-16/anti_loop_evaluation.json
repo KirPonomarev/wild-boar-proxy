@@ -1,0 +1,34 @@
+{
+  "rule": "progress requires machine-carried improvement in at least two key surfaces relative to the post-sync pre-contour state",
+  "pre_state_reference": "sync-induced contradicted state",
+  "surfaces": [
+    {
+      "surface": "policy_drift participation validation",
+      "pre": "detected / contradicted",
+      "post": "clear on rollout rotation claim surface",
+      "improved": true
+    },
+    {
+      "surface": "claim_gate",
+      "pre": "blocked",
+      "post": "blocked",
+      "improved": false
+    },
+    {
+      "surface": "stable repair target reconciliation work",
+      "pre": "would_change=true",
+      "post": "apply returned would_change=false and zero remaining delta",
+      "improved": true
+    },
+    {
+      "surface": "runtime mode/source truth for the active lane",
+      "pre": "desired source remained on observed inventory family",
+      "post": "desired source moved back to approved target but effective source remains observed",
+      "improved": true
+    }
+  ],
+  "improved_surface_count": 3,
+  "threshold": 2,
+  "passes": true,
+  "note": "claim_gate remained blocked, so the contour closes at runtime reproof rather than auth admission"
+}

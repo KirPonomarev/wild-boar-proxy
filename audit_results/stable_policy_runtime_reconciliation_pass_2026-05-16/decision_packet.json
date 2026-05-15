@@ -1,0 +1,19 @@
+{
+  "contour": "STABLE_POLICY_RUNTIME_RECONCILIATION_PASS",
+  "status": "completed",
+  "final_verdict": "GO_TO_RUNTIME_REPROOF_PASS",
+  "why": [
+    "stable repair apply closed the approved-target reconciliation delta with STABLE_REPAIR_APPLIED and zero remaining add/prune work",
+    "rotation truth improved from ROTATION_EVIDENCE_CONTRADICTED(policy_drift_detected) to ROTATION_EVIDENCE_STALE(selected_backend_snapshot_stale) while policy_drift_status on the claim surface became clear",
+    "status still reports claim_gate blocked by policy_drift because effective runtime truth remains observed_source_active while desired source is approved_target_selected and activation evidence is stale",
+    "exact auth-source admission remains unearned because runtime truth is still split and the next narrow owner path is runtime reproof"
+  ],
+  "next_contour": "RUNTIME_REPROOF_PASS",
+  "anti_loop_passed": true,
+  "next_exact_command": "python3 -m wild_boar_proxy healthcheck --json",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "sandbox auth.json materialization",
+    "repeat sync --json by inertia"
+  ]
+}
