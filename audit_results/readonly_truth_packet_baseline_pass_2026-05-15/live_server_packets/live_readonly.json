@@ -1,0 +1,113 @@
+{
+  "commands": {
+    "accounts_list": {
+      "exit_code": 0,
+      "human_message": "Account registry snapshot is available.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "primary_truth",
+      "status": "ok",
+      "ui_state": "success"
+    },
+    "healthcheck": {
+      "exit_code": 0,
+      "human_message": "Runtime attestation passed.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "runtime_detail",
+      "status": "ok",
+      "ui_state": "success"
+    },
+    "mode_get": {
+      "exit_code": 0,
+      "human_message": "Mode values are available.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "primary_truth",
+      "status": "ok",
+      "ui_state": "success"
+    },
+    "rollout_rotation_inspect": {
+      "exit_code": 1,
+      "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "next_action": "user_action",
+      "role": "rollout_evidence",
+      "status": "command_error",
+      "ui_state": "error"
+    },
+    "status": {
+      "exit_code": 0,
+      "human_message": "Runtime status summary is available.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "primary_truth",
+      "status": "ok",
+      "ui_state": "success"
+    }
+  },
+  "events": [
+    {
+      "level": "green",
+      "message": "Runtime status summary is available.",
+      "observed_at": "status --json"
+    },
+    {
+      "level": "amber",
+      "message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
+      "observed_at": "rollout_rotation_inspect"
+    },
+    {
+      "level": "blue",
+      "message": "Runtime attestation passed.",
+      "observed_at": "healthcheck --json"
+    }
+  ],
+  "evidence_summary": {
+    "available_detail_commands": [
+      "healthcheck",
+      "rollout_rotation_inspect"
+    ],
+    "detail_warnings": 0,
+    "highest_warning_severity": "warning",
+    "primary_truth_ok": true,
+    "rollout_warnings": 1
+  },
+  "has_warnings": true,
+  "pool_summary": {
+    "active": 17,
+    "active_note": "17 active в status packet",
+    "hold": 0,
+    "hold_note": "аккаунты на manual hold",
+    "problem": 14,
+    "problem_note": "аккаунты degraded/down/error",
+    "reserve": 0,
+    "reserve_note": "0 reserve в status packet"
+  },
+  "primary_truth_ok": true,
+  "runtime": {
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "endpoint": "http://127.0.0.1:8318/v1",
+    "human_message": "Runtime status summary is available.",
+    "last_error": "",
+    "machine_error_code": "OK",
+    "observed_at_utc": "2026-05-15T13:09:30.662482+00:00",
+    "status_label": "Работает",
+    "visual_state": "healthy"
+  },
+  "schema_version": 1,
+  "source": "live_readonly",
+  "status": "ok",
+  "ui_state": "healthy",
+  "warnings": [
+    {
+      "command_id": "rollout_rotation_inspect",
+      "human_message": "Rotation participation evidence is contradicted because stable policy drift is still detected.",
+      "label": "rollout rotation inspect --json",
+      "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+      "role": "rollout_evidence",
+      "severity": "warning"
+    }
+  ]
+}

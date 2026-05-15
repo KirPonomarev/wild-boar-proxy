@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "human_message": "External-models routes listed from local registry.",
+  "machine_error_code": "OK",
+  "changed_files": [],
+  "next_action": "none",
+  "liveness": "not_applicable",
+  "severity": "recoverable",
+  "operator_action": "none",
+  "data": {
+    "routes": [],
+    "count": 0
+  },
+  "timestamp_utc": "2026-05-15T13:09:00Z"
+}

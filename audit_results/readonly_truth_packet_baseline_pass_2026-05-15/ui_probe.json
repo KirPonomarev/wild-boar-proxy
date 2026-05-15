@@ -1,0 +1,58 @@
+[
+  {
+    "screen": "quick-start",
+    "accountsConnected": "25",
+    "accountsToCheck": "14",
+    "accountsWorking": "11",
+    "apiModel": "Основной route не подтверждён",
+    "apiProvider": "Не настроено",
+    "apiSecret": "secret_ref: —",
+    "apiStatusText": "Основной route не подтверждён bounded snapshot.",
+    "apiStatusTitle": "Не настроено",
+    "fixtureFallback": false,
+    "sidebarStatus": "Quick Start: summary state",
+    "source": "live"
+  },
+  {
+    "screen": "overview",
+    "activeCount": "0",
+    "desiredMode": "-",
+    "effectiveMode": "-",
+    "endpoint": "-",
+    "fixtureFallback": false,
+    "holdCount": "0",
+    "lastError": "-",
+    "problemCount": "0",
+    "reserveCount": "0",
+    "sidebarStatus": "Демо-состояние неизвестно",
+    "source": "live"
+  },
+  {
+    "screen": "accounts",
+    "activeChip": "17 активных",
+    "firstRow": "\t\nopen17-plus\nk.p***@***.com\n\tВыведен\t\nНедоступен\n\tквота или usage limit\t2026-05-08T20:56:41.885472+00:00\t",
+    "fixtureFallback": false,
+    "holdChip": "0 удержание",
+    "problemChip": "14 проблемных",
+    "registryStatus": "Идентичность registry: clear · OK",
+    "reserveChip": "0 резерв",
+    "rowCount": 25,
+    "sidebarStatus": "Account registry snapshot is available.",
+    "source": "live",
+    "visibleCount": "Показано 25 из 25"
+  },
+  {
+    "screen": "api-connections",
+    "attentionCount": "0",
+    "enabledCount": "0",
+    "firstRow": "Маршруты недоступны. Создание и изменение маршрутов остаются deferred до отдельного server-side builder.",
+    "fixtureFallback": false,
+    "latestCheck": "Нет данных",
+    "registryStatus": "Контур: C3 · models source: local_routes_registry",
+    "routesCount": "0",
+    "rowCount": 1,
+    "sidebarStatus": "Список API-подключений собран из пакетов команд.",
+    "source": "live",
+    "visibleCount": "Показано 0 из 0"
+  }
+]

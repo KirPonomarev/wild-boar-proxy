@@ -1,0 +1,67 @@
+{
+  "adapter": {
+    "adapter_runtime_available": false,
+    "adapter_state": "stopped",
+    "foundation_phase": "C3",
+    "lifecycle_mode": "synthetic",
+    "listener_proven": false,
+    "local_token_present": false,
+    "models_source": "local_routes_registry",
+    "observed_routes_count": 0,
+    "profile_ready": false,
+    "runtime_claim_blocked": true
+  },
+  "commands": {
+    "external_models_models": {
+      "exit_code": 0,
+      "human_message": "External-models route models listed from local registry.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "unknown",
+      "status": "ok",
+      "ui_state": "success"
+    },
+    "external_models_routes_list": {
+      "exit_code": 0,
+      "human_message": "External-models routes listed from local registry.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "unknown",
+      "status": "ok",
+      "ui_state": "success"
+    },
+    "external_models_status": {
+      "exit_code": 0,
+      "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "role": "unknown",
+      "status": "ok",
+      "ui_state": "success"
+    }
+  },
+  "primary_truth_ok": true,
+  "privacy": {
+    "forbidden_fields_excluded": [
+      "secret_references",
+      "tokens",
+      "raw_paths",
+      "raw_logs"
+    ],
+    "raw_command_packet_included": false,
+    "redacted": true
+  },
+  "routes": [],
+  "schema_version": 1,
+  "source": "api_connections_readonly",
+  "status": "ok",
+  "summary": {
+    "attention_count": 0,
+    "enabled_count": 0,
+    "human_message": "Список API-подключений собран из пакетов команд.",
+    "last_error": "",
+    "latest_check": "",
+    "machine_error_code": "OK",
+    "routes_count": 0
+  }
+}

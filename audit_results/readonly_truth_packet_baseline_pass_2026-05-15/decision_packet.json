@@ -1,0 +1,19 @@
+{
+  "contour": "READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "blocked_by": [
+    "overview live UI claim does not reflect canonical/live readonly truth for runtime mode, endpoint, pool counts, or warning propagation"
+  ],
+  "reasons": [
+    "canonical readonly packets and live GET packets matched on the primary baseline topics that were checked",
+    "accounts screen matched live readonly truth",
+    "api-connections screen matched live readonly truth",
+    "quick-start summary matched live readonly truth",
+    "overview screen stayed on fixture/unknown placeholders while source=live and healthy live packet were present"
+  ],
+  "required_next_preconditions": [
+    "localize and repair overview live source binding before sandbox boundary work",
+    "re-run readonly baseline after repair",
+    "keep POST /api/action forbidden during diagnosis and repair validation"
+  ]
+}

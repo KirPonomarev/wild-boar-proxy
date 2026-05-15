@@ -1,0 +1,82 @@
+{
+  "status": {
+    "argv": [
+      "status",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "mode_get": {
+    "argv": [
+      "mode",
+      "get",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "accounts_list": {
+    "argv": [
+      "accounts",
+      "list",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "healthcheck": {
+    "argv": [
+      "healthcheck",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "rollout_rotation_inspect": {
+    "argv": [
+      "rollout",
+      "rotation",
+      "inspect",
+      "--json"
+    ],
+    "status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "stderr_present": false
+  },
+  "external_models_status": {
+    "argv": [
+      "external-models",
+      "status",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "external_models_models": {
+    "argv": [
+      "external-models",
+      "models",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  },
+  "external_models_routes_list": {
+    "argv": [
+      "external-models",
+      "routes",
+      "list",
+      "--json"
+    ],
+    "status": "ok",
+    "machine_error_code": "OK",
+    "stderr_present": false
+  }
+}
