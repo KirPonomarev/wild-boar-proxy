@@ -14,9 +14,10 @@
   "rotation_selected_backend_count": 9,
   "rotation_selector_fresh": false,
   "exact_source_admission_earned_now": false,
-  "selector_refresh_earned_now": false,
+  "selector_refresh_earned_now": true,
   "sandbox_materialization_earned_now": false,
-  "next_contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
-  "next_contour_class": "stop_and_diagnose",
-  "reason": "runtime reproof successfully promoted the approved repair target to effective runtime truth and cleared claim-gate and policy-drift blockers, but the remaining selector surface is still stale and family-level only, so one exact auth source is not yet named honestly for sandbox auth materialization"
+  "decision": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "next_contour_class": "owner_path_refresh",
+  "reason": "runtime reproof successfully promoted the approved repair target to effective runtime truth and cleared claim-gate and policy-drift blockers; the remaining localized blocker is stale selected-backend participation evidence, so the next narrow contour is owner-path selector refresh rather than exact-source admission"
 }

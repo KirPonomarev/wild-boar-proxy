@@ -9,9 +9,10 @@ the sandbox onboarding chain.
 ## Result
 
 - status: `completed`
-- final verdict: `STOP_AND_DIAGNOSE`
-- next action: localize how to narrow the now-effective approved-target family
-  to one exact auth source before reopening sandbox auth admission
+- final verdict: `GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS`
+- next action: refresh owner-path participation evidence now that runtime truth
+  is aligned to the approved target, before reopening exact auth-source
+  admission
 
 ## Contour Capsule
 
@@ -31,8 +32,8 @@ the sandbox onboarding chain.
   - `python3 tools/check_closeout_resilience.py audit_results/runtime_reproof_pass_2026-05-16/closeout.md`
   - `python3 tools/check_closeout_resilience.py --staged-only`
 - blocked risks:
-  - exact auth-source selection remains family-level rather than singleton
   - rotation selector surface remains stale
+  - exact auth-source selection remains family-level rather than singleton
   - sandbox auth materialization remains unearned
 - next exact command: `git status --short --untracked-files=no`
 
@@ -61,8 +62,9 @@ the sandbox onboarding chain.
   - post-smoke `rollout rotation inspect --json` still reported
     `ROTATION_EVIDENCE_STALE` with stale selected-backend family count `9`
 - live verification:
-  - runtime activation was reproved live through canon-supported owner surfaces,
-    but singleton exact-source truth was not earned
+  - runtime activation was reproved live through canon-supported owner surfaces
+  - exact auth-source admission still remains deferred until selector freshness
+    is restored
 
 ## Artifacts
 
@@ -99,5 +101,5 @@ the sandbox onboarding chain.
   - rotation participation evidence remains stale even after successful runtime
     activation
 - follow-up contour:
-  - `APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS`
-- resume from here: `diagnose which canon-supported surface, if any, can narrow the active approved-target family to one exact auth source without guessing from stale participation evidence`
+  - `SELECTOR_REFRESH_OWNER_PATH_PASS`
+- resume from here: `refresh selected-backend participation evidence through the owner path before reopening exact auth-source admission`

@@ -29,4 +29,4 @@ stable inventory fallback.
 - claim gate cleared
 - exact auth-source admission remains unearned because no fresh singleton
   exact-source selector basis was produced
-- next contour: `APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS`
+- next contour: `SELECTOR_REFRESH_OWNER_PATH_PASS`

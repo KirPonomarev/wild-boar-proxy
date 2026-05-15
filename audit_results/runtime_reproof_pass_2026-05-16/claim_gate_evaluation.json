@@ -30,6 +30,7 @@
     "runtime_claim_gate_cleared": true,
     "participation_selector_fresh": false,
     "singleton_exact_source_basis_present": false,
-    "exact_auth_source_admission_earned_now": false
+    "exact_auth_source_admission_earned_now": false,
+    "selector_refresh_earned_now": true
   }
 }
