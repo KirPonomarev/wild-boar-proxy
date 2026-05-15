@@ -852,7 +852,7 @@ function setSourceCopy(source) {
     settings: "Настройки · hub разделов",
     setup: "Setup · admission preview",
     "select-client": "Select Client · candidate preview",
-    "import-existing": "Import · deferred preview"
+    "import-existing": "Import · transaction preview"
   };
   const subtitleByScreen = {
     "quick-start": "Ежедневный пульт подключений: аккаунты Codex и один основной API.",
@@ -862,7 +862,7 @@ function setSourceCopy(source) {
     settings: "Конфигурация клиента, данных приложения и безопасных действий.",
     setup: "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
     "select-client": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
-    "import-existing": "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
+    "import-existing": "Перенесите найденную конфигурацию без изменения рабочих файлов Codex."
   };
   const sourceFooter = source === "live"
     ? (footerByScreen[screen] || (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение"))
@@ -882,6 +882,7 @@ function setSourceCopy(source) {
   updateDiagnosticsDetailSource(source);
   updateSetupAdmissionCopy(source);
   updateSelectClientCopy(source);
+  updateImportExistingCopy(source);
 }
 
 function updateSetupAdmissionCopy(source) {
@@ -924,6 +925,315 @@ function updateSelectClientCopy(source) {
   banner.textContent = fixtureState === "stale"
     ? "Демо-режим stale. Кандидаты показаны как fixture preview, не как найденные локальные приложения."
     : "Демо-режим. Кандидаты показаны как fixture preview, не как найденные локальные приложения.";
+}
+
+function updateImportExistingCopy(source) {
+  const banner = document.getElementById("importExistingBanner");
+  const screen = document.getElementById("importExistingScreen");
+  if (!banner || !screen) {
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const requestedVariant = params.get("import_state") || "";
+  const desktop = document.querySelector(".desktop");
+  const fixtureState = desktop?.dataset?.fixtureState || "healthy";
+  const variant = source === "live"
+    ? "live_failure"
+    : canonicalImportVariant(requestedVariant || fixtureState);
+  screen.dataset.importVariant = variant;
+
+  const state = importVariantModel(variant);
+  setImportVisualClass(banner, "fixture-banner", state.bannerVisual);
+  banner.textContent = state.banner;
+  text("importRailNote", state.railNote);
+  setImportChip("importCandidateChip", state.candidateVisual, state.candidateChip);
+  setImportChip("importPlanChip", state.planVisual, state.planChip);
+  setImportChip("importSafetyChip", state.safetyVisual, state.safetyChip);
+  setImportChip("importResultChip", state.resultVisual, state.resultChip);
+  text("importCandidateClient", state.client);
+  text("importCandidateSource", state.sourcePath);
+  text("importCandidateData", state.dataStatus);
+  text("importCandidateAccounts", state.accountsPreview);
+  text("importCandidateStatus", state.candidateStatus);
+  setImportRow("importPlanSnapshotRow", state.rows.snapshot.status, state.rows.snapshot.label);
+  setImportRow("importPlanAccountsRow", state.rows.accounts.status, state.rows.accounts.label);
+  setImportRow("importPlanPolicyRow", state.rows.policy.status, state.rows.policy.label);
+  setImportRow("importPlanRollbackRow", state.rows.rollback.status, state.rows.rollback.label);
+  text("importResultTitle", state.resultTitle);
+  text("importResultText", state.resultText);
+  setImportPhase("importPhaseCandidate", "1", state.phases.candidate);
+  setImportPhase("importPhaseDryRun", "2", state.phases.dryRun);
+  setImportPhase("importPhaseSnapshot", "3", state.phases.snapshot);
+  setImportPhase("importPhaseApply", "4", state.phases.apply);
+}
+
+function canonicalImportVariant(value) {
+  const normalized = String(value || "").replaceAll("-", "_");
+  if (["preview_ready", "healthy"].includes(normalized)) {
+    return "preview_ready";
+  }
+  if (["no_candidate", "unknown"].includes(normalized)) {
+    return "no_candidate";
+  }
+  if (["dry_run_missing_snapshot", "degraded"].includes(normalized)) {
+    return "dry_run_missing_snapshot";
+  }
+  if (["snapshot_ready"].includes(normalized)) {
+    return "snapshot_ready";
+  }
+  if (["partial"].includes(normalized)) {
+    return "partial";
+  }
+  if (["failed", "down", "integration_failure"].includes(normalized)) {
+    return "failed";
+  }
+  if (["rollback", "rollback_available"].includes(normalized)) {
+    return "rollback_available";
+  }
+  if (["stale"].includes(normalized)) {
+    return "stale";
+  }
+  return "preview_ready";
+}
+
+function importVariantModel(variant) {
+  const base = {
+    bannerVisual: "amber",
+    banner: "Демо-режим. План импорта показан как preview, не как найденные локальные файлы.",
+    railNote: "Импорт требует command-owned discovery, dry-run, snapshot и rollback packet.",
+    candidateVisual: "blue",
+    candidateChip: "preview",
+    planVisual: "amber",
+    planChip: "dry-run required",
+    safetyVisual: "neutral",
+    safetyChip: "bounded",
+    resultVisual: "amber",
+    resultChip: "apply disabled",
+    client: "Codex Custom",
+    sourcePath: "/Applications/Codex Custom.app",
+    dataStatus: "fixture candidate display",
+    accountsPreview: "preview count · not confirmed",
+    candidateStatus: "Ожидает command-owned discovery",
+    rows: {
+      snapshot: { status: "ready", label: "ready preview" },
+      accounts: { status: "deferred", label: "deferred" },
+      policy: { status: "pending", label: "pending" },
+      rollback: { status: "blocked", label: "rollback not confirmed" }
+    },
+    resultTitle: "Apply отключён",
+    resultText: "Требуется dry-run packet, snapshot packet и rollback point. Preview не является runtime truth.",
+    phases: {
+      candidate: "candidate preview",
+      dryRun: "dry-run required",
+      snapshot: "snapshot required",
+      apply: "apply disabled"
+    }
+  };
+  if (variant === "no_candidate") {
+    return {
+      ...base,
+      bannerVisual: "neutral",
+      banner: "Демо-режим. Кандидат импорта отсутствует; пустое состояние не является ошибкой.",
+      candidateVisual: "neutral",
+      candidateChip: "no candidate",
+      planVisual: "neutral",
+      planChip: "not inspected",
+      client: "не подтверждён",
+      sourcePath: "нет command-owned candidate packet",
+      dataStatus: "нет packet",
+      accountsPreview: "нет packet",
+      candidateStatus: "Ожидает command-owned discovery",
+      rows: {
+        snapshot: { status: "pending", label: "pending" },
+        accounts: { status: "pending", label: "pending" },
+        policy: { status: "pending", label: "pending" },
+        rollback: { status: "blocked", label: "rollback missing" }
+      },
+      phases: { candidate: "not inspected", dryRun: "not started", snapshot: "not started", apply: "disabled" }
+    };
+  }
+  if (variant === "dry_run_missing_snapshot") {
+    return {
+      ...base,
+      bannerVisual: "amber",
+      banner: "Dry-run preview доступен только как fixture; snapshot не подтверждён.",
+      candidateChip: "fixture preview",
+      planChip: "dry-run preview",
+      rows: {
+        snapshot: { status: "blocked", label: "snapshot missing" },
+        accounts: { status: "ready", label: "ready preview" },
+        policy: { status: "ready", label: "ready preview" },
+        rollback: { status: "blocked", label: "rollback missing" }
+      },
+      resultChip: "snapshot required",
+      resultTitle: "Snapshot требуется",
+      resultText: "Dry-run preview не разрешает apply без snapshot и rollback point.",
+      phases: { candidate: "candidate preview", dryRun: "dry-run preview", snapshot: "snapshot missing", apply: "disabled" }
+    };
+  }
+  if (variant === "snapshot_ready") {
+    return {
+      ...base,
+      bannerVisual: "amber",
+      banner: "Snapshot preview готов, но apply остаётся disabled без admitted command surface.",
+      safetyVisual: "blue",
+      safetyChip: "snapshot preview",
+      resultChip: "apply disabled",
+      rows: {
+        snapshot: { status: "ready", label: "snapshot preview" },
+        accounts: { status: "ready", label: "planned preview" },
+        policy: { status: "ready", label: "planned preview" },
+        rollback: { status: "ready", label: "rollback preview" }
+      },
+      resultTitle: "Apply всё ещё отключён",
+      resultText: "Snapshot preview не является rollback proof до command-owned packet.",
+      phases: { candidate: "candidate preview", dryRun: "dry-run preview", snapshot: "snapshot preview", apply: "disabled" }
+    };
+  }
+  if (variant === "partial") {
+    return {
+      ...base,
+      bannerVisual: "amber",
+      banner: "Partial import требует проверки. Partial import не считается success.",
+      resultVisual: "amber",
+      resultChip: "partial",
+      rows: {
+        snapshot: { status: "ready", label: "snapshot preview" },
+        accounts: { status: "failed", label: "partial" },
+        policy: { status: "blocked", label: "needs review" },
+        rollback: { status: "ready", label: "rollback preview" }
+      },
+      resultTitle: "Partial не является success",
+      resultText: "Нужен command-owned result packet и операторская проверка перед любым следующим шагом.",
+      phases: { candidate: "candidate preview", dryRun: "partial", snapshot: "rollback preview", apply: "needs review" }
+    };
+  }
+  if (variant === "failed") {
+    return {
+      ...base,
+      bannerVisual: "red",
+      banner: "Import preview failed. Никакие fixture-данные не считаются применёнными.",
+      candidateVisual: "neutral",
+      candidateChip: "not trusted",
+      planVisual: "red",
+      planChip: "failed",
+      resultVisual: "red",
+      resultChip: "failed",
+      rows: {
+        snapshot: { status: "blocked", label: "not proven" },
+        accounts: { status: "failed", label: "failed" },
+        policy: { status: "blocked", label: "blocked" },
+        rollback: { status: "blocked", label: "not available" }
+      },
+      resultTitle: "Import failed",
+      resultText: "Failure не меняет runtime truth и не доказывает состояние файлов.",
+      phases: { candidate: "not trusted", dryRun: "failed", snapshot: "not proven", apply: "not run" }
+    };
+  }
+  if (variant === "rollback_available") {
+    return {
+      ...base,
+      bannerVisual: "amber",
+      banner: "Rollback preview доступен только как model state; apply остаётся disabled.",
+      safetyVisual: "blue",
+      safetyChip: "rollback preview",
+      resultVisual: "amber",
+      resultChip: "rollback available",
+      rows: {
+        snapshot: { status: "ready", label: "snapshot preview" },
+        accounts: { status: "blocked", label: "apply not run" },
+        policy: { status: "pending", label: "pending" },
+        rollback: { status: "ready", label: "rollback preview" }
+      },
+      resultTitle: "Rollback point не подтверждён",
+      resultText: "Rollback доступен только после command-owned rollback_id packet.",
+      phases: { candidate: "candidate preview", dryRun: "dry-run preview", snapshot: "rollback preview", apply: "not run" }
+    };
+  }
+  if (variant === "stale") {
+    return {
+      ...base,
+      bannerVisual: "amber",
+      banner: "Import preview устарел. Stale не является зелёным состоянием.",
+      candidateVisual: "amber",
+      candidateChip: "stale",
+      planVisual: "amber",
+      planChip: "stale",
+      resultVisual: "amber",
+      resultChip: "stale",
+      resultTitle: "Preview устарел",
+      resultText: "Требуется новый command-owned packet; fixture preview не используется как live truth.",
+      phases: { candidate: "stale", dryRun: "stale", snapshot: "stale", apply: "disabled" }
+    };
+  }
+  if (variant === "live_failure") {
+    return {
+      ...base,
+      bannerVisual: "red",
+      banner: "Import discovery недоступен. Предыдущие fixture-данные не используются.",
+      candidateVisual: "neutral",
+      candidateChip: "unavailable",
+      planVisual: "neutral",
+      planChip: "not inspected",
+      safetyVisual: "neutral",
+      safetyChip: "bounded",
+      resultVisual: "red",
+      resultChip: "integration failure",
+      client: "не подтверждён",
+      sourcePath: "live packet unavailable",
+      dataStatus: "нет live packet",
+      accountsPreview: "нет packet",
+      candidateStatus: "Live discovery unavailable",
+      rows: {
+        snapshot: { status: "pending", label: "not started" },
+        accounts: { status: "pending", label: "not inspected" },
+        policy: { status: "pending", label: "not inspected" },
+        rollback: { status: "blocked", label: "rollback missing" }
+      },
+      resultTitle: "Live discovery недоступен",
+      resultText: "UI не переиспользует fixture path, fixture count или preview как live truth.",
+      phases: { candidate: "unavailable", dryRun: "not started", snapshot: "not started", apply: "disabled" }
+    };
+  }
+  return base;
+}
+
+function setImportChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || "neutral"}`;
+  chip.lastElementChild.textContent = label;
+}
+
+function setImportVisualClass(node, base, visual) {
+  node.className = `${base} ${ACCOUNT_VISUAL_CLASS[visual] || "neutral"}`;
+}
+
+function setImportRow(id, status, label) {
+  const row = document.getElementById(id);
+  if (!row) {
+    return;
+  }
+  row.dataset.importStatus = status;
+  const value = row.querySelector("strong");
+  if (value) {
+    value.textContent = label;
+  }
+}
+
+function setImportPhase(id, number, label) {
+  const phase = document.getElementById(id);
+  if (!phase) {
+    return;
+  }
+  phase.replaceChildren();
+  const circle = document.createElement("span");
+  circle.textContent = number;
+  const textNode = document.createElement("strong");
+  textNode.textContent = label;
+  phase.append(circle, textNode);
 }
 
 function updateDiagnosticsDetailSource(source) {
@@ -1933,7 +2243,7 @@ function setScreen(screen, updateUrl = false) {
                   : (
                     nextScreen === "select-client"
                       ? "Выбор клиента"
-                      : (nextScreen === "import-existing" ? "Импорт" : "Обзор")
+                      : (nextScreen === "import-existing" ? "Импорт существующей настройки" : "Обзор")
                   )
               )
           )

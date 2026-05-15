@@ -1374,87 +1374,123 @@
           </div>
         </section>
 
-        <section id="importExistingScreen" class="screen setup-screen setup-final-screen" data-screen="import-existing" hidden>
-          <div class="fixture-banner amber">
-            Импорт отложен. Этот экран показывает только структуру: существующая установка здесь не обнаружена, не проверена и не готова к применению.
+        <section id="importExistingScreen" class="screen import-existing-screen" data-screen="import-existing" data-import-mode="transaction-preview" hidden>
+          <div id="importExistingBanner" class="fixture-banner amber">
+            Демо-режим. План импорта показан как preview, не как найденные локальные файлы.
           </div>
 
-          <div class="setup-flow-layout import-flow" data-visual-reference="12_import_existing_wizard" data-setup-flow-frame="left-step-rail">
-            <aside class="setup-flow-rail" aria-label="Шаги импорта">
-              <div class="eyebrow">Import Wizard</div>
-              <div class="flow-step active"><span class="flow-step-num">1</span><span><strong>Найти</strong><small>отложено</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">2</span><span><strong>Проверить</strong><small>dry-run packet</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">3</span><span><strong>Снимок</strong><small>нет evidence</small></span></div>
-              <div class="flow-step"><span class="flow-step-num">4</span><span><strong>Применить</strong><small>запрещено сейчас</small></span></div>
-              <div class="setup-flow-note">Импорт не выполняется без медиации исходного расположения и strong confirmation.</div>
+          <div class="import-transaction-layout" data-visual-reference="12_import_existing_wizard" data-legacy-reference="08_import_existing" data-setup-flow-frame="left-step-rail">
+            <aside class="import-step-rail" aria-label="Шаги импорта">
+              <div class="eyebrow">Transaction wizard</div>
+              <div class="import-step active" data-import-step="find"><span>1</span><strong>Найти</strong><small>candidate preview</small></div>
+              <div class="import-step" data-import-step="dry-run"><span>2</span><strong>Проверить</strong><small>dry-run required</small></div>
+              <div class="import-step" data-import-step="snapshot"><span>3</span><strong>Снимок</strong><small>rollback required</small></div>
+              <div class="import-step muted" data-import-step="apply"><span>4</span><strong>Применить</strong><small>disabled now</small></div>
+              <div id="importRailNote" class="setup-flow-note">Импорт требует command-owned discovery, dry-run, snapshot и rollback packet.</div>
             </aside>
 
-            <div class="setup-workbench">
-              <section class="card setup-hero setup-final-hero">
-                <div class="eyebrow">Импорт</div>
-                <div class="section-head">
-                  <div>
-                    <h3>Импорт существующей установки</h3>
-                    <div class="secondary">Нужны безопасная медиация исходного расположения, dry-run evidence, подтверждение и refresh.</div>
-                  </div>
-                  <span class="chip amber"><span class="dot"></span>отложено</span>
-                </div>
-              </section>
-
-              <div class="setup-grid import-grid">
-                <section class="card form-section">
-                  <div class="section-head">
+            <div class="import-workbench">
+              <div class="import-card-grid">
+                <section class="card import-card import-candidate-card" data-import-card="candidate">
+                  <div class="import-card-head">
+                    <span class="setup-card-icon blue"><img class="ui-icon" src="assets/icons/phosphor/magnifying-glass.png" alt="" aria-hidden="true"></span>
                     <div>
-                      <h3>Источник импорта</h3>
-                      <div class="secondary">Существующая установка здесь не обнаружена; source_id не заявляется.</div>
+                      <h3>Кандидат импорта</h3>
+                      <p>Предпросмотр найденной установки, не live filesystem discovery.</p>
                     </div>
-                    <span class="chip neutral"><span class="dot"></span>не обнаружено</span>
+                    <span id="importCandidateChip" class="chip blue"><span class="dot"></span><span>preview</span></span>
                   </div>
-                  <div class="setup-boundary-grid">
-                    <div><span>Source</span><strong>нужна медиация исходного расположения</strong></div>
-                    <div><span>Preview</span><strong>нужен немутационный dry-run пакет импорта</strong></div>
-                    <div><span>Apply</span><strong>нет медиации исходного расположения и сильного подтверждения</strong></div>
+                  <div class="import-kv-grid">
+                    <div><span>Client</span><strong id="importCandidateClient">Codex Custom</strong></div>
+                    <div><span>Source</span><strong id="importCandidateSource" class="candidate-path">/Applications/Codex Custom.app</strong></div>
+                    <div><span>Data status</span><strong id="importCandidateData">fixture candidate display</strong></div>
+                    <div><span>Accounts preview</span><strong id="importCandidateAccounts">preview count · not confirmed</strong></div>
+                    <div><span>Candidate status</span><strong id="importCandidateStatus">Ожидает command-owned discovery</strong></div>
                   </div>
                 </section>
 
-                <section class="card form-section">
-                  <div class="section-head">
+                <section class="card import-card import-plan-card" data-import-card="plan">
+                  <div class="import-card-head">
+                    <span class="setup-card-icon amber"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
                     <div>
-                      <h3>Dry-run preview</h3>
-                      <div class="secondary">Показывается только будущая структура результата без чисел и готовности.</div>
+                      <h3>План импорта</h3>
+                      <p>Dry-run preview без raw config, auth files или mutable path.</p>
                     </div>
-                    <span class="chip amber"><span class="dot"></span>нет пакета</span>
+                    <span id="importPlanChip" class="chip amber"><span class="dot"></span><span>dry-run required</span></span>
                   </div>
-                  <div class="import-phase-list">
-                    <div class="import-phase-row"><span>1</span><strong>Scan packet</strong><em>не запускался</em></div>
-                    <div class="import-phase-row"><span>2</span><strong>Safety snapshot</strong><em>не доказан</em></div>
-                    <div class="import-phase-row"><span>3</span><strong>Mutation plan</strong><em>не заявляется</em></div>
-                    <div class="import-phase-row"><span>4</span><strong>Rollback packet</strong><em>нет поверхности</em></div>
+                  <div class="import-checklist" aria-label="План импорта">
+                    <div id="importPlanSnapshotRow" class="import-check-row" data-import-status="ready"><span><img class="ui-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">Создать snapshot текущих данных</span><strong>ready preview</strong></div>
+                    <div id="importPlanAccountsRow" class="import-check-row" data-import-status="deferred"><span><img class="ui-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">Импортировать найденные аккаунты</span><strong>deferred</strong></div>
+                    <div id="importPlanPolicyRow" class="import-check-row" data-import-status="pending"><span><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">Назначить active/reserve policy</span><strong>pending</strong></div>
+                    <div id="importPlanRollbackRow" class="import-check-row" data-import-status="blocked"><span><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true">Сохранить rollback point</span><strong>rollback not confirmed</strong></div>
+                  </div>
+                </section>
+
+                <section class="card import-card import-safety-card" data-import-card="safety">
+                  <div class="import-card-head">
+                    <span class="setup-card-icon blue"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Безопасность</h3>
+                      <p>Safety grammar до apply, без прямого чтения рабочих файлов.</p>
+                    </div>
+                    <span id="importSafetyChip" class="chip neutral"><span class="dot"></span><span>bounded</span></span>
+                  </div>
+                  <div class="import-safety-list">
+                    <div><span class="round-icon blue"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span><strong>Рабочий каталог Codex не изменяется</strong></div>
+                    <div><span class="round-icon blue"><img class="ui-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span><strong>Proxy data сохраняется перед apply</strong></div>
+                    <div><span class="round-icon amber"><img class="ui-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span><strong>Partial import не считается success</strong></div>
+                    <div><span class="round-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span><strong>Rollback обязателен для apply</strong></div>
+                  </div>
+                </section>
+
+                <section class="card import-card import-result-card" data-import-card="result">
+                  <div class="import-card-head">
+                    <span class="setup-card-icon neutral"><img class="ui-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                    <div>
+                      <h3>Результат</h3>
+                      <p>Apply/result model, не доказательство завершённого импорта.</p>
+                    </div>
+                    <span id="importResultChip" class="chip amber"><span class="dot"></span><span>apply disabled</span></span>
+                  </div>
+                  <div class="import-result-state">
+                    <strong id="importResultTitle">Apply отключён</strong>
+                    <span id="importResultText">Требуется dry-run packet, snapshot packet и rollback point. Preview не является runtime truth.</span>
+                  </div>
+                  <div class="import-transaction-line" aria-label="Фазы транзакции">
+                    <div id="importPhaseCandidate"><span>1</span><strong>candidate preview</strong></div>
+                    <div id="importPhaseDryRun"><span>2</span><strong>dry-run required</strong></div>
+                    <div id="importPhaseSnapshot"><span>3</span><strong>snapshot required</strong></div>
+                    <div id="importPhaseApply"><span>4</span><strong>apply disabled</strong></div>
                   </div>
                 </section>
               </div>
 
-              <section class="card form-section">
-                <div class="section-head">
-                  <div>
-                    <h3>Управление импортом</h3>
-                    <div class="secondary">Все элементы инертны, пока нет командных контрактов.</div>
-                  </div>
-                  <span class="chip red"><span class="dot"></span>не выполняется</span>
+              <div class="import-bottom-bar" aria-label="Инертные действия импорта">
+                <div class="import-bottom-actions-left">
+                  <button class="button small disabled" type="button" disabled title="Discovery requires command-owned candidate packet.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/magnifying-glass.png" alt="" aria-hidden="true">
+                    <span>Найти установку · missing surface</span>
+                  </button>
+                  <button class="button small disabled" type="button" disabled title="Dry-run requires command-owned plan packet.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                    <span>Проверить · requires dry-run</span>
+                  </button>
+                  <button class="button small disabled" type="button" disabled title="Snapshot requires command-owned rollback packet.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                    <span>Создать snapshot · deferred</span>
+                  </button>
+                  <button class="button small disabled" type="button" disabled title="Rollback requires confirmed rollback point.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                    <span>Откатить · no rollback point</span>
+                  </button>
                 </div>
-                <div class="deferred-list">
-                  <div class="deferred-row"><span>Найти установку</span><span>нужно command-owned обнаружение</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>Создать снимок</span><span>нужна command-owned поверхность снимка</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>Проверить</span><span>нужен немутационный dry-run пакет импорта</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
-                  <div class="deferred-row"><span>Внести изменения</span><span>нет медиации исходного расположения и сильного подтверждения</span><button class="button small disabled" type="button" disabled>Отключено</button></div>
-                  <div class="deferred-row"><span>Откат</span><span>нужна command-owned поверхность отката</span><button class="button small disabled" type="button" disabled>Отложено</button></div>
+                <div class="import-bottom-actions-right">
+                  <button class="button small" type="button">Отмена</button>
+                  <button class="button small disabled import-apply-disabled" type="button" disabled title="Apply requires admitted dry-run, snapshot, rollback and confirmation.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
+                    <span>Применить · requires packet proof</span>
+                  </button>
                 </div>
-              </section>
-
-              <div class="setup-bottom-bar" aria-label="Инертные действия импорта">
-                <button class="button small disabled" type="button" disabled>Найти установку отложено</button>
-                <button class="button small disabled" type="button" disabled>Dry-run недоступен</button>
-                <button class="button primary small disabled" type="button" disabled>Применение отключено</button>
               </div>
             </div>
           </div>

@@ -1140,7 +1140,6 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Проверить готовность · missing surface", html)
         self.assertIn("setup proof packet", html)
         self.assertIn("Закрыть", html)
-        self.assertIn("source_id не заявляется", html)
         self.assertIn('data-select-client-mode="candidate-preview"', html)
         self.assertIn("Демо-режим. Кандидаты показаны как fixture preview", html)
         self.assertIn("Выберите локальный клиент Codex из безопасно предоставленных кандидатов.", js)
@@ -1157,11 +1156,26 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Сохранить выбор · requires candidate proof", html)
         self.assertIn("inert display only", html)
         self.assertIn("not claimed here", html)
-        self.assertIn("нужен немутационный dry-run пакет импорта", html)
-        self.assertIn("нет медиации исходного расположения и сильного подтверждения", html)
-        self.assertIn("существующая установка здесь не обнаружена", html)
-        self.assertIn("Dry-run preview", html)
-        self.assertIn("Rollback packet", html)
+        self.assertIn('data-import-mode="transaction-preview"', html)
+        self.assertIn('data-legacy-reference="08_import_existing"', html)
+        self.assertIn("Transaction wizard", html)
+        self.assertIn("Кандидат импорта", html)
+        self.assertIn("План импорта", html)
+        self.assertIn("Безопасность", html)
+        self.assertIn("Результат", html)
+        self.assertIn("candidate preview", html)
+        self.assertIn("dry-run required", html)
+        self.assertIn("snapshot required", html)
+        self.assertIn("rollback not confirmed", html)
+        self.assertIn("apply disabled", html)
+        self.assertIn("Preview не является runtime truth", html)
+        self.assertIn("Partial import не считается success", html)
+        self.assertIn("Rollback обязателен для apply", html)
+        self.assertIn("Найти установку · missing surface", html)
+        self.assertIn("Проверить · requires dry-run", html)
+        self.assertIn("Создать snapshot · deferred", html)
+        self.assertIn("Откатить · no rollback point", html)
+        self.assertIn("Применить · requires packet proof", html)
 
         for screen_id in ["setupScreen", "selectClientScreen", "importExistingScreen"]:
             section = self._section_html(html, screen_id)
@@ -1222,6 +1236,21 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
             select_client_section,
             r'<button class="button small disabled setup-save-disabled"[^>]*disabled[^>]*>Сохранить выбор · requires candidate proof</button>',
         )
+        import_section = self._section_html(html, "importExistingScreen")
+        self.assertIn('src="assets/icons/phosphor/magnifying-glass.png"', import_section)
+        self.assertIn('src="assets/icons/phosphor/shield-check.png"', import_section)
+        self.assertIn('src="assets/icons/phosphor/arrows-clockwise.png"', import_section)
+        self.assertIn('src="assets/icons/phosphor/warning.png"', import_section)
+        self.assertIn('src="assets/icons/phosphor/check-circle.png"', import_section)
+        self.assertIn('src="assets/icons/phosphor/info.png"', import_section)
+        self.assertNotIn("<svg", import_section.lower())
+        self.assertNotIn("showOpenFilePicker", import_section)
+        self.assertNotIn("source_path", import_section)
+        self.assertNotIn("auth_file", import_section)
+        self.assertNotIn("config_path", import_section)
+        self.assertNotIn("raw_plan_json", import_section)
+        self.assertNotIn("argv", import_section)
+        self.assertNotIn("command_id", import_section)
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         self.assertIn(".setup-flow-layout", css)
         self.assertIn("grid-template-columns: 276px minmax(0, 1fr)", css)
@@ -1238,7 +1267,77 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".candidate-path", css)
         self.assertIn(".select-client-detail-grid", css)
         self.assertIn(".import-phase-row", css)
+        self.assertIn(".import-existing-screen", css)
+        self.assertIn(".import-transaction-layout", css)
+        self.assertIn(".import-step-rail", css)
+        self.assertIn(".import-card-grid", css)
+        self.assertIn(".import-bottom-bar", css)
+        self.assertIn(".import-apply-disabled", css)
         self.assertIn("padding: 24px", css)
+
+    def test_import_existing_transaction_wizard_is_bounded_preview(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        section = self._section_html(html, "importExistingScreen")
+
+        self.assertIn('data-import-mode="transaction-preview"', section)
+        self.assertIn("Найти", section)
+        self.assertIn("Проверить", section)
+        self.assertIn("Снимок", section)
+        self.assertIn("Применить", section)
+        self.assertIn("Демо-режим. План импорта показан как preview, не как найденные локальные файлы.", section)
+        self.assertIn("Импорт требует command-owned discovery, dry-run, snapshot и rollback packet.", section)
+        self.assertIn("fixture candidate display", section)
+        self.assertIn("preview count · not confirmed", section)
+        self.assertIn("Ожидает command-owned discovery", section)
+        self.assertIn("Dry-run preview без raw config, auth files или mutable path.", section)
+        self.assertIn("Partial import не считается success", section)
+        self.assertIn("Rollback обязателен для apply", section)
+        self.assertIn("Применить · requires packet proof", section)
+        self.assertIn("Apply отключён", section)
+        self.assertIn("Preview не является runtime truth", section)
+
+        for forbidden in (
+            "data-ui-action",
+            "live-action",
+            "<input",
+            "<select",
+            "<textarea",
+            'type="file"',
+            "showOpenFilePicker",
+            "readAsText",
+            "localStorage",
+            "source_path",
+            "source-dir",
+            "source_dir",
+            "auth_file",
+            "config_path",
+            "raw_plan_json",
+            "token",
+            "secret",
+            "argv",
+            "command_id",
+            "Применить</button>",
+            "Импорт завершён",
+            "Готово",
+            "Найдено 28 аккаунтов",
+            "Можно применить",
+        ):
+            self.assertNotIn(forbidden, section)
+
+        self.assertIn("updateImportExistingCopy", js)
+        self.assertIn("canonicalImportVariant", js)
+        self.assertIn("importVariantModel", js)
+        self.assertIn("setImportVisualClass", js)
+        self.assertIn("live_failure", js)
+        self.assertIn("Import discovery недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("live packet unavailable", js)
+        self.assertIn("UI не переиспользует fixture path, fixture count или preview как live truth.", js)
+        self.assertIn("Partial import не считается success", js)
+        self.assertIn("Snapshot preview готов, но apply остаётся disabled без admitted command surface.", js)
+        self.assertIn("Rollback preview доступен только как model state; apply остаётся disabled.", js)
+        self.assertNotIn("import_existing_apply", html + js)
+        self.assertNotIn("import_existing_preflight", html + js)
 
     def test_setup_select_import_routes_are_static_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
