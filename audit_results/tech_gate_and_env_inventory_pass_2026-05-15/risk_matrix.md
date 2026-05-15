@@ -1,42 +1,9 @@
 # TECH_GATE_AND_ENV_INVENTORY_PASS Risk Matrix
 
-## High
-
-- `POST /api/action` is already exposed by the live server.
-  - Risk: a sloppy next contour could accidentally leave readonly scope and
-    dispatch mutations.
-  - Guard: `WEB_LIVE_SERVER_READONLY_ADMISSION_PASS` must be GET-only and must
-    explicitly forbid action dispatch.
-
-- 13 canon-required commands are not wired through the current adapter surface.
-  - Risk: doc presence could be mistaken for executable availability.
-  - Guard: every future contour must distinguish `canon-required` from
-    `repo-wired` and `runtime-proven`.
-
-## Medium
-
-- `launch_client_dispatch` is UI-admitted only through a server-owned bounded
-  path, not a browser path.
-  - Risk: next contours could incorrectly assume generic launch availability.
-  - Guard: keep launch admission conditional on bounded server-owned path.
-
-- Account and route actions are visible in metadata before any sandbox contour.
-  - Risk: operators may read availability as permission to execute.
-  - Guard: no mutation contour before sandbox boundary and owner approval.
-
-- `stable_repair_apply` exists in the adapter but is intentionally absent from
-  the UI allowlist.
-  - Risk: repo readers may overestimate readiness of recovery apply.
-  - Guard: treat as deferred until a dedicated contour explicitly admits it.
-
-## Low
-
-- Git hooks are configured, but hook presence is a local hygiene fact rather
-  than runtime truth.
-  - Risk: over-reading workflow hygiene as product readiness.
-  - Guard: keep hooks observation separate from runtime/readiness decisions.
-
-- `api/actions` metadata exposes availability and confirmation rules, but not
-  runtime proof.
-  - Risk: metadata could be mistaken for live health or proof.
-  - Guard: require command packet plus refresh proof for all truth claims.
+| Risk | Severity | Evidence | Why It Matters | Required Guard |
+| --- | --- | --- | --- | --- |
+| `plan_code_live_action_parking` | high | [MASTER_PLAN.md](/Volumes/Work/wild-boar-proxy/MASTER_PLAN.md:10), [MASTER_PLAN.md](/Volumes/Work/wild-boar-proxy/MASTER_PLAN.md:1676), [wild_boar_proxy/web_design_live_server.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:675), [wild_boar_proxy/web_design_live_server.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:1083), [wild_boar_proxy/web_design_ui/scripts/overview.js](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:924) | The corrected master plan parks mutation contours until live-readonly and sandbox boundaries are proven, but `/api/actions` still marks most parked actions available and the UI enables them on live source. | Align `/api/actions` availability and client-side action enablement with the parked mutation policy before readonly admission. |
+| `readme_code_live_readonly_actions` | high | [wild_boar_proxy/web_design_ui/README.md](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/README.md:43), [wild_boar_proxy/web_design_live_server.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:724), [wild_boar_proxy/web_design_ui/scripts/overview.js](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:924) | Operators are told that live read-only mode does not enable action buttons, but the current code does enable them under `?source=live`. That is a documentation and operator-expectation hazard. | Update docs or code so the live-readonly promise matches actual behavior. |
+| `dual_web_entrypoint_ambiguity` | medium | [wild_boar_proxy/web_design_live_server.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:1674), [wild_boar_proxy/web_ui.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_ui.py:1081) | The repo has two web server entrypoints. The next contour must bind the design live server explicitly and not accidentally test the legacy UI server. | Use `python3 -m wild_boar_proxy.web_design_live_server` explicitly in any next live-readonly contour. |
+| `route_action_partial_deferral_only` | medium | [wild_boar_proxy/web_design_ui/scripts/overview.js](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:914), [wild_boar_proxy/web_design_ui/scripts/overview.js](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:4050) | Only five route actions are deferred in the readonly registry UI; `api_route_validate` and `api_route_remove` still remain available under live-source conditions. | Decide explicitly whether route validate/remove belong in the live-readonly wave or must also be parked. |
+| `post_gateway_exists_before_sandbox_binding` | medium | [wild_boar_proxy/web_design_live_server.py](/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:729), [tests/test_web_design_live_server.py](/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py:1768) | The design live server already accepts `POST /api/action`. Even if we choose not to click those buttons, the surface exists before sandbox binding is proven. | Keep the next contour GET-only or gate POST behavior off entirely until sandbox admission. |

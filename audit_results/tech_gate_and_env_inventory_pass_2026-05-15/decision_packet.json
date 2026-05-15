@@ -1,18 +1,22 @@
 {
   "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
-  "decision": "GO_TO_WEB_LIVE_SERVER_READONLY_ADMISSION",
-  "blocked_by": [],
+  "decision": "STOP_AND_DIAGNOSE",
+  "blocked_by": [
+    "MASTER_PLAN parked-mutation policy does not match current /api/actions availability",
+    "web_design_ui README does not match current live-source action enablement"
+  ],
   "reasons": [
-    "tracked repo clean",
-    "readonly endpoints are localized in live server wiring",
-    "ui actions use strict payload guards with only ui_action/account_id/route_id admitted",
-    "mutation actions are visible and classifiable without executing them",
-    "no contradiction blocks readonly live admission"
+    "tracked repo is clean",
+    "CLI, live-server, and UI dispatch entrypoints are localized",
+    "browser payload guards are narrow and factual",
+    "the current live-readonly wave is not coherently enforced across plan, docs, server metadata, and client-side availability logic"
   ],
   "required_next_preconditions": [
-    "keep contour readonly",
-    "do not invoke mutating ui actions",
-    "treat launch_client_dispatch as bounded and server-owned-path only",
-    "keep fixture separate from live truth"
-  ]
+    "keep the design live server as the explicit target server",
+    "align /api/actions availability with the corrected parked-mutation policy",
+    "keep POST /api/action out of the live-readonly wave until sandbox admission is proven",
+    "make README and code agree on whether live read-only mode enables action buttons",
+    "rerun tech gate or readonly admission only after the parked-action mismatch is removed"
+  ],
+  "recommended_follow_up": "repair live-readonly action parking and doc alignment before attempting WEB_LIVE_SERVER_READONLY_ADMISSION_PASS"
 }

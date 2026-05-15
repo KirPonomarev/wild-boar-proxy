@@ -1,19 +1,79 @@
-[
-  {
-    "ui_action": "api_route_allow",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_lifecycle_allow",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "api_route_lifecycle",
-    "allowed_payload_keys": [
-      "ui_action",
+{
+  "contour": "TECH_GATE_AND_ENV_INVENTORY_PASS",
+  "ui_action_count": 22,
+  "available_without_launch_client_path": 21,
+  "read_only_support_actions": [
+    "refresh_health_detail",
+    "stable_repair_plan"
+  ],
+  "support_artifact_actions": [
+    "export_diagnostics"
+  ],
+  "account_actions": [
+    "onboard_account",
+    "validate_account",
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account"
+  ],
+  "runtime_actions": [
+    "set_mode_stable",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke"
+  ],
+  "route_actions": [
+    "api_route_validate",
+    "api_route_check",
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_remove",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "bounded_dispatch_actions": [
+    "launch_client_dispatch"
+  ],
+  "deferred_in_readonly_registry_ui": [
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_check",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "still_available_in_metadata_despite_current_plan_parking": [
+    "onboard_account",
+    "validate_account",
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account",
+    "set_mode_stable",
+    "set_mode_managed",
+    "sync_runtime",
+    "launch_smoke",
+    "export_diagnostics",
+    "api_route_validate",
+    "api_route_check",
+    "api_route_allow",
+    "api_route_disable",
+    "api_route_remove",
+    "api_route_profile",
+    "api_route_evidence_capture"
+  ],
+  "special_case_unavailable_without_server_owned_context": [
+    "launch_client_dispatch"
+  ],
+  "payload_contract": {
+    "browser_object_key": "ui_action",
+    "additional_bounded_keys": [
+      "account_id",
       "route_id"
     ],
-    "forbidden_browser_keys": [
+    "blocked_browser_keys": [
       "command_id",
       "raw_command",
       "argv",
@@ -27,671 +87,6 @@
       "route_json",
       "bundle_path",
       "client_path"
-    ],
-    "adapter_command_id": "external_models_routes_enable",
-    "ui_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness"
-  },
-  {
-    "ui_action": "api_route_check",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_smoke_check",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "api_route_verification",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_check",
-    "ui_claim_scope": "только проверочный запрос маршрута у провайдера; это не утверждение runtime readiness"
-  },
-  {
-    "ui_action": "api_route_disable",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_lifecycle_disable",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "api_route_lifecycle",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_routes_disable",
-    "ui_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness"
-  },
-  {
-    "ui_action": "api_route_evidence_capture",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_local_evidence_capture",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": false,
-    "mutation_class": "api_route_support_artifact",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_evidence_capture",
-    "ui_claim_scope": "только локальный support artifact; это не runtime proof и не чтение evidence file из UI"
-  },
-  {
-    "ui_action": "api_route_profile",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_profile_packet",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": false,
-    "mutation_class": "api_route_support",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_profile_codex_desktop",
-    "ui_claim_scope": "только профильный пакет поддержки; это не Codex config mutation, не listener readiness и не runtime readiness"
-  },
-  {
-    "ui_action": "api_route_remove",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_registry_cleanup",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "api_route_registry_cleanup",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_routes_remove",
-    "ui_claim_scope": "только удаление отключённой registry-записи; область действия не шире command packet"
-  },
-  {
-    "ui_action": "api_route_validate",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "api_route_validation",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "api_route_verification",
-    "allowed_payload_keys": [
-      "ui_action",
-      "route_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "external_models_routes_validate",
-    "ui_claim_scope": "только проверка маршрута у провайдера; это не утверждение runtime readiness"
-  },
-  {
-    "ui_action": "demote_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_lifecycle_demotion",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_demote",
-    "ui_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "export_diagnostics",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "support_artifact",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": false,
-    "post_action_refresh_required": false,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "diagnostics_export",
-    "ui_claim_scope": "только диагностический пакет поддержки"
-  },
-  {
-    "ui_action": "hold_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_lifecycle_hold",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_hold",
-    "ui_claim_scope": "только запрос ручной паузы; подтверждением остаётся обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "launch_client_dispatch",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "Bounded путь запуска клиента недоступен.",
-    "action_role": "host_client_dispatch",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "launch_client",
-    "ui_claim_scope": "только bounded OS dispatch request; это не успех сессии внешнего клиента"
-  },
-  {
-    "ui_action": "launch_smoke",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "runtime_smoke_check",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": false,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "smoke",
-    "ui_claim_scope": "только smoke-проверка runtime; это не успех запуска внешнего клиента"
-  },
-  {
-    "ui_action": "onboard_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_onboarding",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "account_admission",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_onboard",
-    "ui_claim_scope": "только запрос допуска аккаунта; подтверждением остаются пакет команды и обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "promote_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_lifecycle_promotion",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_promote",
-    "ui_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "refresh_health_detail",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "runtime_detail",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": false,
-    "post_action_refresh_required": false,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "healthcheck",
-    "ui_claim_scope": "только обновление деталей runtime; состояние runtime не меняется"
-  },
-  {
-    "ui_action": "release_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_lifecycle_release",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_release",
-    "ui_claim_scope": "только запрос снятия ручной паузы; подтверждением остаётся обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "retire_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_lifecycle_retirement",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_retire",
-    "ui_claim_scope": "только терминальный lifecycle-запрос; подтверждением остаётся обновлённый список аккаунтов"
-  },
-  {
-    "ui_action": "set_mode_managed",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "controlled_mode_mutation",
-    "mutates_runtime": true,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "mode_managed",
-    "ui_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview"
-  },
-  {
-    "ui_action": "set_mode_stable",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "controlled_mode_mutation",
-    "mutates_runtime": true,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "mode_stable",
-    "ui_claim_scope": "только запрос режима; подтверждением остаётся обновлённый live overview"
-  },
-  {
-    "ui_action": "stable_repair_plan",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "recovery_planning",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": false,
-    "post_action_refresh_required": false,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "stable_repair_dry_run",
-    "ui_claim_scope": "только dry-run план восстановления"
-  },
-  {
-    "ui_action": "sync_runtime",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "controlled_runtime_mutation",
-    "mutates_runtime": true,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "sync",
-    "ui_claim_scope": "только запрос sync; подтверждением остаётся обновлённый live overview"
-  },
-  {
-    "ui_action": "validate_account",
-    "available_without_extra_context": true,
-    "conditionally_unavailable_reason": "",
-    "action_role": "account_verification",
-    "mutates_runtime": false,
-    "affects_primary_truth": false,
-    "confirmation_required": true,
-    "post_action_refresh_required": true,
-    "mutation_class": "",
-    "allowed_payload_keys": [
-      "ui_action",
-      "account_id"
-    ],
-    "forbidden_browser_keys": [
-      "command_id",
-      "raw_command",
-      "argv",
-      "shell",
-      "path",
-      "token",
-      "secret",
-      "config_path",
-      "state_path",
-      "log_path",
-      "route_json",
-      "bundle_path",
-      "client_path"
-    ],
-    "adapter_command_id": "accounts_validate",
-    "ui_claim_scope": "только запрос проверки аккаунта; подтверждением остаётся обновлённый список аккаунтов"
+    ]
   }
-]
+}

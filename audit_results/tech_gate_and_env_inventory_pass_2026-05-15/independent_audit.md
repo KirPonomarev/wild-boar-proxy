@@ -2,62 +2,66 @@
 
 ## Auditor
 
-- agent: `019e2bb0-1ebd-77f0-8233-518661ef1d69`
-- nickname: `Bohr`
+- agent: `019e2cc8-5f0c-75a2-8dcc-def35f086f8b`
+- nickname: `Feynman`
 - model: `gpt-5.4-mini`
 - role: readonly inventory cross-check
 
 ## Audit Scope
 
+- `wild_boar_proxy/__main__.py`
+- `wild_boar_proxy/cli.py`
 - `wild_boar_proxy/web_design_live_server.py`
 - `wild_boar_proxy/web_design_command_adapter.py`
+- `wild_boar_proxy/web_ui.py`
 - `wild_boar_proxy/web_design_ui/scripts/overview.js`
 - `tests/test_web_design_live_server.py`
 - `tests/test_web_design_command_adapter.py`
 
-## Fact Report
+## Factual Cross-Check
 
-- UI actions exposed by `UI_ACTION_ALLOWLIST`: `22`
-- Live server endpoints confirmed:
-  - `GET /api/live-readonly`
-  - `GET /api/accounts-readonly`
-  - `GET /api/api-connections-readonly`
-  - `GET /api/actions`
-  - `POST /api/action`
-- Browser payload gate confirmed:
-  - allowed: `ui_action`
-  - additionally bounded: `account_id` or `route_id`
-  - blocked examples: `command_id`, `argv`, `shell`, `path`, `token`, `secret`, `client_path`, `bundle_path`
+The auditor correctly localized:
 
-## Canon vs Wiring Gaps
+- the actual CLI entry shim and CLI root
+- the actual design live-server entrypoint and the legacy `web_ui` server
+- the server-side UI action allowlist boundary
+- the lower command-adapter allowlist boundary
+- the current asymmetry where backend route actions are admitted more broadly than
+  the visible route menu currently exposes
 
-Missing from current repo wiring relative to `COMMAND_API.md` required list:
+Local verification matched the auditor on those points.
 
-- `policy stage set <10|15|20> --json`
-- `rollout posture inspect <15|20> --json`
-- `rollout evidence capture 16 --json`
-- `rollout stage prove 10 --json`
-- `rollout stage prove 15 --json`
-- `rollout stage advance 15 <id> --json`
-- `rollout stage advance 20 <id> --json`
-- `installer init --json`
-- `legacy import --source-dir <path> --json`
-- `companion reset --json`
-- `companion uninstall --json`
-- `package experimental build --output-dir <path> --json`
-- `package experimental verify --manifest <path> --json`
+## What Changed Relative to the Old In-Repo Audit
 
-Repo-wired but not canon-required in current `COMMAND_API.md`:
+This repo already contained an older tech-gate audit under the same contour
+directory. It was tied to older head `42f1c16` and concluded `GO`.
 
-- `launch smoke --json`
-- `stable repair --dry-run`
-- `stable repair --apply`
-- external-models route lifecycle and support commands
-- bounded UI wrapper `launch_client_dispatch`
+That older conclusion is no longer trustworthy after:
 
-## Auditor Verdict
+- the corrected `MASTER_PLAN.md` reset at head `1f10e34`
+- explicit verification that `/api/actions` marks most parked mutation actions
+  available
+- explicit verification that the README promise about live read-only action
+  buttons no longer matches the code
 
-- readonly inventory result: `PASS`
-- contradiction blocking readonly live admission: `none found`
-- next contour allowed: `WEB_LIVE_SERVER_READONLY_ADMISSION_PASS`
-- required guardrail: `treat POST /api/action as forbidden during readonly admission`
+## Auditor Truthfulness Check
+
+- current auditor lied: `no`
+- current auditor overclaimed: `no`
+- current auditor missed the decisive blocker: `partially`
+
+The decisive blocker is not a fake fact from the auditor; it is a broader
+canon-level contradiction assembled from local verification:
+
+- current plan says mutation wave is parked
+- current metadata says most parked actions are available
+- current UI enables those actions on live source
+
+That blocker sits above the auditor's narrower surface-mapping scope.
+
+## Audit Verdict
+
+- readonly inventory mapping: `PASS`
+- next contour admission: `STOP_AND_DIAGNOSE`
+- blocker class: `plan/code/doc contradiction on live-readonly action exposure`
+- required follow-up: `align parked mutation exposure before WEB_LIVE_SERVER_READONLY_ADMISSION_PASS`
