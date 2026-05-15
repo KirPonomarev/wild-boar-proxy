@@ -3705,6 +3705,255 @@ button:disabled {
   justify-self: start;
 }
 
+.settings-runtime-mode {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: min-content minmax(0, 1fr) min-content;
+  height: min(704px, calc(100vh - 236px));
+  min-height: 0;
+}
+
+.runtime-mode-topline {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.runtime-mode-subflow-title {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.runtime-mode-subflow-title strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.runtime-mode-subflow-title span {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.runtime-mode-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-areas:
+    "state source"
+    "request action"
+    "checks disabled"
+    "recovery disabled";
+  grid-template-columns: minmax(0, 1.12fr) minmax(340px, .88fr);
+  grid-template-rows: 228px 142px 118px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.runtime-mode-card {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.runtime-mode-card[data-runtime-mode-card="current"] { grid-area: state; }
+.runtime-mode-card[data-runtime-mode-card="request"] { grid-area: request; }
+.runtime-mode-card[data-runtime-mode-card="checks"] { grid-area: checks; }
+.runtime-mode-card[data-runtime-mode-card="recovery"] { grid-area: recovery; }
+.runtime-mode-card[data-runtime-mode-card="source"] { grid-area: source; }
+.runtime-mode-card[data-runtime-mode-card="last-action"] { grid-area: action; }
+.runtime-mode-card[data-runtime-mode-card="disabled"] { grid-area: disabled; }
+
+.runtime-mode-card-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
+.runtime-mode-card-head h3 {
+  font-size: 13px;
+  line-height: 16px;
+  margin: 0;
+}
+
+.runtime-mode-card-head p {
+  color: var(--secondary);
+  display: -webkit-box;
+  font-size: 10px;
+  line-height: 13px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.runtime-mode-kv,
+.runtime-mode-list {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+}
+
+.runtime-mode-kv {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runtime-mode-kv div,
+.runtime-mode-list div {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 7px;
+}
+
+.runtime-mode-kv div:last-child {
+  grid-column: 1 / -1;
+}
+
+.runtime-mode-kv span,
+.runtime-mode-list span {
+  color: var(--secondary);
+  font-size: 9px;
+  line-height: 11px;
+}
+
+.runtime-mode-kv strong,
+.runtime-mode-list strong {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.runtime-mode-list strong span {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.runtime-mode-segments {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 5px;
+}
+
+.runtime-mode-segments span {
+  border-radius: 10px;
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  min-height: 31px;
+  padding: 7px 8px;
+  text-align: center;
+}
+
+.runtime-mode-segments span.active {
+  background: var(--surface);
+  box-shadow: 0 6px 16px rgba(49, 92, 153, .12);
+  color: var(--text);
+}
+
+.runtime-mode-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runtime-mode-actions.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.runtime-mode-actions .button {
+  font-size: 11px;
+  height: 34px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.runtime-mode-actions .button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-mode-note,
+.runtime-mode-message,
+.runtime-mode-footer {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 14px;
+  margin: 0;
+}
+
+.runtime-mode-message {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+}
+
+.runtime-mode-disabled-list {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-mode-disabled-list span {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 999px;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 15px;
+  padding: 7px 10px;
+}
+
+.runtime-mode-source-card .runtime-mode-list,
+.runtime-mode-action-card .runtime-mode-list {
+  gap: 4px;
+}
+
+.runtime-mode-source-card .runtime-mode-list div,
+.runtime-mode-action-card .runtime-mode-list div {
+  padding: 4px 7px;
+}
+
+.runtime-mode-source-card .runtime-mode-list span,
+.runtime-mode-action-card .runtime-mode-list span {
+  font-size: 8px;
+  line-height: 10px;
+}
+
+.runtime-mode-source-card .runtime-mode-list strong,
+.runtime-mode-action-card .runtime-mode-list strong {
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.runtime-mode-footer {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  padding-top: 7px;
+}
+
 .settings-data-layout {
   display: grid;
   gap: 10px;

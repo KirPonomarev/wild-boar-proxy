@@ -1,0 +1,33 @@
+{
+  "href": "http://127.0.0.1:8766/?screen=settings&section=runtime&state=healthy",
+  "screen": "settings",
+  "settingsSection": "runtime",
+  "documentScrollWidth": 1600,
+  "documentScrollHeight": 1000,
+  "mainScrollHeight": 942,
+  "mainClientHeight": 942,
+  "runtimeModeBottom": 898,
+  "sourceCardOverflow": false,
+  "panelHidden": false,
+  "hubHidden": true,
+  "visibleSvgIcons": 0,
+  "visibleImgIcons": 22,
+  "hasInput": 0,
+  "hasFileInput": 0,
+  "hasTextarea": 0,
+  "hasSelect": 0,
+  "hasCanvas": 0,
+  "buttonOverflow": [],
+  "chipOverflow": [],
+  "bannerClass": "fixture-banner green",
+  "stateChip": "mismatch",
+  "actionChip": "not run",
+  "dataActions": [
+    "set_mode_managed",
+    "set_mode_stable",
+    "sync_runtime",
+    "launch_smoke",
+    "refresh_health_detail",
+    "stable_repair_plan"
+  ]
+}

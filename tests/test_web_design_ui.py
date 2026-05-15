@@ -962,13 +962,21 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        settings_hub_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[0]
+        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
+        data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
         self.assertIn('data-screen-link="settings"', html)
         self.assertIn('id="settingsScreen"', html)
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
         self.assertIn('id="settingsHub"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-with-data-layout"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-and-data-layout"', settings_markup)
+        self.assertIn('id="runtimeModePanel"', settings_markup)
+        self.assertIn('data-settings-subflow="runtime"', settings_markup)
+        self.assertIn('data-runtime-mode-surface="packet-owned-preview"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
+        self.assertIn('data-settings-section-link="runtime"', settings_markup)
         self.assertIn('id="dataLayoutPanel"', settings_markup)
         self.assertIn('data-settings-subflow="data-layout"', settings_markup)
         self.assertIn('data-installer-layout-mode="preview-only"', settings_markup)
@@ -981,6 +989,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Permissions", settings_markup)
         self.assertIn("Snapshot / rollback", settings_markup)
         self.assertIn("Опасные операции", settings_markup)
+        self.assertIn("Текущий режим", runtime_markup)
+        self.assertIn("Запрос режима", runtime_markup)
+        self.assertIn("Source of truth", runtime_markup)
+        self.assertIn("Last command", runtime_markup)
+        self.assertIn("Disabled reasons", runtime_markup)
+        self.assertIn("Режим запрошен ≠ режим применён ≠ здоровье runtime.", runtime_markup)
         self.assertIn("Показать в Finder", html)
         self.assertIn("desktop/native или admitted human-open surface", html)
         for section in [
@@ -1045,11 +1059,26 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("Install now", settings_markup)
         self.assertNotIn("Сохранить", settings_markup)
         self.assertNotIn("Отмена", settings_markup)
-        self.assertNotIn('data-ui-action=', settings_markup)
-        self.assertNotIn("live-action", settings_markup)
+        self.assertNotIn('data-ui-action=', settings_hub_markup)
+        self.assertNotIn('data-ui-action=', data_layout_markup)
+        self.assertNotIn("live-action", settings_hub_markup)
+        self.assertNotIn("live-action", data_layout_markup)
         self.assertNotIn("account-action", settings_markup)
         self.assertNotIn("onboard-action", settings_markup)
         self.assertNotIn("api-route-action", settings_markup)
+        for allowed_action in [
+            "set_mode_managed",
+            "set_mode_stable",
+            "sync_runtime",
+            "launch_smoke",
+            "refresh_health_detail",
+            "stable_repair_plan",
+        ]:
+            self.assertIn(f'data-ui-action="{allowed_action}"', runtime_markup)
+        self.assertEqual(runtime_markup.count("data-ui-action="), 6)
+        self.assertIn("runtime-mode-action", runtime_markup)
+        self.assertIn("confirmation и canonical refresh proof", runtime_markup)
+        self.assertIn("Green появляется только после fresh consistent packet", runtime_markup)
         self.assertNotIn("<svg", settings_markup)
         self.assertNotIn("<input", settings_markup)
         self.assertNotIn("<textarea", settings_markup)
@@ -1126,18 +1155,22 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".data-layout-grid", css)
         self.assertIn("grid-template-areas:", css)
         self.assertIn(".data-layout-danger-card", css)
+        self.assertIn(".settings-runtime-mode", css)
+        self.assertIn(".runtime-mode-grid", css)
+        self.assertIn(".runtime-mode-disabled-list", css)
 
     def test_settings_data_layout_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
         self.assertIn("setSettingsSection", js)
-        self.assertIn('url.searchParams.set("section", "data-layout")', js)
+        self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
         self.assertIn('if (key !== "section")', js)
         self.assertIn('data-settings-section-link="data-layout"', settings_markup)
         self.assertNotIn('data-screen-link="data-layout"', html)
@@ -1188,7 +1221,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
             "routes.json",
             "secrets.env",
         ]:
-            self.assertNotIn(forbidden, settings_markup)
+            self.assertNotIn(forbidden, data_layout_markup)
         self.assertNotIn("showDirectoryPicker", js)
         self.assertNotIn("showOpenFilePicker", js)
         self.assertNotIn("webkitdirectory", js)
@@ -1198,6 +1231,78 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Reinitialize требует strong confirmation", settings_markup)
         self.assertIn("Очистка данных недоступна из web preview", settings_markup)
         self.assertIn("Сброс layout недоступен без rollback semantics", settings_markup)
+
+    def test_settings_runtime_mode_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"]', js)
+        self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
+        self.assertIn('data-settings-section-link="runtime"', settings_markup)
+        self.assertIn('data-settings-subflow="runtime"', runtime_markup)
+        self.assertIn("runtimeModeModelFromSnapshot", js)
+        self.assertIn("renderRuntimeModeSnapshot", js)
+        self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
+        self.assertIn("Runtime mode недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Данные режима устарели. Требуется обновление из canonical source.", js)
+        self.assertIn("command result не подменяет runtime truth", settings_markup)
+
+        for allowed_action in [
+            "set_mode_managed",
+            "set_mode_stable",
+            "sync_runtime",
+            "launch_smoke",
+            "refresh_health_detail",
+            "stable_repair_plan",
+        ]:
+            self.assertIn(f'data-ui-action="{allowed_action}"', runtime_markup)
+        self.assertEqual(runtime_markup.count("data-ui-action="), 6)
+        self.assertIn("metadata.confirmation_required", js)
+        self.assertIn("confirmationPolicyFor(uiAction, metadata)", js)
+        self.assertIn("set_mode_managed:", js)
+        self.assertIn("set_mode_stable:", js)
+        self.assertIn("Фактический режим должен быть подтверждён обновлённым JSON.", js)
+        self.assertIn("ok_refresh_pending", js)
+        self.assertIn("canonical refresh pending", js)
+        self.assertIn("ok_refresh_failed", js)
+        self.assertIn("canonical refresh failed", js)
+        self.assertIn("mismatch", js)
+        self.assertIn('model.key === "stale"', js)
+        self.assertIn("stale", runtime_markup + js)
+        self.assertIn("Применить восстановление", runtime_markup)
+        self.assertIn("Применение восстановления требует отдельного confirmation gate", runtime_markup)
+        self.assertNotIn('data-ui-action="stable_repair_apply"', runtime_markup)
+        self.assertNotIn("stable_repair_apply:", js)
+        self.assertNotIn("policy_stage", runtime_markup + js)
+        self.assertNotIn("rollout_stage", runtime_markup + js)
+        self.assertNotIn("stable_target", runtime_markup + js)
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "mode_override",
+            "config_path",
+            "state_path",
+            "raw_command",
+            "argv",
+            "shell",
+            "Сохранить",
+            "config saved",
+            "mode applied",
+            "production ready",
+        ]:
+            self.assertNotIn(forbidden, runtime_markup)
+        self.assertNotIn("<svg", runtime_markup)
+        self.assertIn('assets/icons/phosphor/pulse.png', runtime_markup)
+        self.assertIn('assets/icons/phosphor/shield-check.png', runtime_markup)
+        self.assertIn('assets/icons/phosphor/arrows-clockwise.png', runtime_markup)
+        self.assertIn('assets/icons/phosphor/warning.png', runtime_markup)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

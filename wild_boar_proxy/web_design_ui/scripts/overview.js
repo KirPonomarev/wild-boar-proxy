@@ -93,7 +93,7 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
-const SETTINGS_SECTIONS = ["hub", "data-layout"];
+const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"];
 const DATA_LAYOUT_FIXTURES = {
   healthy: {
     key: "initialized_healthy",
@@ -1062,12 +1062,22 @@ function setSourceCopy(source) {
   const screen = currentScreen();
   const settingsSection = currentSettingsSection();
   const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
+  const settingsFooter = settingsSection === "runtime"
+    ? "Настройки · runtime mode"
+    : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов");
+  const settingsSubtitle = settingsSection === "runtime"
+    ? "Желаемый и фактический режим работы, подтверждённые только command packets."
+    : (
+      settingsSection === "data-layout"
+        ? "Состояние каталога данных, разрешений и безопасных операций установки."
+        : "Конфигурация клиента, данных приложения и безопасных действий."
+    );
   const footerByScreen = {
     "quick-start": "Quick Start · summary control panel",
     accounts: "Аккаунты · live только чтение",
     "api-connections": "API-подключения · список маршрутов",
     diagnostics: "Диагностика · detail screen",
-    settings: settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов",
+    settings: settingsFooter,
     setup: "Setup · admission preview",
     "select-client": "Select Client · candidate preview",
     "import-existing": "Import · transaction preview"
@@ -1077,9 +1087,7 @@ function setSourceCopy(source) {
     accounts: "Пул аккаунтов, статусы проверки и распределение по режимам.",
     "api-connections": "Маршруты внешних моделей, статусы проверки и безопасные действия.",
     diagnostics: "Проверка цепочки подключения, аккаунтов и режима прокси.",
-    settings: settingsSection === "data-layout"
-      ? "Состояние каталога данных, разрешений и безопасных операций установки."
-      : "Конфигурация клиента, данных приложения и безопасных действий.",
+    settings: settingsSubtitle,
     setup: "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
     "select-client": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
     "import-existing": "Перенесите найденную конфигурацию без изменения рабочих файлов Codex."
@@ -1545,6 +1553,13 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionOnboardingReserveProof", onboardingModel.reserveFirst);
   text("actionOnboardingBackend", safeLedgerText(onboardingModel.selectedBackendId, "-"));
   setStatusChip("actionDisplayChip", actionDisplayLabel(displayStateLabel), panelVisualClass);
+  setRuntimeModeChip("runtimeActionChip", panelVisualClass, actionDisplayLabel(displayStateLabel));
+  text("runtimeActionUiAction", safeUiAction || "нет");
+  text("runtimeActionMachineCode", safeMachineCode);
+  text("runtimeActionRefresh", refreshLabel);
+  text("runtimeActionMessage", safeMessage || "Действия режима ещё не выполнялись.");
+  text("runtimeRefreshState", refreshLabel);
+  text("runtimeLastCommandScope", `${safeUiAction} · action packet only`);
   text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
   text("actionSummaryMeta", `target ${safeTarget} · ${displayStateLabel}`);
   text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
@@ -2196,6 +2211,7 @@ function renderSettingsSnapshot(snapshot) {
     banner.textContent = copy[visualState] || copy.unknown;
   }
   renderDataLayoutSnapshot(snapshot);
+  renderRuntimeModeSnapshot(snapshot);
 }
 
 function updateSettingsActionMetadata() {
@@ -2209,16 +2225,116 @@ function updateSettingsActionMetadata() {
     : "доступно · server-owned bounded dispatch";
 }
 
+function runtimeModeModelFromSnapshot(snapshot) {
+  const runtime = snapshot?.runtime || {};
+  const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
+  const visualState = runtime.visual_state || snapshot?.state_id || "unknown";
+  const desired = runtime.desired_mode || "unknown";
+  const effective = runtime.effective_mode || "unknown";
+  const knownModes = desired !== "unknown" && effective !== "unknown";
+  const mismatch = knownModes && desired !== effective;
+  let visual = ACCOUNT_VISUAL_CLASS[VISUAL_CLASS[visualState]] ? VISUAL_CLASS[visualState] : (VISUAL_CLASS[visualState] || "neutral");
+  if (mismatch) {
+    visual = "amber";
+  }
+  if (visualState === "healthy" && !mismatch) {
+    visual = "green";
+  }
+  if (source === "live" && snapshot?.status === "integration_failure") {
+    visual = "red";
+  }
+  const freshness = visualState === "stale"
+    ? "stale"
+    : (visualState === "healthy" && !mismatch ? "fresh" : (source === "live" && snapshot?.status === "integration_failure" ? "unavailable" : "not confirmed"));
+  const stateLabel = mismatch
+    ? "mismatch"
+    : (visualState === "healthy" ? "consistent" : (visualState === "stale" ? "stale" : runtime.status_label || "unknown"));
+  const modeSource = source === "live" ? "mode JSON packet / status JSON packet" : "fixture preview";
+  const observed = freshness === "fresh"
+    ? (runtime.observed_at_utc || "packet timestamp")
+    : (freshness === "stale" ? "stale" : "—");
+  return {
+    source,
+    visual,
+    stateLabel,
+    desired,
+    effective,
+    mismatch,
+    freshness,
+    observed,
+    modeSource,
+    lastError: runtime.last_error || "—",
+    machineCode: runtime.machine_error_code || "—",
+    statusLabel: runtime.status_label || "Неизвестно",
+    bannerCopy: source === "live" && snapshot?.status === "integration_failure"
+      ? "Runtime mode недоступен. Предыдущие fixture-данные не используются."
+      : (
+        visualState === "stale"
+          ? "Данные режима устарели. Требуется обновление из canonical source."
+          : "Демо-режим. Значения режима показаны как preview, не как runtime truth."
+      )
+  };
+}
+
+function setRuntimeModeChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function renderRuntimeModeSnapshot(snapshot) {
+  const model = runtimeModeModelFromSnapshot(snapshot || {});
+  setRuntimeModeChip("runtimeModePanelChip", model.visual, model.stateLabel);
+  setRuntimeModeChip("runtimeModeStateChip", model.visual, model.stateLabel);
+  setRuntimeModeChip("runtimeModeRequestChip", model.mismatch ? "amber" : "neutral", model.mismatch ? "mismatch" : "request only");
+  setRuntimeModeChip("runtimeModeTruthChip", model.visual, model.source === "live" ? "live packet" : "fixture preview");
+
+  text("runtimeModeDesired", modeLabel(model.desired));
+  text("runtimeModeEffective", modeLabel(model.effective));
+  text("runtimeModeSource", model.modeSource);
+  text("runtimeModeFreshness", model.observed);
+  text("runtimeModeLastError", model.lastError || "—");
+  text("runtimeDesiredSource", model.source === "live" ? "mode JSON packet" : "fixture preview");
+  text("runtimeEffectiveSource", model.source === "live" ? "status JSON packet" : "fixture preview");
+  text("runtimePacketFreshness", model.freshness);
+  text("runtimeLastCommandScope", "last command не является runtime truth");
+  text("runtimeModeFooter", "Режим запрошен ≠ режим применён ≠ здоровье runtime.");
+
+  const managed = document.getElementById("runtimeManagedPreview");
+  const stable = document.getElementById("runtimeStablePreview");
+  if (managed && stable) {
+    managed.classList.toggle("active", model.desired === "managed");
+    stable.classList.toggle("active", model.desired === "stable");
+  }
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner && currentScreen() === "settings" && currentSettingsSection() === "runtime") {
+    banner.className = `fixture-banner ${ACCOUNT_VISUAL_CLASS[model.visual] || VISUAL_CLASS[model.visual] || "neutral"}`;
+    banner.textContent = model.bannerCopy;
+  }
+}
+
 function setSettingsSection(section) {
   const normalized = SETTINGS_SECTIONS.includes(section) ? section : "hub";
   const desktop = document.querySelector(".desktop");
   desktop.dataset.settingsSection = normalized;
   const hub = document.getElementById("settingsHub");
+  const runtimePanel = document.getElementById("runtimeModePanel");
   const panel = document.getElementById("dataLayoutPanel");
   const finder = document.getElementById("dataLayoutOpenFinderAction");
+  const isRuntime = normalized === "runtime" && currentScreen() === "settings";
   const isDataLayout = normalized === "data-layout" && currentScreen() === "settings";
   if (hub) {
-    hub.hidden = isDataLayout;
+    hub.hidden = isRuntime || isDataLayout;
+  }
+  if (runtimePanel) {
+    runtimePanel.hidden = !isRuntime;
   }
   if (panel) {
     panel.hidden = !isDataLayout;
@@ -2558,7 +2674,11 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
           ? "Диагностика"
           : (
             nextScreen === "settings"
-              ? (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+              ? (
+                nextSettingsSection === "runtime"
+                  ? "Runtime / Mode"
+                  : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+              )
               : (
                 nextScreen === "setup"
                   ? "Настройка Wild Boar Proxy"
@@ -2578,8 +2698,8 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("screen", nextScreen);
-    if (nextScreen === "settings" && nextSettingsSection === "data-layout") {
-      url.searchParams.set("section", "data-layout");
+    if (nextScreen === "settings" && nextSettingsSection !== "hub") {
+      url.searchParams.set("section", nextSettingsSection);
     } else {
       const params = new URLSearchParams();
       for (const [key, value] of url.searchParams.entries()) {
@@ -4311,6 +4431,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
   document.getElementById("dataLayoutBackAction")?.addEventListener("click", () => {
+    setScreen("settings", true, "hub");
+    refreshCurrentSource();
+  });
+  document.getElementById("runtimeModeBackAction")?.addEventListener("click", () => {
     setScreen("settings", true, "hub");
     refreshCurrentSource();
   });

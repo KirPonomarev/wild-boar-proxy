@@ -982,18 +982,18 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-data-layout">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-and-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
-                <div><h3>Runtime / Mode</h3><p>Наблюдаемый режим без изменения политики.</p></div>
+                <div><h3>Runtime / Mode</h3><p>Режим работы, source of truth и безопасные mode actions.</p></div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>desired</span><strong id="settingsDesiredMode">-</strong></div>
                 <div><span>effective</span><strong id="settingsEffectiveMode">-</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Mode changes require a separate admitted command surface.">missing surface</button>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=runtime" data-settings-section-link="runtime">Открыть Runtime / Mode</a>
               <span id="settingsMachineCode" class="settings-hidden-field">-</span>
               <span id="settingsRuntimeStatus" class="settings-hidden-field">-</span>
             </section>
@@ -1107,6 +1107,165 @@
               <a class="button small settings-card-link" href="?screen=settings&amp;section=data-layout" data-settings-section-link="data-layout">Открыть data layout</a>
             </section>
           </div>
+
+          <section id="runtimeModePanel" class="settings-runtime-mode" data-settings-subflow="runtime" data-runtime-mode-surface="packet-owned-preview" hidden>
+            <div class="runtime-mode-topline">
+              <div class="runtime-mode-subflow-title"><strong>Runtime / Mode</strong><span>desired/effective mode · packet-owned truth only</span></div>
+              <span id="runtimeModePanelChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+              <button id="runtimeModeBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="runtime-mode-grid" aria-label="Runtime mode settings subflow">
+              <section class="card runtime-mode-card runtime-mode-state-card" data-runtime-mode-card="current">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Текущий режим</h3>
+                    <p>Effective mode важнее desired; command result не подменяет runtime truth.</p>
+                  </div>
+                  <span id="runtimeModeStateChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="runtime-mode-kv">
+                  <div><span>Желаемый режим</span><strong id="runtimeModeDesired">unknown</strong></div>
+                  <div><span>Фактический режим</span><strong id="runtimeModeEffective">unknown</strong></div>
+                  <div><span>Источник</span><strong id="runtimeModeSource">mode JSON packet / status JSON packet</strong></div>
+                  <div><span>Подтверждено</span><strong id="runtimeModeFreshness">—</strong></div>
+                  <div><span>Последняя ошибка</span><strong id="runtimeModeLastError">—</strong></div>
+                </div>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-request-card" data-runtime-mode-card="request">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/sliders-horizontal.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Запрос режима</h3>
+                    <p>Это не toggle: запрос требует confirmation и canonical refresh proof.</p>
+                  </div>
+                  <span id="runtimeModeRequestChip" class="chip neutral"><span class="dot"></span><span>request only</span></span>
+                </div>
+                <div class="runtime-mode-segments" aria-label="Предпросмотр desired mode">
+                  <span id="runtimeManagedPreview">Управляемый</span>
+                  <span id="runtimeStablePreview">Стабильный</span>
+                </div>
+                <div class="runtime-mode-actions">
+                  <button id="runtimeSetManagedAction" class="button small live-action runtime-mode-action" type="button" data-ui-action="set_mode_managed">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                    <span>Запросить управляемый</span>
+                  </button>
+                  <button id="runtimeSetStableAction" class="button small live-action runtime-mode-action" type="button" data-ui-action="set_mode_stable">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                    <span>Запросить стабильный</span>
+                  </button>
+                </div>
+                <div class="runtime-mode-note">Command OK = refresh pending. Green появляется только после fresh consistent packet.</div>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-checks-card" data-runtime-mode-card="checks">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Сверка и проверка</h3>
+                    <p>Secondary checks не доказывают mode switch и не запускают hidden repair.</p>
+                  </div>
+                  <span class="chip blue"><span class="dot"></span>safe checks</span>
+                </div>
+                <div class="runtime-mode-actions three">
+                  <button class="button small live-action runtime-mode-action" type="button" data-ui-action="sync_runtime">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                    <span>Синхронизировать</span>
+                  </button>
+                  <button class="button small live-action runtime-mode-action" type="button" data-ui-action="launch_smoke">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
+                    <span>Проверить работу</span>
+                  </button>
+                  <button class="button small live-action runtime-mode-action" type="button" data-ui-action="refresh_health_detail">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                    <span>Проверить здоровье</span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-recovery-card" data-runtime-mode-card="recovery">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Recovery / deferred</h3>
+                    <p>Recovery остается вторичным блоком, не repair center.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>deferred</span>
+                </div>
+                <div class="runtime-mode-actions">
+                  <button class="button small live-action runtime-mode-action" type="button" data-ui-action="stable_repair_plan">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/wrench.png" alt="" aria-hidden="true">
+                    <span>План восстановления</span>
+                  </button>
+                  <button class="button small disabled" type="button" disabled title="Применение восстановления требует отдельного confirmation gate и не активно в настройках режима.">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true">
+                    <span>Применить восстановление</span>
+                  </button>
+                </div>
+                <div class="runtime-mode-note">Rollout и policy находятся вне этого subflow.</div>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-source-card" data-runtime-mode-card="source">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Source of truth</h3>
+                    <p>Fixture preview, live packet и last command разведены отдельно.</p>
+                  </div>
+                  <span id="runtimeModeTruthChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="runtime-mode-list">
+                  <div><span>Desired source</span><strong id="runtimeDesiredSource">mode JSON packet</strong></div>
+                  <div><span>Effective source</span><strong id="runtimeEffectiveSource">status JSON packet</strong></div>
+                  <div><span>Packet freshness</span><strong id="runtimePacketFreshness">unknown</strong></div>
+                  <div><span>Refresh / command</span><strong><span id="runtimeRefreshState">not requested</span> · <span id="runtimeLastCommandScope">none</span></strong></div>
+                </div>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-action-card" data-runtime-mode-card="last-action">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Last command</h3>
+                    <p>Compact result only; подробности остаются в журнале действий.</p>
+                  </div>
+                  <span id="runtimeActionChip" class="chip neutral"><span class="dot"></span><span>not run</span></span>
+                </div>
+                <div class="runtime-mode-list">
+                  <div><span>ui_action</span><strong id="runtimeActionUiAction">нет</strong></div>
+                  <div><span>machine code</span><strong id="runtimeActionMachineCode">—</strong></div>
+                  <div><span>refresh</span><strong id="runtimeActionRefresh">не запрашивалось</strong></div>
+                </div>
+                <p id="runtimeActionMessage" class="runtime-mode-message">Действия режима ещё не выполнялись.</p>
+              </section>
+
+              <section class="card runtime-mode-card runtime-mode-disabled-card" data-runtime-mode-card="disabled">
+                <div class="runtime-mode-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Disabled reasons</h3>
+                    <p>Недоступные операции объясняются без расширения command surface.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>bounded</span>
+                </div>
+                <div class="runtime-mode-disabled-list">
+                  <span>config write disabled</span>
+                  <span>raw state/log read blocked</span>
+                  <span>recovery apply deferred</span>
+                  <span>rollout / policy out of scope</span>
+                </div>
+              </section>
+            </div>
+
+            <div id="runtimeModeFooter" class="runtime-mode-footer">
+              Режим запрошен ≠ режим применён ≠ здоровье runtime.
+            </div>
+          </section>
 
           <section id="dataLayoutPanel" class="settings-data-layout" data-settings-subflow="data-layout" data-installer-layout-mode="preview-only" hidden>
             <div class="data-layout-topline">
