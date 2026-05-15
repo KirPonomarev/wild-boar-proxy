@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "external-models",
+    "models",
+    "--json"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "payload": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "External-models route models listed from local registry.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "not_applicable",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "data": {
+      "models": [],
+      "count": 0,
+      "source": "local_routes_registry",
+      "listener_proven": false,
+      "runtime_claim_blocked": true
+    },
+    "timestamp_utc": "2026-05-15T14:26:25Z"
+  },
+  "captured_at_utc": "2026-05-15T14:26:25Z"
+}

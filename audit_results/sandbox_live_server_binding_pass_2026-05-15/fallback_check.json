@@ -1,0 +1,41 @@
+{
+  "contour": "SANDBOX_LIVE_SERVER_BINDING_PASS",
+  "timestamp_utc": "2026-05-15T14:33:04Z",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+  "changed_files_outside_sandbox": {},
+  "status_path_evidence": {
+    "state_file": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "launcher_path": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh"
+  },
+  "external_models_path_evidence": {
+    "routes_file": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "state_file": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+    "secrets_file": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+    "evidence_dir": "/Users/kirillponomarev/.codex-custom-test/external-models/evidence"
+  },
+  "live_packet_statuses": {
+    "live_readonly": {
+      "status": "integration_failure",
+      "source": "live_readonly",
+      "primary_truth_ok": false
+    },
+    "accounts_readonly": {
+      "status": "ok",
+      "source": "accounts_readonly",
+      "primary_truth_ok": true
+    },
+    "api_connections_readonly": {
+      "status": "ok",
+      "source": "api_connections_readonly",
+      "primary_truth_ok": true
+    }
+  },
+  "ui_non_live_screens": [],
+  "ui_work_path_leak_screens": [],
+  "forbidden_drift_detected": false,
+  "binding_verdict": "pass",
+  "notes": [
+    "live_readonly may legitimately report integration_failure if sandbox runtime attestation fails, as long as that failure is sandbox-local and honest.",
+    "accounts/api-connections may remain healthy/ok for empty sandbox-local registry state without implying runtime readiness."
+  ]
+}

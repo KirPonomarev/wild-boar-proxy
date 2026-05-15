@@ -1,0 +1,88 @@
+[
+  {
+    "activeScreen": "quick-start",
+    "brandCaption": "quick start · live readonly",
+    "fields": {
+      "quickStartAccountsChip": "пусто",
+      "quickStartAccountsConnected": "0",
+      "quickStartAccountsToCheck": "0",
+      "quickStartAccountsWorking": "0",
+      "quickStartApiChip": "Не настроено",
+      "quickStartApiStatusText": "Основной route не подтверждён bounded snapshot.",
+      "quickStartApiStatusTitle": "Не настроено",
+      "quickStartBanner": "Первый запуск: пустые состояния не являются ошибкой.",
+      "quickStartFooter": "Последняя общая проверка: нет данных · Детальные расследования остаются в экспертных разделах."
+    },
+    "fixtureState": "integration_failure",
+    "mainTitle": "Быстрый старт",
+    "sidebarStatus": "Quick Start: first run",
+    "source": "live",
+    "sourcePill": "Live",
+    "url": "http://127.0.0.1:53439/?screen=quick-start&source=live",
+    "ready": true,
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_live_server_binding_pass_2026-05-15/screenshots/quick-start-final.png"
+  },
+  {
+    "activeScreen": "overview",
+    "brandCaption": "live только чтение",
+    "fields": {
+      "desiredMode": "Неизвестно",
+      "effectiveMode": "Неизвестно",
+      "endpoint": "unknown",
+      "fixtureBanner": "Live-readonly недоступен. Предыдущие healthy-данные не используются.",
+      "lastError": "Runtime status summary reflects live attestation failure."
+    },
+    "fixtureState": "integration_failure",
+    "mainTitle": "Обзор",
+    "sidebarStatus": "Primary command для live-просмотра только чтение не выполнилась.",
+    "source": "live",
+    "sourcePill": "Live",
+    "url": "http://127.0.0.1:53439/?screen=overview&source=live",
+    "ready": true,
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_live_server_binding_pass_2026-05-15/screenshots/overview-final.png"
+  },
+  {
+    "activeScreen": "accounts",
+    "brandCaption": "аккаунты · live только чтение",
+    "fields": {
+      "accountsActiveChip": "0 активных",
+      "accountsBanner": "Live-readonly аккаунтов. Действия остаются bounded requests и подтверждаются обновлённым списком.",
+      "accountsHoldChip": "0 удержание",
+      "accountsPagination": "Строки 0-0 из 0",
+      "accountsProblemChip": "0 проблемных",
+      "accountsRegistryStatus": "Идентичность registry: clear · OK",
+      "accountsReserveChip": "0 резерв",
+      "accountsVisibleCount": "Показано 0 из 0"
+    },
+    "fixtureState": "healthy",
+    "mainTitle": "Аккаунты",
+    "sidebarStatus": "Account registry snapshot is available.",
+    "source": "live",
+    "sourcePill": "Live",
+    "url": "http://127.0.0.1:53439/?screen=accounts&source=live",
+    "ready": true,
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_live_server_binding_pass_2026-05-15/screenshots/accounts-final.png"
+  },
+  {
+    "activeScreen": "api-connections",
+    "brandCaption": "API-подключения · список маршрутов",
+    "fields": {
+      "apiConnectionsAttentionCount": "0",
+      "apiConnectionsBanner": "Live-readonly маршрутов. Удаление доступно только для disabled route после server preflight.",
+      "apiConnectionsEnabledCount": "0",
+      "apiConnectionsLatestCheck": "Нет данных",
+      "apiConnectionsPagination": "Строки 0-0 из 0",
+      "apiConnectionsRegistryStatus": "Контур: C3 · models source: local_routes_registry",
+      "apiConnectionsRoutesCount": "0",
+      "apiConnectionsVisibleCount": "Показано 0 из 0"
+    },
+    "fixtureState": "healthy",
+    "mainTitle": "API-подключения",
+    "sidebarStatus": "Список API-подключений собран из пакетов команд.",
+    "source": "live",
+    "sourcePill": "Live",
+    "url": "http://127.0.0.1:53439/?screen=api-connections&source=live",
+    "ready": true,
+    "screenshot": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_live_server_binding_pass_2026-05-15/screenshots/api-connections-final.png"
+  }
+]

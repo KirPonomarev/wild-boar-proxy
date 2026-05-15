@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "mode",
+    "get",
+    "--json"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "payload": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Mode values are available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "desired_mode": "stable",
+    "effective_mode": "stable"
+  },
+  "captured_at_utc": "2026-05-15T14:26:25Z"
+}

@@ -1,0 +1,53 @@
+{
+  "url": "http://127.0.0.1:53439/api/accounts-readonly",
+  "http_status": 200,
+  "payload": {
+    "accounts": [],
+    "commands": {
+      "accounts_list": {
+        "exit_code": 0,
+        "human_message": "Account registry snapshot is available.",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "role": "primary_truth",
+        "status": "ok",
+        "ui_state": "success"
+      }
+    },
+    "primary_truth_ok": true,
+    "privacy": {
+      "forbidden_fields_excluded": [
+        "secret_references",
+        "tokens",
+        "raw_paths",
+        "raw_logs"
+      ],
+      "raw_command_packet_included": false,
+      "redacted": true
+    },
+    "registry_identity": {
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "status": "clear"
+    },
+    "schema_version": 1,
+    "source": "accounts_readonly",
+    "status": "ok",
+    "summary": {
+      "active": 0,
+      "capacity_target": 25,
+      "degraded": 0,
+      "down": 0,
+      "healthy": 0,
+      "hold": 0,
+      "human_message": "Account registry snapshot is available.",
+      "last_error": "",
+      "machine_error_code": "OK",
+      "problem": 0,
+      "reserve": 0,
+      "retired": 0,
+      "visible_count": 0
+    }
+  },
+  "captured_at_utc": "2026-05-15T14:27:37Z"
+}

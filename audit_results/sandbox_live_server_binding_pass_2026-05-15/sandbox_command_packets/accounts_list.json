@@ -1,0 +1,45 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "accounts",
+    "list",
+    "--json"
+  ],
+  "returncode": 0,
+  "stderr": "",
+  "payload": {
+    "status": "ok",
+    "exit_code": 0,
+    "human_message": "Account registry snapshot is available.",
+    "machine_error_code": "OK",
+    "changed_files": [],
+    "next_action": "none",
+    "liveness": "unknown",
+    "severity": "recoverable",
+    "operator_action": "none",
+    "accounts": [],
+    "registry_identity": {
+      "status": "clear",
+      "machine_error_code": "OK",
+      "duplicate_backend_ids": [],
+      "duplicate_auth_basenames": [],
+      "missing_auth_refs": [],
+      "empty_auth_ref_backends": [],
+      "invalid_auth_basenames": [],
+      "invalid_backend_pools": [],
+      "registry_schema_version": 2,
+      "unsupported_schema_versions": [],
+      "claim_blockers": [],
+      "next_action": "none"
+    },
+    "pool_policy": {
+      "active_min": 0,
+      "active_target": 0,
+      "reserve_target": 0
+    },
+    "stable_default_backend_id": ""
+  },
+  "captured_at_utc": "2026-05-15T14:26:25Z"
+}
