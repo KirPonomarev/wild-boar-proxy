@@ -1,0 +1,64 @@
+{
+  "captured_at": "2026-05-15T15:23:11.530844+00:00",
+  "accepted_shapes_after_repair": [
+    {
+      "shape": {
+        "type": "codex",
+        "email": "...",
+        "access_token": "...",
+        "account_id": "..."
+      },
+      "normalized_auth_type": "codex"
+    },
+    {
+      "shape": {
+        "type": "apikey",
+        "OPENAI_API_KEY": "..."
+      },
+      "normalized_auth_type": "apikey"
+    },
+    {
+      "shape": {
+        "auth_mode": "apikey",
+        "OPENAI_API_KEY": "..."
+      },
+      "normalized_auth_type": "apikey",
+      "compatibility_kind": "legacy_alias"
+    },
+    {
+      "shape": {
+        "OPENAI_API_KEY": "..."
+      },
+      "normalized_auth_type": "apikey",
+      "compatibility_kind": "repo_existing_apikey_shape"
+    }
+  ],
+  "rejected_shapes_after_repair": [
+    {
+      "shape": {
+        "auth_mode": "apikey"
+      },
+      "reason": "missing auth field: OPENAI_API_KEY"
+    },
+    {
+      "shape": {
+        "type": "codex",
+        "email": "only@example.com"
+      },
+      "reason": "missing auth field(s) for codex"
+    },
+    {
+      "shape": {
+        "auth_mode": "mystery"
+      },
+      "reason": "invalid auth type"
+    }
+  ],
+  "current_sandbox_auth_shape": {
+    "payload": {
+      "auth_mode": "apikey",
+      "OPENAI_API_KEY": "sk-959211fed28c4991ac493818616dddda"
+    },
+    "normalized_auth_type": "apikey"
+  }
+}

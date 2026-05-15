@@ -1,0 +1,71 @@
+{
+  "captured_at": "2026-05-15T15:23:11.530849+00:00",
+  "sandbox_auth_path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+  "sandbox_auth_sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+  "sandbox_auth_keys": [
+    "OPENAI_API_KEY",
+    "auth_mode"
+  ],
+  "normalized_auth_type": "apikey",
+  "openai_api_key_present": true,
+  "legacy_auth_mode_present": true,
+  "forbidden_live_path_drift_detected": false,
+  "forbidden_live_path_drift": [],
+  "forbidden_live_paths_current": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "size": 112,
+      "mtime_ns": 1777974351418541438,
+      "sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229,
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+      "size": 7,
+      "mtime_ns": 1778411256548853944,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "size": 7,
+      "mtime_ns": 1778852637475404781,
+      "sha256": "2b92ea252be0fbc26f70317cdaa7b6411ea634b50d55338cd8c495e4dbf25d1d"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "size": 29277,
+      "mtime_ns": 1778512853646445643,
+      "sha256": "7481fec19ea89891ac20c8747a416210cfda1f9d109eb0db59ade2ac0bdbfe91"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592,
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "size": 622,
+      "mtime_ns": 1778512853762031295,
+      "sha256": "94c2bdef0386ec20f4f8772ea581fc9b974cb164fe5fc74d6435927d925c31fd"
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+      "size": 3178,
+      "mtime_ns": 1778445681313227595,
+      "sha256": "6ad97417027a79fddbc49cb2af5dc4716b89429239875575501ce5c9422c9ac9"
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "size": 577,
+      "mtime_ns": 1778332551870097299,
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2"
+    }
+  ],
+  "no_live_fallback_strings_expected_in_helper": true
+}

@@ -439,6 +439,95 @@ class CliTests(unittest.TestCase):
         self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
         self.assertIn("OK", validate_result.stdout)
 
+    def test_installer_materialized_owner_helpers_support_auth_mode_apikey_payload(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "legacy-auth-mode-apikey.json"
+        auth_ref.write_text(
+            json.dumps(
+                {
+                    "auth_mode": "apikey",
+                    "OPENAI_API_KEY": "token-legacy-apikey",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        backends = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_ref)
+        ]
+        self.assertEqual(len(backends), 1)
+        self.assertEqual(backends[0]["pool"], "reserve")
+
+        validate_result = subprocess.run(
+            [str(self.accounts_bin), "validate", backends[0]["id"]],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
+        self.assertIn("OK", validate_result.stdout)
+
+    def test_installer_materialized_owner_helpers_reject_invalid_legacy_apikey_payload(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_ref = self.profile_dir / "legacy-auth-mode-invalid.json"
+        auth_ref.write_text(
+            json.dumps({"auth_mode": "apikey"}) + "\n",
+            encoding="utf-8",
+        )
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        before_registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once", "--auth-ref", str(auth_ref), "--non-interactive"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        after_registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        self.assertEqual(onboard_result.returncode, 1)
+        self.assertIn("missing auth field: OPENAI_API_KEY", onboard_result.stderr)
+        self.assertEqual(before_registry, after_registry)
+
     def test_legacy_import_requires_json_flag(self) -> None:
         result = self.run_cli("legacy", "import", "--source-dir", "/tmp/example")
         self.assertEqual(result.returncode, 2)

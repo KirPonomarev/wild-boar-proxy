@@ -1,0 +1,10 @@
+{
+  "contour": "SANDBOX_AUTH_PAYLOAD_COMPATIBILITY_REPAIR_PASS",
+  "decided_at": "2026-05-15T15:23:11.530878+00:00",
+  "decision": "GO_TO_RERUN_ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "previous_blocker_machine_error_code": "ONBOARD_FAILED",
+  "previous_blocker_stop_reason": "sandbox_auth_payload_incompatible_with_repaired_owner_lane_contract",
+  "current_sandbox_auth_normalized_auth_type": "apikey",
+  "forbidden_live_path_drift_detected": false,
+  "next_contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS"
+}

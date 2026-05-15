@@ -158,15 +158,25 @@ def backend_by_auth_ref(
     return None
 
 
+def normalize_auth_type(payload: dict[str, Any]) -> str | None:
+    auth_type = str(payload.get("type") or payload.get("auth_mode") or "").strip()
+    if auth_type in {"codex", "apikey"}:
+        return auth_type
+    if payload.get("OPENAI_API_KEY"):
+        return "apikey"
+    return None
+
+
 def validate_auth_payload(auth_path: Path) -> dict[str, Any]:
     if not auth_path.exists():
         raise SystemExit(f"auth_ref does not exist: {auth_path}")
     payload = read_json(auth_path)
     if not isinstance(payload, dict):
         raise SystemExit(f"invalid auth payload at {auth_path}: expected object")
-    if payload.get("type") not in {"codex", "apikey"}:
+    auth_type = normalize_auth_type(payload)
+    if auth_type not in {"codex", "apikey"}:
         raise SystemExit(f"invalid auth type: {payload.get('type')}")
-    if payload.get("type") == "codex":
+    if auth_type == "codex":
         for field in ("email", "access_token", "account_id"):
             if not payload.get(field):
                 raise SystemExit(f"missing auth field: {field}")
@@ -316,7 +326,7 @@ def validate_one(backend: dict[str, Any]) -> tuple[bool, str]:
         return False, f"invalid auth json: {exc}"
     if not isinstance(payload, dict):
         return False, "invalid auth payload: expected object"
-    auth_type = payload.get("type")
+    auth_type = normalize_auth_type(payload)
     if auth_type == "codex":
         for field in ("email", "access_token", "account_id"):
             if not payload.get(field):
