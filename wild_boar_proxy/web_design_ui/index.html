@@ -982,7 +982,7 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-and-data-layout">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-and-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
@@ -1041,14 +1041,14 @@
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="diagnostics-privacy">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true"></span>
-                <div><h3>Diagnostics / Privacy</h3><p>Экспорт и redaction без просмотра сырого текста.</p></div>
+                <div><h3>Diagnostics / Privacy</h3><p>Экспорт диагностики, redaction и support bundle boundaries.</p></div>
                 <span class="chip blue"><span class="dot"></span>protected</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>export</span><strong>support artifact</strong></div>
-                <div><span>redaction</span><strong>enforced by packet</strong></div>
+                <div><span>redaction</span><strong>required by policy</strong></div>
               </div>
-              <a class="button small settings-card-link" href="?screen=diagnostics" data-screen-link="diagnostics">Открыть</a>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=diagnostics-privacy" data-settings-section-link="diagnostics-privacy">Открыть Diagnostics / Privacy</a>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="security-boundary">
@@ -1343,7 +1343,7 @@
 
               <section class="card client-launch-card client-launch-boundary-card" data-client-launch-card="boundary">
                 <div class="client-launch-card-head">
-                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/folder.png" alt="" aria-hidden="true"></span>
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
                   <div>
                     <h3>Candidate / selection boundary</h3>
                     <p>Кандидаты выбираются только из command-owned list.</p>
@@ -1396,6 +1396,163 @@
 
             <div id="clientLaunchFooter" class="client-launch-footer">
               Launch dispatch показывает запрос запуска, не здоровье runtime и не активную app session.
+            </div>
+          </section>
+
+          <section id="diagnosticsPrivacyPanel" class="settings-diagnostics-privacy" data-settings-subflow="diagnostics-privacy" data-diagnostics-privacy-surface="support-artifact-boundary" hidden>
+            <div class="diagnostics-privacy-topline">
+              <div class="diagnostics-privacy-subflow-title"><strong>Diagnostics / Privacy</strong><span>support artifact · redaction · bundle boundaries</span></div>
+              <span id="diagnosticsPrivacyPanelChip" class="chip neutral"><span class="dot"></span><span>preview</span></span>
+              <button id="diagnosticsPrivacyBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="diagnostics-privacy-grid" aria-label="Diagnostics privacy settings subflow">
+              <section class="card diagnostics-privacy-card diagnostics-privacy-export-card" data-diagnostics-privacy-card="export-rules">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Export rules</h3>
+                    <p>Diagnostics export creates support evidence; it is never runtime health truth.</p>
+                  </div>
+                  <span id="diagnosticsPrivacyExportChip" class="chip blue"><span class="dot"></span><span>support artifact</span></span>
+                </div>
+                <div class="diagnostics-privacy-kv">
+                  <div><span>Action</span><strong>export_diagnostics</strong></div>
+                  <div><span>Output</span><strong>support artifact metadata only</strong></div>
+                  <div><span>Truth role</span><strong>support evidence, not health truth</strong></div>
+                  <div><span>Result</span><strong>Action Ledger compact entry</strong></div>
+                  <div><span>Redaction</span><strong>required by policy</strong></div>
+                </div>
+                <button class="button small live-action diagnostics-privacy-action" type="button" data-ui-action="export_diagnostics">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
+                  <span>Экспорт диагностики</span>
+                </button>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-redaction-card" data-diagnostics-privacy-card="redaction">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Redaction policy</h3>
+                    <p>Green only when the export packet confirms redaction; unknown stays amber.</p>
+                  </div>
+                  <span id="diagnosticsPrivacyRedactionChip" class="chip amber"><span class="dot"></span><span>required</span></span>
+                </div>
+                <div class="diagnostics-privacy-checklist">
+                  <div><span>API keys / auth tokens</span><strong>removed</strong></div>
+                  <div><span>raw auth values</span><strong>removed</strong></div>
+                  <div><span>private locations</span><strong>redacted or bounded</strong></div>
+                  <div><span>raw command argv</span><strong>not displayed</strong></div>
+                  <div><span>stack traces</span><strong>hidden by default</strong></div>
+                  <div><span>bundle content</span><strong>not rendered in web UI</strong></div>
+                </div>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-bundle-card" data-diagnostics-privacy-card="bundle-categories">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Support metadata categories</h3>
+                    <p>Allowed display is category/reference metadata, not bundle contents.</p>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>readonly</span>
+                </div>
+                <div class="diagnostics-privacy-pill-list">
+                  <span>status summary</span>
+                  <span>healthcheck summary</span>
+                  <span>accounts summary</span>
+                  <span>route/API summary</span>
+                  <span>machine code summary</span>
+                  <span>changed files count</span>
+                  <span>artifact reference</span>
+                  <span>redaction status</span>
+                </div>
+                <p class="diagnostics-privacy-note">UI never renders bundle contents.</p>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-never-card" data-diagnostics-privacy-card="never-included">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Never included / never rendered</h3>
+                    <p>Privacy boundaries stay visible without exposing sensitive material.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>protected</span>
+                </div>
+                <div class="diagnostics-privacy-pill-list compact">
+                  <span>API keys</span>
+                  <span>auth tokens</span>
+                  <span>raw auth files</span>
+                  <span>secret values</span>
+                  <span>private command argv</span>
+                  <span>unredacted local locations</span>
+                  <span>raw diagnostics logs in UI</span>
+                </div>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-result-card" data-diagnostics-privacy-card="export-result">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Export result</h3>
+                    <p>Compact result only; full technical detail stays in the action ledger.</p>
+                  </div>
+                  <span id="diagnosticsPrivacyResultChip" class="chip neutral"><span class="dot"></span><span>no export yet</span></span>
+                </div>
+                <div class="diagnostics-privacy-list">
+                  <div><span>Status</span><strong id="diagnosticsPrivacyResultStatus">no export yet</strong></div>
+                  <div><span>machine code</span><strong id="diagnosticsPrivacyMachineCode">—</strong></div>
+                  <div><span>artifact reference</span><strong id="diagnosticsPrivacyArtifactRef">не создан</strong></div>
+                  <div><span>redaction status</span><strong id="diagnosticsPrivacyRedactionStatus">unknown</strong></div>
+                  <div><span>changed files</span><strong id="diagnosticsPrivacyChangedFiles">0 metadata markers</strong></div>
+                  <div><span>next action</span><strong id="diagnosticsPrivacyNextAction">none</strong></div>
+                  <div><span>timestamp</span><strong id="diagnosticsPrivacyTimestamp">текущая UI-сессия</strong></div>
+                </div>
+                <p id="diagnosticsPrivacyResultMessage" class="diagnostics-privacy-message">Экспорт ещё не запускался. Artifact created is support readiness, not runtime health.</p>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-human-open-card" data-diagnostics-privacy-card="human-open">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/folder.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Human-open deferred actions</h3>
+                    <p>Opening local material requires human-open admission and server-owned bounded target.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>deferred</span>
+                </div>
+                <div class="diagnostics-privacy-disabled-list">
+                  <span>Open logs · requires human-open admission</span>
+                  <span>Open state · requires server-owned bounded target</span>
+                  <span>Open registry · disabled in web preview</span>
+                  <span>Open data folder · desktop/native only</span>
+                </div>
+              </section>
+
+              <section class="card diagnostics-privacy-card diagnostics-privacy-ledger-card" data-diagnostics-privacy-card="last-command">
+                <div class="diagnostics-privacy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Last command compact</h3>
+                    <p>Action result is support metadata; it does not prove runtime health.</p>
+                  </div>
+                  <span id="diagnosticsPrivacyActionChip" class="chip neutral"><span class="dot"></span><span>not run</span></span>
+                </div>
+                <div class="diagnostics-privacy-list">
+                  <div><span>action / target</span><strong><span id="diagnosticsPrivacyActionName">нет</span> · <span id="diagnosticsPrivacyActionTarget">support artifact</span></strong></div>
+                  <div><span>refresh state</span><strong id="diagnosticsPrivacyActionRefresh">not applicable</strong></div>
+                </div>
+                <button id="diagnosticsPrivacyOpenLedgerAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                  <span>Открыть журнал</span>
+                </button>
+              </section>
+            </div>
+
+            <div id="diagnosticsPrivacyFooter" class="diagnostics-privacy-footer">
+              Export creates support artifact metadata only; runtime health color is never derived from diagnostics export result.
             </div>
           </section>
 

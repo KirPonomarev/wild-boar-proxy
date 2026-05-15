@@ -964,7 +964,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
         settings_hub_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[0]
         accounts_policy_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[1].split('<section id="clientLaunchPanel"', 1)[0]
-        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
+        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="diagnosticsPrivacyPanel"', 1)[0]
+        diagnostics_privacy_markup = settings_markup.split('<section id="diagnosticsPrivacyPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
         runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
         data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
@@ -973,7 +974,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
         self.assertIn('id="settingsHub"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-and-data-layout"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-and-data-layout"', settings_markup)
         self.assertIn('id="accountsPolicyPanel"', settings_markup)
         self.assertIn('data-settings-subflow="accounts-policy"', settings_markup)
         self.assertIn('data-accounts-policy-surface="readonly-snapshot-and-policy-invariants"', settings_markup)
@@ -984,6 +985,11 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', settings_markup)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
+        self.assertIn('id="diagnosticsPrivacyPanel"', settings_markup)
+        self.assertIn('data-settings-subflow="diagnostics-privacy"', settings_markup)
+        self.assertIn('data-diagnostics-privacy-surface="support-artifact-boundary"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=diagnostics-privacy"', settings_markup)
+        self.assertIn('data-settings-section-link="diagnostics-privacy"', settings_markup)
         self.assertIn('id="runtimeModePanel"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', settings_markup)
         self.assertIn('data-runtime-mode-surface="packet-owned-preview"', settings_markup)
@@ -1051,6 +1057,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Accounts Policy", settings_markup)
         self.assertIn("API Routes", settings_markup)
         self.assertIn("Diagnostics / Privacy", settings_markup)
+        self.assertIn("Export rules", diagnostics_privacy_markup)
+        self.assertIn("Redaction policy", diagnostics_privacy_markup)
+        self.assertIn("Support metadata categories", diagnostics_privacy_markup)
+        self.assertIn("Never included / never rendered", diagnostics_privacy_markup)
+        self.assertIn("Human-open deferred actions", diagnostics_privacy_markup)
+        self.assertIn("support evidence, not health truth", diagnostics_privacy_markup)
         self.assertIn("Security", settings_markup)
         self.assertIn("Advanced", settings_markup)
         self.assertIn("About", settings_markup)
@@ -1105,6 +1117,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("account-action", accounts_policy_markup)
         self.assertNotIn("onboard-action", accounts_policy_markup)
         self.assertNotIn("api-route-action", accounts_policy_markup)
+        self.assertIn('data-ui-action="export_diagnostics"', diagnostics_privacy_markup)
+        self.assertEqual(diagnostics_privacy_markup.count("data-ui-action="), 1)
         for allowed_action in [
             "set_mode_managed",
             "set_mode_stable",
@@ -1214,6 +1228,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-client-launch", css)
         self.assertIn(".client-launch-grid", css)
         self.assertIn(".client-launch-disabled-list", css)
+        self.assertIn(".settings-diagnostics-privacy", css)
+        self.assertIn(".diagnostics-privacy-grid", css)
+        self.assertIn(".diagnostics-privacy-disabled-list", css)
         self.assertIn(".settings-accounts-policy", css)
         self.assertIn(".accounts-policy-grid", css)
         self.assertIn(".accounts-policy-disabled-list", css)
@@ -1226,7 +1243,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
         self.assertIn("setSettingsSection", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
@@ -1299,7 +1316,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
         self.assertIn('data-settings-section-link="runtime"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', runtime_markup)
@@ -1367,11 +1384,11 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
-        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
+        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="diagnosticsPrivacyPanel"', 1)[0]
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"client"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('data-settings-subflow="client"', client_markup)
@@ -1449,6 +1466,95 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('assets/icons/phosphor/shield-check.png', client_markup)
         self.assertIn('assets/icons/phosphor/warning.png', client_markup)
 
+    def test_settings_diagnostics_privacy_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        diagnostics_privacy_markup = settings_markup.split('<section id="diagnosticsPrivacyPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"diagnostics-privacy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('href="?screen=settings&amp;section=diagnostics-privacy"', settings_markup)
+        self.assertIn('data-settings-section-link="diagnostics-privacy"', settings_markup)
+        self.assertIn('data-settings-subflow="diagnostics-privacy"', diagnostics_privacy_markup)
+        self.assertIn('data-diagnostics-privacy-surface="support-artifact-boundary"', diagnostics_privacy_markup)
+        self.assertIn("diagnosticsPrivacyModelFromSnapshot", js)
+        self.assertIn("renderDiagnosticsPrivacySnapshot", js)
+        self.assertIn("renderDiagnosticsPrivacyAction", js)
+        self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
+        self.assertIn("Diagnostics privacy status недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Redaction proof требует свежий packet.", js)
+        self.assertIn("Демо-режим. Правила диагностики показаны как preview, не как содержимое bundle.", js)
+
+        self.assertIn("Export rules", diagnostics_privacy_markup)
+        self.assertIn("Redaction policy", diagnostics_privacy_markup)
+        self.assertIn("Support metadata categories", diagnostics_privacy_markup)
+        self.assertIn("Never included / never rendered", diagnostics_privacy_markup)
+        self.assertIn("Export result", diagnostics_privacy_markup)
+        self.assertIn("Human-open deferred actions", diagnostics_privacy_markup)
+        self.assertIn("Last command compact", diagnostics_privacy_markup)
+        self.assertIn("support evidence, not health truth", diagnostics_privacy_markup)
+        self.assertIn("support artifact metadata only", diagnostics_privacy_markup)
+        self.assertIn("UI never renders bundle contents.", diagnostics_privacy_markup)
+        self.assertIn("bundle content", diagnostics_privacy_markup)
+        self.assertIn("API keys", diagnostics_privacy_markup)
+        self.assertIn("auth tokens", diagnostics_privacy_markup)
+        self.assertIn("raw auth files", diagnostics_privacy_markup)
+        self.assertIn("secret values", diagnostics_privacy_markup)
+        self.assertIn("private command argv", diagnostics_privacy_markup)
+        self.assertIn("raw diagnostics logs in UI", diagnostics_privacy_markup)
+        self.assertIn("requires human-open admission", diagnostics_privacy_markup)
+        self.assertIn("server-owned bounded target", diagnostics_privacy_markup)
+        self.assertIn("Artifact created is support readiness, not runtime health.", diagnostics_privacy_markup)
+
+        self.assertIn('data-ui-action="export_diagnostics"', diagnostics_privacy_markup)
+        self.assertEqual(diagnostics_privacy_markup.count("data-ui-action="), 1)
+        self.assertIn("diagnosticsExportResultModel(payload)", js)
+        self.assertIn("artifactReference(data.bundle_path)", js)
+        self.assertIn("redactionStatus === \"enabled\" ? \"green\"", js)
+        self.assertIn("redaction_unreported", js)
+        self.assertIn("не runtime health truth", js)
+        self.assertIn("claim_scope=support_artifact_only", js)
+
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "showOpenFilePicker",
+            "showDirectoryPicker",
+            "webkitdirectory",
+            "readAsText",
+            "localStorage",
+            "sessionStorage",
+            "window.open",
+            "data-ui-action=\"read_logs\"",
+            "data-ui-action=\"read_bundle\"",
+            "data-ui-action=\"open_logs\"",
+            "data-ui-action=\"open_state\"",
+            "bundle_path",
+            "log_path",
+            "state_path",
+            "registry_path",
+            "raw_command",
+            "shell",
+            "token value",
+            "secret value input",
+            "raw stack trace",
+            "Диагностика успешна",
+            "Система исправна",
+            "Runtime OK",
+            "runtime healthy",
+        ]:
+            self.assertNotIn(forbidden, diagnostics_privacy_markup)
+        self.assertNotIn("<svg", diagnostics_privacy_markup)
+        self.assertIn('assets/icons/phosphor/download-simple.png', diagnostics_privacy_markup)
+        self.assertIn('assets/icons/phosphor/shield-check.png', diagnostics_privacy_markup)
+        self.assertIn('assets/icons/phosphor/warning.png', diagnostics_privacy_markup)
+        self.assertIn('assets/icons/phosphor/info.png', diagnostics_privacy_markup)
+
     def test_settings_accounts_policy_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -1457,7 +1563,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"accounts-policy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=accounts-policy"', settings_markup)
         self.assertIn('data-settings-section-link="accounts-policy"', settings_markup)
         self.assertIn('data-settings-subflow="accounts-policy"', accounts_policy_markup)

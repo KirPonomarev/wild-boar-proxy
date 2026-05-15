@@ -4196,6 +4196,240 @@ button:disabled {
   padding-top: 7px;
 }
 
+.settings-diagnostics-privacy {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: min-content minmax(0, 1fr) min-content;
+  height: min(728px, calc(100vh - 212px));
+  min-height: 0;
+}
+
+.diagnostics-privacy-topline {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.diagnostics-privacy-subflow-title {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.diagnostics-privacy-subflow-title strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.diagnostics-privacy-subflow-title span {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.diagnostics-privacy-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-areas:
+    "export result"
+    "redaction human"
+    "bundle ledger"
+    "never ledger";
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr);
+  grid-template-rows: 200px 160px 150px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.diagnostics-privacy-card {
+  display: grid;
+  gap: 7px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.diagnostics-privacy-card[data-diagnostics-privacy-card="export-rules"] { grid-area: export; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="redaction"] { grid-area: redaction; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="bundle-categories"] { grid-area: bundle; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="never-included"] { grid-area: never; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="export-result"] { grid-area: result; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="human-open"] { grid-area: human; }
+.diagnostics-privacy-card[data-diagnostics-privacy-card="last-command"] { grid-area: ledger; }
+
+.diagnostics-privacy-card-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+}
+
+.diagnostics-privacy-card-head h3 {
+  font-size: 13px;
+  line-height: 16px;
+  margin: 0;
+}
+
+.diagnostics-privacy-card-head p {
+  color: var(--secondary);
+  display: -webkit-box;
+  font-size: 9px;
+  line-height: 12px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.diagnostics-privacy-kv,
+.diagnostics-privacy-list,
+.diagnostics-privacy-checklist {
+  display: grid;
+  gap: 5px;
+  min-height: 0;
+}
+
+.diagnostics-privacy-kv,
+.diagnostics-privacy-checklist {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diagnostics-privacy-kv div,
+.diagnostics-privacy-list div,
+.diagnostics-privacy-checklist div {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 7px;
+}
+
+.diagnostics-privacy-kv span,
+.diagnostics-privacy-list span,
+.diagnostics-privacy-checklist span {
+  color: var(--secondary);
+  font-size: 8px;
+  line-height: 10px;
+}
+
+.diagnostics-privacy-kv strong,
+.diagnostics-privacy-list strong,
+.diagnostics-privacy-checklist strong {
+  color: var(--text);
+  font-size: 10px;
+  line-height: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-privacy-list strong span {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.diagnostics-privacy-action {
+  font-size: 11px;
+  height: 30px;
+  justify-self: start;
+  min-width: 190px;
+}
+
+.diagnostics-privacy-export-card .diagnostics-privacy-kv {
+  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.diagnostics-privacy-result-card .diagnostics-privacy-list {
+  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.diagnostics-privacy-result-card .diagnostics-privacy-list div {
+  padding: 3px 7px;
+}
+
+.diagnostics-privacy-result-card .diagnostics-privacy-message {
+  display: block;
+  min-height: 24px;
+  overflow: visible;
+  padding: 5px 8px;
+}
+
+.diagnostics-privacy-pill-list,
+.diagnostics-privacy-disabled-list {
+  align-content: start;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 0;
+}
+
+.diagnostics-privacy-pill-list.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.diagnostics-privacy-disabled-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diagnostics-privacy-pill-list span,
+.diagnostics-privacy-disabled-list span {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 999px;
+  color: var(--secondary);
+  font-size: 8px;
+  line-height: 10px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics-privacy-disabled-list span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.diagnostics-privacy-note,
+.diagnostics-privacy-message,
+.diagnostics-privacy-footer {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 14px;
+  margin: 0;
+}
+
+.diagnostics-privacy-message {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  display: -webkit-box;
+  min-height: 30px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding: 6px 9px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.diagnostics-privacy-ledger-card .button {
+  justify-self: start;
+}
+
+.diagnostics-privacy-footer {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  padding-top: 7px;
+}
+
 .settings-accounts-policy {
   display: grid;
   gap: 10px;

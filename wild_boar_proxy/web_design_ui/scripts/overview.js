@@ -93,7 +93,7 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
-const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"];
+const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"];
 const DATA_LAYOUT_FIXTURES = {
   healthy: {
     key: "initialized_healthy",
@@ -1070,7 +1070,11 @@ function setSourceCopy(source) {
         : (
           settingsSection === "accounts-policy"
             ? "Настройки · accounts policy readonly"
-            : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов")
+            : (
+              settingsSection === "diagnostics-privacy"
+                ? "Настройки · diagnostics privacy"
+                : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов")
+            )
         )
     );
   const settingsSubtitle = settingsSection === "runtime"
@@ -1082,9 +1086,13 @@ function setSourceCopy(source) {
           settingsSection === "accounts-policy"
             ? "Правила пулов, проверки и безопасного reserve-first поведения аккаунтов."
             : (
-              settingsSection === "data-layout"
-                ? "Состояние каталога данных, разрешений и безопасных операций установки."
-                : "Конфигурация клиента, данных приложения и безопасных действий."
+              settingsSection === "diagnostics-privacy"
+                ? "Правила экспорта диагностики, redaction и support bundle boundaries."
+                : (
+                  settingsSection === "data-layout"
+                    ? "Состояние каталога данных, разрешений и безопасных операций установки."
+                    : "Конфигурация клиента, данных приложения и безопасных действий."
+                )
             )
         )
     );
@@ -1585,6 +1593,7 @@ function setActionPanel(payload, refreshState = "none") {
   text("accountsPolicyActionName", safeUiAction || "нет");
   text("accountsPolicyActionTarget", safeTarget);
   text("accountsPolicyActionRefresh", refreshLabel);
+  renderDiagnosticsPrivacyAction(payload, refreshLabel, displayStateLabel, panelVisualClass);
   text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
   text("actionSummaryMeta", `target ${safeTarget} · ${displayStateLabel}`);
   text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
@@ -2239,6 +2248,7 @@ function renderSettingsSnapshot(snapshot) {
   renderRuntimeModeSnapshot(snapshot);
   renderClientLaunchSnapshot(snapshot);
   renderAccountsPolicySnapshot(snapshot);
+  renderDiagnosticsPrivacySnapshot(snapshot);
 }
 
 function updateSettingsActionMetadata() {
@@ -2442,6 +2452,99 @@ function renderAccountsPolicySnapshot(snapshot) {
   }
 }
 
+function setDiagnosticsPrivacyChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function diagnosticsPrivacyModelFromSnapshot(snapshot) {
+  const runtime = snapshot?.runtime || {};
+  const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
+  const state = snapshot?.state_id || snapshot?.ui_state || runtime.visual_state || "unknown";
+  const liveFailure = source === "live" && snapshot?.status === "integration_failure";
+  const stale = state === "stale" || runtime.visual_state === "stale";
+  const degraded = state === "degraded" || runtime.visual_state === "degraded";
+  const down = state === "down" || liveFailure;
+  const visual = down
+    ? "red"
+    : (stale || degraded ? "amber" : (state === "healthy" ? "blue" : "neutral"));
+  return {
+    visual,
+    panelLabel: liveFailure ? "unavailable" : (stale ? "stale" : (state === "healthy" ? "preview" : "not inspected")),
+    exportVisual: liveFailure ? "red" : "blue",
+    exportLabel: liveFailure ? "unavailable" : "support artifact",
+    redactionVisual: liveFailure ? "neutral" : "amber",
+    redactionLabel: liveFailure ? "unknown" : "required",
+    footerCopy: liveFailure
+      ? "Diagnostics privacy status unavailable. Previous fixture data is not used."
+      : "Export creates support artifact metadata only; runtime health color is never derived from diagnostics export result.",
+    bannerCopy: liveFailure
+      ? "Diagnostics privacy status недоступен. Предыдущие fixture-данные не используются."
+      : (stale
+        ? "Diagnostics privacy status устарел. Redaction proof требует свежий packet."
+        : "Демо-режим. Правила диагностики показаны как preview, не как содержимое bundle.")
+  };
+}
+
+function renderDiagnosticsPrivacySnapshot(snapshot) {
+  const model = diagnosticsPrivacyModelFromSnapshot(snapshot || {});
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyPanelChip", model.visual, model.panelLabel);
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyExportChip", model.exportVisual, model.exportLabel);
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyRedactionChip", model.redactionVisual, model.redactionLabel);
+  text("diagnosticsPrivacyFooter", model.footerCopy);
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner && currentScreen() === "settings" && currentSettingsSection() === "diagnostics-privacy") {
+    banner.className = `fixture-banner ${ACCOUNT_VISUAL_CLASS[model.visual] || VISUAL_CLASS[model.visual] || "neutral"}`;
+    banner.textContent = model.bannerCopy;
+  }
+}
+
+function renderDiagnosticsPrivacyAction(payload, refreshLabel, displayStateLabel, panelVisualClass) {
+  const safeUiAction = safeLedgerText(payload.ui_action || "unknown", "unknown");
+  const result = payload.result || {};
+  const data = result.data || {};
+  const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
+  const exportModel = payload.ui_action === "export_diagnostics"
+    ? diagnosticsExportResultModel(payload)
+    : null;
+  const visual = exportModel ? exportModel.visual : panelVisualClass;
+  const label = exportModel ? exportModel.state : displayStateLabel;
+  const message = exportModel
+    ? exportModel.copy
+    : safeLedgerText(result.human_message || "Действие не относится к diagnostics export.", "-");
+  const redactionStatus = exportModel
+    ? exportModel.redactionStatus
+    : normalizeDiagnosticsRedactionStatus(data.redaction_status);
+
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyActionChip", visual, actionDisplayLabel(label));
+  text("diagnosticsPrivacyActionName", safeUiAction || "нет");
+  text("diagnosticsPrivacyActionTarget", payload.ui_action === "export_diagnostics" ? "support artifact" : safeLedgerText(payload.account_id || payload.route_id || "—", "—"));
+  text("diagnosticsPrivacyActionRefresh", refreshLabel || "not applicable");
+
+  if (payload.ui_action !== "export_diagnostics") {
+    return;
+  }
+
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyResultChip", visual, exportModel.label);
+  setDiagnosticsPrivacyChip("diagnosticsPrivacyRedactionChip", redactionStatus === "enabled" ? "green" : (redactionStatus === "failed" ? "red" : "amber"), redactionStatus);
+  text("diagnosticsPrivacyResultStatus", exportModel.state);
+  text("diagnosticsPrivacyMachineCode", safeLedgerText(result.machine_error_code || "-", "-"));
+  text("diagnosticsPrivacyArtifactRef", artifactReference(data.bundle_path));
+  text("diagnosticsPrivacyRedactionStatus", redactionStatus);
+  text("diagnosticsPrivacyChangedFiles", `${changedFiles.length} metadata markers`);
+  text("diagnosticsPrivacyNextAction", safeLedgerText(result.next_action || "none", "none"));
+  text("diagnosticsPrivacyTimestamp", "текущая UI-сессия");
+  text("diagnosticsPrivacyResultMessage", message);
+}
+
 function runtimeModeModelFromSnapshot(snapshot) {
   const runtime = snapshot?.runtime || {};
   const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
@@ -2545,14 +2648,16 @@ function setSettingsSection(section) {
   const runtimePanel = document.getElementById("runtimeModePanel");
   const clientPanel = document.getElementById("clientLaunchPanel");
   const accountsPolicyPanel = document.getElementById("accountsPolicyPanel");
+  const diagnosticsPrivacyPanel = document.getElementById("diagnosticsPrivacyPanel");
   const panel = document.getElementById("dataLayoutPanel");
   const finder = document.getElementById("dataLayoutOpenFinderAction");
   const isRuntime = normalized === "runtime" && currentScreen() === "settings";
   const isClient = normalized === "client" && currentScreen() === "settings";
   const isAccountsPolicy = normalized === "accounts-policy" && currentScreen() === "settings";
+  const isDiagnosticsPrivacy = normalized === "diagnostics-privacy" && currentScreen() === "settings";
   const isDataLayout = normalized === "data-layout" && currentScreen() === "settings";
   if (hub) {
-    hub.hidden = isRuntime || isClient || isAccountsPolicy || isDataLayout;
+    hub.hidden = isRuntime || isClient || isAccountsPolicy || isDiagnosticsPrivacy || isDataLayout;
   }
   if (runtimePanel) {
     runtimePanel.hidden = !isRuntime;
@@ -2562,6 +2667,9 @@ function setSettingsSection(section) {
   }
   if (accountsPolicyPanel) {
     accountsPolicyPanel.hidden = !isAccountsPolicy;
+  }
+  if (diagnosticsPrivacyPanel) {
+    diagnosticsPrivacyPanel.hidden = !isDiagnosticsPrivacy;
   }
   if (panel) {
     panel.hidden = !isDataLayout;
@@ -2910,7 +3018,11 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
                       : (
                         nextSettingsSection === "accounts-policy"
                           ? "Accounts Policy"
-                          : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                          : (
+                            nextSettingsSection === "diagnostics-privacy"
+                              ? "Diagnostics / Privacy"
+                              : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                          )
                       )
                   )
               )
@@ -4682,6 +4794,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     refreshCurrentSource();
   });
   document.getElementById("accountsPolicyOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
+  document.getElementById("diagnosticsPrivacyBackAction")?.addEventListener("click", () => {
+    setScreen("settings", true, "hub");
+    refreshCurrentSource();
+  });
+  document.getElementById("diagnosticsPrivacyOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
   for (const button of document.querySelectorAll(".live-action")) {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
