@@ -83,7 +83,7 @@ const ACTION_STATUS_VISUAL_CLASS = {
   unknown: "neutral"
 };
 
-const SCREENS = ["overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
+const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"];
 const ACCOUNT_VISUAL_CLASS = {
   green: "green",
   blue: "blue",
@@ -844,92 +844,34 @@ function renderEvents(events) {
 function setSourceCopy(source) {
   const screen = currentScreen();
   const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
+  const footerByScreen = {
+    "quick-start": "Quick Start · summary control panel",
+    accounts: "Аккаунты · live только чтение",
+    "api-connections": "API-подключения · список маршрутов",
+    diagnostics: "Диагностика · detail screen",
+    settings: "Настройки · hub разделов",
+    setup: "Setup · admission preview",
+    "select-client": "Select Client · candidate preview",
+    "import-existing": "Import · deferred preview"
+  };
+  const subtitleByScreen = {
+    "quick-start": "Ежедневный пульт подключений: аккаунты Codex и один основной API.",
+    accounts: "Пул аккаунтов, статусы проверки и распределение по режимам.",
+    "api-connections": "Маршруты внешних моделей, статусы проверки и безопасные действия.",
+    diagnostics: "Проверка цепочки подключения, аккаунтов и режима прокси.",
+    settings: "Конфигурация клиента, данных приложения и безопасных действий.",
+    setup: "Безопасная подготовка локального контура без изменения рабочих файлов Codex.",
+    "select-client": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
+    "import-existing": "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
+  };
   const sourceFooter = source === "live"
-    ? (
-      screen === "accounts"
-        ? "Аккаунты · live только чтение"
-        : (
-          screen === "api-connections"
-            ? "API-подключения · список маршрутов"
-            : (
-          screen === "diagnostics"
-            ? "Диагностика · detail screen"
-            : (
-              screen === "settings"
-                ? "Настройки · hub разделов"
-                : (
-                  screen === "setup"
-                    ? "Setup · admission preview"
-                    : (
-                      screen === "select-client"
-                        ? "Select Client · candidate preview"
-                        : (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")
-                    )
-                )
-            )
-            )
-        )
-    )
+    ? (footerByScreen[screen] || (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение"))
     : "Предпросмотр UI · без live-команд";
-  const subtitle = source === "live"
-    ? (
-      screen === "accounts"
-        ? "Пул аккаунтов, статусы проверки и распределение по режимам."
-        : (
-          screen === "api-connections"
-            ? "Маршруты внешних моделей, статусы проверки и безопасные действия."
-            : (
-          screen === "diagnostics"
-            ? "Проверка цепочки подключения, аккаунтов и режима прокси."
-            : (
-              screen === "settings"
-                ? "Конфигурация клиента, данных приложения и безопасных действий."
-                : (
-                  screen === "setup"
-                    ? "Безопасная подготовка локального контура без изменения рабочих файлов Codex."
-                    : (
-                  screen === "select-client"
-                    ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
-                    : (
-                  setupLike
-                    ? "Экраны настройки, выбора и импорта инертны в этом контуре. Они не запускают обнаружение, выбор или команды импорта."
-                    : "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
-                    )
-                    )
-                )
-            )
-            )
-        )
-    )
-    : (
-      screen === "accounts"
-        ? "Пул аккаунтов, статусы проверки и распределение по режимам."
-        : (
-          screen === "api-connections"
-            ? "Маршруты внешних моделей, статусы проверки и безопасные действия."
-            : (
-          screen === "diagnostics"
-            ? "Проверка цепочки подключения, аккаунтов и режима прокси."
-            : (
-              screen === "settings"
-                ? "Конфигурация клиента, данных приложения и безопасных действий."
-                : (
-                  screen === "setup"
-                    ? "Безопасная подготовка локального контура без изменения рабочих файлов Codex."
-                    : (
-                  screen === "select-client"
-                    ? "Выберите локальный клиент Codex из безопасно предоставленных кандидатов."
-                    : (
-                  setupLike
-                    ? "Визуальный перенос каркаса настройки, выбора и импорта. Все рискованные элементы отключены; simulated truth нет."
-                    : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
-                    )
-                    )
-                )
-            )
-            )
-        )
-    );
+  const subtitle = subtitleByScreen[screen] || (
+    source === "live"
+      ? "Операторская сводка подключена к live-ответам команд. После действий состояние обновляется заново."
+      : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
+  );
   document.getElementById("sourceFooter").textContent = sourceFooter;
   document.getElementById("subtitleText").textContent = subtitle;
   const sourcePill = document.getElementById("sourcePill");
@@ -1956,6 +1898,9 @@ function setScreen(screen, updateUrl = false) {
   for (const node of document.querySelectorAll(".settings-only")) {
     node.hidden = nextScreen !== "settings";
   }
+  for (const node of document.querySelectorAll(".quick-start-only")) {
+    node.hidden = nextScreen !== "quick-start";
+  }
   for (const link of document.querySelectorAll("[data-screen-link]")) {
     const active = link.dataset.screenLink === nextScreen;
     link.classList.toggle("active", active);
@@ -1971,6 +1916,9 @@ function setScreen(screen, updateUrl = false) {
     nextScreen === "accounts"
       ? "Аккаунты"
       : (
+        nextScreen === "quick-start"
+          ? "Быстрый старт"
+          : (
         nextScreen === "api-connections"
           ? "API-подключения"
           : (
@@ -1990,6 +1938,7 @@ function setScreen(screen, updateUrl = false) {
               )
           )
           )
+          )
       )
   );
   setSourceCopy(document.getElementById("sourcePicker").value);
@@ -1999,6 +1948,269 @@ function setScreen(screen, updateUrl = false) {
     url.searchParams.set("screen", nextScreen);
     window.history.replaceState({}, "", url);
   }
+}
+
+function quickStartAccountState(account, snapshotStatus) {
+  if (snapshotStatus === "integration_failure") {
+    return { key: "stale", label: "Устарело", visual: "amber", order: 1 };
+  }
+  if (account.manual_hold === true) {
+    return { key: "hold_pause", label: "Пауза", visual: "amber", order: 4 };
+  }
+  if (account.last_error_summary || account.visual_state === "red" || account.status === "down") {
+    return { key: "problem", label: "Проверить", visual: "red", order: 0 };
+  }
+  if (account.visual_state === "amber" || account.status === "degraded") {
+    return { key: "stale", label: "Устарело", visual: "amber", order: 2 };
+  }
+  if (account.pool === "reserve") {
+    return { key: "reserve", label: "Резерв", visual: "green", order: 5 };
+  }
+  if (account.status === "healthy" || account.visual_state === "green" || account.visual_state === "blue") {
+    return { key: "ok", label: account.pool === "active" ? "Работает" : "Готов", visual: "green", order: 6 };
+  }
+  return { key: "checking", label: "Проверка", visual: "blue", order: 3 };
+}
+
+function renderQuickStartAccountRows(snapshot) {
+  const list = document.getElementById("quickStartAccountList");
+  list.replaceChildren();
+  const accounts = Array.isArray(snapshot.accounts) ? snapshot.accounts : [];
+  if (!accounts.length) {
+    const empty = document.createElement("div");
+    empty.className = "quick-start-empty-state neutral";
+    empty.innerHTML = '<strong>Аккаунты не подключены</strong><span>Первый запуск: пустое состояние не является ошибкой.</span>';
+    list.append(empty);
+    return;
+  }
+  const rows = accounts
+    .map((account) => ({ account, state: quickStartAccountState(account, snapshot.status) }))
+    .sort((a, b) => a.state.order - b.state.order)
+    .slice(0, 4);
+  rows.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = `quick-start-account-row ${item.state.visual}`;
+    row.dataset.accountId = item.account.id || "";
+
+    const indexNode = document.createElement("span");
+    indexNode.className = `quick-start-account-index ${item.state.visual}`;
+    indexNode.textContent = String(index + 1).padStart(2, "0");
+
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = item.account.id || "unknown-account";
+    const meta = document.createElement("span");
+    const pool = item.account.pool_label || poolLabel(item.account.pool);
+    const check = item.account.last_success || item.account.cooldown_until || "нет данных";
+    meta.textContent = `${pool} · last check ${check}`;
+    copy.append(title, meta);
+
+    const chip = document.createElement("span");
+    chip.className = `chip ${item.state.visual}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = item.state.label;
+    chip.append(dot, label);
+    row.append(indexNode, copy, chip);
+    list.append(row);
+  });
+
+  if (accounts.length > rows.length) {
+    const more = document.createElement("a");
+    more.className = "quick-start-more-row";
+    more.href = "?screen=accounts";
+    more.dataset.screenLink = "accounts";
+    more.textContent = `+${accounts.length - rows.length} ещё · открыть аккаунты`;
+    more.addEventListener("click", (event) => {
+      event.preventDefault();
+      setScreen("accounts", true);
+      refreshCurrentSource();
+    });
+    list.append(more);
+  }
+}
+
+function quickStartApiModel(snapshot, source) {
+  const routes = Array.isArray(snapshot.routes) ? snapshot.routes : [];
+  if (snapshot.status !== "ok" || (source === "live" && snapshot.source !== "api_connections_readonly")) {
+    return {
+      state: "failed",
+      visual: "red",
+      title: "Данные недоступны",
+      provider: "Не настроено",
+      model: "Live-readonly route snapshot недоступен",
+      routeId: "",
+      secretRef: "—",
+      secretState: "unknown",
+      validationState: "unknown",
+      lastCheck: "нет данных",
+      routeCount: routes.length,
+      confirmed: false
+    };
+  }
+  if (!routes.length) {
+    return {
+      state: "not_configured",
+      visual: "neutral",
+      title: "Не настроено",
+      provider: "Не настроено",
+      model: "Основной route не подтверждён",
+      routeId: "",
+      secretRef: "—",
+      secretState: "unknown",
+      validationState: "unknown",
+      lastCheck: "нет данных",
+      routeCount: 0,
+      confirmed: false
+    };
+  }
+  const primary = source === "live"
+    ? routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true)
+    : routes.find((route) => route.enabled === true) || routes[0];
+  if (!primary) {
+    return {
+      state: "not_configured",
+      visual: "neutral",
+      title: "Основной route не подтверждён",
+      provider: "Не настроено",
+      model: "Live snapshot не содержит confirmed main route",
+      routeId: "",
+      secretRef: "—",
+      secretState: "unknown",
+      validationState: "unknown",
+      lastCheck: "нет данных",
+      routeCount: routes.length,
+      confirmed: false
+    };
+  }
+  const missingSecret = primary.status_code === "missing_secret" || primary.secret_visual_state === "amber" || primary.secret_status_label === "missing";
+  const failed = primary.visual_state === "red" || primary.validation_visual_state === "red";
+  const stale = snapshot.status === "stale" || primary.status_code === "stale";
+  const visual = missingSecret || stale ? "amber" : (failed ? "red" : (primary.enabled === true ? "green" : "neutral"));
+  const title = missingSecret
+    ? "Нужен secret_ref"
+    : (failed ? "Ошибка" : (stale ? "Устарело" : (primary.enabled === true ? "Работает" : "Deferred")));
+  return {
+    state: missingSecret ? "missing_secret_ref" : (failed ? "failed" : (stale ? "stale" : (primary.enabled === true ? "ok" : "unsupported_provider"))),
+    visual,
+    title,
+    provider: primary.provider || "Не настроено",
+    model: `${primary.upstream_model || "model unknown"} · ${primary.role_label || "registry entry"}`,
+    routeId: primary.route_id || "",
+    secretRef: primary.secret_ref || "—",
+    secretState: missingSecret ? "missing" : (primary.secret_status_label || "unknown"),
+    validationState: primary.validation_label || primary.status_label || "not checked",
+    lastCheck: primary.last_checked || "нет данных",
+    routeCount: routes.length,
+    confirmed: source !== "live" || primary.role_label === "main route" || primary.role_label === "primary" || primary.is_primary === true || primary.primary === true
+  };
+}
+
+function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = "unknown") {
+  const accountsValidation = validateAccountsSnapshot(accountsSnapshot);
+  const safeAccounts = accountsValidation.ok ? accountsSnapshot : {
+    ...accountsFixtureFromOverview(FALLBACK_FIXTURE),
+    status: "integration_failure",
+    accounts: []
+  };
+  const apiValidation = validateApiConnectionsSnapshot(apiSnapshot);
+  const safeApi = apiValidation.ok ? apiSnapshot : {
+    ...apiConnectionsFixtureFromOverview(FALLBACK_FIXTURE),
+    status: "integration_failure",
+    routes: []
+  };
+  currentAccountsSnapshot = safeAccounts;
+  currentApiConnectionsSnapshot = safeApi;
+
+  const desktop = document.querySelector(".desktop");
+  desktop.dataset.fixtureState = fixtureState;
+  desktop.dataset.source = source;
+  document.getElementById("sourcePicker").value = source;
+  document.getElementById("statePicker").disabled = source === "live";
+  document.getElementById("brandCaption").textContent = source === "live"
+    ? "quick start · live readonly"
+    : "quick start · v0.2.0";
+  document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
+  setSourceCopy(source);
+
+  const accounts = safeAccounts.accounts || [];
+  const noAccounts = accounts.length === 0;
+  const accountProblemCount = accounts.filter((account) => quickStartAccountState(account, safeAccounts.status).visual === "red").length;
+  const accountStaleCount = accounts.filter((account) => quickStartAccountState(account, safeAccounts.status).key === "stale").length;
+  const workingCount = accounts.filter((account) => ["green", "blue"].includes(account.visual_state) && !account.last_error_summary && !account.manual_hold).length;
+  const accountVisual = safeAccounts.status !== "ok" ? "amber" : (accountProblemCount ? "red" : (accountStaleCount ? "amber" : (noAccounts ? "neutral" : "green")));
+  const accountLabel = safeAccounts.status !== "ok"
+    ? "устарело"
+    : (accountProblemCount ? "проверить" : (noAccounts ? "пусто" : "готово"));
+
+  const accountChip = document.getElementById("quickStartAccountsChip");
+  accountChip.className = `chip ${accountVisual}`;
+  accountChip.lastElementChild.textContent = accountLabel;
+  text("quickStartAccountsConnected", noAccounts ? 0 : accounts.length);
+  text("quickStartAccountsWorking", workingCount);
+  text("quickStartAccountsToCheck", accountProblemCount + accountStaleCount);
+  renderQuickStartAccountRows(safeAccounts);
+
+  const apiModel = quickStartApiModel(safeApi, source);
+  const apiChip = document.getElementById("quickStartApiChip");
+  apiChip.className = `chip ${apiModel.visual}`;
+  apiChip.lastElementChild.textContent = apiModel.title;
+  text("quickStartApiProvider", apiModel.provider);
+  text("quickStartApiModel", apiModel.model);
+  text("quickStartApiSecret", `secret_ref: ${apiModel.secretRef}`);
+  const statusCard = document.getElementById("quickStartApiStatusCard");
+  statusCard.className = `quick-start-api-status ${apiModel.visual}`;
+  document.getElementById("quickStartApiStatusDot").className = `quick-start-status-dot ${apiModel.visual}`;
+  text("quickStartApiStatusTitle", apiModel.title);
+  text(
+    "quickStartApiStatusText",
+    apiModel.state === "missing_secret_ref"
+      ? "Основной route выбран, но secret_ref не подтверждён bounded packet. Это не runtime failure."
+      : (apiModel.state === "ok"
+        ? "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно."
+        : "Основной route не подтверждён bounded snapshot.")
+  );
+
+  setQuickStartChecklistChip("quickStartApiProviderChip", apiModel.provider === "Не настроено" ? "neutral" : "green", apiModel.provider === "Не настроено" ? "unknown" : "OK");
+  setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber" : (apiModel.secretState === "available" ? "green" : "neutral"), apiModel.state === "missing_secret_ref" ? "missing" : apiModel.secretState);
+  setQuickStartChecklistChip("quickStartApiRouteChip", apiModel.state === "ok" ? "green" : (apiModel.state === "missing_secret_ref" ? "amber" : "neutral"), apiModel.validationState);
+
+  const apiAction = document.getElementById("quickStartCheckApiAction");
+  apiAction.dataset.routeId = apiModel.routeId || "";
+  apiAction.dataset.routeEnabled = apiModel.state === "ok" ? "true" : "false";
+  apiAction.dataset.routeStateProven = apiModel.confirmed && apiModel.routeId ? "true" : "false";
+  apiAction.disabled = true;
+  apiAction.title = apiModel.confirmed && apiModel.routeId
+    ? "Проверка API остаётся disabled в Quick Start до отдельного admitted action mapping."
+    : "Нужен confirmed main route из bounded snapshot.";
+
+  const banner = document.getElementById("quickStartBanner");
+  const firstRun = noAccounts && safeApi.routes.length === 0;
+  const liveFailure = source === "live" && (safeAccounts.status !== "ok" || safeApi.status !== "ok");
+  const stale = fixtureState === "stale";
+  const bannerVisual = liveFailure ? "red" : (firstRun ? "neutral" : (stale ? "amber" : (apiModel.visual === "red" || accountVisual === "red" ? "amber" : "blue")));
+  setClassName(banner, "fixture-banner", bannerVisual);
+  banner.textContent = liveFailure
+    ? "Live-readonly данные недоступны. Предыдущие fixture-данные не используются."
+    : (firstRun
+      ? "Первый запуск: пустые состояния не являются ошибкой."
+      : (stale
+        ? "Упрощённый режим показывает устаревший bounded snapshot; stale не является зелёным состоянием."
+        : "Упрощённый режим показывает только итоговые статусы и безопасные действия."));
+
+  const latest = apiModel.lastCheck !== "нет данных" ? apiModel.lastCheck : "нет данных";
+  text("quickStartFooter", `Последняя общая проверка: ${latest} · Детальные расследования остаются в экспертных разделах.`);
+  const sidebarDot = document.getElementById("sidebarDot");
+  setClassName(sidebarDot, "dot", bannerVisual);
+  text("sidebarStatus", firstRun ? "Quick Start: first run" : "Quick Start: summary state");
+  applyActionAvailability();
+}
+
+function setQuickStartChecklistChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || "neutral"}`;
+  chip.lastElementChild.textContent = label || "unknown";
 }
 
 function accountsFixtureFromOverview(fixture) {
@@ -2043,6 +2255,63 @@ function accountsFixtureFromOverview(fixture) {
     },
     accounts
   };
+}
+
+function quickStartAccountsFixtureFromOverview(fixture) {
+  const snapshot = accountsFixtureFromOverview(fixture);
+  const stateId = fixture.state_id || "unknown";
+  if (stateId === "unknown") {
+    return {
+      ...snapshot,
+      summary: {
+        ...snapshot.summary,
+        active: 0,
+        reserve: 0,
+        hold: 0,
+        problem: 0,
+        healthy: 0,
+        degraded: 0,
+        down: 0,
+        visible_count: 0
+      },
+      accounts: []
+    };
+  }
+  if (stateId === "healthy") {
+    const accounts = [
+      accountFixture("acct-primary-01", "codex-primary@example.com", "active", "healthy", "green", "", "Сегодня, 12:45"),
+      accountFixture("acct-reserve-01", "codex-reserve@example.com", "reserve", "healthy", "green", "", "Сегодня, 12:40"),
+      accountFixture("acct-backup-01", "codex-backup@example.com", "reserve", "healthy", "green", "", "Сегодня, 12:32"),
+      accountFixture("acct-hold-01", "codex-hold@example.com", "reserve", "healthy", "amber", "", "Сегодня, 11:58", true)
+    ];
+    return {
+      ...snapshot,
+      summary: {
+        ...snapshot.summary,
+        active: 1,
+        reserve: 3,
+        hold: 1,
+        problem: 0,
+        healthy: 3,
+        degraded: 0,
+        down: 0,
+        visible_count: accounts.length
+      },
+      accounts
+    };
+  }
+  if (stateId === "stale") {
+    return {
+      ...snapshot,
+      status: "stale",
+      accounts: snapshot.accounts.map((account) => ({
+        ...account,
+        visual_state: account.manual_hold ? "amber" : "amber",
+        status_label: account.manual_hold ? "Пауза" : "Устарело"
+      }))
+    };
+  }
+  return snapshot;
 }
 
 function apiConnectionsFixtureFromOverview(fixture) {
@@ -2123,6 +2392,84 @@ function apiConnectionsFixtureFromOverview(fixture) {
     },
     routes
   };
+}
+
+function quickStartApiFixtureFromOverview(fixture) {
+  const snapshot = apiConnectionsFixtureFromOverview(fixture);
+  const stateId = fixture.state_id || "unknown";
+  if (stateId === "unknown") {
+    return {
+      ...snapshot,
+      summary: {
+        ...snapshot.summary,
+        routes_count: 0,
+        enabled_count: 0,
+        attention_count: 0,
+        latest_check: ""
+      },
+      routes: []
+    };
+  }
+  if (stateId === "healthy" && snapshot.routes[0]) {
+    return {
+      ...snapshot,
+      routes: [
+        {
+          ...snapshot.routes[0],
+          provider: "openai",
+          upstream_model: "gpt-4.1-mini",
+          role_label: "main route",
+          secret_ref: "WBP_OPENAI_API_KEY",
+          secret_status_label: "available",
+          secret_visual_state: "green",
+          validation_label: "OK",
+          validation_visual_state: "green",
+          status_label: "OK",
+          visual_state: "green",
+          last_checked: "12:45"
+        },
+        ...snapshot.routes.slice(1)
+      ]
+    };
+  }
+  if (stateId === "degraded" && snapshot.routes[0]) {
+    return {
+      ...snapshot,
+      routes: [
+        {
+          ...snapshot.routes[0],
+          provider: "anthropic",
+          upstream_model: "claude-3-5-sonnet",
+          role_label: "main route",
+          secret_ref: "ANTHROPIC_API_KEY",
+          status_code: "missing_secret",
+          status_label: "missing secret",
+          visual_state: "amber",
+          secret_status_label: "missing",
+          secret_visual_state: "amber",
+          validation_label: "pending",
+          validation_visual_state: "amber",
+          last_checked: ""
+        },
+        ...snapshot.routes.slice(1)
+      ]
+    };
+  }
+  if (stateId === "stale") {
+    return {
+      ...snapshot,
+      status: "stale",
+      routes: snapshot.routes.map((route) => ({
+        ...route,
+        status_code: "stale",
+        status_label: "stale",
+        visual_state: "amber",
+        validation_label: "stale",
+        validation_visual_state: "amber"
+      }))
+    };
+  }
+  return snapshot;
 }
 
 function accountFixture(id, label, pool, status, visualState, lastError, lastSuccess, manualHold = false) {
@@ -3218,6 +3565,8 @@ async function setFixtureState(stateId, updateUrl = false) {
     renderAccountsSnapshot(accountsFixtureFromOverview(fixture));
   } else if (currentScreen() === "api-connections") {
     renderApiConnectionsSnapshot(apiConnectionsFixtureFromOverview(fixture));
+  } else if (currentScreen() === "quick-start") {
+    renderQuickStart(quickStartAccountsFixtureFromOverview(fixture), quickStartApiFixtureFromOverview(fixture), "fixture", fixture.state_id || state);
   } else {
     renderSnapshot(fixture);
   }
@@ -3225,9 +3574,14 @@ async function setFixtureState(stateId, updateUrl = false) {
 
 async function setLiveReadonly(updateUrl = false) {
   setSourceCopy("live");
-  const snapshot = currentScreen() === "accounts"
-    ? await loadAccountsReadonly()
-    : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly());
+  const snapshot = currentScreen() === "quick-start"
+    ? {
+      accounts: await loadAccountsReadonly(),
+      apiConnections: await loadApiConnectionsReadonly()
+    }
+    : (currentScreen() === "accounts"
+      ? await loadAccountsReadonly()
+      : (currentScreen() === "api-connections" ? await loadApiConnectionsReadonly() : await loadLiveReadonly()));
   if (updateUrl) {
     const url = new URL(window.location.href);
     url.searchParams.set("source", "live");
@@ -3237,6 +3591,8 @@ async function setLiveReadonly(updateUrl = false) {
     renderAccountsSnapshot(snapshot);
   } else if (currentScreen() === "api-connections") {
     renderApiConnectionsSnapshot(snapshot);
+  } else if (currentScreen() === "quick-start") {
+    renderQuickStart(snapshot.accounts, snapshot.apiConnections, "live", "integration_failure");
   } else {
     renderSnapshot(snapshot);
   }
@@ -3276,6 +3632,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }
   document.getElementById("accountAddAction").addEventListener("click", () => openOnboardModal());
+  document.getElementById("quickStartAddAccountAction")?.addEventListener("click", () => openOnboardModal());
   document.getElementById("accountsClearSelectionAction")?.addEventListener("click", () => clearAccountSelection());
   document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());

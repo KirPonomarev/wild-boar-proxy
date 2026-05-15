@@ -1,0 +1,109 @@
+{
+  "accountsChip": "готово",
+  "accountsRows": 4,
+  "apiChip": "Работает",
+  "apiStatus": "Работает",
+  "apiStatusText": "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно.",
+  "banner": "Упрощённый режим показывает только итоговые статусы и безопасные действия.",
+  "buttons": [
+    {
+      "className": "button primary onboard-action",
+      "clientWidth": 182,
+      "disabled": true,
+      "id": "quickStartAddAccountAction",
+      "scrollWidth": 182,
+      "text": "Добавить аккаунт"
+    },
+    {
+      "className": "button small disabled",
+      "clientWidth": 114,
+      "disabled": true,
+      "id": "quickStartCheckAccountsAction",
+      "scrollWidth": 114,
+      "text": "Проверить"
+    },
+    {
+      "className": "button small api-route-action",
+      "clientWidth": 186,
+      "disabled": true,
+      "id": "quickStartCheckApiAction",
+      "scrollWidth": 186,
+      "text": "Проверить API"
+    }
+  ],
+  "chips": [
+    {
+      "className": "chip green",
+      "clientWidth": 77,
+      "scrollWidth": 77,
+      "text": "готово"
+    },
+    {
+      "className": "chip amber",
+      "clientWidth": 128,
+      "scrollWidth": 128,
+      "text": "Пауза"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 128,
+      "scrollWidth": 128,
+      "text": "Резерв"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 128,
+      "scrollWidth": 128,
+      "text": "Резерв"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 128,
+      "scrollWidth": 128,
+      "text": "Работает"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 92,
+      "scrollWidth": 92,
+      "text": "Работает"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 48,
+      "scrollWidth": 48,
+      "text": "OK"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 99,
+      "scrollWidth": 99,
+      "text": "available"
+    },
+    {
+      "className": "chip green",
+      "clientWidth": 48,
+      "scrollWidth": 48,
+      "text": "OK"
+    }
+  ],
+  "documentScrollHeight": 1000,
+  "documentScrollWidth": 1600,
+  "hasCanvas": 0,
+  "hasFileInput": 0,
+  "hasPre": 0,
+  "hasTextarea": 0,
+  "headerCheckAll": {
+    "bg": "rgba(246, 241, 234, 0.86)",
+    "color": "rgb(110, 103, 95)",
+    "disabled": true,
+    "text": "Проверить всё"
+  },
+  "mainClientHeight": 942,
+  "mainScrollHeight": 942,
+  "quickStartBottom": 930,
+  "quickStartTop": 156,
+  "url": "http://127.0.0.1:8766/?screen=quick-start&source=fixture&state=healthy",
+  "visibleImgIcons": 10,
+  "visibleSvgIcons": 0
+}

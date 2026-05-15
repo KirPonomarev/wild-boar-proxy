@@ -1,0 +1,85 @@
+{
+  "accountsChip": "устарело",
+  "accountsRows": 0,
+  "apiChip": "Данные недоступны",
+  "apiStatus": "Данные недоступны",
+  "apiStatusText": "Основной route не подтверждён bounded snapshot.",
+  "banner": "Live-readonly данные недоступны. Предыдущие fixture-данные не используются.",
+  "buttons": [
+    {
+      "className": "button primary onboard-action",
+      "clientWidth": 182,
+      "disabled": true,
+      "id": "quickStartAddAccountAction",
+      "scrollWidth": 182,
+      "text": "Добавить аккаунт"
+    },
+    {
+      "className": "button small disabled",
+      "clientWidth": 114,
+      "disabled": true,
+      "id": "quickStartCheckAccountsAction",
+      "scrollWidth": 114,
+      "text": "Проверить"
+    },
+    {
+      "className": "button small api-route-action",
+      "clientWidth": 186,
+      "disabled": true,
+      "id": "quickStartCheckApiAction",
+      "scrollWidth": 186,
+      "text": "Проверить API"
+    }
+  ],
+  "chips": [
+    {
+      "className": "chip amber",
+      "clientWidth": 92,
+      "scrollWidth": 92,
+      "text": "устарело"
+    },
+    {
+      "className": "chip red",
+      "clientWidth": 156,
+      "scrollWidth": 156,
+      "text": "Данные недоступны"
+    },
+    {
+      "className": "chip neutral",
+      "clientWidth": 84,
+      "scrollWidth": 84,
+      "text": "unknown"
+    },
+    {
+      "className": "chip neutral",
+      "clientWidth": 84,
+      "scrollWidth": 84,
+      "text": "unknown"
+    },
+    {
+      "className": "chip neutral",
+      "clientWidth": 84,
+      "scrollWidth": 84,
+      "text": "unknown"
+    }
+  ],
+  "documentScrollHeight": 1000,
+  "documentScrollWidth": 1600,
+  "hasCanvas": 0,
+  "hasFileInput": 0,
+  "hasPre": 0,
+  "hasTextarea": 0,
+  "headerCheckAll": {
+    "bg": "rgba(246, 241, 234, 0.86)",
+    "color": "rgb(110, 103, 95)",
+    "disabled": true,
+    "text": "Проверить всё"
+  },
+  "mainClientHeight": 942,
+  "mainScrollHeight": 942,
+  "quickStartBottom": 930,
+  "quickStartTop": 156,
+  "url": "http://127.0.0.1:8766/?screen=quick-start&source=live",
+  "visibleImgIcons": 10,
+  "visibleSvgIcons": 0
+}

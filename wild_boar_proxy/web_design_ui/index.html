@@ -25,6 +25,10 @@
         </div>
 
         <nav class="nav" aria-label="Основная навигация">
+          <a id="quickStartNav" class="nav-item" href="?screen=quick-start" data-screen-link="quick-start">
+            <img class="ui-icon nav-icon" src="assets/icons/phosphor/lightning.png" alt="" aria-hidden="true">
+            <span>Быстрый старт</span>
+          </a>
           <a id="overviewNav" class="nav-item active" href="?screen=overview" aria-current="page" data-screen-link="overview">
             <img class="ui-icon nav-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true">
             <span>Обзор</span>
@@ -116,8 +120,115 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
               <span>Полная проверка</span>
             </button>
+            <button id="quickStartCheckAllAction" class="button primary quick-start-only" type="button" disabled title="Общая проверка требует отдельной admitted aggregate command surface." hidden>
+              <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+              <span>Проверить всё</span>
+            </button>
           </div>
         </div>
+
+        <section id="quickStartScreen" class="screen quick-start-screen" data-screen="quick-start" data-quick-start-mode="daily-control-panel" hidden>
+          <div id="quickStartBanner" class="fixture-banner blue">
+            Упрощённый режим показывает только итоговые статусы и безопасные действия.
+          </div>
+
+          <div class="quick-start-grid" aria-label="Ежедневный пульт подключений">
+            <section class="card quick-start-card quick-start-accounts-card" data-quick-start-card="accounts">
+              <div class="quick-start-card-head">
+                <div>
+                  <div class="quick-start-title-row">
+                    <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true">
+                    <h2>Аккаунты Codex</h2>
+                  </div>
+                  <p>Подключённые аккаунты с простым итоговым статусом.</p>
+                </div>
+                <span id="quickStartAccountsChip" class="chip neutral"><span class="dot"></span><span>нет данных</span></span>
+              </div>
+
+              <div class="quick-start-metrics" aria-label="Сводка аккаунтов Codex">
+                <div class="quick-start-metric"><strong id="quickStartAccountsConnected">0</strong><span>подключено</span></div>
+                <div class="quick-start-metric"><strong id="quickStartAccountsWorking">0</strong><span>работают</span></div>
+                <div class="quick-start-metric"><strong id="quickStartAccountsToCheck">0</strong><span>проверить</span></div>
+              </div>
+
+              <div id="quickStartAccountList" class="quick-start-account-list" aria-live="polite"></div>
+
+              <div class="quick-start-card-actions">
+                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
+                  <span>Добавить аккаунт</span>
+                </button>
+                <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled title="Массовая проверка требует отдельного admitted action mapping.">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить</span>
+                </button>
+                <a class="quick-start-link" href="?screen=accounts" data-screen-link="accounts">Открыть аккаунты</a>
+              </div>
+            </section>
+
+            <section class="card quick-start-card quick-start-api-card" data-quick-start-card="api">
+              <div class="quick-start-card-head">
+                <div>
+                  <div class="quick-start-title-row">
+                    <img class="ui-icon quick-start-card-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true">
+                    <h2>Основной API</h2>
+                  </div>
+                  <p>Один главный route. Таблица остаётся в API-подключениях.</p>
+                </div>
+                <span id="quickStartApiChip" class="chip neutral"><span class="dot"></span><span>не настроено</span></span>
+              </div>
+
+              <section class="quick-start-api-identity" aria-label="Основной API route">
+                <div>
+                  <strong id="quickStartApiProvider">Не настроено</strong>
+                  <span id="quickStartApiModel">Основной route не подтверждён</span>
+                </div>
+                <img id="quickStartApiIdentityIcon" class="ui-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+              </section>
+
+              <div id="quickStartApiSecret" class="quick-start-secret mono-value">secret_ref: —</div>
+
+              <section id="quickStartApiStatusCard" class="quick-start-api-status neutral" aria-label="Итоговый статус основного API">
+                <div class="quick-start-api-status-head">
+                  <span id="quickStartApiStatusDot" class="quick-start-status-dot neutral"></span>
+                  <strong id="quickStartApiStatusTitle">Не настроено</strong>
+                </div>
+                <p id="quickStartApiStatusText">Основной route не подтверждён bounded snapshot.</p>
+              </section>
+
+              <div class="quick-start-api-checklist" aria-label="API checklist">
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">Provider</span>
+                  <span id="quickStartApiProviderChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">secret_ref</span>
+                  <span id="quickStartApiSecretChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="quick-start-check-row">
+                  <span><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">route check</span>
+                  <span id="quickStartApiRouteChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+                </div>
+              </div>
+
+              <div class="quick-start-card-actions">
+                <a class="button small" href="?screen=api-connections" data-screen-link="api-connections">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                  <span>Настроить API</span>
+                </a>
+                <button id="quickStartCheckApiAction" class="button small api-route-action" type="button" data-ui-action="api_route_check" data-route-id="" data-route-enabled="false" data-route-state-proven="false" data-route-state-requirement="enabled" disabled title="Нужен confirmed main route из bounded snapshot.">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                  <span>Проверить API</span>
+                </button>
+                <a class="quick-start-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть детали</a>
+              </div>
+            </section>
+          </div>
+
+          <div id="quickStartFooter" class="quick-start-footer">
+            Последняя общая проверка: нет данных · Детальные расследования остаются в экспертных разделах.
+          </div>
+        </section>
 
         <section id="overviewScreen" class="screen" data-screen="overview">
           <div id="fixtureBanner" class="fixture-banner">

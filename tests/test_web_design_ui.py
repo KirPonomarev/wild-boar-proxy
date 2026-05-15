@@ -248,6 +248,8 @@ class WebDesignUiTests(unittest.TestCase):
         nav_match = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', html, re.S)
         self.assertIsNotNone(nav_match)
         nav = nav_match.group(1)
+        self.assertLess(nav.find('data-screen-link="quick-start"'), nav.find('data-screen-link="overview"'))
+        self.assertIn('data-screen-link="quick-start"', nav)
         self.assertIn('data-screen-link="overview"', nav)
         self.assertIn('data-screen-link="accounts"', nav)
         self.assertIn('data-screen-link="api-connections"', nav)
@@ -272,6 +274,75 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn(".compact-action-panel", css)
         self.assertIn("events.slice(0, 2)", (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
         self.assertIn("log-empty", css + (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
+
+    def test_quick_start_daily_control_panel_is_summary_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        nav_match = re.search(r'<nav class="nav"[^>]*>(.*?)</nav>', html, re.S)
+        self.assertIsNotNone(nav_match)
+        nav = nav_match.group(1)
+        self.assertLess(nav.find('data-screen-link="quick-start"'), nav.find('data-screen-link="overview"'))
+        self.assertIn('href="?screen=quick-start"', nav)
+        self.assertIn('src="assets/icons/phosphor/lightning.png"', nav)
+        self.assertIn(
+            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            js,
+        )
+
+        section = self._section_html(html, "quickStartScreen")
+        self.assertIn('data-screen="quick-start"', section)
+        self.assertIn("Аккаунты Codex", section)
+        self.assertIn("Основной API", section)
+        self.assertIn("Упрощённый режим показывает только итоговые статусы и безопасные действия.", section + js)
+        self.assertIn("Первый запуск: пустые состояния не являются ошибкой.", js)
+        self.assertIn("Live-readonly данные недоступны. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Основной route не подтверждён", section + js)
+        self.assertIn("secret_ref: —", section)
+        self.assertIn('href="?screen=api-connections"', section)
+        self.assertIn('href="?screen=accounts"', section)
+        self.assertIn('data-ui-action="onboard_account"', section)
+        self.assertIn('data-ui-action="api_route_check"', section)
+        self.assertIn('data-route-id=""', section)
+        self.assertIn("quickStartAccountsFixtureFromOverview", js)
+        self.assertIn("quickStartApiFixtureFromOverview", js)
+        self.assertIn("quickStartApiModel", js)
+        self.assertIn("Live snapshot не содержит confirmed main route", js)
+        self.assertIn(".quick-start-grid", css)
+        self.assertIn(".quick-start-card", css)
+        self.assertIn(".quick-start-account-row", css)
+        self.assertIn(".quick-start-api-status", css)
+        self.assertIn("grid-template-columns: minmax(0, 1.24fr) minmax(360px, .92fr)", css)
+
+        for forbidden in (
+            "<canvas",
+            "<textarea",
+            "<pre",
+            'type="file"',
+            "raw JSON",
+            "raw logs",
+            "machine-code dump",
+            "route table",
+            "secret value",
+            "route JSON",
+            "provider config",
+            "auth file",
+        ):
+            self.assertNotIn(forbidden, section)
+        self.assertNotIn("<svg", section.lower())
+        self.assertNotIn("command_id", section + js)
+        self.assertNotIn("client_path", section + js)
+        self.assertNotIn("source_dir", section + js)
+        self.assertNotIn("showOpenFilePicker", section + js)
+        self.assertIn('src="assets/icons/phosphor/users.png"', section)
+        self.assertIn('src="assets/icons/phosphor/share-network.png"', section)
+        self.assertIn('src="assets/icons/phosphor/key.png"', section)
+        self.assertIn('src="assets/icons/phosphor/terminal-window.png"', section)
+        self.assertIn('src="assets/icons/phosphor/shield-check.png"', section)
+        self.assertIn("missing_secret_ref", js)
+        self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
+        self.assertIn('const primary = source === "live"', js)
 
     def test_accounts_screen_is_readonly_and_redacted(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -659,7 +730,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn("Сделать активным", api_screen + js)
         self.assertNotIn("Подключить Codex", api_screen + js)
         self.assertNotIn("Профиль готов", api_screen + js)
-        self.assertNotIn("Основной", api_screen + js)
+        self.assertNotIn("Основной", api_screen)
         self.assertNotIn("Непрерывный поток", api_screen + js)
         self.assertNotIn("Сетка", api_screen + js)
         self.assertNotIn("primary route", api_screen + js)
@@ -770,7 +841,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("human-open deferred", html)
         self.assertNotIn("Ссылка на артефакт", html)
         self.assertIn(
-            'const SCREENS = ["overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
+            'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
             js,
         )
         self.assertIn("renderDiagnosticsAction", js)
@@ -1046,7 +1117,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Безопасная подготовка локального контура без изменения рабочих файлов Codex.", html + js)
         self.assertIn("Live-readonly setup недоступен. Предыдущие fixture-данные не используются.", js)
         self.assertIn("Экран показывает setup preview, не результат настройки.", html + js)
-        self.assertIn("simulated truth нет", js)
+        self.assertIn("setup preview, не результат настройки", js)
         self.assertIn("Первичная настройка", html)
         self.assertIn("Готовность локального контура", html)
         self.assertIn("admission state", html)
