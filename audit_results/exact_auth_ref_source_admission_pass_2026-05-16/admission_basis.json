@@ -1,0 +1,43 @@
+{
+  "contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "timestamp_utc": "2026-05-16T00:00:00Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "034760f",
+  "status_packet": {
+    "machine_error_code": "OK",
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear",
+    "effective_stable_runtime_consumer_source": {
+      "status": "approved_target_active_by_activation_evidence",
+      "source_kind": "approved_repair_target",
+      "matches_desired": true
+    },
+    "consumer_activation_readiness": "aligned"
+  },
+  "rotation_packet": {
+    "machine_error_code": "OK",
+    "evidence_status": "participation_evidence_present",
+    "evidence_freshness": "fresh",
+    "evidence_reason": "multi_backend_snapshot",
+    "policy_drift_status": "clear"
+  },
+  "state_packet": {
+    "selected_backend_ids_flat_count": 0,
+    "selected_backend_snapshot_present": true,
+    "selected_backend_snapshot_source_name": "sync --json",
+    "selected_backend_snapshot_selected_backend_count": 15,
+    "selected_backend_snapshot_claim_scope": "bounded_local_participation_evidence_only"
+  },
+  "admission_prerequisites_satisfied": [
+    "runtime truth aligned",
+    "claim_gate clear",
+    "policy_drift clear",
+    "selector evidence fresh"
+  ],
+  "admission_prerequisites_missing": [
+    "singleton exact auth-ref identity",
+    "canonical exact-source admission proof surface for one already-active family member"
+  ]
+}

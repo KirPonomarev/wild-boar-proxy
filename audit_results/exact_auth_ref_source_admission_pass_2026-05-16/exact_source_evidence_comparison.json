@@ -1,0 +1,84 @@
+{
+  "contour": "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+  "owner_surface_inventory": {
+    "public_cli_accounts_onboard": {
+      "command": "python3 -m wild_boar_proxy accounts onboard --json --auth-ref <path> [--loop] [--skip-login] [--no-sync] [--non-interactive]",
+      "parser_file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py",
+      "dispatch_target": "run_onboard",
+      "surface_kind": "reserve_first_onboarding_owner_path"
+    },
+    "missing_surface": {
+      "command": "python3 -m wild_boar_proxy auth ref-source admission --json",
+      "exists": false,
+      "reason": "no such parser or dispatch target exists in the current CLI"
+    }
+  },
+  "surface_authority": [
+    {
+      "surface": "status --json",
+      "scope": "runtime consumer truth",
+      "authority": "supporting_for_exact_source_only",
+      "singleton_capable": false,
+      "observed_status": "approved_target_active_by_activation_evidence"
+    },
+    {
+      "surface": "rollout rotation inspect --json",
+      "scope": "selector participation evidence",
+      "authority": "supporting_for_exact_source_only",
+      "singleton_capable": false,
+      "observed_reason": "multi_backend_snapshot",
+      "selected_backend_count": 15
+    },
+    {
+      "surface": "runtime_state.selected_backend_snapshot",
+      "scope": "bounded local participation evidence",
+      "authority": "supporting_for_exact_source_only",
+      "singleton_capable": false,
+      "selected_backend_ids": [
+        "beep-outlook-team",
+        "gpt2026bis-team",
+        "k-gpt-pro",
+        "k-gpt-pro-3k",
+        "k-ponomarev-photo",
+        "k-ponomarev-pro",
+        "kabanui7070",
+        "kip85905-team",
+        "kp8750410",
+        "new-gpt-bis",
+        "new-new11111",
+        "new-new22222",
+        "new-new44444",
+        "new-new55555",
+        "pig-outlook-team"
+      ]
+    },
+    {
+      "surface": "accounts onboard --json --auth-ref",
+      "scope": "canonical explicit-auth onboarding owner path",
+      "authority": "authoritative_for_new_backend_import_only",
+      "singleton_capable": true,
+      "requires_new_backend": true
+    }
+  ],
+  "current_exact_candidate_family": {
+    "kind": "selected_backend_snapshot_auth_refs",
+    "count": 15,
+    "auth_refs": [
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-beep.gpt@outlook.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-gpt2026bis@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro.3k@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.ponomarev.photo@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.ponomarev.pro@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-kabanui7070@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-kip85905@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-kp8750410@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.gpt.bis@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new11111@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new22222@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new44444@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new55555@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-pig.gpt@outlook.com-team.json"
+    ]
+  }
+}
