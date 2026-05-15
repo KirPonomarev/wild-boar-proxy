@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "sandbox_owner_truth": {
+    "healthcheck": {
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "listener_ok": true,
+      "models_ok": false,
+      "responses_ok": false,
+      "launch_readiness_blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "auth_file": "/Users/kirillponomarev/.codex-custom-test/auth.json"
+    },
+    "status": {
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+      "attestation_source": "healthcheck --json"
+    }
+  },
+  "sandbox_auth_metadata": {
+    "path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "keys": [
+      "OPENAI_API_KEY",
+      "auth_mode"
+    ],
+    "auth_mode": "apikey",
+    "has_openai_api_key": true,
+    "openai_api_key_len": 35,
+    "digest": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d"
+  },
+  "registry_binding": {
+    "backend_id": "auth",
+    "pool": "reserve",
+    "auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "status": "unknown",
+    "manual_hold": false
+  }
+}

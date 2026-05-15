@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "baseline_sandbox_auth": {
+    "healthcheck": {
+      "machine_error_code": "ATTESTATION_FAILED",
+      "listener_ok": true,
+      "models_ok": false,
+      "responses_ok": false,
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    "status": {
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    }
+  },
+  "read_only_external_auth_override": {
+    "mutation_executed": false,
+    "auth_file_used": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "healthcheck": {
+      "machine_error_code": "ATTESTATION_FAILED",
+      "listener_ok": true,
+      "models_ok": true,
+      "responses_ok": false,
+      "blocking_reason": "usable_auth_pool_empty",
+      "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+    },
+    "status": {
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+    }
+  },
+  "finding": {
+    "primary_http_401_is_auth_source_specific": true,
+    "external_secret_source_required_to_clear_primary_http_401": true,
+    "secondary_blocker_emerges_after_auth_override": "provider_or_model_route_unavailable",
+    "in_scope_auth_repair_possible_without_external_secret_source": false
+  }
+}

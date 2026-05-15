@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "status": "error",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_SOURCE_SCOPE_ADMISSION_PASS",
+  "reason": {
+    "primary_blocker_localized": "sandbox_auth_source_truth",
+    "owner_truth_confirmed": true,
+    "external_secret_source_required": true,
+    "in_scope_mutation_admissible": false,
+    "secondary_blocker_after_external_auth_probe": "provider_or_model_route_unavailable"
+  },
+  "machine_rationale": [
+    "Current sandbox auth file causes live HTTP 401 on healthcheck/status.",
+    "Read-only external auth override clears the 401 symptom and makes models probe succeed.",
+    "Therefore primary blocker is auth-source truth, but the valid secret source is outside the declared sandbox auth surface.",
+    "Contour rules forbid importing that external secret source without re-scope."
+  ],
+  "declared_write_surfaces_for_current_contour": [
+    "/Users/kirillponomarev/.codex-custom-test/auth.json"
+  ],
+  "writes_executed": [],
+  "rollback_executed": false
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contour": "SANDBOX_ACTIVE_LANE_AUTH_SOURCE_REPAIR_PASS",
+  "mutation_executed": false,
+  "forbidden_live_path_drift_observed": false,
+  "sandbox_auth_file_changed": false,
+  "registry_changed": false,
+  "launcher_or_materialization_files_changed": false,
+  "owner_packets_changed_files": {
+    "baseline_healthcheck": [],
+    "baseline_status": [],
+    "external_auth_override_healthcheck": [],
+    "external_auth_override_status": []
+  }
+}
