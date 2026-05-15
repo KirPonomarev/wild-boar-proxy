@@ -1,0 +1,20 @@
+{
+  "verdict": "STOP_AND_DIAGNOSE",
+  "in_scope_repair_admissible": false,
+  "primary_blocker_classification": "auth_runtime_truth",
+  "supporting_blockers": [
+    "sync_forces_stable_endpoint",
+    "managed_listener_absent_on_8320",
+    "repo_owned_default_launcher_not_provisioned",
+    "external_models_adapter_stopped"
+  ],
+  "proofs": [
+    "sandbox healthcheck/status both return ATTESTATION_FAILED with blocking_reason=models_surface_unavailable_or_invalid",
+    "sandbox healthcheck/status both report last_error=HTTP 401: {\"error\":\"Invalid API key\"}",
+    "sandbox sync returns effective_mode=stable endpoint=http://127.0.0.1:8318/v1",
+    "socket probe shows 8318 listening and 8320 not listening",
+    "sandbox launcher script is still placeholder and repo-owned marker absent",
+    "external-models adapter state is synthetic/stopped with no routes and no local token"
+  ],
+  "next_contour_candidate": "SANDBOX_ACTIVE_LANE_AUTH_RUNTIME_TRUTH_REPAIR_PASS"
+}

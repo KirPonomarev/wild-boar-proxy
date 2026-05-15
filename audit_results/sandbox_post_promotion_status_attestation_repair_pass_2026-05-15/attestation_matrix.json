@@ -1,0 +1,125 @@
+{
+  "surfaces": [
+    {
+      "surface": "accounts promote auth --json (prior contour)",
+      "status": "error",
+      "machine_error_code": "PROMOTION_STATUS_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    {
+      "surface": "status --json (sandbox)",
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    {
+      "surface": "healthcheck --json (sandbox)",
+      "status": "error",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "blocking_reason": "models_surface_unavailable_or_invalid",
+      "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}"
+    },
+    {
+      "surface": "sync --json (sandbox)",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "blocking_reason": "",
+      "last_error": ""
+    }
+  ],
+  "listener_observation": {
+    "8318": {
+      "listening": true
+    },
+    "8320": {
+      "listening": false,
+      "error": "[Errno 61] Connection refused"
+    }
+  },
+  "launcher_consumer_contract": {
+    "status": "repo_owned_default_consumer_provisioning_available",
+    "launcher_protocol_scope": "bounded_launcher_smoke_seam",
+    "consumer_kind": "bounded_launcher_script",
+    "handoff_carrier_env_var": "WBP_CURRENT_PROXY_URL",
+    "repo_owned_default_consumer_provisioned": false,
+    "external_launcher_readiness_status": "default_path_present_ownership_unverified",
+    "path_presence_not_capability_proof": true,
+    "repo_managed_marker_required_for_refresh": true,
+    "repo_managed_marker_present": false,
+    "repo_managed_marker_valid": false,
+    "repo_managed_marker_recognized": false,
+    "default_path_non_clobber_required": true,
+    "owner_controlled_activation_only": true
+  },
+  "external_launcher_path_surface": {
+    "status": "path_present",
+    "env_var": "WBP_LAUNCHER_SCRIPT",
+    "resolved_path": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "exists": true,
+    "role": "launcher_executable_path_surface",
+    "path_kind": "default_owned_provisioning_target",
+    "default_owned_provisioning_target": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "repo_managed_marker_present": false,
+    "repo_managed_marker_valid": false,
+    "repo_managed_marker_recognized": false,
+    "consumer_capability_by_path_presence_forbidden": true,
+    "provisioning_ownership_by_path_presence_forbidden": true,
+    "truth_surface": false
+  },
+  "launch_readiness": {
+    "status": "blocked",
+    "owner_command_surface": "healthcheck --json",
+    "delegated_from_status": true,
+    "real_inference_required": true,
+    "listener_reachable": true,
+    "models_surface_reachable": false,
+    "responses_proof_passed": false,
+    "truth_alignment_passed": true,
+    "base_url_match": true,
+    "effective_mode_match": true,
+    "model_match": true,
+    "proxy_url_match": true,
+    "gate_passed": false,
+    "blocking_reason": "models_surface_unavailable_or_invalid",
+    "failed_checks": [
+      "models_surface_unavailable_or_invalid"
+    ],
+    "machine_error_code": "ATTESTATION_FAILED",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+    "auth_pool_hygiene_status": "launch_capable_empty",
+    "launch_capable_backend_count": 0
+  },
+  "healthcheck_launch_readiness": {
+    "status": "blocked",
+    "owner_command_surface": "healthcheck --json",
+    "delegated_from_status": false,
+    "real_inference_required": true,
+    "listener_reachable": true,
+    "models_surface_reachable": false,
+    "responses_proof_passed": false,
+    "truth_alignment_passed": true,
+    "base_url_match": true,
+    "effective_mode_match": true,
+    "model_match": true,
+    "proxy_url_match": true,
+    "gate_passed": false,
+    "blocking_reason": "models_surface_unavailable_or_invalid",
+    "failed_checks": [
+      "models_surface_unavailable_or_invalid"
+    ],
+    "machine_error_code": "ATTESTATION_FAILED",
+    "last_error": "HTTP 401: {\"error\":\"Invalid API key\"}",
+    "auth_pool_hygiene_status": "launch_capable_empty",
+    "launch_capable_backend_count": 0
+  }
+}

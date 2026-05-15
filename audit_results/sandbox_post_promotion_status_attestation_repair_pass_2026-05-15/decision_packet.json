@@ -1,0 +1,24 @@
+{
+  "contour": "SANDBOX_POST_PROMOTION_STATUS_ATTESTATION_REPAIR_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "go_to_rerun_account_lifecycle_sandbox_actions_pass": false,
+  "earned": [
+    "post-promotion blocker re-confirmed on sandbox-local surfaces",
+    "independent audit agrees active repair is not admissible inside current contour scope",
+    "targeted canon tests still pass",
+    "no repo code changes required for this STOP diagnosis"
+  ],
+  "not_earned": [
+    "verified active routing after promote",
+    "managed listener readiness on sandbox active lane",
+    "admissible in-scope repair without auth/launch scope expansion"
+  ],
+  "root_cause_localization": {
+    "primary": "auth_runtime_truth",
+    "secondary": [
+      "sync_active_lane_aftermath_remains_stable_only",
+      "managed_listener_not_materialized"
+    ]
+  },
+  "next_contour": "SANDBOX_ACTIVE_LANE_AUTH_RUNTIME_TRUTH_REPAIR_PASS"
+}
