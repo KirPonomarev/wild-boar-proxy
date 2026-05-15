@@ -1,0 +1,12 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "rollback_contract_source": "COMMAND_API.md stable repair apply contract",
+  "rollback_basis": [
+    "successful apply removed all observed .stable-repair-stage-* and .stable-repair-backup-* paths before command return",
+    "post-apply dry-run reported approved_repair_target_reference.status=materialized_aligned with no add/prune work left",
+    "repair mutations remained bounded to the approved target inventory"
+  ],
+  "rollback_surface": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/",
+  "rollback_verdict": "concrete and bounded",
+  "rollback_limit": "this contour does not prove runtime activation rollback because runtime activation was out of scope"
+}

@@ -1,0 +1,15 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "apply_changed_files_count": 11,
+  "allowed_persisted_write_surface": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/codex-*.json",
+  "allowed_ephemeral_transaction_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/managed/.stable-repair-stage-*",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/.stable-repair-backup-*"
+  ],
+  "ephemeral_transaction_surfaces_present_after_success": false,
+  "forbidden_mutation_surfaces_unchanged": [
+    "/Users/kirillponomarev/.cli-proxy-api",
+    "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json"
+  ],
+  "scope_verdict": "writes stayed inside approved target surfaces only"
+}

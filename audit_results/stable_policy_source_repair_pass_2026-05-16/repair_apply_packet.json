@@ -1,0 +1,16 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "command": "python3 -m wild_boar_proxy stable repair --apply --json",
+  "status": "ok",
+  "exit_code": 0,
+  "machine_error_code": "STABLE_REPAIR_APPLIED",
+  "would_change": false,
+  "changed_files_count": 11,
+  "changed_files_scope_only": true,
+  "all_changed_files_within": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/",
+  "observed_apply_scope_assertions": {
+    "manual_adjacent_file_ops_used": false,
+    "observed_source_files_mutated": false,
+    "sandbox_auth_json_mutated": false
+  }
+}
