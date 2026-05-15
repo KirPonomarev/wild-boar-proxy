@@ -1,0 +1,18 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "authoritative_for_next_step": {
+    "surface": "combined stable repair dry-run plus status plus rotation evidence",
+    "why": [
+      "rotation evidence explicitly classifies participation truth as contradicted by policy drift",
+      "status explicitly blocks claim_gate on policy_drift and reports effective_mode managed with observed-source runtime truth",
+      "stable repair dry-run shows the approved target family is again out of alignment and names concrete reconciliation work"
+    ]
+  },
+  "non_authoritative_for_next_step": [
+    {
+      "surface": "fresh selected_backend_snapshot alone",
+      "why": "freshness alone does not outrank contradicted rotation truth"
+    }
+  ],
+  "stable_chain_restoration_required": true
+}

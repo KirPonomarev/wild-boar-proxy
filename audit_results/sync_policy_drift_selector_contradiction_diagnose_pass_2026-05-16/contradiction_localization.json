@@ -1,0 +1,17 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "contradiction_localization": {
+    "primary_cause": "managed-lane selector refresh reopened stable policy/runtime drift",
+    "not_the_cause": [
+      "missing refresh surface",
+      "stale selector snapshot",
+      "exact auth-source ambiguity alone"
+    ],
+    "why_exact_source_admission_is_unearned": [
+      "rotation evidence is contradicted, not clear",
+      "claim_gate is blocked by policy_drift",
+      "stable repair dry-run shows the approved target inventory is no longer aligned",
+      "runtime/stable chain must be reconciled before any sandbox auth-source work resumes"
+    ]
+  }
+}

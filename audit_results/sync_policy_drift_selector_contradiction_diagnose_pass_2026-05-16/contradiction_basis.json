@@ -1,0 +1,14 @@
+{
+  "contour": "SYNC_POLICY_DRIFT_SELECTOR_CONTRADICTION_DIAGNOSE_PASS",
+  "head_before_contour": "c1fb481",
+  "pre_diagnose_basis": {
+    "selector_snapshot_refresh_surface": "sync --json",
+    "selector_snapshot_fresh": true,
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_reason": "policy_drift_detected",
+    "status_effective_mode": "managed",
+    "status_claim_gate": "blocked",
+    "status_policy_drift": "detected"
+  },
+  "diagnose_question": "does sync-driven managed participation truth canonically outrank the stable-chain context, or does it reopen a stable-policy/runtime reconciliation requirement?"
+}
