@@ -1,0 +1,14 @@
+{
+  "contour": "RUNTIME_SELECTOR_PREREQUISITE_REGRESSION_DIAGNOSE_PASS",
+  "ordering_classification": "runtime_primary_selector_secondary",
+  "selector_snapshot_stale": true,
+  "runtime_activation_snapshot_stale": true,
+  "selector_snapshot_observed_at_utc": "2026-05-15T23:13:26.050963+00:00",
+  "runtime_activation_snapshot_observed_at_utc": "2026-05-15T23:19:25.347606+00:00",
+  "ordering_reason": [
+    "selector freshness failure is confined to rotation evidence",
+    "runtime activation evidence failure directly forces effective source fallback to observed_source_active",
+    "claim_gate blocked is sourced from policy_drift, not selected_backend_snapshot freshness",
+    "selector staleness contributes to exact-source prereq failure but does not directly cause the claim-gate block"
+  ]
+}

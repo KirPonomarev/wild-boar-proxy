@@ -1,0 +1,10 @@
+{
+  "contour": "RUNTIME_SELECTOR_PREREQUISITE_REGRESSION_DIAGNOSE_PASS",
+  "classification": "mixed_prereq_regression_runtime_primary",
+  "selector_regression_present": true,
+  "runtime_regression_present": true,
+  "policy_surface_fallback_present": true,
+  "dominant_regression": "runtime_activation_evidence_loss",
+  "why_not_selector_primary": "selected_backend_snapshot freshness is evaluated in the rotation surface and does not directly drive claim_gate or effective runtime source",
+  "why_not_mixed_primary": "both regressions are present, but current authoritative blocker for the next move is the blocked runtime truth path and the stale activation evidence directly explains that block"
+}
