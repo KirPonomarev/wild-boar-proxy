@@ -1,0 +1,31 @@
+{
+  "contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "observed_candidate_family": {
+    "kind": "live_registry_auth_refs_under_forbidden_root",
+    "registry_file": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "stable_default_backend_id": "gpt2026bis-team",
+    "allowed_exact_auth_ref_count": 12,
+    "selected_backend_ids_count": 0,
+    "selected_backend_ids": [],
+    "exact_candidates": [
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-gpt2026bis@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-21c5ac82-kip85905@gmail.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-pig.gpt@outlook.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-fa241136-beep.gpt@outlook.com-team.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.ponomarev.photo@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro.3k@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro.2@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-k.gpt.pro@gmail.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new22222@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.new55555@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-new.gpt.bis@outlook.com-free.json",
+      "/Users/kirillponomarev/.cli-proxy-api/codex-e5c048fc-kp8750410@gmail.com-team.json"
+    ]
+  },
+  "why_no_single_exact_source_is_admitted_now": [
+    "more than one exact candidate remains policy-allowed",
+    "selected_backend_ids are empty and therefore cannot narrow the source set",
+    "STATE_SCHEMA forbids inferring selected backends from registry active ids or counts",
+    "all observed exact candidates live under forbidden live/working roots"
+  ]
+}

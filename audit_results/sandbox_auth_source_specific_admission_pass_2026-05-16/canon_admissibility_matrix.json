@@ -1,0 +1,31 @@
+{
+  "contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_SANDBOX_AUTH_JSON_MATERIALIZATION_PASS",
+      "admissible": false,
+      "why": [
+        "no single exact upstream source surface is admitted yet",
+        "all currently observed exact candidates are under forbidden live roots",
+        "materialization would widen secret-bearing scope implicitly"
+      ]
+    },
+    {
+      "outcome": "GO_TO_NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+      "admissible": true,
+      "why": [
+        "the candidate family is localized",
+        "multiple exact candidates remain plausible",
+        "a transfer-safe intermediate contour can narrow one source without guessing"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": false,
+      "why": [
+        "the blocker is already localized enough to name the narrower next contour",
+        "the problem is ambiguity inside a forbidden-root candidate family, not a total loss of truth"
+      ]
+    }
+  ]
+}

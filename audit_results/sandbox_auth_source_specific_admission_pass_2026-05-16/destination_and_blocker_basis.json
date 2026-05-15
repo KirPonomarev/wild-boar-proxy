@@ -1,0 +1,9 @@
+{
+  "contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "materialization_earned_before_this_contour": false,
+  "current_blocker": "no single exact upstream auth source surface is admitted yet",
+  "prior_decision": "GO_TO_SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "forbidden_live_root_candidates_observed": true
+}

@@ -1,0 +1,15 @@
+{
+  "contour": "SANDBOX_AUTH_SOURCE_SPECIFIC_ADMISSION_PASS",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "source_family_rollback_truth": {
+    "candidate_family_root": "/Users/kirillponomarev/.cli-proxy-api",
+    "root_is_forbidden_for_sandbox_writes": true,
+    "direct_source_use_is_root_local": false,
+    "why_not_direct_materialization": "copying directly from a forbidden live-root family would widen secret-bearing scope before an exact source and transfer boundary are admitted"
+  },
+  "winning_current_boundary": {
+    "next_needed_scope": "narrower_transfer_admission",
+    "later_destination_surface": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+    "later_rollback_unit": "sandbox auth.json plus any explicitly admitted transfer staging surface only"
+  }
+}
