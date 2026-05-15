@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.46
-PLAN_DATE: 2026-05-15
+PLAN_VERSION: 1.47
+PLAN_DATE: 2026-05-16
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Corrected live-readonly and sandbox admission wave active; prior execution-core repair artifacts remain preserved as evidence, but do not authorize continuing the external-models micro-contour chain by inertia; next primary contour is `TECH_GATE_AND_ENV_INVENTORY_PASS`; account onboarding, lifecycle mutation, route mutation, runtime sync, launch, diagnostics, and stage/pilot gates remain parked until their preceding live-readonly and sandbox boundaries are proven
+PLAN_STATUS: Stable/sandbox truth recalibration wave active; recent contours truthfully narrowed sandbox onboarding auth blockers through family repair and runtime reproof, but canonical selector refresh via `sync --json` reopened a managed-lane policy/runtime contradiction; next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`; exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until stable policy/runtime truth is reconciled and cross-lane drift is cleared
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -89,6 +89,72 @@ Current implication:
   not by itself force more execution-core repair before `basic companion UI`
   begins; the unresolved scale blocker must instead remain explicit as a
   separate later contour
+
+## Current Recalibration Correction
+
+Recent machine-carried evidence closed part of the stable/sandbox chain and also
+exposed a new boundary that this plan now treats as explicit.
+
+What was truthfully gained:
+
+- approved target family reconciliation was completed once through
+  `stable repair --apply --json`
+- runtime reproof later promoted the approved repair target to effective runtime
+  truth through `launch smoke --json`
+- stale selected-backend participation evidence was refreshed through the
+  canonical owner path `sync --json`
+
+What remains blocked:
+
+- the sync-produced selected-backend snapshot is now fresh, but
+  `rollout rotation inspect --json` reports
+  `ROTATION_EVIDENCE_CONTRADICTED` with `policy_drift_detected`
+- `status --json` reports `claim_gate = blocked`
+- `status --json` reports `policy_drift = detected`
+- post-sync runtime truth is in the managed lane while the sandbox auth chain
+  still depends on stable-lane restoration
+- `stable repair --dry-run --json` again reports pending reconciliation work
+
+Interpretation rule:
+
+- this is not treated as stale-selector ambiguity anymore
+- this is not treated as sandbox auth-source readiness
+- this is treated as a cross-lane stable-policy/runtime contradiction reopened
+  by canonical `sync --json`
+
+Current implication:
+
+- the next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`
+- `SELECTOR_REFRESH_OWNER_PATH_PASS` is considered closed and must not be
+  repeated by inertia
+- `EXACT_AUTH_REF_SOURCE_ADMISSION_PASS` remains parked until stable
+  policy/runtime truth is reconciled again
+- sandbox `auth.json` materialization remains parked
+
+## Anti-Loop Rule
+
+The active plan now rejects cosmetic contour churn inside the stable/sandbox
+auth chain.
+
+Progress is counted only when a contour closes with machine-carried improvement
+in at least two of the following surfaces:
+
+- `policy_drift`
+- `claim_gate`
+- `stable repair --dry-run --json` target reconciliation work
+- runtime mode/source truth relevant to the active lane
+
+The following are forbidden as progress claims by themselves:
+
+- re-running `sync --json` without a new contradiction diagnosis
+- re-running selector refresh after freshness is already restored
+- treating runtime activation success alone as exact auth-source readiness
+- reopening sandbox auth admission while stable policy/runtime truth remains
+  contradicted
+
+If a contour changes the blocker wording but does not improve at least two of
+the surfaces above, the chain must be treated as loop risk and moved back to
+`STOP_AND_DIAGNOSE`.
 
 ## Managed Pool Operating Contour
 
