@@ -1,0 +1,33 @@
+{
+  "rule": "progress requires at least two machine-carried improvements relative to the post-runtime-reproof state; otherwise churn must not be renamed as progress",
+  "surfaces": [
+    {
+      "surface": "selector freshness",
+      "pre": "stale",
+      "post": "fresh",
+      "improved": true
+    },
+    {
+      "surface": "rotation evidence status",
+      "pre": "ROTATION_EVIDENCE_STALE",
+      "post": "OK / participation_evidence_present",
+      "improved": true
+    },
+    {
+      "surface": "selector/runtime agreement shape",
+      "pre": "runtime aligned to approved target",
+      "post": "sync moved effective_mode back to managed and effective source back to observed",
+      "improved": false
+    },
+    {
+      "surface": "auth-source readiness specificity",
+      "pre": "stale selector family",
+      "post": "fresh multi-backend selector family only",
+      "improved": true
+    }
+  ],
+  "improved_surface_count": 3,
+  "threshold": 2,
+  "passes": true,
+  "interpretation": "This is progress only in the sense that it sharpened the next diagnose contour materially; it did not earn auth-source work."
+}
