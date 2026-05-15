@@ -1,0 +1,61 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "screens": {
+    "quick-start": {
+      "source": "live",
+      "banner_text": "Упрощённый режим показывает только итоговые статусы и безопасные действия.",
+      "api_status_title": "Не настроено",
+      "api_status_text": "Основной route не подтверждён bounded snapshot.",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    },
+    "overview": {
+      "source": "live",
+      "banner_class": "fixture-banner amber",
+      "banner_text": "Live-readonly с предупреждениями. rollout rotation inspect --json: Rotation participation evidence is contradicted because stable policy drift is still detected.",
+      "sidebar_status": "Runtime status summary is available.",
+      "runtime_chip": "Работает",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    },
+    "accounts": {
+      "source": "live",
+      "banner_text": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    },
+    "api-connections": {
+      "source": "live",
+      "banner_text": "Предпросмотр без изменений системы. Фактическое состояние подтверждается только ответами команд.",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    },
+    "diagnostics": {
+      "source": "live",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    },
+    "settings": {
+      "source": "live",
+      "enabled_visible_actions": [
+        "refresh_health_detail",
+        "stable_repair_plan"
+      ]
+    }
+  },
+  "sensitive_surface_check": {
+    "quick_start_secret_text": "secret_ref: —",
+    "raw_path_found": false,
+    "auth_state_filename_found": false
+  }
+}

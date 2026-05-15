@@ -2,82 +2,95 @@
 
 ## Goal
 
-Verify that the local live web server can be used as a readonly admission
-surface without executing any mutation path, and prove that minimal UI live
-binding remains honest under both healthy and controlled failure conditions.
+Prove that the design live server can serve as the current readonly truth
+surface before any baseline packet contour or sandbox admission work begins.
 
 ## Result
 
-- status: `PASS`
+- status: `complete`
 - final verdict: `GO_TO_READONLY_TRUTH_PACKET_BASELINE_PASS`
-- next action: `READONLY_TRUTH_PACKET_BASELINE_PASS`
+- next action: open `READONLY_TRUTH_PACKET_BASELINE_PASS`
 
 ## Contour Capsule
 
-- goal: prove readonly GET admission and minimal UI live binding without invoking POST actions
+- goal: verify live-readonly server startup, readonly endpoints, UI coherence,
+  and negative safety cases without executing parked mutations
 - branch: `codex/external-agent-lab-isolated`
-- head: `97b5153`
+- head: `84a759c Park live-readonly actions by phase`
 - touched files:
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/endpoint_matrix.json`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/live_server_packet.json`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/ui_readonly_matrix.json`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/decision_packet.json`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/contour.md`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/risk_matrix.md`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/live_server_readonly_packet.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/endpoint_matrix.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/ui_observation_matrix.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/safety_negative_checks.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/decision_packet.json`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/independent_audit.md`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/closeout.md`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/quick_start_live_ok.png`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/accounts_live_failure.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/quick-start-live.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/overview-live.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/accounts-live.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/api-connections-live.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/diagnostics-live.png`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/settings-live.png`
 - tests run:
-  - `python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter -q`
+  - `python3 -m unittest -q tests.test_web_design_command_adapter`
+  - `python3 -m unittest -q tests.test_web_design_live_server`
+  - `python3 -m unittest -q tests.test_web_design_ui`
   - `git diff --check`
+  - `python3 tools/check_closeout_resilience.py audit_results/web_live_server_readonly_admission_pass_2026-05-15/closeout.md`
+  - `python3 tools/check_closeout_resilience.py --staged-only`
 - blocked risks:
-  - live UI exposes active POST-capable actions even during readonly inspection
-  - `/api/action` shares the same server boundary as readonly GET surfaces
-- next exact command: `python3 -B -m unittest tests.test_web_design_live_server -q`
+  - readonly support actions could be misread as runtime success claims
+  - later contours could reopen parked actions before sandbox evidence
+- next exact command: `python3 -m unittest -q tests.test_web_design_command_adapter tests.test_web_design_live_server tests.test_web_design_ui`
 
 ## Verification
 
 - tests:
-  - `python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter -q` -> `PASS`
+  - targeted web-design adapter, live-server, and UI suites passed
 - build:
-  - `git diff --check` -> `PASS`
+  - `git diff --check`
 - manual:
-  - started local live server on `127.0.0.1:64246`
-  - fetched only GET endpoints
-  - verified live UI binding on `quick-start`, `overview`, and `accounts`
-  - verified controlled failure on `accounts` after server shutdown and refresh
+  - server started locally on `127.0.0.1:8788`
+  - `/api/actions`, `/api/live-readonly`, `/api/accounts-readonly`, and
+    `/api/api-connections-readonly` returned coherent readonly packets
+  - browser inspection of `?source=live` screens showed only
+    `refresh_health_detail` and `stable_repair_plan` enabled
+  - parked `POST /api/action` stayed blocked
+  - invalid live JSON produced live failure copy without fixture reuse
 - live verification:
-  - readonly only; no `POST /api/action` call made
+  - yes; local live-readonly server and browser-backed screen checks were run
 
 ## Artifacts
 
-- spec: `none; contour executed directly from canonical contour plan`
+- spec:
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/contour.md`
 - packet:
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/live_server_readonly_packet.json`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/endpoint_matrix.json`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/live_server_packet.json`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/ui_readonly_matrix.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/ui_observation_matrix.json`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/safety_negative_checks.json`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/decision_packet.json`
 - report:
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/contour.md`
-  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/risk_matrix.md`
   - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/independent_audit.md`
+  - `audit_results/web_live_server_readonly_admission_pass_2026-05-15/screenshots/`
 
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `pending`
-- pushed: `pending`
+- commit: pending
+- pushed: pending
 
 ## Scope Check
 
 - unrelated work mixed in: `no`
-- private-data risk reviewed: `yes; no auth/config/state/log writes and no mutation commands were executed`
+- private-data risk reviewed: `yes; only readonly endpoint packets, UI state,
+  and screenshot artifacts were captured`
 
 ## Notes
 
 - blockers encountered:
-  - none that block readonly admission; active action wiring is recorded as a high-risk guardrail instead
+  - none that widened this contour beyond readonly admission
 - follow-up contour:
   - `READONLY_TRUTH_PACKET_BASELINE_PASS`
 - resume from here: `READONLY_TRUTH_PACKET_BASELINE_PASS`

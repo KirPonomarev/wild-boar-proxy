@@ -2,71 +2,70 @@
 
 ## Goal
 
-Verify that the live web server can be used as a readonly admission surface:
-
-- the server starts cleanly;
-- the four GET endpoints respond with valid JSON;
-- `/api/actions` behaves as metadata-only surface;
-- the UI binds to `source=live` without silently replacing live failure with fixture truth;
-- no POST action or runtime mutation is executed during the contour.
+Prove that the design live server can be used as the current readonly truth
+surface without reopening parked mutations, sandbox writes, or fixture-backed
+false-green behavior.
 
 ## Scope
 
-- local startup of `wild_boar_proxy.web_design_live_server`
-- GET-only endpoint audit
-- minimal UI binding check for `quick-start`, `overview`, and `accounts`
-- controlled live failure check through in-page refresh after server shutdown
-- audit artifact generation only
-
-Out of scope:
-
-- semantic baseline truth comparison
-- sandbox preparation
-- any `POST /api/action`
-- any runtime/config/auth/state/log mutation
-
-## Preflight
-
-- `git status --short --untracked-files=no` -> clean
-- `git log --oneline -n 10` -> latest contour `97b5153 Add tech gate and environment inventory audit`
-- `bash tools/install_git_hooks.sh` -> hooks path configured
-
-## Fact Summary
-
-- Server started with:
-  - `python3 -m wild_boar_proxy.web_design_live_server --host 127.0.0.1 --port 64246`
-- GET endpoints confirmed:
+- start `python3 -m wild_boar_proxy.web_design_live_server --port 8788`
+- inspect readonly HTTP surfaces:
+  - `/api/actions`
   - `/api/live-readonly`
   - `/api/accounts-readonly`
   - `/api/api-connections-readonly`
-  - `/api/actions`
-- `/api/actions` returned:
-  - `source = ui_action_metadata`
-  - `status = ok`
-  - `actions_count = 22`
-  - no `adapter_command_id` leakage
-  - no `launch_client_path` leakage
-- UI live binding confirmed:
-  - `quick-start`
-  - `overview`
-  - `accounts`
-- Controlled failure confirmed on `accounts`:
-  - after server shutdown and in-page refresh, live failure copy appeared
-  - no fixture fallback copy appeared
-  - no false healthy state appeared
+- inspect `?screen=quick-start&source=live` and readonly summary screens
+- verify negative cases:
+  - parked POST action stays blocked
+  - malformed POST JSON stays blocked
+  - live failure copy does not reuse fixture truth
+- capture screenshots and audit packets
 
-## Interpretation
+Out of scope:
 
-Readonly admission is usable and honest enough to proceed. The main caution is
-that admitted live-action buttons remain wired in the live UI, so the next
-contour must keep a strict no-POST discipline.
+- account onboarding or lifecycle execution
+- route mutation or provider checks
+- mode set, sync, launch, diagnostics export execution
+- sandbox binding or config/auth/state writes
+
+## Findings
+
+- server starts through `main(...)` on `127.0.0.1:8788` in
+  `action_phase=live_readonly`
+- `/api/actions` reports exactly two available actions:
+  - `refresh_health_detail`
+  - `stable_repair_plan`
+- `/api/live-readonly` returned `status=ok`, `source=live_readonly`,
+  `primary_truth_ok=true`, `ui_state=healthy`, with one warning:
+  `ROTATION_EVIDENCE_CONTRADICTED`
+- `/api/accounts-readonly` returned `status=ok`, `source=accounts_readonly`,
+  `account_count=25`
+- `/api/api-connections-readonly` returned `status=ok`,
+  `source=api_connections_readonly`, `routes_count=0`,
+  `runtime_claim_blocked=true`
+- UI screens stayed in `source=live`; enabled visible actions remained readonly
+  support only
+- malformed POST JSON returned `UI_ACTION_NOT_ALLOWED`
+- parked POST action `export_diagnostics` returned
+  `UI_ACTION_PHASE_PARKED`
+- invalid live-readonly JSON produced red failure copy with “previous healthy
+  data not used” messaging instead of silent fixture fallback
 
 ## Decision
 
 - status: `GO_TO_READONLY_TRUTH_PACKET_BASELINE_PASS`
 - reason:
-  - GET surfaces are live and valid
-  - metadata remains metadata
-  - UI binds to live source honestly
-  - controlled live failure did not degrade into fixture-truth
-  - no mutation surface was touched
+  - live server is startable and coherent as a readonly truth surface
+  - parked actions remain parked in metadata, UI, and POST behavior
+  - live failure states stay honest and do not masquerade as fixture success
+
+## Next Guardrails
+
+- keep the next contour packet-first:
+  - `status --json`
+  - `mode get --json`
+  - `accounts list --json`
+  - `healthcheck --json`
+  - `rollout rotation inspect --json`
+- do not interpret readonly support actions as runtime success claims
+- do not reopen parked actions before sandbox admission contours

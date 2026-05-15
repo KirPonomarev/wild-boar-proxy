@@ -1,0 +1,36 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "checks": {
+    "parked_post_blocking": {
+      "ui_action": "export_diagnostics",
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_PHASE_PARKED",
+      "human_message": "Текущее live-readonly окно не допускает action dispatch. Сначала завершите readonly admission и sandbox binding contours."
+    },
+    "malformed_post_json": {
+      "status": "integration_failure",
+      "machine_error_code": "UI_ACTION_NOT_ALLOWED",
+      "human_message": "UI action должен быть строкой."
+    },
+    "invalid_live_json_ui": {
+      "source": "live",
+      "banner_class": "fixture-banner red",
+      "banner_text": "Live-readonly недоступен. Предыдущие healthy-данные не используются.",
+      "sidebar_status": "Live-запрос только для чтения не удался."
+    },
+    "stale_live_packet_ui": {
+      "source": "live",
+      "banner_class": "fixture-banner amber",
+      "runtime_chip": "Устарело",
+      "sidebar_status": "Runtime snapshot is stale.",
+      "active_count": "—",
+      "problem_count": "—"
+    },
+    "no_sensitive_leak_grep": {
+      "matches": [
+        "secret_ref: —"
+      ],
+      "forbidden_matches": []
+    }
+  }
+}
