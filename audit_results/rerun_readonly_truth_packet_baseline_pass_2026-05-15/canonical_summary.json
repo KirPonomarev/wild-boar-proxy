@@ -1,0 +1,206 @@
+{
+  "status.json": {
+    "argv": [
+      "status",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "attestation_summary",
+      "auth_pool_hygiene",
+      "changed_files",
+      "claim_gate",
+      "configured_model",
+      "configured_proxy_url",
+      "current_proxy_adoption_contract",
+      "current_proxy_url",
+      "desired_mode",
+      "effective_mode",
+      "endpoint",
+      "exit_code",
+      "human_message",
+      "last_error",
+      "last_known_good_proxy",
+      "last_known_good_proxy_contract",
+      "launch_readiness",
+      "liveness",
+      "machine_error_code",
+      "next_action"
+    ]
+  },
+  "mode_get.json": {
+    "argv": [
+      "mode",
+      "get",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "changed_files",
+      "desired_mode",
+      "effective_mode",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "severity",
+      "status"
+    ]
+  },
+  "accounts_list.json": {
+    "argv": [
+      "accounts",
+      "list",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "accounts",
+      "changed_files",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "pool_policy",
+      "registry_identity",
+      "severity",
+      "stable_default_backend_id",
+      "status"
+    ]
+  },
+  "healthcheck.json": {
+    "argv": [
+      "healthcheck",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "attestation",
+      "auth_pool_hygiene",
+      "changed_files",
+      "configured_model",
+      "configured_proxy_url",
+      "current_proxy_adoption_contract",
+      "current_proxy_url",
+      "desired_mode",
+      "deterministic_stable_recovery_contract",
+      "deterministic_stable_recovery_result",
+      "effective_mode",
+      "endpoint",
+      "exit_code",
+      "human_message",
+      "last_error",
+      "last_known_good_proxy",
+      "last_known_good_proxy_contract",
+      "launch_readiness",
+      "liveness",
+      "machine_error_code"
+    ]
+  },
+  "rollout_rotation_inspect.json": {
+    "argv": [
+      "rollout",
+      "rotation",
+      "inspect",
+      "--json"
+    ],
+    "returncode": 1,
+    "status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "keys": [
+      "changed_files",
+      "delegated_evidence",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "rotation_evidence_result",
+      "severity",
+      "status"
+    ]
+  },
+  "external_models_status.json": {
+    "argv": [
+      "external-models",
+      "status",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "changed_files",
+      "data",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "severity",
+      "status",
+      "timestamp_utc"
+    ]
+  },
+  "external_models_models.json": {
+    "argv": [
+      "external-models",
+      "models",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "changed_files",
+      "data",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "severity",
+      "status",
+      "timestamp_utc"
+    ]
+  },
+  "external_models_routes_list.json": {
+    "argv": [
+      "external-models",
+      "routes",
+      "list",
+      "--json"
+    ],
+    "returncode": 0,
+    "status": "ok",
+    "machine_error_code": "OK",
+    "keys": [
+      "changed_files",
+      "data",
+      "exit_code",
+      "human_message",
+      "liveness",
+      "machine_error_code",
+      "next_action",
+      "operator_action",
+      "severity",
+      "status",
+      "timestamp_utc"
+    ]
+  }
+}
