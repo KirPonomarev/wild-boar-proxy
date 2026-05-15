@@ -1,0 +1,8 @@
+{
+  "promote": {
+    "rollback_point_captured": true,
+    "rollback_attempted": true,
+    "rollback_outcome": "completed",
+    "routing_change_attempted": true
+  }
+}

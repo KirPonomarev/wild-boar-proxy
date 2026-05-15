@@ -1,0 +1,85 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "wild_boar_proxy",
+    "accounts",
+    "promote",
+    "auth",
+    "--json"
+  ],
+  "returncode": 1,
+  "stdout": "{\"status\": \"error\", \"exit_code\": 1, \"human_message\": \"Promotion did not produce verified active routing after status proof.\", \"machine_error_code\": \"PROMOTION_STATUS_FAILED\", \"changed_files\": [\"/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json\", \"/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml\", \"/Users/kirillponomarev/.codex-custom-test/config.toml\", \"/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json\", \"/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt\", \"/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh\"], \"next_action\": \"retry\", \"liveness\": \"degraded\", \"severity\": \"recoverable\", \"operator_action\": \"retry\", \"command\": [\"promote\", \"auth\"], \"promotion_result\": {\"status\": \"owner_path_emitted\", \"attempted\": true, \"backend_id\": \"auth\", \"precondition_status\": \"eligible_reserve_backend\", \"previous_pool\": \"reserve\", \"requested_pool\": \"active\", \"pool_policy_status\": \"ok\", \"pool_policy_observed\": {\"status\": \"ok\", \"machine_error_code\": \"OK\", \"reason\": \"pool_policy_valid\", \"active_min\": 10, \"active_target\": 10, \"reserve_target\": 0}, \"active_pool_count_before\": 0, \"active_target_observed\": 10, \"reserve_count_before\": 1, \"reserve_target_observed\": 0, \"active_pool_count_after\": 1, \"reserve_count_after\": 0, \"policy_verification_status\": \"passed\", \"rollback_point_captured\": true, \"routing_change_attempted\": true, \"routing_change_observed\": false, \"validate_attempted\": true, \"validate_outcome\": \"ok\", \"sync_attempted\": true, \"sync_outcome\": \"ok\", \"status_observed\": {\"command_status\": \"error\", \"exit_code\": 1, \"machine_error_code\": \"ATTESTATION_FAILED\", \"liveness\": \"degraded\", \"effective_mode\": \"stable\", \"endpoint\": \"http://127.0.0.1:8318/v1\"}, \"rollback_attempted\": true, \"rollback_outcome\": \"completed\", \"external_command_exit_code\": 0, \"external_command_status\": \"ok\", \"final_outcome\": \"rollback_completed_after_failed_verification\"}, \"sync_result\": {\"command_status\": \"ok\", \"machine_error_code\": \"OK\", \"exit_code\": 0}}\n",
+  "stderr": "auth: OK - ok\nSet pool for auth -> active\nsync-stable:8318\n",
+  "json": {
+    "status": "error",
+    "exit_code": 1,
+    "human_message": "Promotion did not produce verified active routing after status proof.",
+    "machine_error_code": "PROMOTION_STATUS_FAILED",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+      "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+      "/Users/kirillponomarev/.codex-custom-test/config.toml",
+      "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh"
+    ],
+    "next_action": "retry",
+    "liveness": "degraded",
+    "severity": "recoverable",
+    "operator_action": "retry",
+    "command": [
+      "promote",
+      "auth"
+    ],
+    "promotion_result": {
+      "status": "owner_path_emitted",
+      "attempted": true,
+      "backend_id": "auth",
+      "precondition_status": "eligible_reserve_backend",
+      "previous_pool": "reserve",
+      "requested_pool": "active",
+      "pool_policy_status": "ok",
+      "pool_policy_observed": {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "reason": "pool_policy_valid",
+        "active_min": 10,
+        "active_target": 10,
+        "reserve_target": 0
+      },
+      "active_pool_count_before": 0,
+      "active_target_observed": 10,
+      "reserve_count_before": 1,
+      "reserve_target_observed": 0,
+      "active_pool_count_after": 1,
+      "reserve_count_after": 0,
+      "policy_verification_status": "passed",
+      "rollback_point_captured": true,
+      "routing_change_attempted": true,
+      "routing_change_observed": false,
+      "validate_attempted": true,
+      "validate_outcome": "ok",
+      "sync_attempted": true,
+      "sync_outcome": "ok",
+      "status_observed": {
+        "command_status": "error",
+        "exit_code": 1,
+        "machine_error_code": "ATTESTATION_FAILED",
+        "liveness": "degraded",
+        "effective_mode": "stable",
+        "endpoint": "http://127.0.0.1:8318/v1"
+      },
+      "rollback_attempted": true,
+      "rollback_outcome": "completed",
+      "external_command_exit_code": 0,
+      "external_command_status": "ok",
+      "final_outcome": "rollback_completed_after_failed_verification"
+    },
+    "sync_result": {
+      "command_status": "ok",
+      "machine_error_code": "OK",
+      "exit_code": 0
+    }
+  }
+}
