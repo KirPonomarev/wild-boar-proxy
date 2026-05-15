@@ -1,0 +1,20 @@
+{
+  "attempted_actions": [
+    "promote"
+  ],
+  "completed_actions": [],
+  "blocked_action": "promote",
+  "policy_gate": {
+    "status": "blocked",
+    "machine_error_code": "PROMOTION_POLICY_LIMIT_REACHED",
+    "precondition_status": "active_target_reached",
+    "active_pool_count_before": 0,
+    "active_target_observed": 0,
+    "reserve_count_before": 1,
+    "reserve_target_observed": 0,
+    "changed_files": []
+  },
+  "pre_accounts_pool": "reserve",
+  "post_accounts_pool": "reserve",
+  "same_accounts_snapshot": true
+}

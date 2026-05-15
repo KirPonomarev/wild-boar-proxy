@@ -1,0 +1,25 @@
+{
+  "captured_at": "2026-05-15T15:58:03.275213+00:00",
+  "git_status": [],
+  "git_head": "eea44cbd5a99714bdd1255a98331fc628689c74f",
+  "git_head_short": "eea44cb",
+  "git_log_3": [
+    "eea44cb Finalize post-onboard attestation closeout metadata",
+    "c506fa7 Repair post-onboard lifecycle admission classification",
+    "033ca57 Audit sandbox onboarding rerun2 status blocker"
+  ],
+  "sandbox_env_map": {
+    "WBP_AUTH_FILE": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "WBP_CONFIG_TOML": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "WBP_EXTERNAL_MODELS_DIR": "/Users/kirillponomarev/.codex-custom-test/external-models",
+    "WBP_LAUNCHER_SCRIPT": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+    "WBP_MANAGED_CONFIG_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/managed-config.yaml",
+    "WBP_MANAGED_DIR": "/Users/kirillponomarev/.codex-custom-test/managed",
+    "WBP_PROFILE_DIR": "/Users/kirillponomarev/.codex-custom-test",
+    "WBP_REGISTRY_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "WBP_RUNTIME_EFFECTIVE_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+    "WBP_RUNTIME_MODE_FILE": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+    "WBP_STABLE_CONFIG": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+    "WBP_STATE_FILE": "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json"
+  }
+}

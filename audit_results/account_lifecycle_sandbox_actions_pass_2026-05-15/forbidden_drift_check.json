@@ -1,0 +1,43 @@
+{
+  "before": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2",
+      "size": 577,
+      "mtime_ns": 1778332551870097299
+    }
+  ],
+  "after": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "sha256": "d370acc4ce50a65f1434dab4de7cf8075205ca46f489020677f613950b03a92c",
+      "size": 2323,
+      "mtime_ns": 1778523843095903592
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "sha256": "57d86b0e0424657734bcf5338d0303ad240d51a3340f0fe5055a0f371e666436",
+      "size": 1385,
+      "mtime_ns": 1778852650518255229
+    },
+    {
+      "path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+      "sha256": "021dd630b901bcfa88121e2675a3babb61cbfda1b84f231b551af0db50ba51f2",
+      "size": 577,
+      "mtime_ns": 1778332551870097299
+    }
+  ],
+  "unchanged": true
+}

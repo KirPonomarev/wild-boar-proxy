@@ -1,0 +1,15 @@
+{
+  "contour": "ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS",
+  "status": "STOP_AND_DIAGNOSE",
+  "verdict": "promotion policy gate blocks full lifecycle matrix on current sandbox state",
+  "machine_error_code": "PROMOTION_POLICY_LIMIT_REACHED",
+  "blocked_action": "accounts promote auth --json",
+  "blocked_precondition_status": "active_target_reached",
+  "pool_policy": {
+    "active_min": 0,
+    "active_target": 0,
+    "reserve_target": 0
+  },
+  "no_live_drift": true,
+  "next_contour_hint": "SANDBOX_POLICY_STAGE_SET_10_ADMISSION_PASS"
+}
