@@ -1,0 +1,28 @@
+{
+  "captured_at_utc": "2026-05-15T17:23:38.952374Z",
+  "admissibility": [
+    {
+      "candidate": "validate-only",
+      "admissible": true,
+      "reason": "narrowest provider-evidence execution surface; meaningful under auth.type=none; no secret-bearing write scope",
+      "canon_bias": "prefer narrower split before smoke path"
+    },
+    {
+      "candidate": "check-only",
+      "admissible": true,
+      "reason": "meaningful under auth.type=none, but broader than validate because it exercises completion path",
+      "canon_bias": "defer until validate evidence is collected or admitted as unnecessary"
+    },
+    {
+      "candidate": "secret-bearing scope first",
+      "admissible": false,
+      "reason": "current route auth.type=none does not require secret_ref lookup or secret reads beyond file permission gate"
+    },
+    {
+      "candidate": "combined validate+check",
+      "admissible": false,
+      "reason": "wider than needed; route-add STOP did not prove validate and check must execute together"
+    }
+  ],
+  "chosen_outcome": "OPEN_EXACT_PROVIDER_VALIDATE_EVIDENCE_CONTOUR"
+}

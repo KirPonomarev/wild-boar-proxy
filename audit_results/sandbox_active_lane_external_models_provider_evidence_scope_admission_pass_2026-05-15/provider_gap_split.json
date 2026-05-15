@@ -1,0 +1,54 @@
+{
+  "captured_at_utc": "2026-05-15T17:23:38.951971Z",
+  "candidates": [
+    {
+      "candidate": "validate-only admission",
+      "owner_surface": "external-models routes validate --json --route <route_id>",
+      "scope_kind": "provider-model-visibility evidence",
+      "network_dependent": true,
+      "secret_bearing_under_current_auth_none": false,
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "rollback_domain": "state.json plus validate evidence artifact(s)",
+      "why_narrow": "checks model visibility on provider surface before smoke payload execution"
+    },
+    {
+      "candidate": "check/smoke admission",
+      "owner_surface": "external-models check --json --route <route_id>",
+      "scope_kind": "provider completion smoke evidence",
+      "network_dependent": true,
+      "secret_bearing_under_current_auth_none": false,
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "rollback_domain": "state.json plus check evidence artifact(s)",
+      "why_not_primary": "broader than validate because it exercises completion request/response path"
+    },
+    {
+      "candidate": "secret-bearing provider scope",
+      "owner_surface": "not required under current route auth.type=none",
+      "scope_kind": "secret-bearing prerequisite",
+      "network_dependent": false,
+      "secret_bearing_under_current_auth_none": false,
+      "writes": [],
+      "rollback_domain": "none",
+      "why_not_primary": "current route shape avoids secret_ref lookup; only secrets file permission gate remains"
+    },
+    {
+      "candidate": "combined validate+check contour",
+      "owner_surface": "external-models routes validate + external-models check",
+      "scope_kind": "combined provider evidence",
+      "network_dependent": true,
+      "secret_bearing_under_current_auth_none": false,
+      "writes": [
+        "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+        "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+      ],
+      "rollback_domain": "shared state/evidence domain with broader execution surface",
+      "why_not_primary": "canon prefers narrower split while validate can answer the smaller question first"
+    }
+  ]
+}
