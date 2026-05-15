@@ -1,0 +1,24 @@
+{
+  "contour": "ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS",
+  "decided_at": "2026-05-15T15:29:50.386210+00:00",
+  "decision": "STOP_AND_DIAGNOSE",
+  "machine_error_code": "OK",
+  "selected_backend_id": "auth",
+  "new_backend_ids": [
+    "auth"
+  ],
+  "reserve_first_enforced": true,
+  "pool_after_onboarding": {
+    "active": 0,
+    "reserve": 1,
+    "retired": 0
+  },
+  "active_routing_changed": false,
+  "post_refresh_accounts_count": 1,
+  "post_refresh_selected_backend_pool": "reserve",
+  "status_observed_command_status": "error",
+  "status_observed_machine_error_code": "ATTESTATION_FAILED",
+  "forbidden_live_path_drift_detected": false,
+  "stop_reason": "post_onboard_status_summary_remains_degraded_attestation_failed",
+  "next_contour": "SANDBOX_POST_ONBOARD_STATUS_ATTESTATION_REPAIR_PASS"
+}

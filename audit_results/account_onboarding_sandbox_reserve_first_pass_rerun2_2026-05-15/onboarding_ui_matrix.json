@@ -1,0 +1,15 @@
+{
+  "captured_at": "2026-05-15T15:29:50.383687+00:00",
+  "ui_live_walkthrough_skipped": true,
+  "reason": "used targeted UI/live-server tests as factual no-overclaim evidence for onboarding result surfaces",
+  "targeted_tests": [
+    "tests.test_web_design_live_server.WebDesignLiveServerTests.test_onboard_account_action_executes_exact_command_without_browser_args",
+    "tests.test_web_design_live_server.WebDesignLiveServerTests.test_onboard_outcomes_do_not_overclaim_success_without_reserve_proof",
+    "tests.test_web_design_ui.WebDesignUiTests.test_onboarding_result_flow_renders_reserve_first_without_active_claim"
+  ],
+  "evidence": {
+    "reserve_success_copy_keeps_promotion_separate": true,
+    "non_reserve_proof_outcomes_not_green": true,
+    "active_promoted_overclaim_forbidden": true
+  }
+}

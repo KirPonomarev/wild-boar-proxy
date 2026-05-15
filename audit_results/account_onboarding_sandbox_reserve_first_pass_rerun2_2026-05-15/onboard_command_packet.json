@@ -1,0 +1,74 @@
+{
+  "status": "ok",
+  "exit_code": 0,
+  "human_message": "Account onboarding completed with reserve-first proof.",
+  "machine_error_code": "OK",
+  "changed_files": [
+    "/Users/kirillponomarev/.codex-custom-test/managed/backend-registry.json",
+    "/Users/kirillponomarev/.codex-custom-test/config.toml",
+    "/Users/kirillponomarev/.codex-custom-test/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt"
+  ],
+  "next_action": "none",
+  "liveness": "degraded",
+  "severity": "recoverable",
+  "operator_action": "none",
+  "command": [
+    "--once",
+    "--auth-ref",
+    "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "--non-interactive"
+  ],
+  "onboarding_result": {
+    "status": "owner_path_emitted",
+    "attempted": true,
+    "input_mode": "explicit_auth_ref",
+    "explicit_auth_ref": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+    "new_backend_ids": [
+      "auth"
+    ],
+    "selected_backend_id": "auth",
+    "selection_status": "selected_unique_backend",
+    "reserve_first_enforced": true,
+    "auth_snapshot_before_login_status": "ok",
+    "auth_snapshot_before_login_count": 0,
+    "auth_snapshot_before_login_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "auth_snapshot_before_login_source": {
+      "source": "stable_config_parent",
+      "path": "/Users/kirillponomarev/.codex-custom-test/stable",
+      "path_resolution": "fallback",
+      "exists": true
+    },
+    "pool_after_onboarding": {
+      "active": 0,
+      "reserve": 1,
+      "retired": 0
+    },
+    "validate_attempted": true,
+    "validate_outcome": "ok",
+    "sync_attempted": true,
+    "sync_outcome": "ok",
+    "status_observed": {
+      "command_status": "error",
+      "exit_code": 1,
+      "machine_error_code": "ATTESTATION_FAILED",
+      "liveness": "degraded",
+      "effective_mode": "stable",
+      "endpoint": "http://127.0.0.1:8318/v1"
+    },
+    "external_command_exit_code": 0,
+    "external_command_status": "ok",
+    "active_routing_changed": false,
+    "final_outcome": "explicit_auth_imported_to_reserve"
+  },
+  "validate_result": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "exit_code": 0
+  },
+  "sync_result": {
+    "command_status": "ok",
+    "machine_error_code": "OK",
+    "exit_code": 0
+  }
+}
