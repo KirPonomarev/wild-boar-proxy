@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-15T17:16:30.884502Z",
+  "declared_write_surface": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+  "state_file_unchanged": true,
+  "secrets_file_unchanged": true,
+  "state_file_current": {
+    "path": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+    "exists": true,
+    "sha256": "f11ebe5d4aea7a9cd7ff5e54887502bcf3ea1f64f32e832996c79d32c4f84fc5",
+    "size_bytes": 554
+  },
+  "secrets_file_current": {
+    "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+    "exists": true,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size_bytes": 0
+  }
+}

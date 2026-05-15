@@ -1,0 +1,68 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_ADD_REPAIR_PASS",
+  "status": "complete",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "next_contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_PROVIDER_EVIDENCE_SCOPE_ADMISSION_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "94642e2 Audit external-models foundation scope admission",
+  "declared_write_surface": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+  "baseline_truth": {
+    "routes_count": 0,
+    "models_count": 0,
+    "health_machine_error_code": "ATTESTATION_FAILED",
+    "health_last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+  },
+  "route_payload": {
+    "schema_version": 1,
+    "route_id": "wbp-claude-sonnet-4-6-thinking",
+    "display_name": "Claude Sonnet 4.6 Thinking",
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "endpoint_path": "/chat/completions",
+    "upstream_model": "claude-sonnet-4-6-thinking",
+    "compatibility": "openai_chat_completions",
+    "auth": {
+      "type": "none"
+    },
+    "cost_class": "paid_or_free_limited",
+    "lane_role": "candidate",
+    "fallback_eligible": false,
+    "enabled": true
+  },
+  "mutation_truth": {
+    "route_add_machine_error_code": "OK",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json"
+    ],
+    "routes_count_after_add": 1,
+    "models_count_after_add": 1
+  },
+  "owner_truth_after_add": {
+    "health_machine_error_code": "ATTESTATION_FAILED",
+    "health_last_error": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}",
+    "failed_checks": [
+      "usable_auth_pool_empty",
+      "responses_probe_failed"
+    ],
+    "blocking_reason": "usable_auth_pool_empty",
+    "status_machine_error_code": "ATTESTATION_FAILED"
+  },
+  "rollback_truth": {
+    "rollback_needed": true,
+    "routes_sha_restored": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4",
+    "routes_count_after_restore": 0,
+    "models_count_after_restore": 0,
+    "health_machine_error_code_after_restore": "ATTESTATION_FAILED",
+    "health_last_error_after_restore": "HTTP 502: {\"error\":{\"message\":\"unknown provider for model claude-sonnet-4-6-thinking\",\"type\":\"server_error\",\"code\":\"internal_server_error\"}}"
+  },
+  "forbidden_drift": {
+    "state_file_unchanged": true,
+    "secrets_file_unchanged": true
+  },
+  "decision_basis": [
+    "route add materialized local registry truthfully",
+    "owner-level attestation blocker did not change",
+    "retrying route variations would exceed packet-grounded scope",
+    "next honest scope is provider-evidence/model-resolution admission before any validate/check or token lane work"
+  ]
+}
