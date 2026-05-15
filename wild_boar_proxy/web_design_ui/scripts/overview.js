@@ -2261,6 +2261,9 @@ function setScreen(screen, updateUrl = false) {
 }
 
 function quickStartAccountState(account, snapshotStatus) {
+  if (snapshotStatus === "stale") {
+    return { key: "stale", label: "Устарело", visual: "amber", order: 1 };
+  }
   if (snapshotStatus === "integration_failure") {
     return { key: "stale", label: "Устарело", visual: "amber", order: 1 };
   }
@@ -2343,6 +2346,23 @@ function renderQuickStartAccountRows(snapshot) {
 
 function quickStartApiModel(snapshot, source) {
   const routes = Array.isArray(snapshot.routes) ? snapshot.routes : [];
+  if (snapshot.status === "stale") {
+    const primary = routes.find((route) => route.role_label === "main route" || route.role_label === "primary" || route.is_primary === true || route.primary === true) || routes[0];
+    return {
+      state: "stale",
+      visual: "amber",
+      title: "Устарело",
+      provider: primary?.provider || "Не настроено",
+      model: primary ? `${primary.upstream_model || "model unknown"} · ${primary.role_label || "registry entry"}` : "Основной route не подтверждён",
+      routeId: primary?.route_id || "",
+      secretRef: primary?.secret_ref || "—",
+      secretState: primary?.secret_status_label || "unknown",
+      validationState: "stale",
+      lastCheck: "нет данных",
+      routeCount: routes.length,
+      confirmed: false
+    };
+  }
   if (snapshot.status !== "ok" || (source === "live" && snapshot.source !== "api_connections_readonly")) {
     return {
       state: "failed",
@@ -2450,9 +2470,11 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   const accountStaleCount = accounts.filter((account) => quickStartAccountState(account, safeAccounts.status).key === "stale").length;
   const workingCount = accounts.filter((account) => ["green", "blue"].includes(account.visual_state) && !account.last_error_summary && !account.manual_hold).length;
   const accountVisual = safeAccounts.status !== "ok" ? "amber" : (accountProblemCount ? "red" : (accountStaleCount ? "amber" : (noAccounts ? "neutral" : "green")));
-  const accountLabel = safeAccounts.status !== "ok"
-    ? "устарело"
-    : (accountProblemCount ? "проверить" : (noAccounts ? "пусто" : "готово"));
+  const accountLabel = safeAccounts.status === "integration_failure"
+    ? "нет данных"
+    : (safeAccounts.status !== "ok"
+      ? "устарело"
+      : (accountProblemCount ? "проверить" : (noAccounts ? "пусто" : "готово")));
 
   const accountChip = document.getElementById("quickStartAccountsChip");
   accountChip.className = `chip ${accountVisual}`;
@@ -2469,6 +2491,10 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   text("quickStartApiProvider", apiModel.provider);
   text("quickStartApiModel", apiModel.model);
   text("quickStartApiSecret", `secret_ref: ${apiModel.secretRef}`);
+  const routeHint = document.getElementById("quickStartApiRouteHint");
+  const hiddenRouteCount = Math.max(0, apiModel.routeCount - 1);
+  routeHint.hidden = hiddenRouteCount <= 0;
+  routeHint.textContent = `+${hiddenRouteCount} route · открыть API-подключения`;
   const statusCard = document.getElementById("quickStartApiStatusCard");
   statusCard.className = `quick-start-api-status ${apiModel.visual}`;
   document.getElementById("quickStartApiStatusDot").className = `quick-start-status-dot ${apiModel.visual}`;
@@ -2479,7 +2505,9 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
       ? "Основной route выбран, но secret_ref не подтверждён bounded packet. Это не runtime failure."
       : (apiModel.state === "ok"
         ? "Provider, secret_ref и route представлены как bounded summary. Runtime readiness подтверждается отдельно."
-        : "Основной route не подтверждён bounded snapshot.")
+        : (apiModel.state === "stale"
+          ? "Основной route показан из устаревшего bounded snapshot. Требуется обновление."
+          : "Основной route не подтверждён bounded snapshot."))
   );
 
   setQuickStartChecklistChip("quickStartApiProviderChip", apiModel.provider === "Не настроено" ? "neutral" : "green", apiModel.provider === "Не настроено" ? "unknown" : "OK");
@@ -2500,7 +2528,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   const liveFailure = source === "live" && (safeAccounts.status !== "ok" || safeApi.status !== "ok");
   const stale = fixtureState === "stale";
   const bannerVisual = liveFailure ? "red" : (firstRun ? "neutral" : (stale ? "amber" : (apiModel.visual === "red" || accountVisual === "red" ? "amber" : "blue")));
-  setClassName(banner, "fixture-banner", bannerVisual);
+  setVisualClass(banner, "fixture-banner", bannerVisual);
   banner.textContent = liveFailure
     ? "Live-readonly данные недоступны. Предыдущие fixture-данные не используются."
     : (firstRun
@@ -2512,7 +2540,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   const latest = apiModel.lastCheck !== "нет данных" ? apiModel.lastCheck : "нет данных";
   text("quickStartFooter", `Последняя общая проверка: ${latest} · Детальные расследования остаются в экспертных разделах.`);
   const sidebarDot = document.getElementById("sidebarDot");
-  setClassName(sidebarDot, "dot", bannerVisual);
+  setVisualClass(sidebarDot, "dot", bannerVisual);
   text("sidebarStatus", firstRun ? "Quick Start: first run" : "Quick Start: summary state");
   applyActionAvailability();
 }
@@ -2521,6 +2549,10 @@ function setQuickStartChecklistChip(id, visual, label) {
   const chip = document.getElementById(id);
   chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || "neutral"}`;
   chip.lastElementChild.textContent = label || "unknown";
+}
+
+function setVisualClass(node, base, visual) {
+  node.className = `${base} ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
 }
 
 function accountsFixtureFromOverview(fixture) {

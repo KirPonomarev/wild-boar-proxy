@@ -1,109 +1,190 @@
 {
-  "accountsChip": "устарело",
-  "accountsRows": 4,
-  "apiChip": "Данные недоступны",
-  "apiStatus": "Данные недоступны",
-  "apiStatusText": "Основной route не подтверждён bounded snapshot.",
+  "url": "http://127.0.0.1:8766/?screen=quick-start&source=fixture&state=stale",
+  "bannerClass": "fixture-banner amber",
   "banner": "Упрощённый режим показывает устаревший bounded snapshot; stale не является зелёным состоянием.",
+  "sidebarDotClass": "dot amber",
+  "accountsChip": "устарело",
+  "accountsChipClass": "chip amber",
+  "accountsRows": 4,
+  "apiChip": "Устарело",
+  "apiChipClass": "chip amber",
+  "apiStatus": "Устарело",
+  "apiStatusText": "Основной route показан из устаревшего bounded snapshot. Требуется обновление.",
+  "routeHintHidden": false,
+  "routeHintText": "+1 route · открыть API-подключения",
+  "documentScrollHeight": 1000,
+  "documentScrollWidth": 1600,
+  "mainClientHeight": 942,
+  "mainScrollHeight": 942,
+  "quickStartTop": 166,
+  "quickStartBottom": 930,
+  "quickStartRect": {
+    "top": 166,
+    "bottom": 930,
+    "left": 373,
+    "right": 1531,
+    "width": 1158,
+    "height": 764
+  },
+  "visibleSvgIcons": 0,
+  "visibleImgIcons": 16,
+  "hasCanvas": 0,
+  "hasPre": 0,
+  "hasTextarea": 0,
+  "hasFileInput": 0,
+  "hasPathTokenInputs": 0,
+  "headerCheckAll": {
+    "disabled": true,
+    "text": "Проверить всё",
+    "color": "rgb(110, 103, 95)",
+    "bg": "rgba(246, 241, 234, 0.86)"
+  },
+  "addAccountPrimary": {
+    "disabled": true,
+    "text": "Добавить аккаунт",
+    "color": "rgb(110, 103, 95)",
+    "bg": "rgba(246, 241, 234, 0.86)",
+    "border": "rgba(217, 208, 195, 0.94)"
+  },
   "buttons": [
     {
+      "id": "refreshFixture",
+      "text": "Обновить",
+      "className": "button",
+      "clientWidth": 136,
+      "scrollWidth": 136,
+      "clientHeight": 38,
+      "scrollHeight": 38
+    },
+    {
+      "id": "quickStartCheckAllAction",
+      "text": "Проверить всё",
+      "className": "button primary quick-start-only",
+      "clientWidth": 158,
+      "scrollWidth": 158,
+      "clientHeight": 38,
+      "scrollHeight": 38
+    },
+    {
+      "id": "quickStartAddAccountAction",
+      "text": "Добавить аккаунт",
       "className": "button primary onboard-action",
       "clientWidth": 182,
-      "disabled": true,
-      "id": "quickStartAddAccountAction",
       "scrollWidth": 182,
-      "text": "Добавить аккаунт"
+      "clientHeight": 38,
+      "scrollHeight": 38
     },
     {
+      "id": "quickStartCheckAccountsAction",
+      "text": "Проверить",
       "className": "button small disabled",
       "clientWidth": 114,
-      "disabled": true,
-      "id": "quickStartCheckAccountsAction",
       "scrollWidth": 114,
-      "text": "Проверить"
+      "clientHeight": 34,
+      "scrollHeight": 34
     },
     {
-      "className": "button small api-route-action",
-      "clientWidth": 186,
-      "disabled": true,
+      "id": "",
+      "text": "Настроить API",
+      "className": "button small",
+      "clientWidth": 143,
+      "scrollWidth": 143,
+      "clientHeight": 34,
+      "scrollHeight": 34
+    },
+    {
       "id": "quickStartCheckApiAction",
-      "scrollWidth": 186,
-      "text": "Проверить API"
+      "text": "Проверить API",
+      "className": "button small api-route-action",
+      "clientWidth": 180,
+      "scrollWidth": 180,
+      "clientHeight": 24,
+      "scrollHeight": 24
     }
   ],
+  "buttonOverflow": [],
+  "chipOverflow": [],
   "chips": [
     {
+      "id": "quickStartAccountsChip",
+      "text": "устарело",
       "className": "chip amber",
       "clientWidth": 92,
       "scrollWidth": 92,
-      "text": "устарело"
+      "clientHeight": 26,
+      "scrollHeight": 26
     },
     {
-      "className": "chip red",
-      "clientWidth": 128,
-      "scrollWidth": 128,
-      "text": "Проверить"
-    },
-    {
+      "id": "",
+      "text": "Устарело",
       "className": "chip amber",
       "clientWidth": 128,
       "scrollWidth": 128,
-      "text": "Устарело"
+      "clientHeight": 26,
+      "scrollHeight": 26
     },
     {
+      "id": "",
+      "text": "Устарело",
       "className": "chip amber",
       "clientWidth": 128,
       "scrollWidth": 128,
-      "text": "Устарело"
+      "clientHeight": 26,
+      "scrollHeight": 26
     },
     {
+      "id": "",
+      "text": "Устарело",
       "className": "chip amber",
       "clientWidth": 128,
       "scrollWidth": 128,
-      "text": "Пауза"
+      "clientHeight": 26,
+      "scrollHeight": 26
     },
     {
-      "className": "chip red",
-      "clientWidth": 156,
-      "scrollWidth": 156,
-      "text": "Данные недоступны"
+      "id": "",
+      "text": "Устарело",
+      "className": "chip amber",
+      "clientWidth": 128,
+      "scrollWidth": 128,
+      "clientHeight": 26,
+      "scrollHeight": 26
     },
     {
+      "id": "quickStartApiChip",
+      "text": "Устарело",
+      "className": "chip amber",
+      "clientWidth": 92,
+      "scrollWidth": 92,
+      "clientHeight": 26,
+      "scrollHeight": 26
+    },
+    {
+      "id": "quickStartApiProviderChip",
+      "text": "OK",
+      "className": "chip green",
+      "clientWidth": 48,
+      "scrollWidth": 48,
+      "clientHeight": 26,
+      "scrollHeight": 26
+    },
+    {
+      "id": "quickStartApiSecretChip",
+      "text": "available",
+      "className": "chip green",
+      "clientWidth": 99,
+      "scrollWidth": 99,
+      "clientHeight": 26,
+      "scrollHeight": 26
+    },
+    {
+      "id": "quickStartApiRouteChip",
+      "text": "stale",
       "className": "chip neutral",
-      "clientWidth": 84,
-      "scrollWidth": 84,
-      "text": "unknown"
-    },
-    {
-      "className": "chip neutral",
-      "clientWidth": 84,
-      "scrollWidth": 84,
-      "text": "unknown"
-    },
-    {
-      "className": "chip neutral",
-      "clientWidth": 84,
-      "scrollWidth": 84,
-      "text": "unknown"
+      "clientWidth": 70,
+      "scrollWidth": 70,
+      "clientHeight": 26,
+      "scrollHeight": 26
     }
-  ],
-  "documentScrollHeight": 1000,
-  "documentScrollWidth": 1600,
-  "hasCanvas": 0,
-  "hasFileInput": 0,
-  "hasPre": 0,
-  "hasTextarea": 0,
-  "headerCheckAll": {
-    "bg": "rgba(246, 241, 234, 0.86)",
-    "color": "rgb(110, 103, 95)",
-    "disabled": true,
-    "text": "Проверить всё"
-  },
-  "mainClientHeight": 942,
-  "mainScrollHeight": 942,
-  "quickStartBottom": 930,
-  "quickStartTop": 156,
-  "url": "http://127.0.0.1:8766/?screen=quick-start&source=fixture&state=stale",
-  "visibleImgIcons": 10,
-  "visibleSvgIcons": 0
+  ]
 }
