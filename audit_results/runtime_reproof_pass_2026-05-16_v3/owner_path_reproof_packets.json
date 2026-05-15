@@ -1,0 +1,26 @@
+{
+  "healthcheck_packet_summary": {
+    "result": "insufficient_for_effective_runtime_consumer_settlement",
+    "effective_mode": "stable",
+    "effective_stable_runtime_consumer_source_status": "observed_source_active",
+    "consumer_activation_readiness_status": "activation_pending",
+    "activation_evidence_surface_status": "snapshot_stale"
+  },
+  "launch_smoke_packet_summary": {
+    "machine_error_code": "OK",
+    "launcher_exit_code": 0,
+    "desired_mode": "stable",
+    "effective_mode": "stable",
+    "effective_stable_runtime_consumer_source_status": "approved_target_active_by_activation_evidence",
+    "effective_stable_runtime_consumer_source_matches_desired": true,
+    "activation_evidence_surface_status": "snapshot_present",
+    "activation_snapshot_freshness": "fresh",
+    "consumer_activation_readiness_status": "aligned",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+    ]
+  }
+}

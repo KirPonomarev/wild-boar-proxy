@@ -1,0 +1,17 @@
+{
+  "desired_stable_runtime_consumer_source": {
+    "status": "approved_target_selected",
+    "source_kind": "approved_repair_target"
+  },
+  "effective_stable_runtime_consumer_source_before": {
+    "status": "observed_source_active",
+    "source_kind": "observed_stable_inventory_source",
+    "matches_desired": false
+  },
+  "effective_stable_runtime_consumer_source_after": {
+    "status": "approved_target_active_by_activation_evidence",
+    "source_kind": "approved_repair_target",
+    "matches_desired": true
+  },
+  "classification": "launch_smoke_closed_runtime_consumer_gap_that_healthcheck_left_open"
+}

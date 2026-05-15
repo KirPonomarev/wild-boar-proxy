@@ -1,0 +1,17 @@
+{
+  "before": {
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "consumer_activation_readiness_status": "activation_pending"
+  },
+  "after": {
+    "claim_gate_status": "clear",
+    "claim_gate_sources": [],
+    "policy_drift_status": "clear",
+    "consumer_activation_readiness_status": "aligned"
+  },
+  "interpretation": "runtime reproof refreshed activation evidence strongly enough for status to switch from observed auth-dir drift to approved-target clear drift"
+}
