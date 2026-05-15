@@ -1,0 +1,23 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_CANDIDATE_DIAGNOSE_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "owner_surface": "accounts onboard --json",
+  "prior_stop_packet": {
+    "machine_error_code": "ONBOARD_FAILED",
+    "final_outcome": "import_failed",
+    "selection_status": "no_new_backend_detected",
+    "selected_backend_id": "",
+    "new_backend_ids": [],
+    "reserve_first_proven": false
+  },
+  "stderr_sideband": "No sandbox-local auth candidate is available.",
+  "post_refresh": {
+    "accounts_count": 0,
+    "post_refresh_matches_owner_failure": true
+  },
+  "supporting_status": {
+    "machine_error_code": "MISSING_JSON_FILE",
+    "human_message": "Missing JSON file: /Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json"
+  },
+  "forbidden_live_path_drift": false
+}

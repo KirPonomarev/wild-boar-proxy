@@ -1,0 +1,14 @@
+{
+  "contour": "SANDBOX_ONBOARDING_AUTH_CANDIDATE_DIAGNOSE_PASS",
+  "decision": "GO_TO_SANDBOX_ONBOARDING_AUTH_CANDIDATE_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "localized_cause": "missing auth material under the sandbox owner lane",
+  "discovery_bug_observed": false,
+  "env_binding_bug_observed": false,
+  "default_auth_file_missing": true,
+  "inventory_candidates_missing": true,
+  "live_auth_shortcut_outside_owner_surface_admitted": false,
+  "next_contour": "SANDBOX_ONBOARDING_AUTH_CANDIDATE_ADMISSION_PASS",
+  "next_contour_class": "admission",
+  "reason": "the next step must explicitly admit secret-bearing auth source and destination surfaces before any materialization or copy"
+}
