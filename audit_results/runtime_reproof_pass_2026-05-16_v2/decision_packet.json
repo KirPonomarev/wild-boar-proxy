@@ -1,0 +1,20 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v2",
+  "status": "completed",
+  "final_verdict": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "why": [
+    "healthcheck alone did not settle runtime truth: effective source remained observed and activation readiness remained pending",
+    "launch smoke succeeded with launcher_exit_code=0 and promoted effective stable runtime consumer truth to approved_target_active_by_activation_evidence",
+    "post-smoke status cleared claim_gate and stable claim-surface policy_drift while desired and effective runtime truth both pointed to approved_repair_target",
+    "post-smoke rotation inspect still reports ROTATION_EVIDENCE_STALE(selected_backend_snapshot_stale), so exact auth-source admission remains unearned and selector freshness is now the narrowest blocker"
+  ],
+  "next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "anti_loop_passed": true,
+  "next_exact_command": "python3 -m wild_boar_proxy sync --json",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "sandbox auth.json materialization",
+    "repeating stable repair without new evidence"
+  ]
+}

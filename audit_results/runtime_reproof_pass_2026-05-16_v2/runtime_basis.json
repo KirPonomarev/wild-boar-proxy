@@ -1,0 +1,26 @@
+{
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v2",
+  "pre_state": {
+    "head": "0a3d867",
+    "desired_mode": "stable",
+    "effective_mode": "managed",
+    "claim_gate_status": "blocked",
+    "claim_gate_sources": [
+      "policy_drift"
+    ],
+    "policy_drift_status": "detected",
+    "desired_source_status": "approved_target_selected",
+    "effective_source_status": "observed_source_active",
+    "consumer_activation_readiness_status": "activation_pending",
+    "rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale"
+  },
+  "owner_path_sequence": [
+    "healthcheck --json",
+    "launch smoke --json",
+    "status --json",
+    "rollout rotation inspect --json"
+  ],
+  "healthcheck_alone_sufficient": false
+}
