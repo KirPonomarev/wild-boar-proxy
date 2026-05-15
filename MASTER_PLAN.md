@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.45
-PLAN_DATE: 2026-05-08
+PLAN_VERSION: 1.46
+PLAN_DATE: 2026-05-15
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Execution wave 1 active; 16-account field evidence observed; prior blocked evidence-lane artifacts remain preserved as history; direct same-day 20-account re-entry closed `NO_GO` on 2026-05-08 because the canonical stage-20 owner path lacked an explicit eligible reserve backend; fixed long-window metrics gating remains removed from the active plan; next primary contour is execution-core repair, reserve-first stage-20 re-entry, post-advance same-day validation, then canonical stop before basic companion UI
+PLAN_STATUS: Corrected live-readonly and sandbox admission wave active; prior execution-core repair artifacts remain preserved as evidence, but do not authorize continuing the external-models micro-contour chain by inertia; next primary contour is `TECH_GATE_AND_ENV_INVENTORY_PASS`; account onboarding, lifecycle mutation, route mutation, runtime sync, launch, diagnostics, and stage/pilot gates remain parked until their preceding live-readonly and sandbox boundaries are proven
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -916,14 +916,557 @@ they do not define the current active execution contour.
 
 The active forward plan is now:
 
-- run one approved same-day live validation for the real 20-account contour
-- capture machine-carried evidence from existing owner surfaces
-- use that contour to resolve scale validation honestly
-- then close remaining development questions
-- then build the basic companion UI
-- then continue pre-release testing before any release claim
+- run live-readonly and sandbox admission first
+- prove web live server binding, command action packets, sandbox data
+  boundaries, and rollback discipline before account or route mutation
+- run sandbox onboarding, lifecycle, API-route, runtime mode, launch,
+  diagnostics, and full operator-session contours in order
+- repair only packet-proven field defects after the sandbox operator session
+- only then reopen stage 10/15/20 and pilot gates with machine-carried
+  evidence
 
 No fixed long-window metrics requirement is part of the active governing plan.
+
+## Corrected Live/Sandbox Operating Sequence
+
+This section supersedes the prior practice of continuing narrow execution-core
+repair contours by inertia after each `STOP_AND_DIAGNOSE`.
+
+The current branch has already produced later execution-core repair artifacts
+than the historical web visual QA note. Those artifacts remain useful evidence,
+but the active strategy now resets to a factual live-readonly and sandbox
+admission wave before further account, route, runtime, or launch mutation.
+
+This wave is not a rich UI expansion and does not satisfy or bypass the design
+gate. It is an operator-safety and truth-surface wave for existing command
+surfaces.
+
+Global rules for every contour in this sequence:
+
+1. `git status --short --untracked-files=no` must be clean for tracked files
+   before starting.
+2. The previous contour must be closed with verification, commit, and push.
+3. Strict JSON command packets are the primary truth source.
+4. Command `OK` does not equal runtime truth without refresh proof.
+5. Live mutation requires owner approval, declared write surfaces, and rollback
+   expectations.
+6. Web UI actions must not accept path, file, token, secret, or raw config
+   payloads from the UI.
+7. The UI must not read raw logs, raw config, auth files, state files, or secret
+   values.
+8. Fixture data must not be treated as live truth.
+9. Every contour closes with an audit packet, closeout, commit, and push.
+10. If command/write surfaces and rollback are already admitted and current
+    packet truth satisfies preconditions, execute the bounded contour instead
+    of opening another admission contour.
+11. A successful prerequisite that the next contour depends on should remain in
+    place unless rollback is required by a failed or contradictory packet.
+12. Historical or transient truth is not current truth after rollback.
+
+Final active contour order:
+
+```text
+0.  TECH_GATE_AND_ENV_INVENTORY_PASS
+1.  WEB_LIVE_SERVER_READONLY_ADMISSION_PASS
+2.  READONLY_TRUTH_PACKET_BASELINE_PASS
+3.  SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS
+4.  SANDBOX_LIVE_SERVER_BINDING_PASS
+5.  ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS
+6.  ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS
+7.  API_ROUTES_READONLY_AND_SECRET_REF_PASS
+8.  API_ROUTE_CHECK_AND_DISABLED_REMOVE_SANDBOX_PASS
+9.  RUNTIME_MODE_AND_SYNC_SANDBOX_PASS
+10. CLIENT_LAUNCH_SANDBOX_DISPATCH_PASS
+11. DIAGNOSTICS_EXPORT_AND_PRIVACY_SANDBOX_PASS
+12. ACTION_LEDGER_LIVE_E2E_PASS
+13. CONTRACT_ADMISSION_PACKETS_PASS
+14. SANDBOX_FULL_OPERATOR_SESSION_PASS
+15. FIELD_REPAIR_LOOP_1_PASS
+16+. Stage 10 / 15 / 20 / Pilot Gate after evidence
+```
+
+The immediate next contour is:
+
+```text
+TECH_GATE_AND_ENV_INVENTORY_PASS
+```
+
+The previously selected
+`SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_VALIDATE_EVIDENCE_PASS` is parked.
+It may be resumed only if `TECH_GATE_AND_ENV_INVENTORY_PASS` and later sandbox
+binding evidence prove that this route-validation lane is still the correct
+owner-surface path.
+
+### 0. `TECH_GATE_AND_ENV_INVENTORY_PASS`
+
+Goal: establish the factual repo/runtime state before live-readonly work.
+
+Actions:
+
+```text
+git status --short --untracked-files=no
+git log --oneline -n 10
+verify git hooks
+verify CLI entrypoints
+verify web_design_live_server.py
+verify web_design_command_adapter.py as read-only first
+verify action allowlist read-only surfaces
+verify api/actions contract
+collect admitted UI actions
+collect readonly commands
+collect mutation commands
+collect deferred or missing surfaces
+```
+
+Outputs:
+
+```text
+inventory_packet.json
+actions_matrix.json
+risk_matrix.md
+decision: can proceed to live-readonly or STOP_AND_DIAGNOSE
+```
+
+Stop conditions:
+
+```text
+dirty tracked diff
+unclear command entrypoint
+allowlist/runtime contradiction
+```
+
+### 1. `WEB_LIVE_SERVER_READONLY_ADMISSION_PASS`
+
+Goal: run the live server in read-only mode only.
+
+Actions:
+
+```text
+start live server
+open ?screen=quick-start&source=live
+check /api/actions
+check /api/live-readonly
+check fixture fallback behavior
+check invalid JSON handling
+check stale/error copy
+check disabled actions without sensitive metadata
+```
+
+Forbidden:
+
+```text
+onboard
+mode set
+launch client
+import
+reset
+write config
+```
+
+Outputs:
+
+```text
+live_server_readonly_packet.json
+endpoint_matrix.json
+screenshots
+```
+
+### 2. `READONLY_TRUTH_PACKET_BASELINE_PASS`
+
+Goal: capture the read-only baseline truth.
+
+Commands:
+
+```text
+status --json
+mode get --json
+accounts list --json
+healthcheck --json
+rollout rotation inspect --json
+external-models status/models/routes read-only, if present
+```
+
+UI checks:
+
+```text
+Quick Start
+Overview
+Accounts
+API Connections
+Diagnostics
+Settings summaries
+```
+
+Acceptance:
+
+```text
+no stale-green
+no fixture truth in live failure
+no raw logs/secrets
+UI state matches packet scope
+```
+
+### 3. `SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_PASS`
+
+Goal: prepare a safe sandbox.
+
+Actions:
+
+```text
+identify working host-client path
+identify sandbox data dir
+identify auth/config/state/log boundaries
+forbid writes into the working contour
+create snapshot and rollback plan
+describe teardown
+describe sandbox separation proof
+```
+
+Forbidden:
+
+```text
+copying live auth without explicit decision
+onboarding
+import
+config writes
+```
+
+Outputs:
+
+```text
+sandbox_boundary_packet.json
+rollback_runbook.md
+write_surface_declaration.md
+```
+
+### 4. `SANDBOX_LIVE_SERVER_BINDING_PASS`
+
+Goal: prove the live server and command runner are bound to sandbox paths.
+
+Actions:
+
+```text
+start live server with sandbox env
+check status/mode/accounts from sandbox
+prove working paths are not used
+check changed_files scope
+check env vars
+check ports
+check teardown
+```
+
+Acceptance:
+
+```text
+sandbox source proven
+production/work host-client data untouched
+rollback possible
+```
+
+### 5. `ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS`
+
+Goal: run the first sandbox onboarding as reserve-first.
+
+Actions:
+
+```text
+owner approval for sandbox mutation
+run onboarding only through accounts onboard --json
+check selected_backend_id
+check new_backend_ids
+check reserve_first_enforced
+check pool_after_onboarding = reserve
+check active_routing_changed = false
+check validate outcome
+check sync outcome
+run accounts list --json after the command
+compare UI result and action ledger
+```
+
+Stop conditions:
+
+```text
+no reserve-first proof
+ambiguous auth
+no_new_auth shown as green
+new backend enters active
+refresh failed
+```
+
+### 6. `ACCOUNT_LIFECYCLE_SANDBOX_ACTIONS_PASS`
+
+Goal: verify lifecycle actions on a sandbox account.
+
+Actions:
+
+```text
+validate_account
+hold_account
+release_account
+promote_account
+demote_account
+retire_account only for a disposable test account
+after each action run accounts list --json
+check Account Detail drawer
+check disabled reasons
+check confirmation for risky actions
+```
+
+Acceptance:
+
+```text
+payload only ui_action + account_id
+disabled action does not dispatch
+success only after refresh proof
+```
+
+### 7. `API_ROUTES_READONLY_AND_SECRET_REF_PASS`
+
+Goal: verify API route registry display without editing.
+
+Actions:
+
+```text
+collect read-only routes snapshot
+select main route for Quick Start
+check enabled/disabled/unknown states
+check secret_ref name/status only
+check missing_secret amber state
+check support packet is not health truth
+```
+
+Forbidden:
+
+```text
+raw route JSON
+token input
+secret value
+provider config edit
+```
+
+### 8. `API_ROUTE_CHECK_AND_DISABLED_REMOVE_SANDBOX_PASS`
+
+Goal: verify admitted route actions.
+
+Actions:
+
+```text
+api_route_check if admitted
+api_route_validate if admitted
+api_route_remove only for disabled route
+preflight
+strong confirmation
+command result
+read-only refresh
+route absent proof
+```
+
+Stop conditions:
+
+```text
+enabled route removal
+payload contains raw JSON/provider/model/path/secret
+refresh mismatch
+```
+
+### 9. `RUNTIME_MODE_AND_SYNC_SANDBOX_PASS`
+
+Goal: verify runtime mode and sync in sandbox.
+
+Actions:
+
+```text
+mode get --json
+mode set managed --json
+refresh
+mode set stable --json
+refresh
+sync --json if admitted
+launch smoke --json if admitted
+check desired/effective mismatch
+```
+
+Acceptance:
+
+```text
+green only from fresh consistent packet
+mode command OK is not success without refresh
+stable_repair_apply remains deferred
+```
+
+### 10. `CLIENT_LAUNCH_SANDBOX_DISPATCH_PASS`
+
+Goal: verify launch client as bounded dispatch.
+
+Actions:
+
+```text
+check selected client packet
+check launch readiness
+launch client --json
+check runtime precondition
+check env sanitization
+check dispatch_observed
+check claim_scope
+```
+
+Rule:
+
+```text
+"dispatch requested" is allowed
+"client running" or "session ready" requires packet proof
+```
+
+### 11. `DIAGNOSTICS_EXPORT_AND_PRIVACY_SANDBOX_PASS`
+
+Goal: verify diagnostics export and privacy posture.
+
+Actions:
+
+```text
+diagnostics export --json
+artifact reference basename/id only
+redaction status
+changed files count-only
+action ledger entry
+Diagnostics / Privacy screen
+```
+
+Forbidden:
+
+```text
+read bundle in UI
+read raw logs
+show full path
+treat export as runtime healthy
+```
+
+### 12. `ACTION_LEDGER_LIVE_E2E_PASS`
+
+Goal: verify unified action result grammar.
+
+Required states:
+
+```text
+running
+duplicate_blocked
+ok_refresh_pending
+ok_refresh_complete
+ok_refresh_failed
+command_error
+invalid_json
+timeout
+integration_failure
+partial_success
+needs_user_action
+```
+
+Acceptance:
+
+```text
+no raw argv
+no secrets/paths
+special fields only in expanded detail
+no stale-green
+```
+
+### 13. `CONTRACT_ADMISSION_PACKETS_PASS`
+
+Goal: document future missing contracts.
+
+Included admissions:
+
+```text
+data_layout_check
+data_layout_snapshot
+data_layout_rollback
+import_existing_preflight
+import_existing_dry_run
+import_existing_snapshot
+import_existing_apply
+import_existing_rollback
+diagnostics_history_packet
+```
+
+Rule:
+
+```text
+spec/admission only
+no implementation
+no live mutation
+```
+
+### 14. `SANDBOX_FULL_OPERATOR_SESSION_PASS`
+
+Goal: run the full operator scenario in sandbox.
+
+Scenario:
+
+```text
+Quick Start
+accounts read-only
+onboard test account
+validate
+hold/release
+API check
+diagnostics export
+mode switch
+launch sandbox client
+action ledger review
+final accounts/status/healthcheck refresh
+```
+
+Outputs:
+
+```text
+operator_session_packet.json
+screenshots
+mismatch_list.md
+repair_backlog.md
+```
+
+### 15. `FIELD_REPAIR_LOOP_1_PASS`
+
+Goal: repair only factually observed issues.
+
+Classification:
+
+```text
+UI bug
+command adapter bug
+runtime/core truth bug
+docs/runbook bug
+test coverage gap
+```
+
+Rule:
+
+```text
+do not fix everything in one contour
+each fix uses an atomic commit and push
+```
+
+### Parking Lot: Stage And Pilot
+
+Do not start these before sandbox evidence:
+
+```text
+ACTIVE_POOL_STAGE_10_PROOF_PASS
+ACTIVE_POOL_STAGE_15_PROOF_PASS
+ACTIVE_POOL_STAGE_20_REENTRY_PASS
+PILOT_READINESS_GATE_PASS
+```
+
+They become active only after:
+
+```text
+sandbox onboarding PASS
+lifecycle PASS
+runtime mode PASS
+diagnostics PASS
+fallback readiness PASS
+machine-carried evidence exists
+```
 
 ### Workstream 08: Experiment Package
 
@@ -1123,22 +1666,25 @@ It must not produce `stable_16_proved`, `stable_20_proved`, `scale_complete`,
 
 ## Implementation Order
 
-1. Freeze execution core.
-2. Freeze state schema and state transitions.
-3. Freeze command API.
-4. Close the current stage-20 command API work, including serialized stage-advance owner-path closure and interleaving tests.
-5. Capture the 16-account evidence packet.
-6. Upgrade registry and probing architecture for 20-account capacity.
-7. Finish runtime hardening.
-8. Run same-day live validation for 20 accounts.
-9. Capture and redact the 20-account machine evidence packet.
-10. Close remaining control-layer development questions.
-11. Productize onboarding where needed for release flow.
-12. Build basic companion UI.
-13. Add diagnostics export.
-14. Add installer and legacy import.
-15. Prepare experimental package.
-16. Run pre-release testing and release-candidate regression.
+Active implementation order is now governed by the corrected live/sandbox
+operating sequence above.
+
+The previous macro order remains a release roadmap, not the active next-action
+queue. Stage and pilot contours are parked until the sandbox evidence gates are
+closed.
+
+1. Run `TECH_GATE_AND_ENV_INVENTORY_PASS`.
+2. Run live-readonly admission and read-only truth baseline.
+3. Prove sandbox data boundaries and live-server sandbox binding.
+4. Prove sandbox onboarding reserve-first behavior.
+5. Prove sandbox lifecycle actions.
+6. Prove API route read-only and admitted route actions.
+7. Prove runtime mode/sync, launch dispatch, diagnostics, and action ledger.
+8. Run one full sandbox operator session.
+9. Run a focused field repair loop for packet-proven defects only.
+10. Reopen stage 10/15/20 and pilot gates only after sandbox evidence exists.
+11. Continue packaging, installer, diagnostics history, and pre-release
+    regression only after the relevant gate evidence is committed and pushed.
 
 ## Estimate
 
