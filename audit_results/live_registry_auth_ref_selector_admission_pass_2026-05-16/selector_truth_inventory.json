@@ -1,0 +1,60 @@
+{
+  "contour": "LIVE_REGISTRY_AUTH_REF_SELECTOR_ADMISSION_PASS",
+  "selector_surfaces": [
+    {
+      "surface": "runtime_state.selected_backend_snapshot",
+      "source_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "present": true,
+      "canon_supported": true,
+      "validation_status": "valid",
+      "evidence_status": "participation_evidence_contradicted",
+      "evidence_reason": "policy_drift_detected",
+      "selected_snapshot_count": 9,
+      "narrows_current_owner_eligible_set_to_count": 8,
+      "selected_not_currently_eligible_backend_ids": [
+        "k-gpt-pro-3k"
+      ],
+      "exact_singleton": false
+    },
+    {
+      "surface": "runtime_state.selected_backend_ids",
+      "source_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "present": true,
+      "canon_supported": true,
+      "selected_backend_ids": [],
+      "observed_at_utc": "2026-05-11T07:52:10.916285+00:00",
+      "narrows_current_owner_eligible_set_to_count": 0,
+      "exact_singleton": false
+    },
+    {
+      "surface": "stable_runtime_consumer_snapshot",
+      "source_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "present": true,
+      "canon_supported": true,
+      "selected_source_kind": "approved_repair_target",
+      "selected_source_path": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+      "snapshot_freshness": "stale",
+      "family_entry_count": 9,
+      "snapshot_alone_sufficient": false,
+      "exact_singleton": false
+    },
+    {
+      "surface": "status.stable_runtime_consumer.effective_stable_runtime_consumer_source",
+      "source_file": "status --json",
+      "present": true,
+      "canon_supported": true,
+      "source_kind": "observed_stable_inventory_source",
+      "resolved_path": "/Users/kirillponomarev/.cli-proxy-api",
+      "matches_desired": true,
+      "exact_singleton": false
+    },
+    {
+      "surface": "backend_registry.stable_default_backend_id",
+      "source_file": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "present": true,
+      "canon_supported_as_selector": false,
+      "backend_id": "gpt2026bis-team",
+      "why_not_selector": "registry policy field alone is insufficient to select one exact transfer source"
+    }
+  ]
+}
