@@ -1,0 +1,17 @@
+{
+  "contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "current_truth": {
+    "direct_use_of_candidate_family_is_root_local": false,
+    "why_not_materialization_now": "a direct transfer from the current candidate family would still require choosing one forbidden-root source surface without a canon-supported selector"
+  },
+  "next_required_boundary": {
+    "kind": "selector_admission",
+    "must_name": [
+      "one exact source selector",
+      "one exact source surface",
+      "one transfer-safe intermediate boundary if needed",
+      "one rollback domain"
+    ]
+  }
+}

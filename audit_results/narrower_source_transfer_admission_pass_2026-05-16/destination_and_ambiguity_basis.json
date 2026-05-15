@@ -1,0 +1,11 @@
+{
+  "contour": "NARROWER_SOURCE_TRANSFER_ADMISSION_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "materialization_earned_before_this_contour": false,
+  "current_candidate_family": "live_registry_auth_refs_under_forbidden_root",
+  "allowed_exact_auth_ref_count": 12,
+  "selected_backend_ids_count": 0,
+  "stable_default_backend_id": "gpt2026bis-team",
+  "non_guessing_required": true
+}
