@@ -1,0 +1,24 @@
+{
+  "admitted_payload_basis": "/Volumes/Work/wild-boar-proxy/audit_results/sandbox_active_lane_external_models_route_add_repair_pass_2026-05-15/route_payload_plan.json",
+  "payload_field_equivalence": {
+    "schema_version": 1,
+    "route_id": "wbp-claude-sonnet-4-6-thinking",
+    "display_name": "Claude Sonnet 4.6 Thinking",
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "endpoint_path": "/chat/completions",
+    "upstream_model": "claude-sonnet-4-6-thinking",
+    "compatibility": "openai_chat_completions",
+    "auth": {
+      "type": "none"
+    },
+    "cost_class": "paid_or_free_limited",
+    "lane_role": "candidate",
+    "fallback_eligible": false,
+    "enabled": true
+  },
+  "execution_guard": {
+    "required_env_binding": "WBP_EXTERNAL_MODELS_DIR=/Users/kirillponomarev/.codex-custom-test/external-models",
+    "reason": "unbound command defaults to ~/.wild-boar-proxy/external-models"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_RESTORE_REPAIR_PASS",
+  "status": "complete",
+  "final_verdict": "GO_TO_SANDBOX_ACTIVE_LANE_EXTERNAL_MODELS_ROUTE_VALIDATE_EVIDENCE_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout": "1490086 Audit external-models validate scope restoration admission",
+  "decision_basis": [
+    "sandbox restore command was re-run with explicit WBP_EXTERNAL_MODELS_DIR binding",
+    "changed_files on final restore contained only /Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "sandbox routes_count moved from 0 to 1",
+    "sandbox models_count moved from 0 to 1",
+    "sandbox state.json and secrets.env stayed unchanged",
+    "validate precondition is now truthfully satisfied"
+  ],
+  "recorded_incident": {
+    "initial_unbound_command_targeted_default_path": true,
+    "default_path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+    "incident_localized": true,
+    "incident_recovered": true,
+    "guard_required_for_next_contour": "bind WBP_EXTERNAL_MODELS_DIR to /Users/kirillponomarev/.codex-custom-test/external-models"
+  },
+  "declared_next_command_surface": "WBP_EXTERNAL_MODELS_DIR=/Users/kirillponomarev/.codex-custom-test/external-models python3 -m wild_boar_proxy external-models routes validate --json --route wbp-claude-sonnet-4-6-thinking",
+  "declared_next_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+    "/Users/kirillponomarev/.codex-custom-test/external-models/evidence/*"
+  ]
+}

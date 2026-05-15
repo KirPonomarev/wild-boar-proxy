@@ -1,0 +1,30 @@
+{
+  "sandbox_before_restore": {
+    "routes.json": {
+      "sha256": "711b3bde3287264a4a1e90eb2ccb362848032973213137c3903009d6d70b3df4",
+      "size_bytes": 42
+    },
+    "state.json": {
+      "sha256": "f11ebe5d4aea7a9cd7ff5e54887502bcf3ea1f64f32e832996c79d32c4f84fc5",
+      "size_bytes": 554
+    },
+    "secrets.env": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0
+    }
+  },
+  "rollback_contract": {
+    "declared_rollback_surface": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+    "restore_method": "byte-faithful restore to pre-restore snapshot if post-restore proof contradicts route restoration claim"
+  },
+  "recorded_recovery_episode": {
+    "unintended_default_path_add_observed": true,
+    "default_path": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+    "default_path_pre_add_count": 0,
+    "rollback_sequence": [
+      "routes disable --json --route wbp-claude-sonnet-4-6-thinking",
+      "routes remove --json --route wbp-claude-sonnet-4-6-thinking"
+    ],
+    "default_path_post_rollback_count": 0
+  }
+}
