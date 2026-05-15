@@ -1,0 +1,19 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "decision": "GO_TO_READONLY_TRUTH_PACKET_BASELINE_PASS",
+  "blocked_by": [],
+  "reasons": [
+    "live server started without mutation-oriented flags",
+    "all four readonly GET endpoints were reachable and returned valid JSON",
+    "/api/actions behaved as metadata-only surface and did not leak adapter command ids or launch client path",
+    "UI bound to live readonly source on quick-start, overview, and accounts",
+    "controlled live failure on accounts refresh did not fall back to fixture truth and did not show false healthy state",
+    "no POST /api/action call was made during the contour"
+  ],
+  "required_next_preconditions": [
+    "keep next contour GET-only for endpoint admission vs baseline boundary",
+    "do not click admitted live-action buttons during readonly baseline work unless contour explicitly authorizes mutations",
+    "treat /api/actions as metadata, not runtime truth",
+    "keep fixture and live truth strictly separated"
+  ]
+}

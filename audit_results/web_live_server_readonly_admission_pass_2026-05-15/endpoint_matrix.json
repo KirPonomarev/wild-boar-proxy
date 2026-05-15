@@ -1,0 +1,58 @@
+[
+  {
+    "endpoint": "/api/live-readonly",
+    "method": "GET",
+    "reachable": true,
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "valid_json": true,
+    "truth_role_claimed": "runtime_summary_readonly",
+    "endpoint_reachable": true,
+    "json_shape_valid": true,
+    "ui_bound": true,
+    "runtime_semantics_verified": false,
+    "notes": "Top-level keys observed: commands, events, evidence_summary, has_warnings, pool_summary, primary_truth_ok, runtime, schema_version, source, status, ui_state, warnings."
+  },
+  {
+    "endpoint": "/api/accounts-readonly",
+    "method": "GET",
+    "reachable": true,
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "valid_json": true,
+    "truth_role_claimed": "accounts_snapshot_readonly",
+    "endpoint_reachable": true,
+    "json_shape_valid": true,
+    "ui_bound": true,
+    "runtime_semantics_verified": false,
+    "notes": "Top-level keys observed: accounts, commands, primary_truth_ok, privacy, registry_identity, schema_version, source, status, summary."
+  },
+  {
+    "endpoint": "/api/api-connections-readonly",
+    "method": "GET",
+    "reachable": true,
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "valid_json": true,
+    "truth_role_claimed": "api_connections_snapshot_readonly",
+    "endpoint_reachable": true,
+    "json_shape_valid": true,
+    "ui_bound": true,
+    "runtime_semantics_verified": false,
+    "notes": "Top-level keys observed: adapter, commands, primary_truth_ok, privacy, routes, schema_version, source, status, summary."
+  },
+  {
+    "endpoint": "/api/actions",
+    "method": "GET",
+    "reachable": true,
+    "status_code": 200,
+    "content_type": "application/json; charset=utf-8",
+    "valid_json": true,
+    "truth_role_claimed": "action_metadata_only",
+    "endpoint_reachable": true,
+    "json_shape_valid": true,
+    "ui_bound": true,
+    "runtime_semantics_verified": false,
+    "notes": "Observed source=ui_action_metadata, status=ok, actions_count=22, no adapter_command_id leakage, no launch_client_path leakage."
+  }
+]

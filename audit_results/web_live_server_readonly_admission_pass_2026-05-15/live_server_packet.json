@@ -1,0 +1,25 @@
+{
+  "contour": "WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "server": {
+    "host": "127.0.0.1",
+    "port": 64246,
+    "startup_mode": "python3 -m wild_boar_proxy.web_design_live_server --host 127.0.0.1 --port 64246",
+    "launch_client_path_supplied": false
+  },
+  "readonly_endpoints": [
+    "/api/live-readonly",
+    "/api/accounts-readonly",
+    "/api/api-connections-readonly",
+    "/api/actions"
+  ],
+  "post_action_called": false,
+  "mutation_commands_called": false,
+  "write_side_effects_observed": false,
+  "ui_metadata_surface": {
+    "source": "ui_action_metadata",
+    "actions_count": 22,
+    "adapter_command_id_leaked": false,
+    "launch_client_path_leaked": false
+  },
+  "decision_candidate": "GO_TO_READONLY_TRUTH_PACKET_BASELINE_PASS"
+}
