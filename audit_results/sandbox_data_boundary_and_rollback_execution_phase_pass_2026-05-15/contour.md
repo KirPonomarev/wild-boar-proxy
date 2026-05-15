@@ -83,7 +83,7 @@ Stop conditions:
 - any forbidden live path drifts
 
 Closeout:
-- verification complete: pending
-- commit: pending
-- push: pending
+- verification complete: yes
+- commit: `9b0e9b1 Materialize sandbox execution-phase scaffold`
+- push: yes
 - next contour: `SANDBOX_LIVE_SERVER_BINDING_PASS` only if the decision packet says GO

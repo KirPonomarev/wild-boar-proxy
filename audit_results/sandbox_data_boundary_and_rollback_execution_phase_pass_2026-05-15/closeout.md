@@ -14,7 +14,7 @@ Materialize the minimal sandbox-local WBP filesystem scaffold under `/Users/kiri
 
 - goal: turn the previously planned sandbox boundary into a real scaffold on disk while proving no drift in `/Users/kirillponomarev/.codex-custom-cli` and `/Users/kirillponomarev/.cli-proxy-api/config.yaml`
 - branch: `codex/external-agent-lab-isolated`
-- head: `38f4d62 Audit sandbox data boundary and rollback prerequisites`
+- head: `9b0e9b1 Materialize sandbox execution-phase scaffold`
 - touched files: `audit_results/sandbox_data_boundary_and_rollback_execution_phase_pass_2026-05-15/*`; external scaffold writes under `/Users/kirillponomarev/.codex-custom-test/{managed,stable,external-models,...}`
 - tests run: `python3` scaffold validator for scaffold contents, modes, and placeholder launcher; `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/sandbox_data_boundary_and_rollback_execution_phase_pass_2026-05-15/closeout.md`; `python3 tools/check_closeout_resilience.py --staged-only`
 - blocked risks: pre-existing sandbox `auth.json` and `config.toml` remain in place and must not be treated as binding/readiness proof in the next contour
@@ -37,8 +37,8 @@ Materialize the minimal sandbox-local WBP filesystem scaffold under `/Users/kiri
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending at artifact drafting time
-- pushed: pending at artifact drafting time
+- commit: `9b0e9b1 Materialize sandbox execution-phase scaffold`
+- pushed: yes
 
 ## Scope Check
 
