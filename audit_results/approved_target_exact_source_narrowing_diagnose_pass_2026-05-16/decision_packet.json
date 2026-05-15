@@ -1,0 +1,13 @@
+{
+  "contour": "APPROVED_TARGET_EXACT_SOURCE_NARROWING_DIAGNOSE_PASS",
+  "decision": "STOP_AND_DIAGNOSE",
+  "narrowing_surface_exists": true,
+  "narrowing_surface_singleton_capable_now": false,
+  "runtime_truth_aligned_now": false,
+  "selector_truth_fresh_now": false,
+  "claim_gate_clear_now": false,
+  "policy_drift_clear_now": false,
+  "next_contour": "",
+  "next_contour_class": "stop",
+  "reason": "family-level narrowing surfaces exist, but current live runtime truth and selector freshness have regressed, so exact-source narrowing is no longer the active blocker and the lane must stop rather than mix readiness recovery with identity narrowing"
+}
