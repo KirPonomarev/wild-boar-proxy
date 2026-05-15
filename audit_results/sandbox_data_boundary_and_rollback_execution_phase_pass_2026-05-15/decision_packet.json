@@ -1,0 +1,14 @@
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_EXECUTION_PHASE_PASS",
+  "status": "completed",
+  "final_verdict": "GO_TO_SANDBOX_LIVE_SERVER_BINDING_PASS",
+  "owner_gate_confirmed": true,
+  "existing_sandbox_data_classified": true,
+  "safe_to_proceed_after_classification": true,
+  "scaffold_materialized": true,
+  "scaffold_only": true,
+  "runtime_truth_claims_made": false,
+  "forbidden_drift_detected": false,
+  "copied_live_auth_or_state": false,
+  "follow_up_requirement": "Next contour must prove binding with explicit env/path overrides and must not infer runtime readiness from this scaffold alone."
+}

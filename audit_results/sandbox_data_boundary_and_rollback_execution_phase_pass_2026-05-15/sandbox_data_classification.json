@@ -1,0 +1,210 @@
+{
+  "contour": "SANDBOX_DATA_BOUNDARY_AND_ROLLBACK_EXECUTION_PHASE_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-test",
+  "classification_entries": [
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/.tmp",
+      "relative_path": ".tmp",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+      "relative_path": "auth.json",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/codex-vibe-test.sh",
+      "relative_path": "codex-vibe-test.sh",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/config.toml",
+      "relative_path": "config.toml",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/installation_id",
+      "relative_path": "installation_id",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/launch-logs",
+      "relative_path": "launch-logs",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/logs_2.sqlite",
+      "relative_path": "logs_2.sqlite",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/logs_2.sqlite-shm",
+      "relative_path": "logs_2.sqlite-shm",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/logs_2.sqlite-wal",
+      "relative_path": "logs_2.sqlite-wal",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/memories",
+      "relative_path": "memories",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/sessions",
+      "relative_path": "sessions",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/shell_snapshots",
+      "relative_path": "shell_snapshots",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/skills",
+      "relative_path": "skills",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/state_5.sqlite",
+      "relative_path": "state_5.sqlite",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/state_5.sqlite-shm",
+      "relative_path": "state_5.sqlite-shm",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/state_5.sqlite-wal",
+      "relative_path": "state_5.sqlite-wal",
+      "kind": "file",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/tmp",
+      "relative_path": "tmp",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Non-target existing sandbox profile data; no write in this contour touches this path, and no runtime/binding claim is made from it."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/managed",
+      "relative_path": "managed",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/runtime-mode.txt",
+      "relative_path": "runtime-mode.txt",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/runtime-effective-mode.txt",
+      "relative_path": "runtime-effective-mode.txt",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/stable",
+      "relative_path": "stable",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/stable/config.yaml",
+      "relative_path": "stable/config.yaml",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/codex-custom-launch.sh",
+      "relative_path": "codex-custom-launch.sh",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models",
+      "relative_path": "external-models",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/routes.json",
+      "relative_path": "external-models/routes.json",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/state.json",
+      "relative_path": "external-models/state.json",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/secrets.env",
+      "relative_path": "external-models/secrets.env",
+      "kind": "file_or_dir_target",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    },
+    {
+      "path": "/Users/kirillponomarev/.codex-custom-test/external-models/evidence",
+      "relative_path": "external-models/evidence",
+      "kind": "dir",
+      "classification": "safe",
+      "reason": "Allowlisted target path absent and safe to create in this contour."
+    }
+  ],
+  "overwrite_risk_paths": [],
+  "ambiguous_paths": [],
+  "safe_to_proceed": true,
+  "timestamp_utc": "2026-05-15T14:16:11Z",
+  "notes": [
+    "Existing auth/config/session data under the sandbox root is treated as non-target for this contour only.",
+    "No runtime, binding, or onboarding claim may be inferred from these pre-existing files."
+  ]
+}
