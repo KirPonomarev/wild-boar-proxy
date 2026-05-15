@@ -982,7 +982,7 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-and-data-layout">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-and-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
@@ -1001,14 +1001,14 @@
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="client-launch">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true"></span>
-                <div><h3>Client / Launch</h3><p>Клиент и запуск остаются command-owned.</p></div>
+                <div><h3>Client / Launch</h3><p>Выбранный клиент, readiness и безопасный запуск.</p></div>
                 <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
               <div class="settings-card-facts">
                 <div><span>client</span><strong>Codex Custom</strong></div>
                 <div><span>launch</span><strong id="settingsLaunchAvailability">метаданные недоступны</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Web Settings does not accept arbitrary app paths.">manual picker deferred</button>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=client" data-settings-section-link="client">Открыть Client / Launch</a>
               <span id="settingsEndpoint" class="settings-hidden-field">-</span>
             </section>
 
@@ -1107,6 +1107,137 @@
               <a class="button small settings-card-link" href="?screen=settings&amp;section=data-layout" data-settings-section-link="data-layout">Открыть data layout</a>
             </section>
           </div>
+
+          <section id="clientLaunchPanel" class="settings-client-launch" data-settings-subflow="client" data-client-launch-surface="bounded-dispatch-preview" hidden>
+            <div class="client-launch-topline">
+              <div class="client-launch-subflow-title"><strong>Client / Launch</strong><span>selected client · readiness · bounded dispatch only</span></div>
+              <span id="clientLaunchPanelChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+              <button id="clientLaunchBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="client-launch-grid" aria-label="Client launch settings subflow">
+              <section class="card client-launch-card client-launch-selected-card" data-client-launch-card="selected">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Выбранный клиент</h3>
+                    <p>Client preview не является runtime readiness или доказательством локального файла.</p>
+                  </div>
+                  <span id="clientSelectedChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="client-launch-kv">
+                  <div><span>Название</span><strong id="clientSelectedName">unknown</strong></div>
+                  <div><span>Статус</span><strong id="clientSelectedStatus">unknown</strong></div>
+                  <div><span>Источник</span><strong id="clientSelectedSource">fixture preview</strong></div>
+                  <div><span>Путь</span><strong id="clientSelectedPath" class="mono-ellipsis" title="inert display only">inert display only</strong></div>
+                  <div><span>Последняя проверка</span><strong id="clientSelectedChecked">—</strong></div>
+                </div>
+              </section>
+
+              <section class="card client-launch-card client-launch-readiness-card" data-client-launch-card="readiness">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Launch readiness</h3>
+                    <p>Preconditions помогают оператору, но не становятся health/session truth.</p>
+                  </div>
+                  <span id="clientReadinessChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="client-launch-checklist">
+                  <div><span>Client candidate</span><strong id="clientReadyCandidate">unknown</strong></div>
+                  <div><span>Runtime reachable</span><strong id="clientReadyRuntime">unknown</strong></div>
+                  <div><span>Mode compatible</span><strong id="clientReadyMode">unknown</strong></div>
+                  <div><span>Accounts available</span><strong id="clientReadyAccounts">unknown</strong></div>
+                  <div><span>Launch dispatch</span><strong id="clientReadyDispatch">disabled</strong></div>
+                </div>
+              </section>
+
+              <section class="card client-launch-card client-launch-dispatch-card" data-client-launch-card="dispatch">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Запуск клиента</h3>
+                    <p>Command OK означает dispatch requested, не app/session truth.</p>
+                  </div>
+                  <span id="clientDispatchChip" class="chip neutral"><span class="dot"></span><span>bounded</span></span>
+                </div>
+                <div class="client-launch-actions">
+                  <button id="clientLaunchDispatchAction" class="button small live-action client-launch-action" type="button" data-ui-action="launch_client_dispatch">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
+                    <span>Запустить клиент</span>
+                  </button>
+                  <button class="button small live-action client-launch-action" type="button" data-ui-action="launch_smoke">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                    <span>Проверить запуск</span>
+                  </button>
+                  <a class="button small settings-card-link" href="?screen=diagnostics" data-screen-link="diagnostics">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true">
+                    <span>Открыть диагностику</span>
+                  </a>
+                </div>
+                <div class="client-launch-note">Запрос запуска отправлен ≠ активная app session. Нужен packet proof и refresh.</div>
+              </section>
+
+              <section class="card client-launch-card client-launch-boundary-card" data-client-launch-card="boundary">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/folder.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Candidate / selection boundary</h3>
+                    <p>Кандидаты выбираются только из command-owned list.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>native deferred</span>
+                </div>
+                <div class="client-launch-boundary-copy">
+                  <span>Ручной выбор файла: desktop/native only.</span>
+                  <span>Selected preview не равен runtime readiness.</span>
+                  <span>Web path payload forbidden.</span>
+                </div>
+                <a class="button small settings-card-link" href="?screen=select-client" data-screen-link="select-client">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true">
+                  <span>Открыть выбор клиента</span>
+                </a>
+              </section>
+
+              <section class="card client-launch-card client-launch-action-card" data-client-launch-card="last-command">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Last command</h3>
+                    <p>Compact result only; полный журнал остаётся в action ledger.</p>
+                  </div>
+                  <span id="clientActionChip" class="chip neutral"><span class="dot"></span><span>not run</span></span>
+                </div>
+                <div class="client-launch-list">
+                  <div><span>ui_action / machine</span><strong><span id="clientActionUiAction">нет</span> · <span id="clientActionMachineCode">—</span></strong></div>
+                  <div><span>refresh / proof</span><strong id="clientActionRefresh">не запрашивалось</strong></div>
+                </div>
+                <p id="clientActionMessage" class="client-launch-message">Запуск клиента ещё не запрашивался.</p>
+              </section>
+
+              <section class="card client-launch-card client-launch-deferred-card" data-client-launch-card="deferred">
+                <div class="client-launch-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Deferred native actions</h3>
+                    <p>Недоступные операции не расширяют web command surface.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>disabled</span>
+                </div>
+                <div class="client-launch-disabled-list">
+                  <span>Выбрать .app файл · desktop/native only</span>
+                  <span>Показать в Finder · human-open not admitted</span>
+                  <span>Изменить рабочий каталог · forbidden in web</span>
+                </div>
+              </section>
+            </div>
+
+            <div id="clientLaunchFooter" class="client-launch-footer">
+              Launch dispatch показывает запрос запуска, не здоровье runtime и не активную app session.
+            </div>
+          </section>
 
           <section id="runtimeModePanel" class="settings-runtime-mode" data-settings-subflow="runtime" data-runtime-mode-surface="packet-owned-preview" hidden>
             <div class="runtime-mode-topline">

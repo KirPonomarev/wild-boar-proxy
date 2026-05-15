@@ -962,7 +962,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
-        settings_hub_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[0]
+        settings_hub_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[0]
+        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
         runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
         data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
@@ -971,7 +972,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
         self.assertIn('id="settingsHub"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-and-data-layout"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-and-data-layout"', settings_markup)
+        self.assertIn('id="clientLaunchPanel"', settings_markup)
+        self.assertIn('data-settings-subflow="client"', settings_markup)
+        self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
+        self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('id="runtimeModePanel"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', settings_markup)
         self.assertIn('data-runtime-mode-surface="packet-owned-preview"', settings_markup)
@@ -989,6 +995,17 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Permissions", settings_markup)
         self.assertIn("Snapshot / rollback", settings_markup)
         self.assertIn("Опасные операции", settings_markup)
+        self.assertIn("Выбранный клиент", client_markup)
+        self.assertIn("Launch readiness", client_markup)
+        self.assertIn("Запуск клиента", client_markup)
+        self.assertIn("Candidate / selection boundary", client_markup)
+        self.assertIn("Deferred native actions", client_markup)
+        self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
+        self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
+        self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
+        self.assertIn("Launch dispatch показывает запрос запуска, не здоровье runtime", client_markup)
+        self.assertIn("Web path payload forbidden", client_markup)
+        self.assertIn("inert display only", client_markup)
         self.assertIn("Текущий режим", runtime_markup)
         self.assertIn("Запрос режима", runtime_markup)
         self.assertIn("Source of truth", runtime_markup)
@@ -1039,7 +1056,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("renderSettingsSnapshot", js)
         self.assertIn("updateSettingsActionMetadata", js)
         self.assertIn("missing surface", settings_markup)
-        self.assertIn("manual picker deferred", settings_markup)
+        self.assertNotIn("manual picker deferred", settings_markup)
+        self.assertIn("desktop/native only", settings_markup)
         self.assertIn("owner approval", settings_markup)
         self.assertIn("support artifact", settings_markup)
         self.assertIn("display deferred", settings_markup)
@@ -1076,6 +1094,15 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         ]:
             self.assertIn(f'data-ui-action="{allowed_action}"', runtime_markup)
         self.assertEqual(runtime_markup.count("data-ui-action="), 6)
+        for allowed_action in [
+            "launch_client_dispatch",
+            "launch_smoke",
+        ]:
+            self.assertIn(f'data-ui-action="{allowed_action}"', client_markup)
+        self.assertEqual(client_markup.count("data-ui-action="), 2)
+        self.assertIn('data-screen-link="select-client"', client_markup)
+        self.assertIn('data-screen-link="diagnostics"', client_markup)
+        self.assertIn("client-launch-action", client_markup)
         self.assertIn("runtime-mode-action", runtime_markup)
         self.assertIn("confirmation и canonical refresh proof", runtime_markup)
         self.assertIn("Green появляется только после fresh consistent packet", runtime_markup)
@@ -1099,6 +1126,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("rollout stage", html + js)
         self.assertNotIn("JSON.stringify({ command_id", js)
         self.assertNotIn("client_path", settings_markup)
+        self.assertNotIn("app_path", settings_markup)
+        self.assertNotIn("working_dir", settings_markup)
+        self.assertNotIn("candidate_path", settings_markup)
         self.assertNotIn("source_dir", settings_markup)
         self.assertNotIn("data_dir", settings_markup)
         self.assertNotIn("secret_ref", settings_markup)
@@ -1158,6 +1188,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-runtime-mode", css)
         self.assertIn(".runtime-mode-grid", css)
         self.assertIn(".runtime-mode-disabled-list", css)
+        self.assertIn(".settings-client-launch", css)
+        self.assertIn(".client-launch-grid", css)
+        self.assertIn(".client-launch-disabled-list", css)
 
     def test_settings_data_layout_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -1167,7 +1200,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
         self.assertIn("setSettingsSection", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
@@ -1240,7 +1273,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
         self.assertIn('data-settings-section-link="runtime"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', runtime_markup)
@@ -1303,6 +1336,92 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('assets/icons/phosphor/shield-check.png', runtime_markup)
         self.assertIn('assets/icons/phosphor/arrows-clockwise.png', runtime_markup)
         self.assertIn('assets/icons/phosphor/warning.png', runtime_markup)
+
+    def test_settings_client_launch_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"client"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
+        self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
+        self.assertIn('data-settings-section-link="client"', settings_markup)
+        self.assertIn('data-settings-subflow="client"', client_markup)
+        self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', client_markup)
+        self.assertIn("clientLaunchModelFromSnapshot", js)
+        self.assertIn("renderClientLaunchSnapshot", js)
+        self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
+        self.assertIn("Client status недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Client status устарел. Требуется refresh из bounded packet.", js)
+        self.assertIn("Демо-режим. Клиент показан как preview, не как найденное локальное приложение.", js)
+
+        self.assertIn("Выбранный клиент", client_markup)
+        self.assertIn("Launch readiness", client_markup)
+        self.assertIn("Запуск клиента", client_markup)
+        self.assertIn("Candidate / selection boundary", client_markup)
+        self.assertIn("Deferred native actions", client_markup)
+        self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
+        self.assertIn("Client preview не является runtime readiness или доказательством локального файла.", client_markup)
+        self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
+        self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
+        self.assertIn("Launch dispatch показывает запрос запуска, не здоровье runtime", client_markup)
+        self.assertIn("Кандидаты выбираются только из command-owned list.", client_markup)
+        self.assertIn("Ручной выбор файла: desktop/native only.", client_markup)
+        self.assertIn("Web path payload forbidden.", client_markup)
+        self.assertIn("Показать в Finder · human-open not admitted", client_markup)
+
+        self.assertIn('data-ui-action="launch_client_dispatch"', client_markup)
+        self.assertIn('data-ui-action="launch_smoke"', client_markup)
+        self.assertEqual(client_markup.count("data-ui-action="), 2)
+        self.assertIn('data-screen-link="select-client"', client_markup)
+        self.assertIn('data-screen-link="diagnostics"', client_markup)
+        self.assertIn("launch_client_dispatch:", js)
+        self.assertIn("bounded-dispatch", js)
+        self.assertIn("Это не доказывает старт приложения или здоровье runtime.", js)
+        self.assertIn("metadata.available !== false", js)
+        self.assertIn("UI_ACTION_UNAVAILABLE", js)
+
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "showOpenFilePicker",
+            "showDirectoryPicker",
+            "webkitdirectory",
+            "readAsText",
+            "localStorage",
+            "sessionStorage",
+            "window.open",
+            "client_path",
+            "app_path",
+            "working_dir",
+            "candidate_path",
+            "config_path",
+            "state_path",
+            "raw_command",
+            "argv",
+            "shell",
+            "token",
+            "secret",
+            "config.toml",
+            "state.json",
+            "routes.json",
+            "secrets.env",
+            "Клиент запущен",
+            "client running",
+            "launch success",
+            "runtime ready",
+        ]:
+            self.assertNotIn(forbidden, client_markup)
+        self.assertNotIn("<svg", client_markup)
+        self.assertIn('assets/icons/phosphor/play.png', client_markup)
+        self.assertIn('assets/icons/phosphor/terminal-window.png', client_markup)
+        self.assertIn('assets/icons/phosphor/shield-check.png', client_markup)
+        self.assertIn('assets/icons/phosphor/warning.png', client_markup)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -1558,7 +1677,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('"select-client"', js)
         self.assertIn('"import-existing"', js)
         self.assertNotIn('?screen=setup', html)
-        self.assertNotIn('?screen=select-client', html)
+        self.assertIn('?screen=select-client', html)
+        nav_markup = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+        self.assertNotIn('?screen=select-client', nav_markup)
         self.assertNotIn('?screen=import-existing', html)
         self.assertNotIn("setup_discovery", html + js)
         self.assertNotIn("verify_path", html + js)

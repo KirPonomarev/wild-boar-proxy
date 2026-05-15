@@ -93,7 +93,7 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
-const SETTINGS_SECTIONS = ["hub", "runtime", "data-layout"];
+const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"];
 const DATA_LAYOUT_FIXTURES = {
   healthy: {
     key: "initialized_healthy",
@@ -1064,13 +1064,21 @@ function setSourceCopy(source) {
   const setupLike = ["setup", "select-client", "import-existing"].includes(screen);
   const settingsFooter = settingsSection === "runtime"
     ? "Настройки · runtime mode"
-    : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов");
+    : (
+      settingsSection === "client"
+        ? "Настройки · client launch"
+        : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов")
+    );
   const settingsSubtitle = settingsSection === "runtime"
     ? "Желаемый и фактический режим работы, подтверждённые только command packets."
     : (
-      settingsSection === "data-layout"
-        ? "Состояние каталога данных, разрешений и безопасных операций установки."
-        : "Конфигурация клиента, данных приложения и безопасных действий."
+      settingsSection === "client"
+        ? "Клиент Codex, условия запуска и bounded dispatch без выбора файлов из браузера."
+        : (
+          settingsSection === "data-layout"
+            ? "Состояние каталога данных, разрешений и безопасных операций установки."
+            : "Конфигурация клиента, данных приложения и безопасных действий."
+        )
     );
   const footerByScreen = {
     "quick-start": "Quick Start · summary control panel",
@@ -1560,6 +1568,11 @@ function setActionPanel(payload, refreshState = "none") {
   text("runtimeActionMessage", safeMessage || "Действия режима ещё не выполнялись.");
   text("runtimeRefreshState", refreshLabel);
   text("runtimeLastCommandScope", `${safeUiAction} · action packet only`);
+  setClientLaunchChip("clientActionChip", panelVisualClass, actionDisplayLabel(displayStateLabel));
+  text("clientActionUiAction", safeUiAction || "нет");
+  text("clientActionMachineCode", safeMachineCode);
+  text("clientActionRefresh", refreshLabel);
+  text("clientActionMessage", safeMessage || "Запуск клиента ещё не запрашивался.");
   text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
   text("actionSummaryMeta", `target ${safeTarget} · ${displayStateLabel}`);
   text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
@@ -2212,6 +2225,7 @@ function renderSettingsSnapshot(snapshot) {
   }
   renderDataLayoutSnapshot(snapshot);
   renderRuntimeModeSnapshot(snapshot);
+  renderClientLaunchSnapshot(snapshot);
 }
 
 function updateSettingsActionMetadata() {
@@ -2221,8 +2235,104 @@ function updateSettingsActionMetadata() {
     return;
   }
   target.textContent = launch.available === false
-    ? `недоступно · ${launch.unavailable_reason || "server-owned path не предоставлен"}`
+    ? `недоступно · ${launch.unavailable_reason || "server-owned target не предоставлен"}`
     : "доступно · server-owned bounded dispatch";
+}
+
+function setClientLaunchChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function clientLaunchModelFromSnapshot(snapshot) {
+  const runtime = snapshot?.runtime || {};
+  const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
+  const state = snapshot?.state_id || snapshot?.ui_state || runtime.visual_state || "unknown";
+  const liveFailure = source === "live" && snapshot?.status === "integration_failure";
+  const launch = metadataFor("launch_client_dispatch");
+  const launchAdmitted = launch.available !== false;
+  const runtimeDown = state === "down" || liveFailure;
+  const stale = state === "stale";
+  const degraded = state === "degraded";
+  const visual = liveFailure || runtimeDown
+    ? "red"
+    : (stale || degraded ? "amber" : (state === "healthy" ? "green" : "neutral"));
+  const candidateVisual = liveFailure
+    ? "red"
+    : (stale ? "amber" : (state === "healthy" || degraded ? "green" : "neutral"));
+  const selectedName = liveFailure ? "unknown" : "Codex Custom";
+  const selectedStatus = liveFailure
+    ? "unavailable"
+    : (stale ? "stale" : (degraded ? "requires verification" : (state === "healthy" ? "available" : "unknown")));
+  const inertPath = liveFailure
+    ? "Каталог не подтверждён"
+    : "~/Applications/Codex Custom.app · inert display only";
+  const runtimeReachable = runtimeDown ? "down" : (stale ? "stale" : (state === "healthy" || degraded ? "OK" : "unknown"));
+  const modeCompatible = runtime.desired_mode && runtime.effective_mode && runtime.desired_mode !== runtime.effective_mode
+    ? "mismatch"
+    : (runtimeDown ? "unknown" : (stale ? "stale" : "OK"));
+  const accountsAvailable = state === "healthy" ? "OK" : (runtimeDown ? "unknown" : (stale || degraded ? "warning" : "unknown"));
+  const dispatch = launchAdmitted ? "admitted" : `disabled · ${launch.unavailable_reason || "server-owned target missing"}`;
+  return {
+    source,
+    visual,
+    candidateVisual,
+    launchAdmitted,
+    panelLabel: liveFailure ? "unavailable" : (stale ? "stale" : (degraded ? "requires check" : "ready preview")),
+    bannerCopy: liveFailure
+      ? "Client status недоступен. Предыдущие fixture-данные не используются."
+      : (stale
+        ? "Client status устарел. Требуется refresh из bounded packet."
+        : "Демо-режим. Клиент показан как preview, не как найденное локальное приложение."),
+    selectedName,
+    selectedStatus,
+    selectedSource: source === "live" ? "command-owned packet" : "fixture preview",
+    inertPath,
+    lastChecked: liveFailure ? "—" : (runtime.observed_at_utc || "Сегодня, 12:45"),
+    readinessVisual: visual,
+    readinessLabel: runtimeDown ? "blocked" : (stale || degraded ? "warning" : "ready"),
+    candidateStatus: liveFailure ? "unavailable" : (degraded ? "requires verification" : (stale ? "stale" : "OK")),
+    runtimeReachable,
+    modeCompatible,
+    accountsAvailable,
+    dispatch
+  };
+}
+
+function renderClientLaunchSnapshot(snapshot) {
+  const model = clientLaunchModelFromSnapshot(snapshot || {});
+  setClientLaunchChip("clientLaunchPanelChip", model.visual, model.panelLabel);
+  setClientLaunchChip("clientSelectedChip", model.candidateVisual, model.selectedStatus);
+  setClientLaunchChip("clientReadinessChip", model.readinessVisual, model.readinessLabel);
+  setClientLaunchChip("clientDispatchChip", model.launchAdmitted ? "blue" : "amber", model.launchAdmitted ? "dispatch admitted" : "dispatch disabled");
+
+  text("clientSelectedName", model.selectedName);
+  text("clientSelectedStatus", model.selectedStatus);
+  text("clientSelectedSource", model.selectedSource);
+  text("clientSelectedPath", model.inertPath);
+  const pathNode = document.getElementById("clientSelectedPath");
+  if (pathNode) {
+    pathNode.title = model.inertPath;
+  }
+  text("clientSelectedChecked", model.lastChecked);
+  text("clientReadyCandidate", model.candidateStatus);
+  text("clientReadyRuntime", model.runtimeReachable);
+  text("clientReadyMode", model.modeCompatible);
+  text("clientReadyAccounts", model.accountsAvailable);
+  text("clientReadyDispatch", model.dispatch);
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner && currentScreen() === "settings" && currentSettingsSection() === "client") {
+    banner.className = `fixture-banner ${ACCOUNT_VISUAL_CLASS[model.visual] || VISUAL_CLASS[model.visual] || "neutral"}`;
+    banner.textContent = model.bannerCopy;
+  }
 }
 
 function runtimeModeModelFromSnapshot(snapshot) {
@@ -2326,15 +2436,20 @@ function setSettingsSection(section) {
   desktop.dataset.settingsSection = normalized;
   const hub = document.getElementById("settingsHub");
   const runtimePanel = document.getElementById("runtimeModePanel");
+  const clientPanel = document.getElementById("clientLaunchPanel");
   const panel = document.getElementById("dataLayoutPanel");
   const finder = document.getElementById("dataLayoutOpenFinderAction");
   const isRuntime = normalized === "runtime" && currentScreen() === "settings";
+  const isClient = normalized === "client" && currentScreen() === "settings";
   const isDataLayout = normalized === "data-layout" && currentScreen() === "settings";
   if (hub) {
-    hub.hidden = isRuntime || isDataLayout;
+    hub.hidden = isRuntime || isClient || isDataLayout;
   }
   if (runtimePanel) {
     runtimePanel.hidden = !isRuntime;
+  }
+  if (clientPanel) {
+    clientPanel.hidden = !isClient;
   }
   if (panel) {
     panel.hidden = !isDataLayout;
@@ -2677,7 +2792,11 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
               ? (
                 nextSettingsSection === "runtime"
                   ? "Runtime / Mode"
-                  : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                  : (
+                    nextSettingsSection === "client"
+                      ? "Client / Launch"
+                      : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                  )
               )
               : (
                 nextScreen === "setup"
@@ -4435,6 +4554,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     refreshCurrentSource();
   });
   document.getElementById("runtimeModeBackAction")?.addEventListener("click", () => {
+    setScreen("settings", true, "hub");
+    refreshCurrentSource();
+  });
+  document.getElementById("clientLaunchBackAction")?.addEventListener("click", () => {
     setScreen("settings", true, "hub");
     refreshCurrentSource();
   });
