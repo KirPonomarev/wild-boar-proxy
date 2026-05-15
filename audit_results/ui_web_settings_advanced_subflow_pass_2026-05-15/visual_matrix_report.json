@@ -1,0 +1,167 @@
+{
+  "generated_at": "2026-05-15T10:03:43.393Z",
+  "viewport": "1600x1000",
+  "cases": [
+    {
+      "name": "advanced_preview",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=healthy",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Демо-режим. Advanced показывает policy preview, не активные системные переключатели."
+      }
+    },
+    {
+      "name": "dangerous_actions_deferred",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=degraded",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Демо-режим. Advanced показывает policy preview, не активные системные переключатели."
+      }
+    },
+    {
+      "name": "owner_approval_required",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=healthy",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Демо-режим. Advanced показывает policy preview, не активные системные переключатели."
+      }
+    },
+    {
+      "name": "safe_links_only",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=healthy",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Демо-режим. Advanced показывает policy preview, не активные системные переключатели."
+      }
+    },
+    {
+      "name": "stale",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=stale",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Advanced status устарел. Deferred gates не становятся зелёным состоянием."
+      }
+    },
+    {
+      "name": "live_integration_failure",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=live",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Advanced status недоступен. Предыдущие fixture-данные не используются."
+      }
+    },
+    {
+      "name": "last_command_visible",
+      "url": "http://127.0.0.1:8771/index.html?screen=settings&section=advanced&source=fixture&state=healthy",
+      "metrics": {
+        "documentScrollHeight": 1000,
+        "documentClientHeight": 1000,
+        "documentScrollWidth": 1600,
+        "mainScrollHeight": 942,
+        "mainClientHeight": 942,
+        "mainScrollWidth": 1238,
+        "mainClientWidth": 1238,
+        "advancedBottom": 922,
+        "advancedHeight": 728,
+        "visibleSvgIcons": 0,
+        "visibleImgIcons": 9,
+        "dataActions": [],
+        "inputs": 0,
+        "clipped": [],
+        "hidden": false,
+        "title": "Advanced",
+        "banner": "Демо-режим. Advanced показывает policy preview, не активные системные переключатели."
+      }
+    }
+  ]
+}

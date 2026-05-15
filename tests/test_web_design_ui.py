@@ -966,7 +966,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         accounts_policy_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[1].split('<section id="clientLaunchPanel"', 1)[0]
         client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="diagnosticsPrivacyPanel"', 1)[0]
         diagnostics_privacy_markup = settings_markup.split('<section id="diagnosticsPrivacyPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
-        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
+        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="advancedSettingsPanel"', 1)[0]
+        advanced_markup = settings_markup.split('<section id="advancedSettingsPanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
         data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
 
         self.assertIn('data-screen-link="settings"', html)
@@ -974,7 +975,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
         self.assertIn('id="settingsHub"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-and-data-layout"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-advanced-and-data-layout"', settings_markup)
         self.assertIn('id="accountsPolicyPanel"', settings_markup)
         self.assertIn('data-settings-subflow="accounts-policy"', settings_markup)
         self.assertIn('data-accounts-policy-surface="readonly-snapshot-and-policy-invariants"', settings_markup)
@@ -995,6 +996,11 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-runtime-mode-surface="packet-owned-preview"', settings_markup)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
         self.assertIn('data-settings-section-link="runtime"', settings_markup)
+        self.assertIn('id="advancedSettingsPanel"', settings_markup)
+        self.assertIn('data-settings-subflow="advanced"', settings_markup)
+        self.assertIn('data-advanced-surface="boundary-reference-only"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=advanced"', settings_markup)
+        self.assertIn('data-settings-section-link="advanced"', settings_markup)
         self.assertIn('id="dataLayoutPanel"', settings_markup)
         self.assertIn('data-settings-subflow="data-layout"', settings_markup)
         self.assertIn('data-installer-layout-mode="preview-only"', settings_markup)
@@ -1037,6 +1043,16 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Last command", runtime_markup)
         self.assertIn("Disabled reasons", runtime_markup)
         self.assertIn("Режим запрошен ≠ режим применён ≠ здоровье runtime.", runtime_markup)
+        self.assertIn("Operator mode", advanced_markup)
+        self.assertIn("Command surface rules", advanced_markup)
+        self.assertIn("Deferred dangerous actions", advanced_markup)
+        self.assertIn("Owner approval gates", advanced_markup)
+        self.assertIn("Safe links", advanced_markup)
+        self.assertIn("Last command compact", advanced_markup)
+        self.assertIn("System notes", advanced_markup)
+        self.assertIn("Raw commands forbidden", advanced_markup)
+        self.assertNotIn('data-ui-action=', advanced_markup)
+        self.assertNotIn("live-action", advanced_markup)
         self.assertIn("Показать в Finder", html)
         self.assertIn("desktop/native или admitted human-open surface", html)
         for section in [
@@ -1231,6 +1247,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-diagnostics-privacy", css)
         self.assertIn(".diagnostics-privacy-grid", css)
         self.assertIn(".diagnostics-privacy-disabled-list", css)
+        self.assertIn(".settings-advanced", css)
+        self.assertIn(".advanced-settings-grid", css)
+        self.assertIn(".advanced-settings-disabled-list", css)
         self.assertIn(".settings-accounts-policy", css)
         self.assertIn(".accounts-policy-grid", css)
         self.assertIn(".accounts-policy-disabled-list", css)
@@ -1243,7 +1262,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
         self.assertIn("setSettingsSection", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
@@ -1312,11 +1331,11 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
-        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
+        runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="advancedSettingsPanel"', 1)[0]
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
         self.assertIn('data-settings-section-link="runtime"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', runtime_markup)
@@ -1380,6 +1399,111 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('assets/icons/phosphor/arrows-clockwise.png', runtime_markup)
         self.assertIn('assets/icons/phosphor/warning.png', runtime_markup)
 
+    def test_settings_advanced_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        advanced_markup = settings_markup.split('<section id="advancedSettingsPanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
+        nav_markup = html.split('<nav class="nav"', 1)[1].split("</nav>", 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"advanced"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
+        self.assertIn('href="?screen=settings&amp;section=advanced"', settings_markup)
+        self.assertIn('data-settings-section-link="advanced"', settings_markup)
+        self.assertNotIn('data-screen-link="advanced"', html)
+        self.assertNotIn("section=advanced", nav_markup)
+        self.assertIn('data-settings-subflow="advanced"', advanced_markup)
+        self.assertIn('data-advanced-surface="boundary-reference-only"', advanced_markup)
+
+        self.assertIn("advancedModelFromSnapshot", js)
+        self.assertIn("renderAdvancedSettingsSnapshot", js)
+        self.assertIn("renderAdvancedAction", js)
+        self.assertIn("Advanced status недоступен. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Deferred gates не становятся зелёным состоянием.", js)
+        self.assertIn("Демо-режим. Advanced показывает policy preview, не активные системные переключатели.", js)
+        self.assertIn('nextSettingsSection === "advanced"', js)
+        self.assertIn('id="advancedSettingsBackAction"', advanced_markup)
+        self.assertIn('id="advancedOpenLedgerAction"', advanced_markup)
+
+        for expected in [
+            "Operator mode",
+            "Command surface rules",
+            "Deferred dangerous actions",
+            "Owner approval gates",
+            "Safe links",
+            "Last command compact",
+            "System notes",
+            "stable_repair_apply",
+            "policy controls",
+            "rollout prove / advance",
+            "route create / update",
+            "secret reference selector",
+            "desktop/native bridge",
+            "human-open local files",
+            "owner approval required",
+            "Raw commands forbidden",
+            "Action result требует canonical refresh",
+        ]:
+            self.assertIn(expected, advanced_markup)
+
+        self.assertIn('{ "ui_action": "..." }', advanced_markup)
+        self.assertIn('{ "ui_action": "...", "account_id": "..." }', advanced_markup)
+        self.assertIn('{ "ui_action": "...", "route_id": "..." }', advanced_markup)
+        self.assertIn('data-screen-link="diagnostics"', advanced_markup)
+        self.assertIn('data-screen-link="api-connections"', advanced_markup)
+        self.assertIn('data-settings-section-link="hub"', advanced_markup)
+
+        self.assertNotIn('data-ui-action=', advanced_markup)
+        self.assertNotIn("live-action", advanced_markup)
+        self.assertNotIn("api-route-action", advanced_markup)
+        self.assertNotIn("account-action", advanced_markup)
+        self.assertNotIn('data-ui-action="stable_repair_apply"', advanced_markup)
+        self.assertNotIn("stable_repair_apply:", js)
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "showOpenFilePicker",
+            "showDirectoryPicker",
+            "webkitdirectory",
+            "readAsText",
+            "localStorage",
+            "sessionStorage",
+            "window.open",
+            "command_id",
+            "raw_command",
+            "argv",
+            "shell",
+            "client_path",
+            "app_path",
+            "working_dir",
+            "config_path",
+            "state_path",
+            "log_path",
+            "route_json",
+            "policy_stage",
+            "rollout_stage",
+            "stable_target",
+            "token value",
+            "secret value",
+            "textarea",
+            "admin console active",
+            "enable all",
+        ]:
+            self.assertNotIn(forbidden, advanced_markup)
+        self.assertNotIn("<svg", advanced_markup)
+        self.assertIn('assets/icons/phosphor/gear.png', advanced_markup)
+        self.assertIn('assets/icons/phosphor/shield-check.png', advanced_markup)
+        self.assertIn('assets/icons/phosphor/warning.png', advanced_markup)
+        self.assertIn('assets/icons/phosphor/terminal-window.png', advanced_markup)
+        self.assertIn('assets/icons/phosphor/arrows-clockwise.png', advanced_markup)
+        self.assertIn(".settings-advanced", (WEB_DESIGN_UI / "styles" / "overview.css").read_text())
+        self.assertIn(".advanced-settings-grid", (WEB_DESIGN_UI / "styles" / "overview.css").read_text())
+        self.assertIn(".advanced-settings-disabled-list", (WEB_DESIGN_UI / "styles" / "overview.css").read_text())
+
     def test_settings_client_launch_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
@@ -1388,7 +1512,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"client"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('data-settings-subflow="client"', client_markup)
@@ -1474,7 +1598,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"diagnostics-privacy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=diagnostics-privacy"', settings_markup)
         self.assertIn('data-settings-section-link="diagnostics-privacy"', settings_markup)
         self.assertIn('data-settings-subflow="diagnostics-privacy"', diagnostics_privacy_markup)
@@ -1563,7 +1687,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"accounts-policy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=accounts-policy"', settings_markup)
         self.assertIn('data-settings-section-link="accounts-policy"', settings_markup)
         self.assertIn('data-settings-subflow="accounts-policy"', accounts_policy_markup)

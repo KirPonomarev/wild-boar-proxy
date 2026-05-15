@@ -982,7 +982,7 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-and-data-layout">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-diagnostics-privacy-advanced-and-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
@@ -1067,14 +1067,14 @@
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="advanced-boundary">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true"></span>
-                <div><h3>Advanced</h3><p>Опасные действия не выполняются из Settings.</p></div>
+                <div><h3>Advanced</h3><p>Operator boundaries, deferred gates и безопасные command surfaces.</p></div>
                 <span class="chip amber"><span class="dot"></span>deferred</span>
               </div>
               <div class="settings-card-facts">
-                <div><span>repair</span><strong>execution blocked</strong></div>
-                <div><span>approval</span><strong>owner required</strong></div>
+                <div><span>raw commands</span><strong>forbidden</strong></div>
+                <div><span>approval</span><strong>owner-gated</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Dangerous operations require owner approval.">missing surface</button>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=advanced" data-settings-section-link="advanced">Открыть Advanced</a>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="about" data-about-surface="readonly-metadata">
@@ -1712,6 +1712,155 @@
 
             <div id="runtimeModeFooter" class="runtime-mode-footer">
               Режим запрошен ≠ режим применён ≠ здоровье runtime.
+            </div>
+          </section>
+
+          <section id="advancedSettingsPanel" class="settings-advanced" data-settings-subflow="advanced" data-advanced-surface="boundary-reference-only" hidden>
+            <div class="advanced-settings-topline">
+              <div class="advanced-settings-subflow-title"><strong>Advanced</strong><span>operator boundaries · deferred gates · safe surfaces only</span></div>
+              <span id="advancedSettingsPanelChip" class="chip neutral"><span class="dot"></span><span>preview</span></span>
+              <button id="advancedSettingsBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="advanced-settings-grid" aria-label="Advanced settings boundary subflow">
+              <section class="card advanced-settings-card" data-advanced-card="operator-mode">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Operator mode</h3>
+                    <p>No enable-all toggle. Advanced explains boundaries, it does not unlock hidden controls.</p>
+                  </div>
+                  <span id="advancedOperatorChip" class="chip blue"><span class="dot"></span><span>standard</span></span>
+                </div>
+                <div class="advanced-settings-kv">
+                  <div><span>Current UI mode</span><strong id="advancedUiMode">standard operator preview</strong></div>
+                  <div><span>Mutation policy</span><strong>allowlisted only</strong></div>
+                  <div><span>Runtime truth</span><strong>strict JSON packets</strong></div>
+                  <div><span>Desktop phase</span><strong>owner approval required</strong></div>
+                </div>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="command-rules">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/terminal-window.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Command surface rules</h3>
+                    <p>Reference only: browser submits bounded UI intents, never a terminal command.</p>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>readonly</span>
+                </div>
+                <div class="advanced-settings-code-list" aria-label="Allowed browser payload references">
+                  <code>{ "ui_action": "..." }</code>
+                  <code>{ "ui_action": "...", "account_id": "..." }</code>
+                  <code>{ "ui_action": "...", "route_id": "..." }</code>
+                </div>
+                <div class="advanced-settings-pill-list compact" aria-label="Forbidden browser payload categories">
+                  <span>browser command identifiers</span>
+                  <span>raw arguments</span>
+                  <span>terminal execution</span>
+                  <span>local locations</span>
+                  <span>credential material</span>
+                  <span>raw route document</span>
+                  <span>config mutation</span>
+                </div>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="dangerous">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Deferred dangerous actions</h3>
+                    <p>These rows are disabled references; no button here dispatches a mutation.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>disabled</span>
+                </div>
+                <div class="advanced-settings-disabled-list">
+                  <div><strong>stable_repair_apply</strong><span class="chip amber"><span class="dot"></span>owner approval</span><em>separate recovery gate required</em></div>
+                  <div><strong>policy controls</strong><span class="chip amber"><span class="dot"></span>missing surface</span><em>not a settings form</em></div>
+                  <div><strong>rollout prove / advance</strong><span class="chip amber"><span class="dot"></span>admission required</span><em>no scale gate in Advanced</em></div>
+                  <div><strong>route create / update</strong><span class="chip amber"><span class="dot"></span>deferred</span><em>builder is not admitted</em></div>
+                  <div><strong>secret reference selector</strong><span class="chip blue"><span class="dot"></span>protected</span><em>no values entered or shown</em></div>
+                  <div><strong>data reset / reinitialize</strong><span class="chip amber"><span class="dot"></span>danger deferred</span><em>requires snapshot semantics</em></div>
+                  <div><strong>desktop/native bridge</strong><span class="chip amber"><span class="dot"></span>owner-gated</span><em>not activated from web</em></div>
+                  <div><strong>human-open local files</strong><span class="chip amber"><span class="dot"></span>deferred</span><em>needs server-owned target</em></div>
+                </div>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="owner-gates">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Owner approval gates</h3>
+                    <p>Owner-gated does not mean broken; it means this web surface is intentionally bounded.</p>
+                  </div>
+                  <span id="advancedOwnerGateChip" class="chip amber"><span class="dot"></span><span>required</span></span>
+                </div>
+                <div class="advanced-settings-pill-list compact">
+                  <span>Desktop renderer phase · owner approval required</span>
+                  <span>Native file picker · not started</span>
+                  <span>Human-open locations · admission required</span>
+                  <span>Recovery apply · separate confirmation gate</span>
+                  <span>Rollout / scale gate · outside Settings</span>
+                  <span>Raw support artifacts · not rendered in web UI</span>
+                </div>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="safe-links">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/share-network.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Safe links</h3>
+                    <p>Navigation only. These links do not perform command dispatch.</p>
+                  </div>
+                  <span class="chip blue"><span class="dot"></span>navigation</span>
+                </div>
+                <div class="advanced-settings-link-grid">
+                  <button id="advancedOpenLedgerAction" class="button small" type="button">
+                    <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                    <span>Открыть журнал действий</span>
+                  </button>
+                  <a class="button small settings-card-link" href="?screen=diagnostics" data-screen-link="diagnostics">Открыть диагностику</a>
+                  <a class="button small settings-card-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть API-подключения</a>
+                  <a class="button small settings-card-link" href="?screen=settings" data-settings-section-link="hub">Открыть Settings hub</a>
+                </div>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="last-command">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Last command compact</h3>
+                    <p>Compact only. Action result still requires canonical refresh before truth claims.</p>
+                  </div>
+                  <span id="advancedActionChip" class="chip neutral"><span class="dot"></span><span>not run</span></span>
+                </div>
+                <div class="advanced-settings-list">
+                  <div><span>action</span><strong id="advancedActionName">нет</strong></div>
+                  <div><span>status</span><strong id="advancedActionStatus">not run</strong></div>
+                  <div><span>refresh</span><strong id="advancedActionRefresh">не запрашивалось</strong></div>
+                  <div><span>next action</span><strong id="advancedActionNext">none</strong></div>
+                </div>
+                <p id="advancedActionMessage" class="advanced-settings-message">Last command is a UI-session summary, not runtime truth.</p>
+              </section>
+
+              <section class="card advanced-settings-card" data-advanced-card="notes">
+                <div class="advanced-settings-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>System notes</h3>
+                    <p>Short reminders keep Advanced as a boundary surface, not a console.</p>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>reference</span>
+                </div>
+                <p class="advanced-settings-message">UI не является runtime truth · Action result требует canonical refresh · Deferred не является failure · Desktop phase отдельно · Raw commands forbidden.</p>
+              </section>
+            </div>
+
+            <div id="advancedSettingsFooter" class="advanced-settings-footer">
+              Advanced is a boundary/reference surface: safe links only, no hidden admin console.
             </div>
           </section>
 
