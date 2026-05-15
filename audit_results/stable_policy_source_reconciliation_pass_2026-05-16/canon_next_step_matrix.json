@@ -1,0 +1,36 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "decision_space": [
+    {
+      "outcome": "GO_TO_STABLE_POLICY_SOURCE_REPAIR_PASS",
+      "admissible": true,
+      "why": [
+        "the dominant divergence is actionable family-level drift",
+        "stable repair dry-run exposes an exact add/prune delta for the approved target inventory",
+        "runtime consumer truth already confirms approved target is not yet the runtime-ready family"
+      ]
+    },
+    {
+      "outcome": "GO_TO_SELECTOR_REFRESH_OWNER_PATH_PASS",
+      "admissible": false,
+      "why": [
+        "refreshing selector evidence would not repair the family-level approved-target delta",
+        "selector admission remains downstream of family reconciliation"
+      ]
+    },
+    {
+      "outcome": "GO_TO_EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+      "admissible": false,
+      "why": [
+        "exact-source admission remains unearned while family-level drift persists"
+      ]
+    },
+    {
+      "outcome": "STOP_AND_DIAGNOSE",
+      "admissible": false,
+      "why": [
+        "the current divergence is already localized enough to name the repair contour precisely"
+      ]
+    }
+  ]
+}

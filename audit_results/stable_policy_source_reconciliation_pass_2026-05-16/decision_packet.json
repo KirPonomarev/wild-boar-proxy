@@ -1,0 +1,17 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "decision": "GO_TO_STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "sandbox_root": "/Users/kirillponomarev/.codex-custom-sandbox-20260515",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "divergence_type": "actionable_stable_policy_source_family_drift",
+  "approved_target_family_count": 9,
+  "current_policy_source_copy_family_count": 11,
+  "selected_snapshot_matches_approved_target_exactly": true,
+  "status_desired_effective_source_kind": "observed_stable_inventory_source",
+  "approved_target_runtime_ready_now": false,
+  "exact_source_admitted": false,
+  "materialization_earned_now": false,
+  "next_contour": "STABLE_POLICY_SOURCE_REPAIR_PASS",
+  "next_contour_class": "repair",
+  "reason": "current owner-path stable repair truth exposes an exact family delta between the approved target inventory and the current eligible source-copy family, while runtime-consumer truth still canonically prefers the observed source family; repair the family-level stable policy source set before reopening selector or exact-source admission"
+}

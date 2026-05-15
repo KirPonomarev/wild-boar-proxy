@@ -1,0 +1,19 @@
+{
+  "contour": "STABLE_POLICY_SOURCE_RECONCILIATION_PASS",
+  "fixed_destination": "/Users/kirillponomarev/.codex-custom-sandbox-20260515/auth.json",
+  "current_owner_truth": {
+    "rotation_inspect_machine_error_code": "ROTATION_EVIDENCE_CONTRADICTED",
+    "rotation_evidence_reason": "policy_drift_detected",
+    "stable_repair_dry_run_machine_error_code": "OK",
+    "stable_repair_would_change": true,
+    "status_machine_error_code": "OK",
+    "status_desired_source_kind": "observed_stable_inventory_source",
+    "status_effective_source_kind": "observed_stable_inventory_source",
+    "status_effective_matches_desired": true
+  },
+  "family_counts": {
+    "approved_target_family_count": 9,
+    "selected_snapshot_family_count": 9,
+    "current_policy_source_copy_family_count": 11
+  }
+}
