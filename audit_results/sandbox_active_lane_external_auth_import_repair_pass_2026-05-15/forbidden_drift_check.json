@@ -1,0 +1,14 @@
+{
+  "contour": "SANDBOX_ACTIVE_LANE_EXTERNAL_AUTH_IMPORT_REPAIR_PASS",
+  "declared_read_surface": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+  "declared_write_surface": "/Users/kirillponomarev/.codex-custom-test/auth.json",
+  "external_source_sha256": "37b7bae386bcae214e05083f1d4dc12ab8c491ad9df49e534575603af91d07a8",
+  "external_source_unchanged": true,
+  "launcher_materialization_untouched": true,
+  "post_restore_target_sha256": "2207df2939a2f4558a0fc42383291fd8c0a9768fb4e5fdbcdc7c74a68e176f8d",
+  "registry_sha256": "02b2961b25cf8b78f592be3ed73c540ffffbe8ae236333b4e35b647c56251d56",
+  "registry_unchanged": true,
+  "sandbox_target_restored_after_blocked_post_import_proof": true,
+  "schema_version": 1,
+  "undeclared_write_surfaces_touched": []
+}
