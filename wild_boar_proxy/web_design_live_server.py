@@ -327,6 +327,37 @@ UI_ACTION_ALLOWLIST = {
     },
 }
 
+LIVE_READONLY_ACTION_PHASE = "live_readonly"
+FULL_ACTION_PHASE = "full"
+LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE = (
+    "Текущее live-readonly окно не допускает action dispatch. "
+    "Сначала завершите readonly admission и sandbox binding contours."
+)
+PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
+    {
+        "onboard_account",
+        "validate_account",
+        "promote_account",
+        "demote_account",
+        "retire_account",
+        "hold_account",
+        "release_account",
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture",
+        "sync_runtime",
+        "set_mode_stable",
+        "set_mode_managed",
+        "launch_smoke",
+        "launch_client_dispatch",
+        "export_diagnostics",
+    }
+)
+
 
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     commands: dict[str, dict[str, Any]] = {}
@@ -605,6 +636,7 @@ def run_ui_action(
     payload: dict[str, Any],
     *,
     launch_client_path: str | None = None,
+    action_phase: str = FULL_ACTION_PHASE,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return _blocked_action("unknown", "Payload UI-действия должен быть объектом.")
@@ -618,6 +650,30 @@ def run_ui_action(
     action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
     if action_spec is None:
         return _blocked_action(ui_action, "UI action отсутствует в allowlist.")
+    if (
+        ui_action == "launch_client_dispatch"
+        and action_phase != LIVE_READONLY_ACTION_PHASE
+        and not launch_client_path
+    ):
+        return _unavailable_action(
+            ui_action,
+            "Bounded путь запуска клиента недоступен.",
+            "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
+        )
+    if not _action_available(
+        ui_action,
+        launch_client_path=launch_client_path,
+        action_phase=action_phase,
+    ):
+        return _unavailable_action(
+            ui_action,
+            _action_unavailable_reason(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
+            "UI_ACTION_PHASE_PARKED",
+        )
 
     allowed_payload_keys = {"ui_action"}
     if ui_action in ACCOUNT_ID_UI_ACTIONS:
@@ -672,11 +728,16 @@ def run_ui_action(
     }
 
 
-def ui_action_metadata(*, launch_client_path: str | None = None) -> dict[str, Any]:
+def ui_action_metadata(
+    *,
+    launch_client_path: str | None = None,
+    action_phase: str = LIVE_READONLY_ACTION_PHASE,
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "status": "ok",
         "source": "ui_action_metadata",
+        "action_phase": action_phase,
         "actions": {
             ui_action: {
                 "ui_action": ui_action,
@@ -689,10 +750,15 @@ def ui_action_metadata(*, launch_client_path: str | None = None) -> dict[str, An
                 "confirmation_required": bool(action_spec["confirmation_required"]),
                 "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
                 "action_claim_scope": str(action_spec["action_claim_scope"]),
-                "available": _action_available(ui_action, launch_client_path=launch_client_path),
+                "available": _action_available(
+                    ui_action,
+                    launch_client_path=launch_client_path,
+                    action_phase=action_phase,
+                ),
                 "unavailable_reason": _action_unavailable_reason(
                     ui_action,
                     launch_client_path=launch_client_path,
+                    action_phase=action_phase,
                 ),
             }
             for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items())
@@ -705,6 +771,7 @@ def build_handler(
     runner: CommandRunner | None = None,
     static_dir: Path = WEB_DESIGN_UI,
     launch_client_path: str | None = None,
+    action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     static_root = static_dir.resolve()
@@ -722,7 +789,12 @@ def build_handler(
                 self._send_json(build_api_connections_readonly_snapshot(command_runner))
                 return
             if parsed.path == "/api/actions":
-                self._send_json(ui_action_metadata(launch_client_path=launch_client_path))
+                self._send_json(
+                    ui_action_metadata(
+                        launch_client_path=launch_client_path,
+                        action_phase=action_phase,
+                    )
+                )
                 return
             self._send_static(parsed.path)
 
@@ -736,6 +808,7 @@ def build_handler(
                     command_runner,
                     self._read_json_body(),
                     launch_client_path=launch_client_path,
+                    action_phase=action_phase,
                 )
             )
 
@@ -1080,13 +1153,27 @@ def _api_route_list_invalid_code(ui_action: str) -> str:
     return "UI_API_ROUTE_CHECK_ROUTE_LIST_INVALID"
 
 
-def _action_available(ui_action: str, *, launch_client_path: str | None) -> bool:
+def _action_available(
+    ui_action: str,
+    *,
+    launch_client_path: str | None,
+    action_phase: str,
+) -> bool:
+    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        return False
     if ui_action == "launch_client_dispatch":
         return bool(launch_client_path)
     return True
 
 
-def _action_unavailable_reason(ui_action: str, *, launch_client_path: str | None) -> str:
+def _action_unavailable_reason(
+    ui_action: str,
+    *,
+    launch_client_path: str | None,
+    action_phase: str,
+) -> str:
+    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "Bounded путь запуска клиента недоступен."
     return ""
@@ -1680,7 +1767,10 @@ def main(argv: list[str] | None = None) -> int:
 
     server = ThreadingHTTPServer(
         (args.host, args.port),
-        build_handler(launch_client_path=args.launch_client_path),
+        build_handler(
+            launch_client_path=args.launch_client_path,
+            action_phase=LIVE_READONLY_ACTION_PHASE,
+        ),
     )
     try:
         server.serve_forever()

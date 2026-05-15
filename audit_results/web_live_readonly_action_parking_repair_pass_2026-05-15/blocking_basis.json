@@ -1,0 +1,13 @@
+{
+  "contour": "WEB_LIVE_READONLY_ACTION_PARKING_REPAIR_PASS",
+  "blocked_by_before_repair": [
+    "MASTER_PLAN parked mutation policy disagreed with default /api/actions availability",
+    "README said live-readonly does not enable action buttons while code enabled most actions on live source"
+  ],
+  "repair_target": [
+    "server metadata availability",
+    "default POST action dispatch phase gate",
+    "README live-readonly wording"
+  ],
+  "resolved_after_repair": true
+}

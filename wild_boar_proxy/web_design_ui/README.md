@@ -41,7 +41,10 @@ http://127.0.0.1:8788/?source=live
 ```
 
 Live read-only mode uses strict JSON command packets through
-`web_design_command_adapter`. It does not enable action buttons.
+`web_design_command_adapter` to hydrate readonly snapshots and action metadata.
+In the current live-readonly phase, mutation and support-artifact action
+buttons remain disabled until the later sandbox admission contours explicitly
+reopen them; only readonly support actions stay available.
 
 Available fixture states:
 

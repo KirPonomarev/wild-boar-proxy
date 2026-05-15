@@ -16,6 +16,8 @@ from wild_boar_proxy.web_design_command_adapter import ALLOWLIST
 from wild_boar_proxy.web_design_live_server import (
     ACCOUNTS_READONLY_COMMAND_IDS,
     API_CONNECTIONS_READONLY_COMMAND_IDS,
+    FULL_ACTION_PHASE,
+    LIVE_READONLY_ACTION_PHASE,
     READONLY_COMMAND_IDS,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
@@ -458,6 +460,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             api = json.loads(fetch(f"{base_url}/api/live-readonly?command_id=sync"))
             accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly?command_id=sync"))
             api_connections = json.loads(fetch(f"{base_url}/api/api-connections-readonly?command_id=sync"))
+            metadata = json.loads(fetch(f"{base_url}/api/actions"))
         finally:
             server.shutdown()
             server.server_close()
@@ -469,14 +472,24 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(accounts["source"], "accounts_readonly")
         self.assertEqual(api_connections["status"], "ok")
         self.assertEqual(api_connections["source"], "api_connections_readonly")
+        self.assertEqual(metadata["action_phase"], LIVE_READONLY_ACTION_PHASE)
+        self.assertTrue(metadata["actions"]["refresh_health_detail"]["available"])
+        self.assertTrue(metadata["actions"]["stable_repair_plan"]["available"])
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
+        self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
 
     def test_ui_action_metadata_hides_adapter_commands_and_marks_confirmed_actions(self) -> None:
         metadata = ui_action_metadata()
-        bounded_metadata = ui_action_metadata(launch_client_path="/Applications/Codex.app")
+        full_metadata = ui_action_metadata(action_phase=FULL_ACTION_PHASE)
+        bounded_metadata = ui_action_metadata(
+            launch_client_path="/Applications/Codex.app",
+            action_phase=FULL_ACTION_PHASE,
+        )
 
         self.assertEqual(metadata["status"], "ok")
+        self.assertEqual(metadata["action_phase"], LIVE_READONLY_ACTION_PHASE)
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
         self.assertNotIn("save_settings", metadata["actions"])
         self.assertNotIn("update_settings", metadata["actions"])
@@ -488,174 +501,57 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("legacy_import", metadata["actions"])
         self.assertNotIn("import_apply", metadata["actions"])
         self.assertNotIn("installer_init", metadata["actions"])
-        self.assertTrue(metadata["actions"]["sync_runtime"]["confirmation_required"])
-        self.assertTrue(metadata["actions"]["sync_runtime"]["mutates_runtime"])
-        self.assertTrue(metadata["actions"]["sync_runtime"]["post_action_refresh_required"])
-        self.assertTrue(metadata["actions"]["set_mode_stable"]["confirmation_required"])
-        self.assertTrue(metadata["actions"]["set_mode_managed"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["launch_smoke"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["launch_smoke"]["mutates_runtime"])
-        self.assertIn("не успех запуска внешнего клиента", metadata["actions"]["launch_smoke"]["action_claim_scope"])
-        self.assertIn("export_diagnostics", metadata["actions"])
-        self.assertEqual(metadata["actions"]["export_diagnostics"]["action_role"], "support_artifact")
-        self.assertFalse(metadata["actions"]["export_diagnostics"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["export_diagnostics"]["affects_primary_truth"])
-        self.assertFalse(metadata["actions"]["export_diagnostics"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["export_diagnostics"]["post_action_refresh_required"])
-        self.assertIn("диагностический пакет поддержки", metadata["actions"]["export_diagnostics"]["action_claim_scope"])
-        self.assertIn("onboard_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["onboard_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["onboard_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["onboard_account"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
-        self.assertEqual(metadata["actions"]["onboard_account"]["mutation_class"], "account_admission")
-        self.assertIn(
-            "пакет команды и обновлённый список аккаунтов",
-            metadata["actions"]["onboard_account"]["action_claim_scope"],
-        )
-        self.assertTrue(metadata["actions"]["onboard_account"]["post_action_refresh_required"])
-        self.assertIn("validate_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["validate_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["validate_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["validate_account"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["validate_account"]["action_role"], "account_verification")
-        self.assertTrue(metadata["actions"]["validate_account"]["post_action_refresh_required"])
-        self.assertIn("promote_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["promote_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["promote_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["promote_account"]["affects_primary_truth"])
-        self.assertEqual(
-            metadata["actions"]["promote_account"]["action_role"],
-            "account_lifecycle_promotion",
-        )
-        self.assertTrue(metadata["actions"]["promote_account"]["post_action_refresh_required"])
-        self.assertIn("demote_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["demote_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["demote_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["demote_account"]["affects_primary_truth"])
-        self.assertEqual(
-            metadata["actions"]["demote_account"]["action_role"],
-            "account_lifecycle_demotion",
-        )
-        self.assertTrue(metadata["actions"]["demote_account"]["post_action_refresh_required"])
-        self.assertIn("retire_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["retire_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["retire_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["retire_account"]["affects_primary_truth"])
-        self.assertEqual(
-            metadata["actions"]["retire_account"]["action_role"],
-            "account_lifecycle_retirement",
-        )
-        self.assertIn(
-            "терминальный lifecycle-запрос",
-            metadata["actions"]["retire_account"]["action_claim_scope"],
-        )
-        self.assertTrue(metadata["actions"]["retire_account"]["post_action_refresh_required"])
-        self.assertIn("hold_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["hold_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["hold_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["hold_account"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["hold_account"]["action_role"], "account_lifecycle_hold")
-        self.assertTrue(metadata["actions"]["hold_account"]["post_action_refresh_required"])
-        self.assertIn("release_account", metadata["actions"])
-        self.assertTrue(metadata["actions"]["release_account"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["release_account"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["release_account"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["release_account"]["action_role"], "account_lifecycle_release")
-        self.assertTrue(metadata["actions"]["release_account"]["post_action_refresh_required"])
-        self.assertIn("api_route_validate", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_validate"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_validate"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_validate"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
-        self.assertEqual(
-            metadata["actions"]["api_route_validate"]["mutation_class"],
-            "api_route_verification",
-        )
-        self.assertTrue(metadata["actions"]["api_route_validate"]["post_action_refresh_required"])
-        self.assertIn("runtime readiness", metadata["actions"]["api_route_validate"]["action_claim_scope"])
-        self.assertIn("api_route_check", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_check"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_check"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_check"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["api_route_check"]["action_role"], "api_route_smoke_check")
-        self.assertEqual(
-            metadata["actions"]["api_route_check"]["mutation_class"],
-            "api_route_verification",
-        )
-        self.assertTrue(metadata["actions"]["api_route_check"]["post_action_refresh_required"])
-        self.assertIn("runtime readiness", metadata["actions"]["api_route_check"]["action_claim_scope"])
-        self.assertIn("api_route_allow", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_allow"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_allow"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_allow"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["api_route_allow"]["action_role"], "api_route_lifecycle_allow")
-        self.assertEqual(
-            metadata["actions"]["api_route_allow"]["mutation_class"],
-            "api_route_lifecycle",
-        )
-        self.assertTrue(metadata["actions"]["api_route_allow"]["post_action_refresh_required"])
-        self.assertIn("runtime readiness", metadata["actions"]["api_route_allow"]["action_claim_scope"])
-        self.assertIn("api_route_disable", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_disable"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_disable"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_disable"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["api_route_disable"]["action_role"], "api_route_lifecycle_disable")
-        self.assertEqual(
-            metadata["actions"]["api_route_disable"]["mutation_class"],
-            "api_route_lifecycle",
-        )
-        self.assertTrue(metadata["actions"]["api_route_disable"]["post_action_refresh_required"])
-        self.assertIn("runtime readiness", metadata["actions"]["api_route_disable"]["action_claim_scope"])
-        self.assertIn("api_route_remove", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_remove"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_remove"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_remove"]["affects_primary_truth"])
-        self.assertEqual(
-            metadata["actions"]["api_route_remove"]["action_role"],
-            "api_route_registry_cleanup",
-        )
-        self.assertEqual(
-            metadata["actions"]["api_route_remove"]["mutation_class"],
-            "api_route_registry_cleanup",
-        )
-        self.assertTrue(metadata["actions"]["api_route_remove"]["post_action_refresh_required"])
-        self.assertIn("registry-записи", metadata["actions"]["api_route_remove"]["action_claim_scope"])
-        self.assertIn("api_route_profile", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_profile"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_profile"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_profile"]["affects_primary_truth"])
-        self.assertEqual(metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
-        self.assertEqual(
-            metadata["actions"]["api_route_profile"]["mutation_class"],
-            "api_route_support",
-        )
-        self.assertFalse(metadata["actions"]["api_route_profile"]["post_action_refresh_required"])
-        self.assertIn("Codex config mutation", metadata["actions"]["api_route_profile"]["action_claim_scope"])
-        self.assertIn("api_route_evidence_capture", metadata["actions"])
-        self.assertTrue(metadata["actions"]["api_route_evidence_capture"]["confirmation_required"])
-        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["mutates_runtime"])
-        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["affects_primary_truth"])
-        self.assertEqual(
-            metadata["actions"]["api_route_evidence_capture"]["action_role"],
-            "api_route_local_evidence_capture",
-        )
-        self.assertEqual(
-            metadata["actions"]["api_route_evidence_capture"]["mutation_class"],
-            "api_route_support_artifact",
-        )
-        self.assertFalse(metadata["actions"]["api_route_evidence_capture"]["post_action_refresh_required"])
-        self.assertIn(
-            "runtime proof",
-            metadata["actions"]["api_route_evidence_capture"]["action_claim_scope"],
-        )
-        self.assertIn("launch_client_dispatch", metadata["actions"])
-        self.assertTrue(metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
+        self.assertTrue(metadata["actions"]["refresh_health_detail"]["available"])
+        self.assertTrue(metadata["actions"]["stable_repair_plan"]["available"])
+        self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
+        self.assertFalse(metadata["actions"]["onboard_account"]["available"])
+        self.assertFalse(metadata["actions"]["validate_account"]["available"])
+        self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
+        self.assertFalse(metadata["actions"]["api_route_validate"]["available"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
-        self.assertIn("недоступен", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+        self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
+        self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
+        self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+
+        self.assertTrue(full_metadata["actions"]["sync_runtime"]["available"])
+        self.assertTrue(full_metadata["actions"]["set_mode_stable"]["confirmation_required"])
+        self.assertTrue(full_metadata["actions"]["set_mode_managed"]["confirmation_required"])
+        self.assertFalse(full_metadata["actions"]["launch_smoke"]["confirmation_required"])
+        self.assertEqual(full_metadata["actions"]["export_diagnostics"]["action_role"], "support_artifact")
+        self.assertEqual(full_metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
+        self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
+        self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
+        self.assertTrue(full_metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertEqual(bounded_metadata["actions"]["launch_client_dispatch"]["unavailable_reason"], "")
         self.assertNotIn("/Applications/Codex.app", json.dumps(bounded_metadata))
+
+    def test_http_action_endpoint_blocks_parked_actions_in_live_readonly_phase(self) -> None:
+        runner = MappingRunner(live_payloads())
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            diagnostics = json.loads(
+                post_json(f"{base_url}/api/action", {"ui_action": "export_diagnostics"})
+            )
+            validate = json.loads(
+                post_json(
+                    f"{base_url}/api/action",
+                    {"ui_action": "validate_account", "account_id": "acct-active"},
+                )
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(diagnostics["status"], "integration_failure")
+        self.assertEqual(diagnostics["result"]["machine_error_code"], "UI_ACTION_PHASE_PARKED")
+        self.assertEqual(validate["status"], "integration_failure")
+        self.assertEqual(validate["result"]["machine_error_code"], "UI_ACTION_PHASE_PARKED")
+        self.assertEqual(runner.calls, [])
 
     def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -1759,7 +1655,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         runner = MappingRunner(live_payloads())
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(runner=runner, launch_client_path="/Applications/Codex.app"),
+            build_handler(
+                runner=runner,
+                launch_client_path="/Applications/Codex.app",
+                action_phase=FULL_ACTION_PHASE,
+            ),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -1827,7 +1727,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         runner = MappingRunner(payloads)
         server = ThreadingHTTPServer(
             ("127.0.0.1", free_port()),
-            build_handler(runner=runner, launch_client_path="/Applications/Codex.app"),
+            build_handler(
+                runner=runner,
+                launch_client_path="/Applications/Codex.app",
+                action_phase=FULL_ACTION_PHASE,
+            ),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

@@ -1,0 +1,15 @@
+{
+  "contour": "WEB_LIVE_READONLY_ACTION_PARKING_REPAIR_PASS",
+  "decision": "GO_TO_WEB_LIVE_SERVER_READONLY_ADMISSION_PASS",
+  "reasons": [
+    "default server metadata now phase-gates the master-plan parked action set",
+    "default POST /api/action blocks parked actions in the live-readonly phase",
+    "client-side availability remains metadata-led and therefore follows repaired server truth",
+    "README now matches repaired live-readonly behavior"
+  ],
+  "next_preconditions": [
+    "keep WEB_LIVE_SERVER_READONLY_ADMISSION_PASS readonly",
+    "do not reopen parked actions before sandbox admission evidence",
+    "treat refresh_health_detail and stable_repair_plan as readonly support only, not runtime success claims"
+  ]
+}
