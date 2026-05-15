@@ -93,7 +93,7 @@ const ACCOUNT_VISUAL_CLASS = {
 };
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
-const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"];
+const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"];
 const DATA_LAYOUT_FIXTURES = {
   healthy: {
     key: "initialized_healthy",
@@ -1067,7 +1067,11 @@ function setSourceCopy(source) {
     : (
       settingsSection === "client"
         ? "Настройки · client launch"
-        : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов")
+        : (
+          settingsSection === "accounts-policy"
+            ? "Настройки · accounts policy readonly"
+            : (settingsSection === "data-layout" ? "Настройки · data layout preview" : "Настройки · hub разделов")
+        )
     );
   const settingsSubtitle = settingsSection === "runtime"
     ? "Желаемый и фактический режим работы, подтверждённые только command packets."
@@ -1075,9 +1079,13 @@ function setSourceCopy(source) {
       settingsSection === "client"
         ? "Клиент Codex, условия запуска и bounded dispatch без выбора файлов из браузера."
         : (
-          settingsSection === "data-layout"
-            ? "Состояние каталога данных, разрешений и безопасных операций установки."
-            : "Конфигурация клиента, данных приложения и безопасных действий."
+          settingsSection === "accounts-policy"
+            ? "Правила пулов, проверки и безопасного reserve-first поведения аккаунтов."
+            : (
+              settingsSection === "data-layout"
+                ? "Состояние каталога данных, разрешений и безопасных операций установки."
+                : "Конфигурация клиента, данных приложения и безопасных действий."
+            )
         )
     );
   const footerByScreen = {
@@ -1573,6 +1581,10 @@ function setActionPanel(payload, refreshState = "none") {
   text("clientActionMachineCode", safeMachineCode);
   text("clientActionRefresh", refreshLabel);
   text("clientActionMessage", safeMessage || "Запуск клиента ещё не запрашивался.");
+  setAccountsPolicyChip("accountsPolicyActionChip", panelVisualClass, actionDisplayLabel(displayStateLabel));
+  text("accountsPolicyActionName", safeUiAction || "нет");
+  text("accountsPolicyActionTarget", safeTarget);
+  text("accountsPolicyActionRefresh", refreshLabel);
   text("actionSummaryTitle", safeUiAction || "Действие не выбрано");
   text("actionSummaryMeta", `target ${safeTarget} · ${displayStateLabel}`);
   text("actionSummaryMessage", safeMessage || "Действия ещё не выполнялись.");
@@ -2226,6 +2238,7 @@ function renderSettingsSnapshot(snapshot) {
   renderDataLayoutSnapshot(snapshot);
   renderRuntimeModeSnapshot(snapshot);
   renderClientLaunchSnapshot(snapshot);
+  renderAccountsPolicySnapshot(snapshot);
 }
 
 function updateSettingsActionMetadata() {
@@ -2335,6 +2348,100 @@ function renderClientLaunchSnapshot(snapshot) {
   }
 }
 
+function setAccountsPolicyChip(id, visual, label) {
+  const chip = document.getElementById(id);
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${ACCOUNT_VISUAL_CLASS[visual] || VISUAL_CLASS[visual] || "neutral"}`;
+  const labelNode = chip.lastElementChild;
+  if (labelNode) {
+    labelNode.textContent = label;
+  }
+}
+
+function accountsPolicyModelFromSnapshot(snapshot) {
+  const runtime = snapshot?.runtime || {};
+  const pool = snapshot?.pool_summary || {};
+  const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
+  const state = snapshot?.state_id || snapshot?.ui_state || runtime.visual_state || "unknown";
+  const liveFailure = source === "live" && snapshot?.status === "integration_failure";
+  const stale = state === "stale" || runtime.visual_state === "stale";
+  const down = state === "down" || runtime.visual_state === "down" || liveFailure;
+  const degraded = state === "degraded" || runtime.visual_state === "degraded";
+  const noAccounts = Number(pool.active || 0) + Number(pool.reserve || 0) + Number(pool.hold || 0) + Number(pool.problem || 0) + Number(pool.retired || 0) === 0;
+  const snapshotVisual = liveFailure
+    ? "red"
+    : (stale || degraded ? "amber" : (state === "healthy" && !noAccounts ? "green" : "neutral"));
+  const panelVisual = liveFailure || down
+    ? "red"
+    : (stale || degraded ? "amber" : (state === "healthy" ? "green" : "neutral"));
+  const snapshotLabel = liveFailure
+    ? "unavailable"
+    : (stale ? "stale" : (noAccounts ? "no accounts" : "observed"));
+  const counts = liveFailure
+    ? { active: "unknown", reserve: "unknown", hold: "unknown", problem: "unknown", retired: "unknown" }
+    : {
+      active: String(pool.active ?? "unknown"),
+      reserve: String(pool.reserve ?? "unknown"),
+      hold: String(pool.hold ?? "unknown"),
+      problem: String(pool.problem ?? "unknown"),
+      retired: String(pool.retired ?? "unknown")
+    };
+  return {
+    source,
+    panelVisual,
+    panelLabel: liveFailure ? "unavailable" : (stale ? "stale" : "readonly"),
+    snapshotVisual,
+    snapshotLabel,
+    targetVisual: source === "live" ? "neutral" : "blue",
+    targetLabel: source === "live" ? "future packet" : "design preview",
+    counts,
+    capacityTarget: source === "live" ? "unknown" : "design target preview",
+    reserveTarget: source === "live" ? "unknown" : "design target preview",
+    validationStart: "unknown / display only",
+    validationSource: "accounts list readonly snapshot",
+    snapshotCopy: liveFailure
+      ? "Observed pool snapshot недоступен. Предыдущие fixture counts не используются как policy truth."
+      : "Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.",
+    footerCopy: "Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Account Detail.",
+    bannerCopy: liveFailure
+      ? "Accounts policy недоступна. Предыдущие fixture-данные не используются."
+      : (stale
+        ? "Accounts policy snapshot устарел. Stale counts не являются зелёным состоянием."
+        : "Демо-режим. Политика аккаунтов показана как preview, не как config truth.")
+  };
+}
+
+function renderAccountsPolicySnapshot(snapshot) {
+  const model = accountsPolicyModelFromSnapshot(snapshot || {});
+  setAccountsPolicyChip("accountsPolicyPanelChip", model.panelVisual, model.panelLabel);
+  setAccountsPolicyChip("accountsPolicyTargetChip", model.targetVisual, model.targetLabel);
+  setAccountsPolicyChip("accountsPolicySnapshotChip", model.snapshotVisual, model.snapshotLabel);
+  setAccountsPolicyChip("accountsPolicyInvariantChip", "blue", "canon");
+
+  text("accountsPolicyReserveFirst", "enforced by canon / preview");
+  text("accountsPolicyAutoPromote", "not admitted");
+  text("accountsPolicySource", "future policy packet / unavailable");
+  text("accountsPolicyCapacityTarget", model.capacityTarget);
+  text("accountsPolicyReserveTarget", model.reserveTarget);
+  text("accountsPolicyValidationStart", model.validationStart);
+  text("accountsPolicyValidationSource", model.validationSource);
+  text("accountsPolicyActiveCount", model.counts.active);
+  text("accountsPolicyReserveCount", model.counts.reserve);
+  text("accountsPolicyHeldCount", model.counts.hold);
+  text("accountsPolicyProblemCount", model.counts.problem);
+  text("accountsPolicyRetiredCount", model.counts.retired);
+  text("accountsPolicySnapshotCopy", model.snapshotCopy);
+  text("accountsPolicyFooter", model.footerCopy);
+
+  const banner = document.getElementById("settingsBanner");
+  if (banner && currentScreen() === "settings" && currentSettingsSection() === "accounts-policy") {
+    banner.className = `fixture-banner ${ACCOUNT_VISUAL_CLASS[model.panelVisual] || VISUAL_CLASS[model.panelVisual] || "neutral"}`;
+    banner.textContent = model.bannerCopy;
+  }
+}
+
 function runtimeModeModelFromSnapshot(snapshot) {
   const runtime = snapshot?.runtime || {};
   const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
@@ -2437,19 +2544,24 @@ function setSettingsSection(section) {
   const hub = document.getElementById("settingsHub");
   const runtimePanel = document.getElementById("runtimeModePanel");
   const clientPanel = document.getElementById("clientLaunchPanel");
+  const accountsPolicyPanel = document.getElementById("accountsPolicyPanel");
   const panel = document.getElementById("dataLayoutPanel");
   const finder = document.getElementById("dataLayoutOpenFinderAction");
   const isRuntime = normalized === "runtime" && currentScreen() === "settings";
   const isClient = normalized === "client" && currentScreen() === "settings";
+  const isAccountsPolicy = normalized === "accounts-policy" && currentScreen() === "settings";
   const isDataLayout = normalized === "data-layout" && currentScreen() === "settings";
   if (hub) {
-    hub.hidden = isRuntime || isClient || isDataLayout;
+    hub.hidden = isRuntime || isClient || isAccountsPolicy || isDataLayout;
   }
   if (runtimePanel) {
     runtimePanel.hidden = !isRuntime;
   }
   if (clientPanel) {
     clientPanel.hidden = !isClient;
+  }
+  if (accountsPolicyPanel) {
+    accountsPolicyPanel.hidden = !isAccountsPolicy;
   }
   if (panel) {
     panel.hidden = !isDataLayout;
@@ -2795,7 +2907,11 @@ function setScreen(screen, updateUrl = false, settingsSection = null) {
                   : (
                     nextSettingsSection === "client"
                       ? "Client / Launch"
-                      : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                      : (
+                        nextSettingsSection === "accounts-policy"
+                          ? "Accounts Policy"
+                          : (nextSettingsSection === "data-layout" ? "Данные приложения" : "Настройки")
+                      )
                   )
               )
               : (
@@ -4561,6 +4677,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     setScreen("settings", true, "hub");
     refreshCurrentSource();
   });
+  document.getElementById("accountsPolicyBackAction")?.addEventListener("click", () => {
+    setScreen("settings", true, "hub");
+    refreshCurrentSource();
+  });
+  document.getElementById("accountsPolicyOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
   for (const button of document.querySelectorAll(".live-action")) {
     button.addEventListener("click", () => maybeConfirmAndRun(button.dataset.uiAction));
   }

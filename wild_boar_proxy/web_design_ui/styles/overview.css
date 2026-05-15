@@ -4196,6 +4196,284 @@ button:disabled {
   padding-top: 7px;
 }
 
+.settings-accounts-policy {
+  display: grid;
+  gap: 10px;
+  grid-template-rows: min-content minmax(0, 1fr) min-content;
+  height: min(740px, calc(100vh - 200px));
+  min-height: 0;
+}
+
+.accounts-policy-topline {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.accounts-policy-subflow-title {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.accounts-policy-subflow-title strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.accounts-policy-subflow-title span {
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.accounts-policy-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-areas:
+    "invariants snapshot"
+    "meanings deferred"
+    "validation command"
+    "hold targets";
+  grid-template-columns: minmax(0, 1.12fr) minmax(350px, .88fr);
+  grid-template-rows: 146px 190px 172px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.accounts-policy-card {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 9px;
+}
+
+.accounts-policy-card[data-accounts-policy-card="invariants"] { grid-area: invariants; }
+.accounts-policy-card[data-accounts-policy-card="targets"] { grid-area: targets; }
+.accounts-policy-card[data-accounts-policy-card="meanings"] { grid-area: meanings; }
+.accounts-policy-card[data-accounts-policy-card="validation"] { grid-area: validation; }
+.accounts-policy-card[data-accounts-policy-card="hold"] { grid-area: hold; }
+.accounts-policy-card[data-accounts-policy-card="snapshot"] { grid-area: snapshot; }
+.accounts-policy-card[data-accounts-policy-card="deferred"] { grid-area: deferred; }
+.accounts-policy-card[data-accounts-policy-card="last-command"] { grid-area: command; }
+
+.accounts-policy-card-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.accounts-policy-card-head h3 {
+  font-size: 13px;
+  line-height: 16px;
+  margin: 0;
+}
+
+.accounts-policy-card-head p {
+  color: var(--secondary);
+  display: -webkit-box;
+  font-size: 9px;
+  line-height: 11px;
+  margin: 2px 0 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.accounts-policy-kv,
+.accounts-policy-list,
+.accounts-policy-snapshot-grid {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+}
+
+.accounts-policy-kv,
+.accounts-policy-snapshot-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.accounts-policy-snapshot-grid div:last-child {
+  grid-column: 1 / -1;
+}
+
+.accounts-policy-kv div,
+.accounts-policy-list div,
+.accounts-policy-snapshot-grid div {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 20px;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
+.accounts-policy-kv span,
+.accounts-policy-list span,
+.accounts-policy-snapshot-grid span {
+  color: var(--secondary);
+  flex: 0 0 auto;
+  font-size: 8px;
+  line-height: 10px;
+}
+
+.accounts-policy-kv strong,
+.accounts-policy-list strong,
+.accounts-policy-snapshot-grid strong {
+  color: var(--text);
+  font-size: 9px;
+  line-height: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-policy-list strong span {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.accounts-policy-meanings {
+  display: grid;
+  gap: 3px;
+}
+
+.accounts-policy-meanings div {
+  align-items: center;
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 19px;
+  padding: 2px 6px;
+}
+
+.accounts-policy-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 76px;
+  font-size: 9px;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 13px;
+  padding: 2px 7px;
+}
+
+.accounts-policy-badge.green {
+  background: #eaf3ed;
+  color: #2d7a4b;
+}
+
+.accounts-policy-badge.amber {
+  background: #f7eee0;
+  color: #a86a10;
+}
+
+.accounts-policy-badge.neutral {
+  background: #eee8df;
+  color: #6e675f;
+}
+
+.accounts-policy-meanings strong {
+  color: var(--text);
+  font-size: 9px;
+  line-height: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-policy-disabled-list {
+  align-content: start;
+  display: grid;
+  gap: 5px;
+}
+
+.accounts-policy-disabled-list span {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 999px;
+  color: var(--secondary);
+  font-size: 9px;
+  line-height: 12px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 5px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accounts-policy-message,
+.accounts-policy-footer {
+  color: var(--secondary);
+  font-size: 10px;
+  line-height: 14px;
+  margin: 0;
+}
+
+.accounts-policy-message {
+  background: #fffaf6;
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 10px;
+  display: -webkit-box;
+  min-height: 22px;
+  overflow: hidden;
+  padding: 4px 7px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.accounts-policy-command-card .button,
+.accounts-policy-validation-card .button {
+  font-size: 11px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.accounts-policy-command-card .accounts-policy-list,
+.accounts-policy-targets-card .accounts-policy-list {
+  gap: 4px;
+}
+
+.accounts-policy-command-card .accounts-policy-list div,
+.accounts-policy-targets-card .accounts-policy-list div {
+  padding: 3px 7px;
+}
+
+.accounts-policy-command-card .accounts-policy-list span,
+.accounts-policy-targets-card .accounts-policy-list span {
+  font-size: 8px;
+  line-height: 10px;
+}
+
+.accounts-policy-command-card .accounts-policy-list strong,
+.accounts-policy-targets-card .accounts-policy-list strong {
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.accounts-policy-footer {
+  border-top: 1px solid rgba(217, 208, 195, .72);
+  padding-top: 7px;
+}
+
 .settings-data-layout {
   display: grid;
   gap: 10px;

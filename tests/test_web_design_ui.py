@@ -962,7 +962,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
-        settings_hub_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[0]
+        settings_hub_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[0]
+        accounts_policy_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[1].split('<section id="clientLaunchPanel"', 1)[0]
         client_markup = settings_markup.split('<section id="clientLaunchPanel"', 1)[1].split('<section id="runtimeModePanel"', 1)[0]
         runtime_markup = settings_markup.split('<section id="runtimeModePanel"', 1)[1].split('<section id="dataLayoutPanel"', 1)[0]
         data_layout_markup = settings_markup.split('<section id="dataLayoutPanel"', 1)[1]
@@ -972,7 +973,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-visual-reference="14_settings_main_hub"', settings_markup)
         self.assertIn('data-config-mode="readonly"', settings_markup)
         self.assertIn('id="settingsHub"', settings_markup)
-        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-and-data-layout"', settings_markup)
+        self.assertIn('data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-and-data-layout"', settings_markup)
+        self.assertIn('id="accountsPolicyPanel"', settings_markup)
+        self.assertIn('data-settings-subflow="accounts-policy"', settings_markup)
+        self.assertIn('data-accounts-policy-surface="readonly-snapshot-and-policy-invariants"', settings_markup)
+        self.assertIn('href="?screen=settings&amp;section=accounts-policy"', settings_markup)
+        self.assertIn('data-settings-section-link="accounts-policy"', settings_markup)
         self.assertIn('id="clientLaunchPanel"', settings_markup)
         self.assertIn('data-settings-subflow="client"', settings_markup)
         self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', settings_markup)
@@ -1000,6 +1006,19 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Запуск клиента", client_markup)
         self.assertIn("Candidate / selection boundary", client_markup)
         self.assertIn("Deferred native actions", client_markup)
+        self.assertIn("Policy invariants", accounts_policy_markup)
+        self.assertIn("Capacity / targets", accounts_policy_markup)
+        self.assertIn("Pool meanings", accounts_policy_markup)
+        self.assertIn("Validation policy", accounts_policy_markup)
+        self.assertIn("Hold / release behavior", accounts_policy_markup)
+        self.assertIn("Observed pool snapshot", accounts_policy_markup)
+        self.assertIn("Deferred controls", accounts_policy_markup)
+        self.assertIn("policy invariants · observed pool snapshot · no lifecycle mutation", accounts_policy_markup)
+        self.assertIn("reserve-first", accounts_policy_markup.lower())
+        self.assertIn("Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.", accounts_policy_markup)
+        self.assertIn("Lifecycle actions", accounts_policy_markup)
+        self.assertIn("Accounts / Account Detail only", accounts_policy_markup)
+        self.assertIn("missing admitted policy command surface", accounts_policy_markup)
         self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
         self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
         self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
@@ -1078,12 +1097,14 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertNotIn("Сохранить", settings_markup)
         self.assertNotIn("Отмена", settings_markup)
         self.assertNotIn('data-ui-action=', settings_hub_markup)
+        self.assertNotIn('data-ui-action=', accounts_policy_markup)
         self.assertNotIn('data-ui-action=', data_layout_markup)
         self.assertNotIn("live-action", settings_hub_markup)
+        self.assertNotIn("live-action", accounts_policy_markup)
         self.assertNotIn("live-action", data_layout_markup)
-        self.assertNotIn("account-action", settings_markup)
-        self.assertNotIn("onboard-action", settings_markup)
-        self.assertNotIn("api-route-action", settings_markup)
+        self.assertNotIn("account-action", accounts_policy_markup)
+        self.assertNotIn("onboard-action", accounts_policy_markup)
+        self.assertNotIn("api-route-action", accounts_policy_markup)
         for allowed_action in [
             "set_mode_managed",
             "set_mode_stable",
@@ -1102,6 +1123,8 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertEqual(client_markup.count("data-ui-action="), 2)
         self.assertIn('data-screen-link="select-client"', client_markup)
         self.assertIn('data-screen-link="diagnostics"', client_markup)
+        self.assertIn('data-screen-link="accounts"', accounts_policy_markup)
+        self.assertIn('id="accountsPolicyOpenLedgerAction"', accounts_policy_markup)
         self.assertIn("client-launch-action", client_markup)
         self.assertIn("runtime-mode-action", runtime_markup)
         self.assertIn("confirmation и canonical refresh proof", runtime_markup)
@@ -1191,6 +1214,9 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn(".settings-client-launch", css)
         self.assertIn(".client-launch-grid", css)
         self.assertIn(".client-launch-disabled-list", css)
+        self.assertIn(".settings-accounts-policy", css)
+        self.assertIn(".accounts-policy-grid", css)
+        self.assertIn(".accounts-policy-disabled-list", css)
 
     def test_settings_data_layout_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -1200,7 +1226,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"data-layout"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
         self.assertIn("settingsSectionFromLocation", js)
         self.assertIn("setSettingsSection", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
@@ -1273,7 +1299,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"runtime"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=runtime"', settings_markup)
         self.assertIn('data-settings-section-link="runtime"', settings_markup)
         self.assertIn('data-settings-subflow="runtime"', runtime_markup)
@@ -1345,7 +1371,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
 
         self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
         self.assertNotIn('"client"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
-        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "data-layout"]', js)
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
         self.assertIn('href="?screen=settings&amp;section=client"', settings_markup)
         self.assertIn('data-settings-section-link="client"', settings_markup)
         self.assertIn('data-settings-subflow="client"', client_markup)
@@ -1422,6 +1448,105 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('assets/icons/phosphor/terminal-window.png', client_markup)
         self.assertIn('assets/icons/phosphor/shield-check.png', client_markup)
         self.assertIn('assets/icons/phosphor/warning.png', client_markup)
+
+    def test_settings_accounts_policy_subflow_is_bounded_and_section_routed(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        settings_markup = html.split('<section id="settingsScreen"', 1)[1].split('<section id="setupScreen"', 1)[0]
+        accounts_policy_markup = settings_markup.split('<section id="accountsPolicyPanel"', 1)[1].split('<section id="clientLaunchPanel"', 1)[0]
+
+        self.assertIn('const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]', js)
+        self.assertNotIn('"accounts-policy"', js.split("const SCREENS =", 1)[1].split("];", 1)[0])
+        self.assertIn('const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "data-layout"]', js)
+        self.assertIn('href="?screen=settings&amp;section=accounts-policy"', settings_markup)
+        self.assertIn('data-settings-section-link="accounts-policy"', settings_markup)
+        self.assertIn('data-settings-subflow="accounts-policy"', accounts_policy_markup)
+        self.assertIn('data-accounts-policy-surface="readonly-snapshot-and-policy-invariants"', accounts_policy_markup)
+        self.assertIn("accountsPolicyModelFromSnapshot", js)
+        self.assertIn("renderAccountsPolicySnapshot", js)
+        self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
+        self.assertIn("Accounts policy недоступна. Предыдущие fixture-данные не используются.", js)
+        self.assertIn("Accounts policy snapshot устарел. Stale counts не являются зелёным состоянием.", js)
+        self.assertIn("Демо-режим. Политика аккаунтов показана как preview, не как config truth.", js)
+
+        self.assertIn("Policy invariants", accounts_policy_markup)
+        self.assertIn("Pool meanings", accounts_policy_markup)
+        self.assertIn("Validation policy", accounts_policy_markup)
+        self.assertIn("Hold / release behavior", accounts_policy_markup)
+        self.assertIn("Observed pool snapshot", accounts_policy_markup)
+        self.assertIn("Deferred controls", accounts_policy_markup)
+        self.assertIn("Reserve-first", accounts_policy_markup)
+        self.assertIn("enforced by canon / preview", accounts_policy_markup + js)
+        self.assertIn("future policy packet / unavailable", accounts_policy_markup + js)
+        self.assertIn("accounts list readonly snapshot", accounts_policy_markup + js)
+        self.assertIn("Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.", accounts_policy_markup + js)
+        self.assertIn("Targets are informational only until a policy packet exists.", accounts_policy_markup)
+        self.assertIn("Capacity target", accounts_policy_markup)
+        self.assertIn("design target preview", accounts_policy_markup + js)
+        self.assertIn("Auto-promote", accounts_policy_markup)
+        self.assertIn("not admitted", accounts_policy_markup + js)
+        self.assertIn("no auto-green", accounts_policy_markup)
+        self.assertIn("Active", accounts_policy_markup)
+        self.assertIn("Reserve", accounts_policy_markup)
+        self.assertIn("Held", accounts_policy_markup)
+        self.assertIn("Problem", accounts_policy_markup)
+        self.assertIn("Retired", accounts_policy_markup)
+        self.assertIn("Открыть аккаунты", accounts_policy_markup)
+        self.assertIn('data-screen-link="accounts"', accounts_policy_markup)
+        self.assertIn("missing admitted policy command surface", accounts_policy_markup)
+
+        self.assertNotIn('data-ui-action=', accounts_policy_markup)
+        self.assertNotIn("live-action", accounts_policy_markup)
+        self.assertNotIn("account-action", accounts_policy_markup)
+        self.assertNotIn("onboard-action", accounts_policy_markup)
+        self.assertNotIn("api-route-action", accounts_policy_markup)
+        for forbidden in [
+            "<input",
+            "<textarea",
+            "<select",
+            'type="file"',
+            "contenteditable",
+            "policy_write",
+            "capacity_target",
+            "reserve_target",
+            "active_target",
+            "pool_policy",
+            "account_ids",
+            "backend_ids",
+            "auto_promote",
+            "auto-promote action",
+            "validate_account",
+            "promote_account",
+            "demote_account",
+            "hold_account",
+            "release_account",
+            "retire_account",
+            "onboard_account",
+            "auth path",
+            "token",
+            "config path",
+            "raw_command",
+            "argv",
+            "shell",
+            "policy_stage",
+            "rollout_stage",
+            "policy stage set",
+            "accounts promote",
+            "accounts demote",
+            "accounts hold",
+            "accounts release",
+            "accounts retire",
+            "accounts onboard",
+            "saved policy",
+            "policy saved",
+            "active routing changed",
+        ]:
+            self.assertNotIn(forbidden, accounts_policy_markup)
+        self.assertNotIn("<svg", accounts_policy_markup)
+        self.assertIn('assets/icons/phosphor/users.png', accounts_policy_markup)
+        self.assertIn('assets/icons/phosphor/shield-check.png', accounts_policy_markup)
+        self.assertIn('assets/icons/phosphor/pause-circle.png', accounts_policy_markup)
+        self.assertIn('assets/icons/phosphor/warning.png', accounts_policy_markup)
 
     def test_setup_select_import_screens_are_inert_skeletons(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

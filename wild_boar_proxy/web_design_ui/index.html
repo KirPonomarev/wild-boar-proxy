@@ -982,7 +982,7 @@
             Демо-режим настроек. Значения показывают admitted layout, не runtime config truth.
           </div>
 
-          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-and-data-layout">
+          <div id="settingsHub" class="settings-layout settings-hub settings-final-sections" data-visual-reference="14_settings_main_hub" data-config-mode="readonly" data-settings-subscreen-mode="hub-with-runtime-client-accounts-policy-and-data-layout">
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="runtime-mode">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pulse.png" alt="" aria-hidden="true"></span>
@@ -1015,14 +1015,14 @@
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="accounts-policy">
               <div class="settings-card-head">
                 <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true"></span>
-                <div><h3>Accounts Policy</h3><p>Смысл пулов и проверок без lifecycle mutation.</p></div>
-                <span class="chip amber"><span class="dot"></span>deferred</span>
+                <div><h3>Accounts Policy</h3><p>Пулы, удержание, проверка и reserve-first правила.</p></div>
+                <span class="chip neutral"><span class="dot"></span>readonly</span>
               </div>
               <div class="settings-card-facts">
-                <div><span>active</span><strong>рабочий пул</strong></div>
-                <div><span>held</span><strong>операторская пауза</strong></div>
+                <div><span>reserve-first</span><strong>canon invariant</strong></div>
+                <div><span>policy source</span><strong>future packet</strong></div>
               </div>
-              <button class="button small disabled" type="button" disabled title="Lifecycle commands stay on Accounts.">readonly policy</button>
+              <a class="button small settings-card-link" href="?screen=settings&amp;section=accounts-policy" data-settings-section-link="accounts-policy">Открыть Accounts Policy</a>
             </section>
 
             <section class="card settings-hub-card" data-settings-card="true" data-settings-section="api-routes">
@@ -1107,6 +1107,166 @@
               <a class="button small settings-card-link" href="?screen=settings&amp;section=data-layout" data-settings-section-link="data-layout">Открыть data layout</a>
             </section>
           </div>
+
+          <section id="accountsPolicyPanel" class="settings-accounts-policy" data-settings-subflow="accounts-policy" data-accounts-policy-surface="readonly-snapshot-and-policy-invariants" hidden>
+            <div class="accounts-policy-topline">
+              <div class="accounts-policy-subflow-title"><strong>Accounts Policy</strong><span>policy invariants · observed pool snapshot · no lifecycle mutation</span></div>
+              <span id="accountsPolicyPanelChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+              <button id="accountsPolicyBackAction" class="button small" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
+                <span>Назад к настройкам</span>
+              </button>
+            </div>
+
+            <div class="accounts-policy-grid" aria-label="Accounts policy settings subflow">
+              <section class="card accounts-policy-card accounts-policy-invariants-card" data-accounts-policy-card="invariants">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Policy invariants</h3>
+                    <p>Канонические правила показаны отдельно от observed pool snapshot.</p>
+                  </div>
+                  <span id="accountsPolicyInvariantChip" class="chip blue"><span class="dot"></span><span>canon</span></span>
+                </div>
+                <div class="accounts-policy-kv">
+                  <div><span>Reserve-first</span><strong id="accountsPolicyReserveFirst">enforced by canon / preview</strong></div>
+                  <div><span>Auto-promote</span><strong id="accountsPolicyAutoPromote">not admitted</strong></div>
+                  <div><span>Lifecycle actions</span><strong>Accounts / Account Detail only</strong></div>
+                  <div><span>Policy source</span><strong id="accountsPolicySource">future policy packet / unavailable</strong></div>
+                </div>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-targets-card" data-accounts-policy-card="targets">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Capacity / targets</h3>
+                    <p>Targets are informational only until a policy packet exists.</p>
+                  </div>
+                  <span id="accountsPolicyTargetChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="accounts-policy-list">
+                  <div><span>Capacity target</span><strong id="accountsPolicyCapacityTarget">unknown / design target preview</strong></div>
+                  <div><span>Reserve target</span><strong id="accountsPolicyReserveTarget">unknown / design target preview</strong></div>
+                  <div><span>Validation on start</span><strong id="accountsPolicyValidationStart">unknown / display only</strong></div>
+                </div>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-meanings-card" data-accounts-policy-card="meanings">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Pool meanings</h3>
+                    <p>Это explanatory policy card, не таблица аккаунтов и не action surface.</p>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>readonly</span>
+                </div>
+                <div class="accounts-policy-meanings">
+                  <div><span class="accounts-policy-badge green">Active</span><strong>для маршрутизации</strong></div>
+                  <div><span class="accounts-policy-badge green">Reserve</span><strong>ожидает проверки, не active routing</strong></div>
+                  <div><span class="accounts-policy-badge amber">Held</span><strong>исключён оператором</strong></div>
+                  <div><span class="accounts-policy-badge amber">Problem</span><strong>требует проверки, no auto-green</strong></div>
+                  <div><span class="accounts-policy-badge neutral">Retired</span><strong>выведен из использования</strong></div>
+                </div>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-validation-card" data-accounts-policy-card="validation">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Validation policy</h3>
+                    <p>Manual validation lives on Accounts and Account Detail, not Settings.</p>
+                  </div>
+                  <span class="chip neutral"><span class="dot"></span>display only</span>
+                </div>
+                <div class="accounts-policy-list">
+                  <div><span>Manual validation</span><strong>Accounts / Account Detail</strong></div>
+                  <div><span>Validation source</span><strong id="accountsPolicyValidationSource">accounts list readonly snapshot</strong></div>
+                  <div><span>Failure handling</span><strong>problem semantics, no auto-green</strong></div>
+                  <div><span>Schedule</span><strong>future policy packet / unavailable</strong></div>
+                </div>
+                <a class="button small settings-card-link" href="?screen=accounts" data-screen-link="accounts">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/users.png" alt="" aria-hidden="true">
+                  <span>Открыть аккаунты</span>
+                </a>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-hold-card" data-accounts-policy-card="hold">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/pause-circle.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Hold / release behavior</h3>
+                    <p>Settings объясняет meaning; действия требуют account_id и refresh.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>bounded</span>
+                </div>
+                <div class="accounts-policy-list">
+                  <div><span>Hold</span><strong>исключает из active routing</strong></div>
+                  <div><span>Release</span><strong>возвращает в допустимый pool</strong></div>
+                  <div><span>Retire / refresh</span><strong>destructive + proof in Account Detail</strong></div>
+                </div>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-snapshot-card" data-accounts-policy-card="snapshot">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/squares-four.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Observed pool snapshot</h3>
+                    <p>Counts come from accounts list readonly snapshot, not policy config.</p>
+                  </div>
+                  <span id="accountsPolicySnapshotChip" class="chip neutral"><span class="dot"></span><span>unknown</span></span>
+                </div>
+                <div class="accounts-policy-snapshot-grid">
+                  <div><span>Active</span><strong id="accountsPolicyActiveCount">unknown</strong></div>
+                  <div><span>Reserve</span><strong id="accountsPolicyReserveCount">unknown</strong></div>
+                  <div><span>Held</span><strong id="accountsPolicyHeldCount">unknown</strong></div>
+                  <div><span>Problem</span><strong id="accountsPolicyProblemCount">unknown</strong></div>
+                  <div><span>Retired</span><strong id="accountsPolicyRetiredCount">unknown</strong></div>
+                </div>
+                <p id="accountsPolicySnapshotCopy" class="accounts-policy-message">Snapshot показывает наблюдаемое состояние пула, не сохранённую policy config.</p>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-deferred-card" data-accounts-policy-card="deferred">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon amber"><img class="ui-icon button-icon" src="assets/icons/phosphor/warning.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Deferred controls</h3>
+                    <p>Policy edits disabled until a dedicated admitted command surface exists.</p>
+                  </div>
+                  <span class="chip amber"><span class="dot"></span>missing surface</span>
+                </div>
+                <div class="accounts-policy-disabled-list">
+                  <span>Изменить capacity target · missing admitted policy command surface</span>
+                  <span>Изменить reserve target · missing admitted policy command surface</span>
+                  <span>Включить проверку при старте · missing admitted policy command surface</span>
+                  <span>Настроить auto-recovery policy · missing admitted policy command surface</span>
+                </div>
+              </section>
+
+              <section class="card accounts-policy-card accounts-policy-command-card" data-accounts-policy-card="last-command">
+                <div class="accounts-policy-card-head">
+                  <span class="settings-card-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true"></span>
+                  <div>
+                    <h3>Last command</h3>
+                    <p>Compact only; Settings не показывает raw ledger или changed files dump.</p>
+                  </div>
+                  <span id="accountsPolicyActionChip" class="chip neutral"><span class="dot"></span><span>not run</span></span>
+                </div>
+                <div class="accounts-policy-list">
+                  <div><span>action / target</span><strong><span id="accountsPolicyActionName">нет</span> · <span id="accountsPolicyActionTarget">—</span></strong></div>
+                  <div><span>refresh state</span><strong id="accountsPolicyActionRefresh">не запрашивалось</strong></div>
+                </div>
+                <button id="accountsPolicyOpenLedgerAction" class="button small" type="button">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                  <span>Открыть журнал</span>
+                </button>
+              </section>
+            </div>
+
+            <div id="accountsPolicyFooter" class="accounts-policy-footer">
+              Accounts Policy объясняет правила и observed counts; lifecycle actions остаются в Accounts / Account Detail.
+            </div>
+          </section>
 
           <section id="clientLaunchPanel" class="settings-client-launch" data-settings-subflow="client" data-client-launch-surface="bounded-dispatch-preview" hidden>
             <div class="client-launch-topline">
