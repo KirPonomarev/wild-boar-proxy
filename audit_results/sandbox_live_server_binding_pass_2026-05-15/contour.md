@@ -85,7 +85,7 @@ Stop conditions:
 - proof requires onboarding or mutation to continue
 
 Closeout:
-- verification complete: pending
-- commit: pending
-- push: pending
+- verification complete: yes
+- commit: `c62e5c0 Audit sandbox live server binding`
+- push: yes
 - next contour: `ACCOUNT_ONBOARDING_SANDBOX_RESERVE_FIRST_PASS` only if the decision packet says GO

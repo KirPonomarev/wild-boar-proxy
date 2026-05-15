@@ -14,7 +14,7 @@ Prove that the command runner, live read-only server, and UI read-only screens b
 
 - goal: prove sandbox-local source binding from command packets through live GET packets into the core UI read-only screens
 - branch: `codex/external-agent-lab-isolated`
-- head: `0532db8 Finalize sandbox scaffold closeout metadata`
+- head: `c62e5c0 Audit sandbox live server binding`
 - touched files: `audit_results/sandbox_live_server_binding_pass_2026-05-15/*`
 - tests run: sandbox command packet capture; live readonly GET capture; browser-based final screen capture; `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/sandbox_live_server_binding_pass_2026-05-15/closeout.md`; `python3 tools/check_closeout_resilience.py --staged-only`
 - blocked risks: sandbox-root `auth.json` and `config.toml` remain pre-existing files and are not readiness proof; next contour must still treat onboarding as a fresh mutation proof
@@ -37,8 +37,8 @@ Prove that the command runner, live read-only server, and UI read-only screens b
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending at artifact drafting time
-- pushed: pending at artifact drafting time
+- commit: `c62e5c0 Audit sandbox live server binding`
+- pushed: yes
 
 ## Scope Check
 
