@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS_REENTRY",
+  "run_label": "v1",
+  "status": "completed",
+  "fresh_runtime_truth": {
+    "healthcheck_ok": true,
+    "claim_gate_clear": true,
+    "policy_drift_clear": true
+  },
+  "write_surface_result": {
+    "declared_surfaces_kept": true,
+    "launch_smoke_changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+    ],
+    "status_after_launch_smoke_changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json"
+    ]
+  },
+  "selector_execution_performed": false,
+  "next_contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "machine_reason": "FRESH_RUNTIME_REENTRY_GREEN_SELECTOR_REFRESH_MAY_REOPEN",
+  "next_action": "open selector refresh contour and start from fresh runtime truth rather than historical packets"
+}
