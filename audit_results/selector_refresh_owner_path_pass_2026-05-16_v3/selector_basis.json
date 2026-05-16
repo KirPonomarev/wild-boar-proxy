@@ -1,0 +1,16 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "v3",
+  "pre_attempt_basis": {
+    "runtime_reproof_prereq_expected": "runtime_green_required",
+    "fresh_rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "rotation_evidence_reason": "selected_backend_snapshot_stale",
+    "rotation_selected_backend_count": 15,
+    "rotation_policy_drift_status": "clear",
+    "rotation_snapshot_observed_at_utc": "2026-05-15T23:13:26.050963+00:00"
+  },
+  "owner_path_contract": {
+    "selected_backend_snapshot_refresh_owner": "sync --json",
+    "rotation_inspect_role": "validate_only"
+  }
+}

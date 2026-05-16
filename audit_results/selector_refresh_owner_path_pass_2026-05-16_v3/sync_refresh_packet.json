@@ -1,0 +1,13 @@
+{
+  "sync_attempted": true,
+  "sync_completed": false,
+  "first_sync_attempt": {
+    "machine_error_code": "LOCK_HELD",
+    "human_message": "Mutation lock is held by pid 3256.",
+    "changed_files": []
+  },
+  "lock_followup": {
+    "pid_3256_present_after_interrupt_check": false,
+    "classification": "transient_lock_holder_gone_before_retry"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "v3",
+  "status": "stopped",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "why": [
+    "rotation evidence remained stale before any successful sync refresh packet was produced",
+    "the first sync --json attempt returned LOCK_HELD and did not mutate selector evidence",
+    "before a clean retry, fresh status --json showed runtime-green preconditions had already regressed: claim_gate=blocked, policy_drift=detected, effective_stable_runtime_consumer_source=observed_source_active, consumer_activation_readiness=activation_pending",
+    "continuing the selector-only contour would have mixed selector refresh with runtime recovery work"
+  ],
+  "next_contour": "RUNTIME_REPROOF_PASS",
+  "forbidden_next_moves": [
+    "EXACT_AUTH_REF_SOURCE_ADMISSION_PASS",
+    "sandbox auth.json materialization",
+    "pretending selector refresh completed successfully"
+  ]
+}
