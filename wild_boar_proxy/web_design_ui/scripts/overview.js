@@ -5274,6 +5274,8 @@ async function setLiveReadonly(updateUrl = false) {
   if (currentScreen() === "overview") {
     renderOverviewLivePendingState();
   }
+  await loadActionMetadata();
+  applyActionAvailability();
   const snapshot = currentScreen() === "quick-start"
     ? {
       accounts: await loadAccountsReadonly(),

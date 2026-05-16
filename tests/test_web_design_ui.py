@@ -3003,6 +3003,7 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext("renderSettingsSnapshot = () => {};", sandbox);
 
 (async () => {
   const first = sandbox.runUiAction("validate_account", { account_id: "acc-021" });
@@ -3070,6 +3071,12 @@ class Node {
     this.append(...items);
   }
   addEventListener() {}
+  querySelector() {
+    return new Node();
+  }
+  querySelectorAll() {
+    return [];
+  }
   setAttribute(name, value) {
     this[name] = value;
   }
@@ -3079,6 +3086,7 @@ class Node {
 }
 
 const ids = [
+  "refreshFixture",
   "sourcePicker",
   "statePicker",
   "brandCaption",
@@ -3103,6 +3111,7 @@ const ids = [
   "sidebarStatus"
 ];
 const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.refreshFixture.lastElementChild = { textContent: "" };
 elements.runtimeChip.lastElementChild = { textContent: "" };
 elements.sourcePill.lastElementChild = { textContent: "" };
 elements.sourcePicker.value = "fixture";
@@ -3115,7 +3124,10 @@ const sandbox = {
   Node,
   document: {
     getElementById(id) {
-      return elements[id] || null;
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
     },
     createElement(tag) {
       return new Node(tag);
@@ -3136,7 +3148,7 @@ const sandbox = {
   URL,
   URLSearchParams,
   fetch(url) {
-    if (url !== "api/live-readonly") {
+    if (url !== "api/live-readonly" && url !== "api/actions") {
       throw new Error(`unexpected fetch ${url}`);
     }
     return new Promise(() => {});
@@ -3145,32 +3157,274 @@ const sandbox = {
 
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
-sandbox.setLiveReadonly(false);
+(async () => {
+  sandbox.setLiveReadonly(false);
+  await Promise.resolve();
 
-if (desktop.dataset.source !== "live") {
-  throw new Error(`desktop source must switch to live immediately: ${desktop.dataset.source}`);
+  if (desktop.dataset.source !== "live") {
+    throw new Error(`desktop source must switch to live immediately: ${desktop.dataset.source}`);
+  }
+  if (elements.sourcePicker.value !== "live") {
+    throw new Error(`source picker must switch to live immediately: ${elements.sourcePicker.value}`);
+  }
+  if (elements.statePicker.disabled !== true) {
+    throw new Error("state picker must be disabled while live readonly is pending");
+  }
+  if (elements.brandCaption.textContent !== "live только чтение") {
+    throw new Error(`overview live caption missing: ${elements.brandCaption.textContent}`);
+  }
+  if (elements.runtimeChip.lastElementChild.textContent !== "Загрузка") {
+    throw new Error(`runtime chip must show loading while fetch pending: ${elements.runtimeChip.lastElementChild.textContent}`);
+  }
+  if (elements.activeCount.textContent !== "—" || elements.problemCount.textContent !== "—") {
+    throw new Error(`overview counters must not keep fixture values while live fetch pending: active=${elements.activeCount.textContent}, problem=${elements.problemCount.textContent}`);
+  }
+  if (!elements.fixtureBanner.textContent.includes("Загрузка live-readonly")) {
+    throw new Error(`overview banner must show live pending copy: ${elements.fixtureBanner.textContent}`);
+  }
+  if (elements.sidebarStatus.textContent !== "Загрузка live-readonly…") {
+    throw new Error(`sidebar status must show live pending copy: ${elements.sidebarStatus.textContent}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_set_live_readonly_retries_action_metadata_after_initial_failure(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tagName = tag.toUpperCase();
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.value = "";
+    this.dataset = {};
+    this.children = [];
+    this.attributes = {};
+    this.style = {};
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (token) => this.className.split(/\s+/).filter(Boolean).includes(token),
+      add: () => {},
+      remove: () => {},
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  querySelector() {
+    return new Node();
+  }
+  querySelectorAll() {
+    return [];
+  }
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
 }
-if (elements.sourcePicker.value !== "live") {
-  throw new Error(`source picker must switch to live immediately: ${elements.sourcePicker.value}`);
-}
-if (elements.statePicker.disabled !== true) {
-  throw new Error("state picker must be disabled while live readonly is pending");
-}
-if (elements.brandCaption.textContent !== "live только чтение") {
-  throw new Error(`overview live caption missing: ${elements.brandCaption.textContent}`);
-}
-if (elements.runtimeChip.lastElementChild.textContent !== "Загрузка") {
-  throw new Error(`runtime chip must show loading while fetch pending: ${elements.runtimeChip.lastElementChild.textContent}`);
-}
-if (elements.activeCount.textContent !== "—" || elements.problemCount.textContent !== "—") {
-  throw new Error(`overview counters must not keep fixture values while live fetch pending: active=${elements.activeCount.textContent}, problem=${elements.problemCount.textContent}`);
-}
-if (!elements.fixtureBanner.textContent.includes("Загрузка live-readonly")) {
-  throw new Error(`overview banner must show live pending copy: ${elements.fixtureBanner.textContent}`);
-}
-if (elements.sidebarStatus.textContent !== "Загрузка live-readonly…") {
-  throw new Error(`sidebar status must show live pending copy: ${elements.sidebarStatus.textContent}`);
-}
+
+const ids = [
+  "refreshFixture",
+  "sourcePicker",
+  "statePicker",
+  "brandCaption",
+  "sourceFooter",
+  "subtitleText",
+  "sourcePill",
+  "runtimeChip",
+  "desiredMode",
+  "effectiveMode",
+  "endpoint",
+  "lastError",
+  "activeCount",
+  "reserveCount",
+  "holdCount",
+  "problemCount",
+  "activeNote",
+  "reserveNote",
+  "holdNote",
+  "problemNote",
+  "fixtureBanner",
+  "sidebarDot",
+  "sidebarStatus"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.refreshFixture.lastElementChild = { textContent: "" };
+elements.runtimeChip.lastElementChild = { textContent: "" };
+elements.sourcePill.lastElementChild = { textContent: "" };
+elements.sourcePicker.value = "live";
+elements.statePicker.value = "healthy";
+const desktop = new Node("div");
+desktop.dataset = { screen: "overview", source: "fixture", fixtureState: "healthy", settingsSection: "hub" };
+
+const onboardButton = new Node("button");
+onboardButton.className = "button primary onboard-action";
+onboardButton.dataset = { uiAction: "onboard_account" };
+
+let actionsFetchCount = 0;
+const liveSnapshot = {
+  schema_version: 1,
+  state_id: "healthy",
+  status: "ok",
+  ui_state: "healthy",
+  source: "live_readonly",
+  fixture_notice: "live readonly ok",
+  runtime: {
+    visual_state: "healthy",
+    status_label: "Готово",
+    desired_mode: "managed",
+    effective_mode: "managed",
+    endpoint: "http://127.0.0.1:8765",
+    machine_error_code: "",
+    human_message: "ok",
+    last_error: "",
+    observed_at_utc: "2026-05-16T00:00:00Z"
+  },
+  pool_summary: {
+    active: 1,
+    reserve: 0,
+    hold: 0,
+    problem: 0,
+    active_note: "ok",
+    reserve_note: "ok",
+    hold_note: "ok",
+    problem_note: "ok"
+  },
+  events: []
+};
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
+        return [onboardButton];
+      }
+      return [];
+    }
+  },
+  window: {
+    location: { search: "?screen=overview&source=live", href: "http://127.0.0.1/?screen=overview&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url === "api/actions") {
+      actionsFetchCount += 1;
+      if (actionsFetchCount === 1) {
+        return Promise.resolve({ ok: false, status: 503, text: async () => "" });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          actions: {
+            onboard_account: {
+              ui_action: "onboard_account",
+              display_name: "Подключить аккаунт",
+              human_meaning: "live onboarding",
+              action_role: "live_onboarding",
+              mutates_runtime: true,
+              affects_primary_truth: true,
+              confirmation_required: true,
+              post_action_refresh_required: true,
+              action_claim_scope: "account_registry",
+              available: true,
+              availability_state: "displayable_readonly",
+              disabled_reason_code: "",
+              disabled_reasons: [],
+              unavailable_reason: ""
+            }
+          }
+        })
+      });
+    }
+    if (url === "api/live-readonly") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => liveSnapshot
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  desktop.dataset.source = "live";
+  await sandbox.loadActionMetadata();
+  sandbox.applyActionAvailability();
+  if (onboardButton.disabled !== true || onboardButton.dataset.disabledReasonCode !== "UI_ACTION_METADATA_UNAVAILABLE") {
+    throw new Error(`initial metadata failure must disable onboard button, got disabled=${onboardButton.disabled} reason=${onboardButton.dataset.disabledReasonCode}`);
+  }
+
+  await sandbox.setLiveReadonly(false);
+
+  if (actionsFetchCount !== 2) {
+    throw new Error(`setLiveReadonly must retry action metadata, got ${actionsFetchCount} fetches`);
+  }
+  if (desktop.dataset.source !== "live") {
+    throw new Error(`desktop source must stay live after refresh, got ${desktop.dataset.source}`);
+  }
+  if (onboardButton.disabled !== false) {
+    throw new Error("onboard button must recover after metadata refresh succeeds");
+  }
+  if (onboardButton.dataset.available !== "true") {
+    throw new Error(`onboard button availability must recover, got ${onboardButton.dataset.available}`);
+  }
+  if (onboardButton.dataset.disabledReasonCode !== "") {
+    throw new Error(`disabled reason must clear after recovery, got ${onboardButton.dataset.disabledReasonCode}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
 """
         result = subprocess.run(
             ["node", "-e", script],
