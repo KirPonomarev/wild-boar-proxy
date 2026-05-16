@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "status": "stopped",
+  "final_verdict": "STOP_AND_DIAGNOSE",
+  "machine_reason": "WRITE_SURFACE_CONTRACT_VIOLATION",
+  "trigger_packet": "launch_smoke_packet.json",
+  "triggering_changed_files": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+  ],
+  "outside_declared_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli/config.toml"
+  ],
+  "packet_truth_summary": {
+    "healthcheck_ok": true,
+    "claim_gate_cleared_after_launch_smoke": true,
+    "policy_drift_cleared_after_launch_smoke": true
+  },
+  "next_contour_candidate": "STOP_AND_DIAGNOSE",
+  "next_action": "audit and localize undeclared config.toml write before any further live selector or runtime progression"
+}

@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "sequence": [
+    "healthcheck --json",
+    "status --json",
+    "launch smoke --json",
+    "status --json"
+  ],
+  "authorization_basis": "standing approval phrase present in active thread",
+  "healthcheck_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "effective_mode": "stable",
+    "launch_readiness_status": "ready",
+    "runtime_guardrails_status": "clear",
+    "lock_status": "available",
+    "changed_files": [],
+    "observed_at_utc": "2026-05-16T05:49:23.652005+00:00"
+  },
+  "status_after_healthcheck_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "claim_gate": {
+      "status": "blocked",
+      "machine_error_code": "CLAIM_GATE_BLOCKED",
+      "blocked_claims": [
+        "active-only-traffic",
+        "pool-participation-correct",
+        "stable-15-proved"
+      ],
+      "sources": [
+        "policy_drift"
+      ],
+      "next_action": "inspect_claim_gate"
+    },
+    "policy_drift": {
+      "status": "detected",
+      "machine_error_code": "STABLE_POLICY_DRIFT",
+      "configured_active_count": 17,
+      "allowed_stable_auth_count": 15,
+      "stable_auth_inventory_count": 25,
+      "stable_auth_inventory_source": {
+        "source": "auth-dir",
+        "path": "~/.cli-proxy-api",
+        "path_resolution": "expanduser",
+        "exists": true
+      },
+      "disallowed_configured_auths": [
+        {
+          "backend_id": "kir-test-gpt26-team",
+          "auth_basename": "codex-21c5ac82-kir.test.gpt26@gmail.com-team.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "ponkirill816-team",
+          "auth_basename": "codex-a4266d7f-ponkirill816@gmail.com-team.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "kp8750410-team",
+          "auth_basename": "codex-e5c048fc-kp8750410@gmail.com-team.json",
+          "pool": "active",
+          "manual_hold": false,
+          "status": "degraded",
+          "enabled": true,
+          "reason": "auth_invalid,status_not_allowed"
+        },
+        {
+          "backend_id": "k-gpt-pro-2",
+          "auth_basename": "codex-k.gpt.pro.2@outlook.com-free.json",
+          "pool": "active",
+          "manual_hold": false,
+          "status": "degraded",
+          "enabled": true,
+          "reason": "quota_exhausted,status_not_allowed"
+        },
+        {
+          "backend_id": "k-gpt-pro-4",
+          "auth_basename": "codex-k.gpt.pro.4@outlook.com-free.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "open17-plus",
+          "auth_basename": "codex-k.pro.open17@gmail.com-plus.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "kirpon556",
+          "auth_basename": "codex-kirpon556@gmail.com-free.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "new-gpt-pro",
+          "auth_basename": "codex-new.gpt.pro@outlook.com-free.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "new-new33333",
+          "auth_basename": "codex-new.new33333@outlook.com-free.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        },
+        {
+          "backend_id": "pkir0477",
+          "auth_basename": "codex-pkir0477@gmail.com-free.json",
+          "pool": "retired",
+          "manual_hold": false,
+          "status": "down",
+          "enabled": true,
+          "reason": "pool_not_active,status_not_allowed"
+        }
+      ],
+      "missing_auths": [],
+      "unknown_auths": [],
+      "claim_blockers": [
+        "stable-15-proved",
+        "active-only-traffic",
+        "pool-participation-correct"
+      ],
+      "next_action": "inspect_stable_policy_drift"
+    }
+  },
+  "launch_smoke_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "liveness": "healthy",
+    "effective_mode": "stable",
+    "changed_files": [
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+    ]
+  },
+  "status_after_launch_smoke_summary": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "claim_gate": {
+      "status": "clear",
+      "machine_error_code": "OK",
+      "blocked_claims": [],
+      "sources": [],
+      "next_action": "none"
+    },
+    "policy_drift": {
+      "status": "clear",
+      "machine_error_code": "OK",
+      "configured_active_count": 17,
+      "allowed_stable_auth_count": 15,
+      "stable_auth_inventory_count": 15,
+      "stable_auth_inventory_source": {
+        "source": "approved_repair_target",
+        "path": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+        "path_resolution": "control_owned_inventory_path",
+        "exists": true
+      },
+      "disallowed_configured_auths": [],
+      "missing_auths": [],
+      "unknown_auths": [],
+      "claim_blockers": [],
+      "next_action": "none"
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "observed_at_utc": "2026-05-16T05:18:26Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "b4af7be",
+  "pre_start_gate": {
+    "tracked_worktree_clean": true,
+    "ambient_untracked_tail_present": true,
+    "ambient_untracked_tail_count": 165,
+    "master_plan_correction_commit": "b4af7be",
+    "master_plan_correction_pushed": true,
+    "previous_dependent_contour_closed": true,
+    "lock_surface_path": "/Users/kirillponomarev/.codex-custom-cli/managed/wild-boar-proxy.lock",
+    "lock_surface_path_exists": false,
+    "lock_surface_observed_state": "no_lock_file_present_at_preflight_read",
+    "live_owner_authorization_status": "blocked_pending_canonical_owner_authorization",
+    "live_runtime_commands_executed": false
+  },
+  "cleanliness_adjudication": {
+    "canon_order_basis": [
+      "CANON.md",
+      "MASTER_PLAN.md",
+      "DELIVERY_RULES.md"
+    ],
+    "higher_order_active_rule": "git status --short --untracked-files=no must be clean for tracked files before starting",
+    "ambient_untracked_tail_examples": [
+      "Security.zip",
+      "Security/",
+      "audit_results/c02_mini_eval_admission_2026-05-09.json"
+    ],
+    "adjudication": "tracked_cleanliness_is_authoritative_for_this_contour_pre_start; ambient_untracked_tail_not_touched_in_this_contour"
+  },
+  "resolved_runtime_paths": {
+    "profile_dir": "/Users/kirillponomarev/.codex-custom-cli",
+    "managed_dir": "/Users/kirillponomarev/.codex-custom-cli/managed",
+    "stable_config": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+    "auth_file": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+    "config_toml": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+    "runtime_mode_file": "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+    "runtime_effective_mode_file": "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+    "registry_file": "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+    "state_file": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+    "managed_config_file": "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+    "launcher_script": "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+    "sync_script": "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-sync.sh",
+    "lock_file": "/Users/kirillponomarev/.codex-custom-cli/managed/wild-boar-proxy.lock",
+    "repair_target_inventory_dir": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target",
+    "repair_target_reference_file": "/Users/kirillponomarev/.codex-custom-cli/managed/approved-repair-target.json",
+    "target_switch_transaction_file": "/Users/kirillponomarev/.codex-custom-cli/managed/target-switch-transaction.json",
+    "stable_runtime_generated_config_file": "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml"
+  },
+  "live_surface_admission": {
+    "exact_commands": [
+      "python3 -m wild_boar_proxy healthcheck --json",
+      "python3 -m wild_boar_proxy status --json",
+      "python3 -m wild_boar_proxy launch smoke --json",
+      "python3 -m wild_boar_proxy rollout rotation inspect --json"
+    ],
+    "exact_real_read_surfaces": [
+      "/Users/kirillponomarev/.codex-custom-cli/",
+      "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/managed-config.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-sync.sh",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/wild-boar-proxy.lock",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/approved-repair-target.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/target-switch-transaction.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-repair-target/",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+      "/Users/kirillponomarev/.cli-proxy-api/config.yaml"
+    ],
+    "exact_real_write_surfaces": [
+      "/Users/kirillponomarev/.codex-custom-cli/runtime-effective-mode.txt",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/supervisor-state.json",
+      "/Users/kirillponomarev/.codex-custom-cli/managed/stable-runtime-config.generated.yaml",
+      "/Users/kirillponomarev/.codex-custom-cli/codex-custom-launch.sh"
+    ],
+    "rollback_expectation": [
+      "follow command-packet rollback or operator_action when present",
+      "stop immediately on writes outside admitted surfaces",
+      "close as STOP_AND_DIAGNOSE if runtime truth remains blocked after reproof"
+    ]
+  },
+  "local_verification": {
+    "git_diff_check": "pass",
+    "targeted_cli_tests": {
+      "status": "pass",
+      "test_count": 4,
+      "command": "python3 -m unittest -q tests.test_cli.CliTests.test_healthcheck_owner_path_recovers_approved_target_and_reports_changed_files tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target tests.test_cli.CliTests.test_status_uses_approved_target_policy_drift_surface_when_live_activation_evidence_is_valid tests.test_cli.CliTests.test_rollout_rotation_inspect_reports_stale_selected_snapshot"
+    }
+  },
+  "agent_inspection": {
+    "max_parallel_agents_respected": true,
+    "inspector_count": 2,
+    "russell_result": {
+      "verdict": "pass_with_caveats",
+      "facts": [
+        "RUNTIME_REPROOF_PASS is canonically correct as next primary contour",
+        "live runtime commands require explicit owner authorization",
+        "selector refresh, exact auth-source admission, sandbox auth materialization, and onboarding remain parked",
+        "handoff snapshot metadata is stale relative to current HEAD, so MASTER_PLAN active sections outrank it"
+      ]
+    },
+    "peirce_result": {
+      "verdict_before_remediation": "fail",
+      "facts": [
+        "no improper layer mixing found",
+        "previous-contour closeout gate was not explicit enough",
+        "live write surfaces and rollback expectations were missing",
+        "live owner authorization is required before live runtime commands"
+      ],
+      "remediation_applied": [
+        "added previous contour verification/commit/push gate",
+        "added declared live write surfaces",
+        "added rollback expectations",
+        "added previous-contour closure stop condition"
+      ]
+    },
+    "followup_lock_gap_audit": {
+      "verdict_before_remediation": "fail",
+      "facts": [
+        "the packet claimed only owner authorization remained blocked",
+        "current lock surface had not been positively adjudicated in the v5 packets"
+      ],
+      "remediation_applied": [
+        "performed direct preflight read of the declared lock path",
+        "recorded that the lock path is currently absent at preflight read",
+        "kept live stop condition for any active or ambiguous lock state reported later by command packets"
+      ]
+    }
+  },
+  "decision": {
+    "status": "preflight_blocked_before_live",
+    "machine_reason": "OWNER_AUTHORIZATION_REQUIRED",
+    "next_action": "obtain canonical owner authorization before healthcheck --json",
+    "admission_state": "ready_except_for_owner_authorization",
+    "lock_surface_preflight_state": "no_lock_file_present_at_preflight_read"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_REPROOF_PASS",
+  "run_label": "v5",
+  "observed_at_utc": "2026-05-16T05:33:57Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "b4af7be",
+  "gate": "live_owner_authorization",
+  "canon_basis": {
+    "source": "CANON.md",
+    "rule": "live runtime commands require explicit owner authorization in the active thread",
+    "standing_approval_phrase": "разрешаю тебе любые законные действия в рамках разработки проекта",
+    "generic_start_phrase_sufficient": false
+  },
+  "independent_inspection": {
+    "max_parallel_agents_respected": true,
+    "inspector_count": 2,
+    "authorization_audit": {
+      "verdict": "fail",
+      "finding": "current thread-visible user messages do not contain canonically sufficient owner authorization for live runtime commands"
+    },
+    "blocker_audit": {
+      "verdict": "pass",
+      "finding": "all currently checked non-authorization preflight gates are satisfied; live execution still must stop on any active or ambiguous lock state reported later by command packets"
+    }
+  },
+  "supporting_facts": {
+    "tracked_worktree_clean": true,
+    "ambient_untracked_tail_present": true,
+    "ambient_untracked_tail_nonblocking_for_this_contour": true,
+    "master_plan_correction_commit": "b4af7be",
+    "master_plan_correction_pushed": true,
+    "previous_dependent_contour_closed": true,
+    "lock_surface_path": "/Users/kirillponomarev/.codex-custom-cli/managed/wild-boar-proxy.lock",
+    "lock_surface_path_exists_at_preflight": false,
+    "lock_surface_observed_state_at_preflight": "no_lock_file_present_at_preflight_read",
+    "live_runtime_commands_executed": false,
+    "targeted_cli_tests_status": "pass",
+    "targeted_cli_test_count": 4,
+    "preflight_admission_state": "ready_except_for_owner_authorization"
+  },
+  "decision": {
+    "status": "blocked_before_live",
+    "machine_reason": "OWNER_AUTHORIZATION_REQUIRED",
+    "allowed_next_action": "obtain canonical owner authorization in-thread before healthcheck --json",
+    "forbidden_next_action": "do not run live runtime commands before authorization"
+  }
+}
