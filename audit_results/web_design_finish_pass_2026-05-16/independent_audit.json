@@ -1,0 +1,37 @@
+{
+  "auditor": "Sagan",
+  "verdict": "PASS",
+  "findings": [],
+  "evidence": [
+    {
+      "file": "wild_boar_proxy/web_design_ui/index.html",
+      "lines": "709-719",
+      "note": "api-connections table column widths adjusted only; no new ids, elements, or status claims"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "lines": "1727-1747",
+      "note": "overview top-card alignment and density changes stay layout-only"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "lines": "1817-1860",
+      "note": "segmented control and utility-strip spacing changes stay visual-only"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "lines": "2201-2303",
+      "note": "table padding, route metadata wrapping, and API table width changes stay UI-only"
+    },
+    {
+      "file": "wild_boar_proxy/web_design_ui/styles/overview.css",
+      "lines": "6407-6799",
+      "note": "quick-start overflow, wrapping, and responsive layout fixes stay visual-only"
+    }
+  ],
+  "scope_confirmation": {
+    "ui_only": true,
+    "new_server_fields_required": false,
+    "new_action_ids_required": false
+  }
+}

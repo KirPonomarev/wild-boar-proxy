@@ -1725,6 +1725,8 @@ button:disabled {
 }
 
 .overview-top {
+  align-items: start;
+  gap: 24px;
   grid-template-columns: minmax(360px, 496px) minmax(500px, 1fr);
 }
 
@@ -1734,7 +1736,14 @@ button:disabled {
 }
 
 .system-card .kv {
+  gap: 10px 20px;
   margin-top: 16px;
+}
+
+.mode-card {
+  align-content: start;
+  display: grid;
+  gap: 14px;
 }
 
 .kv {
@@ -1812,8 +1821,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   height: 42px;
-  margin-bottom: 18px;
-  margin-top: 16px;
+  margin: 4px 0 0;
   padding: 4px;
 }
 
@@ -1848,7 +1856,7 @@ button:disabled {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: -4px 0 12px;
+  margin: 0;
   padding-bottom: 12px;
 }
 
@@ -2191,7 +2199,7 @@ button:disabled {
 }
 
 .api-connections-table {
-  min-width: 980px;
+  min-width: 1098px;
 }
 
 .table th {
@@ -2202,6 +2210,7 @@ button:disabled {
   height: 42px;
   letter-spacing: .06em;
   line-height: 14px;
+  padding: 0 12px 10px;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
@@ -2213,8 +2222,19 @@ button:disabled {
   height: 58px;
   line-height: 18px;
   overflow-wrap: normal;
+  padding: 10px 12px;
   word-break: normal;
   vertical-align: middle;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
 }
 
 .table tbody tr.selected td {
@@ -2264,10 +2284,22 @@ button:disabled {
 
 .api-route-id {
   display: block;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.api-connections-table .account-sub {
+  display: -webkit-box;
+  line-height: 17px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }
 
 .right {
@@ -2337,6 +2369,12 @@ button:disabled {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.api-secret-ref .mono-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .api-secret-ref .chip {
@@ -6367,7 +6405,7 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .main {
-  overflow-y: hidden;
+  overflow-y: auto;
   padding-bottom: 34px;
   padding-top: 46px;
 }
@@ -6376,8 +6414,8 @@ button:disabled {
   display: grid;
   gap: 16px;
   grid-template-rows: min-content minmax(0, 1fr) min-content;
-  height: calc(100vh - 236px);
-  min-height: 0;
+  height: auto;
+  min-height: calc(100vh - 236px);
 }
 
 .quick-start-screen[hidden] {
@@ -6470,10 +6508,13 @@ button:disabled {
 }
 
 .quick-start-account-list {
+  align-content: start;
   border-top: 1px solid rgba(217, 208, 195, .86);
   display: grid;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .quick-start-account-row {
@@ -6482,7 +6523,8 @@ button:disabled {
   display: grid;
   gap: 14px;
   grid-template-columns: 40px minmax(0, 1fr) 128px;
-  height: 64px;
+  min-height: 64px;
+  padding: 12px 0;
 }
 
 .quick-start-account-index {
@@ -6582,12 +6624,18 @@ button:disabled {
 }
 
 .quick-start-card-actions {
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: auto;
 }
 
 .quick-start-card-actions .button {
   white-space: nowrap;
+}
+
+.quick-start-card-actions .quick-start-link {
+  margin-left: auto;
 }
 
 .quick-start-card-actions .button.primary:disabled {
@@ -6659,6 +6707,8 @@ button:disabled {
 .quick-start-api-status {
   border: 1px solid rgba(217, 208, 195, .86);
   border-radius: 16px;
+  display: grid;
+  gap: 10px;
   min-height: 112px;
   padding: 16px;
 }
@@ -6741,4 +6791,10 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 18px;
+}
+
+@media (max-width: 1420px) {
+  .quick-start-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
