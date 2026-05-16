@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE",
+  "run_label": "config_toml_write",
+  "write_target": "/Users/kirillponomarev/.codex-custom-cli/config.toml",
+  "runtime_paths_basis": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 203,
+    "field": "RuntimePaths.config_toml",
+    "default_resolution": "~/.codex-custom-cli/config.toml"
+  },
+  "cli_trace": [
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/__main__.py",
+      "line": 4,
+      "function": "main"
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py",
+      "line": 292,
+      "function": "main"
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py",
+      "line": 316,
+      "dispatch": "launch smoke -> run_launch_smoke(paths)"
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "line": 6278,
+      "function": "run_launch_smoke"
+    },
+    {
+      "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+      "line": 3367,
+      "function": "run_stable_runtime_launcher_attempt"
+    }
+  ],
+  "primary_write_site": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 904,
+    "function": "build_repo_owned_default_launcher_script_payload",
+    "mode_branch": "smoke",
+    "embedded_write_line": 954,
+    "write_mechanism": "embedded launcher Python uses config_path.write_text(...)",
+    "conditionality": "executed whenever repo-owned default launcher handles smoke mode"
+  },
+  "secondary_write_site": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 5029,
+    "function": "reconcile_stable_fallback",
+    "write_mechanism": "write_toml_string_atomic(paths.config_toml, 'base_url', stable_endpoint)",
+    "conditionality": "conditional on healthcheck fallback reconciliation"
+  },
+  "write_helper_semantics": {
+    "path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "line": 545,
+    "function": "write_toml_string_atomic",
+    "short_circuit_on_unchanged_content": false,
+    "final_write": "write_text_atomic(...)"
+  }
+}
