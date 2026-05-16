@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contour": "PLAN_RECENTER_TO_PRODUCT_WORK",
+  "status": "completed",
+  "decision": "ALLOW_UI_READONLY_COMMAND_BINDING_WHILE_RUNTIME_LIVE_ACTION_CHAIN_REMAINS_PARKED",
+  "runtime_live_action_chain": {
+    "status": "parked",
+    "blockers": [
+      "repeated_selector_lock_contention",
+      "post_retry_runtime_regression",
+      "exact_auth_source_not_singleton",
+      "sandbox_auth_materialization_not_admitted",
+      "onboarding_not_admitted",
+      "stage_pilot_claims_not_admitted"
+    ],
+    "next_live_action_contour": "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION"
+  },
+  "product_safe_ui_lane": {
+    "status": "allowed",
+    "next_contour": "UI_READONLY_COMMAND_BINDING_PASS",
+    "allowed_surfaces": [
+      "read_only_json_command_binding",
+      "truth_display",
+      "command_ledger_history_display",
+      "disabled_live_action_reasons"
+    ],
+    "forbidden_claims": [
+      "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+      "exact_auth_source_ready",
+      "selector_refresh_success",
+      "sandbox_auth_materialization_ready",
+      "onboarding_ready",
+      "pilot_ready",
+      "stage_proved"
+    ],
+    "forbidden_live_commands": [
+      "sync --json",
+      "launch smoke --json",
+      "stable repair --apply --json",
+      "accounts onboard --json",
+      "route mutation commands",
+      "stage/pilot proof commands"
+    ]
+  },
+  "canon_alignment": {
+    "false_green_forbidden": true,
+    "live_mutation_performed": false,
+    "runtime_data_committed": false,
+    "design_gate_claimed": false,
+    "rich_ui_expansion_claimed": false
+  },
+  "next_contour": "UI_READONLY_COMMAND_BINDING_PASS"
+}

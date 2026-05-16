@@ -7,7 +7,7 @@ PLAN_NAME: Wild Boar Proxy Master Plan
 PLAN_VERSION: 1.50
 PLAN_DATE: 2026-05-16
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Stable/sandbox truth recalibration wave active; `RUNTIME_REPROOF_PASS` v5 re-earned runtime preconditions through `launch smoke --json` and the follow-up `status --json` packet cleared `claim_gate` and `policy_drift`, but the contour then closed as `STOP_AND_DIAGNOSE` because `launch smoke --json` truthfully reported a legitimate `config.toml` write outside the contour's declared write surfaces; next primary contour is `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`; selector refresh, exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until launch-smoke write-surface truth is aligned with governing contour truth and the next live re-entry contour is named from aligned evidence
+PLAN_STATUS: Product-safe UI lane recentered while runtime/live-action chain remains parked; launch-smoke write-surface alignment and runtime re-entry have already closed, but the latest selector retry again returned `LOCK_HELD` and post-retry runtime truth regressed to blocked `claim_gate` / detected `policy_drift`; selector retry, exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until repeated selector lock contention and runtime regression are diagnosed in a separate live-action contour; `UI_READONLY_COMMAND_BINDING_PASS` may proceed as a separate product-safe lane limited to read-only JSON command binding, truth display, command ledger/history display, and disabled live-action reasons, without claiming `EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -90,11 +90,37 @@ Current implication:
   begins; the unresolved scale blocker must instead remain explicit as a
   separate later contour
 
+## Product-Safe UI Lane Recenter
+
+The runtime/live-action chain and the product-safe UI lane are separate active
+lanes.
+
+Runtime/live-action truth remains parked on repeated selector lock contention
+and post-retry runtime regression. This does not grant execution-core repair
+closure, exact auth-source readiness, sandbox auth materialization readiness,
+onboarding readiness, stage proof, pilot readiness, or design-gate readiness.
+
+A separate product-safe UI lane may proceed as
+`UI_READONLY_COMMAND_BINDING_PASS` under these constraints:
+
+- bind only read-only JSON command surfaces and committed packet truth
+- display current truth, command ledger/history, and machine-readable blocked
+  reasons
+- show live-mutating actions only as disabled when runtime/selector/auth truth
+  does not admit them
+- do not execute `sync --json`, `launch smoke --json`,
+  `stable repair --apply --json`, onboarding, route mutation, or stage/pilot
+  commands
+- do not present blocked runtime actions as available
+- do not claim `EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`
+- do not treat this as rich UI expansion or design polish
+
 ## Current Recalibration Correction
 
 Recent machine-carried evidence first exposed a selector-refresh precondition
-boundary, then later exposed a contour-contract alignment gap inside the
-runtime reproof lane.
+boundary, later exposed and closed a launch-smoke write-surface alignment gap,
+then exposed repeated selector lock contention with post-retry runtime
+regression.
 
 What was truthfully gained:
 
@@ -106,50 +132,52 @@ What was truthfully gained:
   truth had been re-earned
 - the latest runtime reproof packet set cleared `claim_gate` and
   `policy_drift` after `launch smoke --json`
+- launch-smoke `config.toml` writes were diagnosed as legitimate owner-path
+  behavior and governing write-surface truth was aligned
+- a fresh runtime re-entry closed green after that alignment
+- selector refresh was retried once after lock diagnosis, as a bounded retry
+  only
 
 What remains blocked:
 
-- selector refresh did not complete and did not produce a successful
-  `sync --json` packet
-- the first `sync --json` attempt returned `LOCK_HELD` with no changed files
-- before a clean retry, `status --json` again reported
+- selector refresh still has not completed in the latest chain
+- the latest bounded selector retry returned `LOCK_HELD` with no selector
+  progress
+- post-retry `status --json` again reported
   `claim_gate = blocked`
-- before a clean retry, `status --json` again reported
+- post-retry `status --json` again reported
   `policy_drift = detected`
 - effective stable runtime consumer truth regressed to
   `observed_source_active`
 - consumer activation readiness regressed to `activation_pending`
 - activation evidence became `snapshot_stale`
-- the later `RUNTIME_REPROOF_PASS` v5 contour reported
-  `/Users/kirillponomarev/.codex-custom-cli/config.toml` in
-  `launch smoke --json` `changed_files`
-- that write was later diagnosed as legitimate repo/runtime owner-path behavior
-  rather than a runtime bug
-- the contour's declared launch-smoke write surfaces were narrower than the
-  runtime truth they were supposed to admit
+- exact auth-source admission remains a multi-candidate family problem, not a
+  singleton-ready surface
+- no safe canonical admission command for one already-active auth-ref has been
+  established
 
 Interpretation rule:
 
 - this is not treated as successful selector refresh
 - this is not treated as sandbox auth-source readiness
-- the earlier selector-refresh stop was treated as runtime precondition loss
-  before selector retry
-- the later runtime reproof packet set is treated as runtime preconditions
-  re-earned
-- selector refresh still may not resume yet because launch-smoke write-surface
-  truth is not fully aligned with governing contour truth
-- contract alignment must close before the next live runtime or selector contour
+- this is not treated as live-action readiness
+- this is not treated as execution-core repair closure
+- repeated selector lock contention plus post-retry runtime regression must be
+  diagnosed before any further live selector retry or auth/source materialization
+- product-safe UI work may proceed only in the separate read-only / disabled
+  action lane described above
 
 Current implication:
 
-- the next primary contour is
-  `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`
+- the live-action chain remains parked on
+  `STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION`
 - `SELECTOR_REFRESH_OWNER_PATH_PASS` remains stopped and must not be retried
-  until launch-smoke write-surface truth is aligned and a fresh live re-entry
-  contour is named from aligned evidence
+  until repeated lock contention and post-retry runtime regression are localized
 - `EXACT_AUTH_REF_SOURCE_ADMISSION_PASS` remains parked until runtime truth and
-  selector evidence are aligned again
+  selector evidence are aligned again and a singleton admission surface exists
 - sandbox `auth.json` materialization remains parked
+- `UI_READONLY_COMMAND_BINDING_PASS` may proceed as product-safe work under the
+  constraints in `Product-Safe UI Lane Recenter`
 
 ## Anti-Loop Rule
 
@@ -185,30 +213,31 @@ contour` text, this section wins.
 Current active truth:
 
 - stable sandbox auth chain is not currently admission-ready
-- canonical selector refresh through `sync --json` was attempted but did not
-  complete
-- selected-backend participation evidence remains stale
-- the first selector refresh attempt returned `LOCK_HELD`
-- runtime-green preconditions later regressed before selector refresh could be
-  retried
-- the latest runtime reproof packet set re-earned runtime preconditions
-- the latest follow-up `status --json` packet reported:
-  - `claim_gate = clear`
-  - `policy_drift = clear`
-- `launch smoke --json` legitimately writes `config.toml` as part of its
-  owner-path behavior
-- the active contract/governing truth for launch-smoke write surfaces is
-  under-aligned with repo/runtime truth
+- launch-smoke write-surface truth has been aligned with repo/runtime behavior
+- runtime-green truth was re-earned in a fresh runtime re-entry after that
+  alignment
+- canonical selector refresh through `sync --json` was attempted after runtime
+  re-entry but hit `LOCK_HELD`
+- lock diagnosis localized the first stop as true concurrent lock contention
+  and admitted one bounded retry
+- the bounded retry again hit `LOCK_HELD` and earned no fresh selector progress
+- post-retry runtime truth regressed:
+  - `claim_gate = blocked`
+  - `policy_drift = detected`
+- exact auth-source admission remains parked because no singleton exact
+  auth-ref basis exists
+- product-safe UI command binding may proceed only as read-only truth display
+  plus disabled live-action reasons
 
 Current active implication:
 
-- the next primary contour is
-  `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`
-- no further selector refresh until launch-smoke write-surface truth is
-  aligned and the next live contour is named from aligned evidence
+- no further selector refresh until repeated lock contention and post-retry
+  runtime regression are diagnosed in a separate live-action contour
 - no exact auth-source admission
 - no sandbox `auth.json` materialization
 - no onboarding rerun
+- no stage/pilot claim
+- product-safe next contour is `UI_READONLY_COMMAND_BINDING_PASS`
 
 ## Lane Authority Quick Map
 
@@ -220,18 +249,21 @@ narrative convenience.
 | `stable repair --dry-run --json` | stable | policy/source-copy reconciliation truth | authoritative |
 | `status --json` | runtime | current mode, claim-gate, effective-source truth | authoritative |
 | `rollout rotation inspect --json` | participation | validates selected-backend evidence against policy/runtime truth | authoritative |
-| `sync --json` selected-backend snapshot | managed participation | attempted selector refresh; latest attempt stopped on `LOCK_HELD` | blocked until launch-smoke write-surface truth is aligned and the next live contour is named from aligned evidence |
-| `launch smoke --json` activation evidence | stable runtime activation | latest packet set re-earned runtime preconditions and exposed a legitimate `config.toml` owner-path write | authoritative for activation evidence and launch-smoke write-surface alignment |
+| `sync --json` selected-backend snapshot | managed participation | attempted selector refresh; latest bounded retry stopped on `LOCK_HELD` with no selector progress | blocked until repeated lock contention and post-retry runtime regression are diagnosed |
+| `launch smoke --json` activation evidence | stable runtime activation | earlier packet set re-earned runtime preconditions and exposed a legitimate `config.toml` owner-path write; write-surface truth has since been aligned | authoritative for activation evidence, but not a substitute for selector progress |
+| `UI_READONLY_COMMAND_BINDING_PASS` | product-safe UI | read-only truth display, command ledger/history display, and disabled live-action reasons | allowed only without live mutation, false-green, design-gate claim, or rich UI polish |
 
 Current interpretation rule:
 
-- stale selector evidence does not outrank either regressed runtime truth or an
-  unresolved contract mismatch in the active lane
-- managed-lane refresh cannot be retried honestly while launch-smoke
-  write-surface truth remains under-aligned
+- stale or absent selector progress does not outrank regressed runtime truth
+- managed-lane refresh cannot be retried honestly while repeated lock
+  contention and post-retry runtime regression remain undiagnosed
 - exact auth-source work may resume only after stable policy/runtime
-  reconciliation, runtime activation truth, selector evidence, and governing
-  write-surface truth are aligned
+  reconciliation, runtime activation truth, selector evidence, singleton
+  admission-surface truth, and governing write-surface truth are aligned
+- product-safe UI read-only binding may proceed without resolving the
+  live-action chain only if live-mutating actions remain disabled and blocked
+  reasons are surfaced truthfully
 
 ## Historical Next-Contour Marker Rule
 
