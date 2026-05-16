@@ -14808,6 +14808,38 @@ class CliTests(unittest.TestCase):
         self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, helper_text)
         self.assertTrue(runtime_mod.repo_managed_owner_helper_recognized(self.sync_script, "sync"))
 
+    def test_sync_blocks_held_lock_without_mutation(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        before = self.state_snapshot()
+
+        result = self.run_cli("sync", "--json")
+
+        after = self.state_snapshot()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["next_action"], "retry")
+        self.assertEqual(payload["operator_action"], "retry")
+        self.assertEqual(before, after)
+
+    def test_sync_clears_stale_lock_and_proceeds_past_lock_gate(self) -> None:
+        lock_file = self.managed_dir / "wild-boar-proxy.lock"
+        lock_file.write_text("999999\n", encoding="utf-8")
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+
+        result = self.run_cli("sync", "--json")
+
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr.strip(), f"sync-stable:{port}")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertNotEqual(payload["machine_error_code"], "LOCK_HELD")
+        self.assertFalse(lock_file.exists())
+
     def test_sync_materializes_selected_backend_snapshot_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]

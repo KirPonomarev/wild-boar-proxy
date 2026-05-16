@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE_SELECTOR_LOCK_HELD",
+  "lock_origin": {
+    "command": "python3 -m wild_boar_proxy sync --json",
+    "dispatch_path": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:78-80",
+    "runtime_entry": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:6746-6785",
+    "lock_gate": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py:5098-5113",
+    "error_wrapper": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/cli.py:421-433"
+  },
+  "exact_trigger_conditions": [
+    "lock file already exists",
+    "lock file content is non-empty",
+    "process_is_alive(holder_pid_text) returns true"
+  ],
+  "non_trigger_conditions": [
+    "invalid pid text returns false from process_is_alive",
+    "dead numeric pid returns false from process_is_alive",
+    "stale lock file is unlinked and acquisition loop retries instead of raising LOCK_HELD"
+  ],
+  "post_packet_absent_lock_explanation": {
+    "explained_by_same_code_path": false,
+    "same_path_unlinks_after_LOCK_HELD": false,
+    "supported_interpretation": "another process held the lock at packet time and released it before follow-up observation",
+    "code_evidence": [
+      "serialized_lock raises LOCK_HELD before any unlink when holder pid is alive",
+      "serialized_lock unlinks only stale lock files or lock files it created and later releases"
+    ]
+  }
+}
