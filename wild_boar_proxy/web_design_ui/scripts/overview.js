@@ -418,6 +418,13 @@ let selectedAccountIds = new Set();
 let actionLedger = [];
 let actionLedgerFilter = "all";
 let activeActionRequestKey = "";
+let snapshotCommandLedgerState = {
+  surface: "not loaded",
+  status: "missing",
+  source: "none",
+  entries: [],
+  hasWarnings: false
+};
 
 function text(id, value) {
   document.getElementById(id).textContent = String(value ?? "-");
@@ -926,6 +933,7 @@ function isApiRouteActionDeferredInReadonlyRegistry(uiAction) {
 
 function actionAvailabilityForButton(button) {
   const metadata = metadataFor(button.dataset.uiAction);
+  const metadataAllowsAction = metadata.available !== false;
   const requiresLive = (
     button.classList.contains("account-action")
     || button.classList.contains("onboard-action")
@@ -978,7 +986,7 @@ function actionAvailabilityForButton(button) {
       title: "Переключите экран на live-источник перед выполнением действий."
     };
   }
-  if (metadata.available === false) {
+  if (!metadataAllowsAction) {
     return {
       available: false,
       availabilityState: metadata.availability_state || "unknown_disabled",
@@ -1208,6 +1216,7 @@ function setLiveReadonlyPendingUi() {
     brandCaption.textContent = liveBrandCaptionForScreen(screen);
   }
   setSourceCopy("live");
+  setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
 }
 
 function renderOverviewLivePendingState() {
@@ -2174,6 +2183,139 @@ function setActionLedgerFilter(filter) {
 function clearActionLedger() {
   actionLedger = [];
   renderActionLedger();
+}
+
+function setSnapshotCommandLedgerFromSnapshots(surface, snapshots) {
+  const snapshotList = Array.isArray(snapshots) ? snapshots : [snapshots];
+  const entries = [];
+  for (const snapshot of snapshotList) {
+    if (!snapshot || typeof snapshot !== "object") {
+      continue;
+    }
+    const commands = snapshot.commands && typeof snapshot.commands === "object" ? snapshot.commands : {};
+    for (const [commandId, command] of Object.entries(commands)) {
+      if (!command || typeof command !== "object") {
+        continue;
+      }
+      entries.push(snapshotCommandLedgerEntry(commandId, command, snapshot));
+    }
+  }
+  snapshotCommandLedgerState = {
+    surface: safeLedgerText(surface || "read-only snapshot", "read-only snapshot"),
+    status: snapshotList.some((snapshot) => snapshot?.status === "integration_failure")
+      ? "integration_failure"
+      : (entries.length ? "loaded" : "missing"),
+    source: safeLedgerText(snapshotList.map((snapshot) => snapshot?.source).filter(Boolean).join(" + "), "unknown"),
+    entries: entries.slice(0, 12),
+    hasWarnings: snapshotList.some((snapshot) => snapshot?.has_warnings === true || snapshot?.status === "integration_failure")
+  };
+  renderSnapshotCommandLedger();
+}
+
+function snapshotCommandLedgerEntry(commandId, command, snapshot) {
+  return {
+    commandId: safeLedgerText(commandId, "unknown"),
+    role: safeLedgerText(command.role || "unknown", "unknown"),
+    status: safeLedgerText(command.status || "unknown", "unknown"),
+    uiState: safeLedgerText(command.ui_state || "unknown", "unknown"),
+    machineCode: safeLedgerText(command.machine_error_code || "-", "-"),
+    exitCode: Number.isFinite(Number(command.exit_code)) ? String(command.exit_code) : "-",
+    nextAction: safeLedgerText(command.next_action || "none", "none"),
+    visualClass: snapshotCommandVisual(command, snapshot),
+    source: safeLedgerText(snapshot?.source || "unknown", "unknown")
+  };
+}
+
+function snapshotCommandVisual(command, snapshot) {
+  const status = String(command.status || "unknown");
+  const uiState = String(command.ui_state || "unknown");
+  if (["command_error", "integration_failure", "invalid_json"].includes(status) || uiState === "integration_failure") {
+    return "red";
+  }
+  if (status !== "ok" || ["degraded", "down", "unknown"].includes(uiState) || snapshot?.has_warnings === true) {
+    return "amber";
+  }
+  return "blue";
+}
+
+function renderSnapshotCommandLedger() {
+  const list = document.getElementById("snapshotCommandLedgerList");
+  const surface = document.getElementById("snapshotCommandLedgerSurface");
+  const scope = document.getElementById("snapshotCommandLedgerScope");
+  if (surface) {
+    surface.textContent = `${snapshotCommandLedgerState.surface} · ${snapshotCommandLedgerState.source} · command packet outcome only`;
+  }
+  if (scope) {
+    const visual = snapshotCommandLedgerState.status === "integration_failure"
+      ? "red"
+      : (snapshotCommandLedgerState.hasWarnings ? "amber" : (snapshotCommandLedgerState.entries.length ? "blue" : "neutral"));
+    scope.className = `chip ${visual}`;
+    scope.lastElementChild.textContent = snapshotCommandLedgerState.entries.length
+      ? `${snapshotCommandLedgerState.entries.length} summaries`
+      : "нет summaries";
+  }
+  if (!list || typeof list.replaceChildren !== "function") {
+    return;
+  }
+  list.replaceChildren();
+  if (!snapshotCommandLedgerState.entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "action-ledger-empty";
+    empty.textContent = "Нет bounded command summaries в последнем read-only snapshot.";
+    list.append(empty);
+    return;
+  }
+  for (const entry of snapshotCommandLedgerState.entries) {
+    list.append(snapshotCommandLedgerRow(entry));
+  }
+}
+
+function snapshotCommandLedgerRow(entry) {
+  const row = document.createElement("details");
+  row.className = `action-ledger-row ${entry.visualClass}`;
+  row.open = false;
+
+  const head = document.createElement("summary");
+  head.className = "action-ledger-row-head";
+  setNodeAttribute(head, "aria-label", `Раскрыть read-only command summary ${entry.commandId}`);
+  const titleWrap = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = `${entry.commandId} · ${entry.role}`;
+  const source = document.createElement("small");
+  source.textContent = entry.source;
+  titleWrap.append(title, source);
+  const chip = document.createElement("span");
+  chip.className = `chip ${entry.visualClass}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const chipText = document.createElement("span");
+  chipText.textContent = entry.status;
+  chip.append(dot, chipText);
+  head.append(titleWrap, chip);
+
+  const truth = document.createElement("div");
+  truth.className = "action-ledger-truth";
+  truth.textContent = "command packet outcome only · not runtime health proof";
+
+  const detailGrid = document.createElement("div");
+  detailGrid.className = "action-ledger-detail-grid";
+  for (const [label, value] of [
+    ["command", entry.commandId],
+    ["role", entry.role],
+    ["status", entry.status],
+    ["ui_state", entry.uiState],
+    ["machine", entry.machineCode],
+    ["exit", entry.exitCode],
+    ["next", entry.nextAction]
+  ]) {
+    const labelNode = document.createElement("span");
+    labelNode.textContent = label;
+    const valueNode = document.createElement("strong");
+    valueNode.textContent = value;
+    detailGrid.append(labelNode, valueNode);
+  }
+  row.append(head, truth, detailGrid);
+  return row;
 }
 
 function actionSupportDetails(payload) {
@@ -3419,6 +3561,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   };
   currentAccountsSnapshot = safeAccounts;
   currentApiConnectionsSnapshot = safeApi;
+  setSnapshotCommandLedgerFromSnapshots("quick-start snapshot", [safeAccounts, safeApi]);
 
   const desktop = document.querySelector(".desktop");
   desktop.dataset.fixtureState = fixtureState;
@@ -3903,6 +4046,7 @@ function renderAccountsSnapshot(snapshot) {
       : (noData ? "Нет данных для таблицы" : "Строки 0-0 из 0")
   );
   currentAccountsSnapshot = safeSnapshot;
+  setSnapshotCommandLedgerFromSnapshots("accounts snapshot", safeSnapshot);
   renderAccountRows(safeSnapshot.accounts);
   renderAccountDetailDrawer();
 
@@ -3969,6 +4113,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   text("apiConnectionsVisibleCount", noData ? "Нет данных" : `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
   text("apiConnectionsPagination", noData ? "Нет данных для таблицы" : `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
   currentApiConnectionsSnapshot = safeSnapshot;
+  setSnapshotCommandLedgerFromSnapshots("api-connections snapshot", safeSnapshot);
   renderApiConnectionRows(safeSnapshot.routes);
 
   const sidebarDot = document.getElementById("sidebarDot");
@@ -4829,6 +4974,7 @@ function renderSnapshot(snapshot) {
   const desktop = document.querySelector(".desktop");
   desktop.dataset.fixtureState = safeSnapshot.state_id || safeSnapshot.ui_state || visualState;
   desktop.dataset.source = source;
+  setSnapshotCommandLedgerFromSnapshots("overview snapshot", safeSnapshot);
 
   const picker = document.getElementById("statePicker");
   picker.value = canonicalState(safeSnapshot.state_id || safeSnapshot.ui_state);

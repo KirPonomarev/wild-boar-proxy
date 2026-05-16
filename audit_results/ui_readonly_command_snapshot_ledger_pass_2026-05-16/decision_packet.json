@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "contour": "UI_READONLY_COMMAND_SNAPSHOT_LEDGER_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "GO_TO_NEXT_PRODUCT_SAFE_UI_BINDING_SLICE",
+  "live_mutation_performed": false,
+  "new_command_execution_surface_added": false,
+  "snapshot_command_ledger": {
+    "source": "existing_readonly_snapshot_commands",
+    "surfaces": [
+      "/api/live-readonly",
+      "/api/accounts-readonly",
+      "/api/api-connections-readonly"
+    ],
+    "rendered_fields": [
+      "command_id",
+      "role",
+      "status",
+      "ui_state",
+      "machine_error_code",
+      "exit_code",
+      "next_action"
+    ],
+    "excluded_fields": [
+      "raw_packet_body",
+      "argv",
+      "filesystem_paths",
+      "secrets",
+      "private_runtime_data",
+      "human_message"
+    ],
+    "truth_scope": "command_packet_outcome_only_not_runtime_health_proof",
+    "persistence": "ui_memory_only",
+    "separate_from_session_action_ledger": true
+  },
+  "runtime_live_action_chain": {
+    "status": "parked",
+    "blocked_actions_reason_code": "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+  },
+  "forbidden_claims": [
+    "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+    "selector_refresh_success",
+    "exact_auth_source_ready",
+    "onboarding_ready",
+    "pilot_ready",
+    "stage_proved"
+  ],
+  "next_contour": "GO_TO_NEXT_PRODUCT_SAFE_UI_BINDING_SLICE"
+}

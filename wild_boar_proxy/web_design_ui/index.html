@@ -2530,6 +2530,16 @@
           <div id="actionLedgerList" class="action-ledger-list" aria-label="Лента действий текущей UI-сессии">
             <div class="action-ledger-empty">Действия ещё не выполнялись в этой UI-сессии.</div>
           </div>
+          <div class="action-ledger-head">
+            <div>
+              <div class="card-title">Snapshot commands</div>
+              <div id="snapshotCommandLedgerSurface" class="secondary">Последний read-only snapshot · command packet outcome only</div>
+            </div>
+            <span id="snapshotCommandLedgerScope" class="chip neutral"><span class="dot"></span><span>не загружено</span></span>
+          </div>
+          <div id="snapshotCommandLedgerList" class="action-ledger-list" aria-label="Команды последнего read-only snapshot">
+            <div class="action-ledger-empty">Read-only snapshot ещё не загружен.</div>
+          </div>
         </aside>
       </div>
     </div>

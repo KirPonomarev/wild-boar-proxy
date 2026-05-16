@@ -3573,6 +3573,149 @@ if (elements.actionLedgerList.children.length > 5) {
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_snapshot_command_ledger_renders_bounded_readonly_commands(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.dataset = {};
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  setAttribute(name, value) {
+    this[name] = value;
+  }
+}
+
+const ids = [
+  "snapshotCommandLedgerList",
+  "snapshotCommandLedgerScope",
+  "snapshotCommandLedgerSurface",
+  "actionLedgerList"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.snapshotCommandLedgerScope.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "overview", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.setSnapshotCommandLedgerFromSnapshots("overview live-readonly", {
+  status: "integration_failure",
+  source: "live_readonly",
+  has_warnings: true,
+  commands: {
+    status: {
+      status: "ok",
+      ui_state: "healthy",
+      role: "primary",
+      machine_error_code: "OK",
+      exit_code: 0,
+      next_action: "none",
+      human_message: "do not render secret=VERYSECRET /Users/kirill/private.log",
+      argv: ["status", "--json"],
+      packet: { raw_json: "forbidden" }
+    },
+    rollout_rotation_inspect: {
+      status: "command_error",
+      ui_state: "degraded",
+      role: "detail",
+      machine_error_code: "LOCK_HELD",
+      exit_code: 1,
+      next_action: "retry /tmp/runtime-state.json command_id=sync"
+    }
+  }
+});
+
+const ledgerText = JSON.stringify(elements.snapshotCommandLedgerList);
+const sessionText = JSON.stringify(elements.actionLedgerList);
+if (!ledgerText.includes("status · primary") || !ledgerText.includes("rollout_rotation_inspect · detail")) {
+  throw new Error(`snapshot command summaries missing: ${ledgerText}`);
+}
+if (!ledgerText.includes("command packet outcome only · not runtime health proof")) {
+  throw new Error(`snapshot command ledger broadened truth scope: ${ledgerText}`);
+}
+if (ledgerText.includes("human_message") || ledgerText.includes("VERYSECRET") || ledgerText.includes("/Users/") || ledgerText.includes("/tmp/runtime-state") || ledgerText.includes("argv") || ledgerText.includes("raw_json") || ledgerText.includes("forbidden")) {
+  throw new Error(`snapshot command ledger leaked raw/private fields: ${ledgerText}`);
+}
+if (ledgerText.includes("command_id=sync")) {
+  throw new Error(`snapshot command ledger leaked browser command_id field: ${ledgerText}`);
+}
+if (ledgerText.includes("chip green") || ledgerText.includes("action-ledger-row green")) {
+  throw new Error(`snapshot command ledger must not turn command ok into runtime green: ${ledgerText}`);
+}
+if (!ledgerText.includes("[redacted-path]") || !ledgerText.includes("command_id=[redacted]")) {
+  throw new Error(`snapshot command ledger did not redact bounded next_action fields: ${ledgerText}`);
+}
+if (!elements.snapshotCommandLedgerSurface.textContent.includes("overview live-readonly")) {
+  throw new Error(`snapshot surface label missing: ${elements.snapshotCommandLedgerSurface.textContent}`);
+}
+if (!elements.snapshotCommandLedgerScope.className.includes("red")) {
+  throw new Error(`integration failure snapshot must mark scope red: ${elements.snapshotCommandLedgerScope.className}`);
+}
+if (sessionText.includes("status · primary") || sessionText.includes("rollout_rotation_inspect")) {
+  throw new Error(`snapshot command ledger polluted session action ledger: ${sessionText}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_static_confirmation_policy_covers_risky_actions(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
