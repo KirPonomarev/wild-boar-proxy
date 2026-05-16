@@ -194,6 +194,7 @@ class RuntimePaths:
     accounts_bin: Path
     onboard_bin: Path
     lock_file: Path
+    launcher_lock_file: Path
     repair_target_inventory_dir: Path
     repair_target_reference_file: Path
     target_switch_transaction_file: Path
@@ -270,6 +271,12 @@ class RuntimePaths:
             lock_file=Path(
                 os.environ.get(
                     "WBP_LOCK_FILE", str(managed_dir / "wild-boar-proxy.lock")
+                )
+            ).expanduser(),
+            launcher_lock_file=Path(
+                os.environ.get(
+                    "WBP_LAUNCHER_LOCK_FILE",
+                    str(managed_dir / "stable-runtime-launch.lock"),
                 )
             ).expanduser(),
             repair_target_inventory_dir=managed_dir / "stable-repair-target",
@@ -3378,21 +3385,22 @@ def run_stable_runtime_launcher_attempt(
     selected_config_file = str(paths.stable_config)
     selected_source_kind = "observed_stable_inventory_source"
     selected_source_path = str(observed_path)
-    with serialized_lock(paths):
+    with launcher_procedure_lock(paths):
         if desired_kind == "approved_repair_target":
-            write_text_atomic(
-                paths.stable_runtime_generated_config_file,
-                build_generated_stable_runtime_config_text(paths),
-            )
-            launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
-                paths.stable_runtime_generated_config_file
-            )
-            activation_attempted = True
-            generated_config_regenerated = True
-            activation_method = "process_local_env_override"
-            selected_config_file = str(paths.stable_runtime_generated_config_file)
-            selected_source_kind = "approved_repair_target"
-            selected_source_path = str(paths.repair_target_inventory_dir)
+            with serialized_lock(paths):
+                write_text_atomic(
+                    paths.stable_runtime_generated_config_file,
+                    build_generated_stable_runtime_config_text(paths),
+                )
+                launcher_env[STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV] = str(
+                    paths.stable_runtime_generated_config_file
+                )
+                activation_attempted = True
+                generated_config_regenerated = True
+                activation_method = "process_local_env_override"
+                selected_config_file = str(paths.stable_runtime_generated_config_file)
+                selected_source_kind = "approved_repair_target"
+                selected_source_path = str(paths.repair_target_inventory_dir)
         result = subprocess.run(
             [str(paths.launcher_script), "smoke"],
             capture_output=True,
@@ -5058,8 +5066,12 @@ def reconcile_stable_recovery_success(
 
 
 @contextmanager
-def serialized_lock(paths: RuntimePaths):
-    lock_key = str(paths.lock_file.expanduser().resolve())
+def lock_file_owner_path(
+    lock_file: Path,
+    *,
+    human_label: str = "Mutation lock",
+):
+    lock_key = str(lock_file.expanduser().resolve())
     owner_pid = os.getpid()
     owner_thread_id = threading.get_ident()
     created_lock_file = False
@@ -5095,22 +5107,22 @@ def serialized_lock(paths: RuntimePaths):
                         SERIALIZED_LOCK_LOCAL_OWNERS.pop(lock_key, None)
         return
 
-    paths.lock_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
     while True:
         try:
-            fd = os.open(paths.lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             created_lock_file = True
             break
         except FileExistsError:
-            holder = read_text(paths.lock_file)
+            holder = read_text(lock_file)
             if holder and process_is_alive(holder):
                 raise RuntimeErrorInfo(
-                    f"Mutation lock is held by pid {holder}.",
+                    f"{human_label} is held by pid {holder}.",
                     machine_error_code="LOCK_HELD",
                     severity="recoverable",
                     operator_action="retry",
                 )
-            paths.lock_file.unlink(missing_ok=True)
+            lock_file.unlink(missing_ok=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(f"{os.getpid()}\n")
@@ -5137,7 +5149,21 @@ def serialized_lock(paths: RuntimePaths):
             elif created_lock_file:
                 release_lock_file = True
         if release_lock_file:
-            paths.lock_file.unlink(missing_ok=True)
+            lock_file.unlink(missing_ok=True)
+
+
+@contextmanager
+def serialized_lock(paths: RuntimePaths):
+    with lock_file_owner_path(paths.lock_file):
+        yield
+
+
+@contextmanager
+def launcher_procedure_lock(paths: RuntimePaths):
+    with lock_file_owner_path(
+        paths.launcher_lock_file, human_label="Launcher procedure lock"
+    ):
+        yield
 
 
 def build_command_payload(

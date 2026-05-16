@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "contour": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "SHARED_LOCK_WINDOW_NARROWED_WITH_SEPARATE_LAUNCHER_PROCEDURE_LOCK",
+  "lock_window_change": {
+    "before": "run_stable_runtime_launcher_attempt held serialized_lock across generated-config preparation and the full launcher subprocess",
+    "after": "run_stable_runtime_launcher_attempt holds a dedicated launcher procedure lock across the launcher subprocess and uses serialized_lock only for the short generated-config mutation section"
+  },
+  "correctness_invariant": [
+    "generated stable runtime config is still materialized under serialized_lock before launcher handoff is updated",
+    "launcher subprocess still runs under one dedicated launcher procedure lock so concurrent launcher attempts cannot stomp each other",
+    "shared mutation lock semantics for sync and other owner paths remain unchanged"
+  ],
+  "retry_safe_without_live_proof": "not_run_in_this_contour",
+  "requires_live_retry_now": false,
+  "next_admitted_contour": "WEB_SAFE_APP_COPY_LAUNCH_PASS",
+  "forbidden_next_moves": [
+    "claim live selector success from unit tests alone",
+    "reopen auth admission or onboarding",
+    "bundle UI work into this runtime fix contour"
+  ]
+}

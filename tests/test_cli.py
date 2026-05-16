@@ -14978,6 +14978,126 @@ class CliTests(unittest.TestCase):
         after = json.loads(state_path.read_text())
         self.assertEqual(after.get("selected_backend_snapshot"), expected_snapshot)
 
+    def test_stable_runtime_launcher_attempt_does_not_hold_shared_sync_lock(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        launcher_started = threading.Event()
+        release_launcher = threading.Event()
+        sync_subprocess_called = threading.Event()
+        attempt_result: dict[str, object] = {}
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def subprocess_side_effect(
+                command: list[str],
+                *,
+                capture_output: bool,
+                text: bool,
+                env: dict[str, str],
+                check: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                executable = str(command[0])
+                if executable == str(paths.launcher_script):
+                    launcher_started.set()
+                    self.assertEqual(
+                        env[runtime_mod.STABLE_RUNTIME_LAUNCHER_HANDOFF_ENV],
+                        str(paths.stable_runtime_generated_config_file),
+                    )
+                    release_launcher.wait(timeout=5)
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                if executable == str(paths.sync_script):
+                    sync_subprocess_called.set()
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                raise AssertionError(f"unexpected subprocess command: {command!r}")
+
+            def run_attempt() -> None:
+                attempt_result["attempt"] = runtime_mod.run_stable_runtime_launcher_attempt(
+                    paths, selection
+                )
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.subprocess.run",
+                side_effect=subprocess_side_effect,
+            ), mock.patch(
+                "wild_boar_proxy.runtime.socket_is_listening", return_value=False
+            ):
+                launcher_thread = threading.Thread(target=run_attempt, daemon=True)
+                launcher_thread.start()
+                self.assertTrue(launcher_started.wait(timeout=2))
+                payload = runtime_mod.run_sync(paths)
+                release_launcher.set()
+                launcher_thread.join(timeout=5)
+
+        self.assertFalse(launcher_thread.is_alive())
+        self.assertTrue(sync_subprocess_called.is_set())
+        self.assertEqual(payload["machine_error_code"], "SYNC_HEALTHCHECK_FAILED")
+        self.assertNotEqual(payload["machine_error_code"], "LOCK_HELD")
+        attempt = attempt_result["attempt"]
+        self.assertIsInstance(attempt, runtime_mod.StableRuntimeLaunchAttempt)
+        self.assertTrue(attempt.activation_attempted)
+        self.assertEqual(
+            attempt.selected_config_file,
+            str(self.managed_dir / "stable-runtime-config.generated.yaml"),
+        )
+
+    def test_stable_runtime_launcher_attempt_serializes_concurrent_launcher_runs(
+        self,
+    ) -> None:
+        selection = {
+            "desired_kind": "approved_repair_target",
+            "observed_path": str(self.stable_dir),
+        }
+        launcher_started = threading.Event()
+        release_launcher = threading.Event()
+        concurrent_result: dict[str, object] = {}
+
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            paths = runtime_mod.RuntimePaths.from_env()
+
+            def subprocess_side_effect(
+                command: list[str],
+                *,
+                capture_output: bool,
+                text: bool,
+                env: dict[str, str],
+                check: bool,
+            ) -> subprocess.CompletedProcess[str]:
+                executable = str(command[0])
+                if executable != str(paths.launcher_script):
+                    raise AssertionError(f"unexpected subprocess command: {command!r}")
+                launcher_started.set()
+                release_launcher.wait(timeout=5)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            def run_first_attempt() -> None:
+                runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+
+            with mock.patch(
+                "wild_boar_proxy.runtime.subprocess.run",
+                side_effect=subprocess_side_effect,
+            ):
+                launcher_thread = threading.Thread(target=run_first_attempt, daemon=True)
+                launcher_thread.start()
+                self.assertTrue(launcher_started.wait(timeout=2))
+                try:
+                    runtime_mod.run_stable_runtime_launcher_attempt(paths, selection)
+                except runtime_mod.RuntimeErrorInfo as exc:
+                    concurrent_result["machine_error_code"] = exc.machine_error_code
+                    concurrent_result["message"] = exc.message
+                else:
+                    concurrent_result["status"] = "unexpected_success"
+                release_launcher.set()
+                launcher_thread.join(timeout=5)
+
+        self.assertFalse(launcher_thread.is_alive())
+        self.assertEqual(concurrent_result["machine_error_code"], "LOCK_HELD")
+        self.assertIn("Launcher procedure lock", str(concurrent_result["message"]))
+
     def test_reconcile_stable_fallback_preserves_selected_backend_snapshot_surfaces(
         self,
     ) -> None:
