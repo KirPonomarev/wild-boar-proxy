@@ -711,7 +711,6 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("routeSecretRef", js)
         self.assertIn("routeDisabledMenuButton", js)
         self.assertIn("apiRouteRemoveDisabledReason", js)
-        self.assertIn("isApiRouteActionDeferredInReadonlyRegistry", js)
         self.assertIn("apiRouteStateRequirement", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { route_id: button.dataset.routeId })', js)
 
@@ -750,11 +749,12 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn("api_route_create", api_screen + js)
         self.assertNotIn("api_route_update", api_screen + js)
         self.assertNotIn("api_route_draft", api_screen + js)
-        self.assertNotIn('routeActionButton(route, "api_route_allow"', js)
-        self.assertNotIn('routeActionButton(route, "api_route_disable"', js)
+        self.assertIn('routeActionButton(route, "api_route_allow", "Разрешить маршрут"', js)
+        self.assertIn('routeActionButton(route, "api_route_disable", "Отключить маршрут"', js)
+        self.assertIn('routeActionButton(route, "api_route_check", "Проверить запросом"', js)
         self.assertIn('routeActionButton(route, "api_route_remove", "Удалить route"', js)
-        self.assertNotIn('routeActionButton(route, "api_route_profile"', js)
-        self.assertNotIn('routeActionButton(route, "api_route_evidence_capture"', js)
+        self.assertIn('routeActionButton(route, "api_route_profile", "Пакет профиля"', js)
+        self.assertIn('routeActionButton(route, "api_route_evidence_capture", "Свидетельство"', js)
         self.assertNotIn("Вкл", api_screen + js)
         self.assertNotIn("Сделать активным", api_screen + js)
         self.assertNotIn("Подключить Codex", api_screen + js)
@@ -799,7 +799,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("accountActionButtons", js)
         self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
         self.assertIn("Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов.", js)
-        self.assertIn("Это действие маршрута отложено", js)
+        self.assertIn("Это не утверждение состояния runtime.", js)
         self.assertIn("secret_references", js)
         self.assertNotIn("auth_ref", html + js)
         self.assertNotIn("accounts validate", html + js)
@@ -4122,7 +4122,6 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
         self.assertIn("unknown_disabled", js)
         self.assertIn("LIVE_SOURCE_REQUIRED", js)
-        self.assertIn("READONLY_ROUTE_ACTION_DEFERRED", js)
         self.assertIn("ROUTE_STATE_REQUIREMENT_NOT_MET", js)
         self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
         self.assertIn(".diagnostics-only", js)
@@ -4298,17 +4297,14 @@ assertAvailability(disabledRouteButton, {
   disabledReasonCode: "ROUTE_STATE_REQUIREMENT_NOT_MET",
   disabledReasons: JSON.stringify(["route_state_requirement_not_met"])
 });
-if (!allowDisabledRouteButton.disabled) {
-  throw new Error(`allow should stay deferred in readonly registry: ${JSON.stringify(allowDisabledRouteButton)}`);
-}
-if (!allowDisabledRouteButton.title.includes("отложено")) {
-  throw new Error(`allow should explain deferred route mutation: ${JSON.stringify(allowDisabledRouteButton)}`);
+if (allowDisabledRouteButton.disabled) {
+  throw new Error(`allow should be available for proven disabled route in live source: ${JSON.stringify(allowDisabledRouteButton)}`);
 }
 assertAvailability(allowDisabledRouteButton, {
-  available: "false",
-  availabilityState: "disabled_live_action",
-  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
-  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+  available: "true",
+  availabilityState: "displayable_readonly",
+  disabledReasonCode: "",
+  disabledReasons: ""
 });
 if (!allowEnabledRouteButton.disabled) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
@@ -4337,23 +4333,23 @@ assertAvailability(removeEnabledRouteButton, {
   disabledReasonCode: "ROUTE_STATE_REQUIREMENT_NOT_MET",
   disabledReasons: JSON.stringify(["route_state_requirement_not_met"])
 });
-if (!profileDisabledRouteButton.disabled || !profileDisabledRouteButton.title.includes("отложено")) {
-  throw new Error(`profile packet should stay deferred in readonly registry: ${JSON.stringify(profileDisabledRouteButton)}`);
+if (profileDisabledRouteButton.disabled) {
+  throw new Error(`profile packet should be available for proven route in live source: ${JSON.stringify(profileDisabledRouteButton)}`);
 }
 assertAvailability(profileDisabledRouteButton, {
-  available: "false",
-  availabilityState: "disabled_live_action",
-  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
-  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+  available: "true",
+  availabilityState: "displayable_readonly",
+  disabledReasonCode: "",
+  disabledReasons: ""
 });
-if (!evidenceDisabledRouteButton.disabled || !evidenceDisabledRouteButton.title.includes("отложено")) {
-  throw new Error(`evidence capture should stay deferred in readonly registry: ${JSON.stringify(evidenceDisabledRouteButton)}`);
+if (evidenceDisabledRouteButton.disabled) {
+  throw new Error(`evidence capture should be available for proven route in live source: ${JSON.stringify(evidenceDisabledRouteButton)}`);
 }
 assertAvailability(evidenceDisabledRouteButton, {
-  available: "false",
-  availabilityState: "disabled_live_action",
-  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
-  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+  available: "true",
+  availabilityState: "displayable_readonly",
+  disabledReasonCode: "",
+  disabledReasons: ""
 });
 if (settingsLaunchAvailability.textContent.indexOf("preflight blocked") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);

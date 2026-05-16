@@ -963,16 +963,6 @@ function boundedUiActionPayload(uiAction, extraPayload = {}) {
   return payload;
 }
 
-function isApiRouteActionDeferredInReadonlyRegistry(uiAction) {
-  return [
-    "api_route_allow",
-    "api_route_disable",
-    "api_route_check",
-    "api_route_profile",
-    "api_route_evidence_capture"
-  ].includes(uiAction);
-}
-
 function actionAvailabilityForButton(button) {
   const metadata = metadataFor(button.dataset.uiAction);
   const metadataAllowsAction = metadata.available !== false;
@@ -988,8 +978,6 @@ function actionAvailabilityForButton(button) {
   const routeStateAllowed = routeStateRequirement === "disabled"
     ? (!routeEnabled && routeStateProven)
     : (routeStateRequirement === "enabled" ? (routeEnabled && routeStateProven) : true);
-  const routeActionDeferred = button.classList.contains("api-route-action")
-    && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
 
   if (!routeStateAllowed) {
     return {
@@ -1008,15 +996,6 @@ function actionAvailabilityForButton(button) {
             ? "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
             : "Состояние маршрута не доказано. Нужен readonly route packet."
         )
-    };
-  }
-  if (routeActionDeferred) {
-    return {
-      available: false,
-      availabilityState: "disabled_live_action",
-      disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
-      disabledReasons: ["readonly_registry_deferred"],
-      title: "Это действие маршрута отложено в этом readonly registry contour."
     };
   }
   if (requiresLive && !isLiveSource) {
@@ -4474,6 +4453,14 @@ function routeActionButtons(route) {
   const list = document.createElement("div");
   list.className = "account-action-menu-list api-route-action-menu-list";
   list.append(routeActionButton(route, "api_route_validate", "Проверить маршрут", { menuItem: true }));
+  list.append(routeActionButton(route, "api_route_check", "Проверить запросом", { menuItem: true }));
+  if (route.enabled === false) {
+    list.append(routeActionButton(route, "api_route_allow", "Разрешить маршрут", { menuItem: true }));
+  } else {
+    list.append(routeActionButton(route, "api_route_disable", "Отключить маршрут", { menuItem: true }));
+  }
+  list.append(routeActionButton(route, "api_route_profile", "Пакет профиля", { menuItem: true }));
+  list.append(routeActionButton(route, "api_route_evidence_capture", "Свидетельство", { menuItem: true }));
   list.append(routeDisabledMenuButton("Детали", "Readonly route details are deferred to a separate surface."));
   const divider = document.createElement("div");
   divider.className = "account-action-menu-divider";
