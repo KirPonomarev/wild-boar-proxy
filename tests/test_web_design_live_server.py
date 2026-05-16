@@ -522,6 +522,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
         self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
+        self.assertTrue(metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertFalse(metadata["actions"]["onboard_account"]["available"])
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
@@ -551,6 +552,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(full_metadata["actions"]["set_mode_managed"]["confirmation_required"])
         self.assertFalse(full_metadata["actions"]["launch_smoke"]["confirmation_required"])
         self.assertEqual(full_metadata["actions"]["export_diagnostics"]["action_role"], "support_artifact")
+        self.assertEqual(
+            full_metadata["actions"]["onboard_account_dry_run"]["action_role"],
+            "account_onboarding_preview",
+        )
         self.assertEqual(full_metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
         self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
         self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
@@ -566,6 +571,38 @@ class WebDesignLiveServerTests(unittest.TestCase):
             bounded_metadata["actions"]["launch_client_dispatch"]["launch_preflight"]["process_confirmation_possible"]
         )
         self.assertNotIn(TEST_LAUNCH_CLIENT_PATH, json.dumps(bounded_metadata))
+
+    def test_onboard_account_dry_run_returns_preview_without_command_or_browser_args(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(runner, {"ui_action": "onboard_account_dry_run"})
+        auth_ref = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account_dry_run", "auth_ref": "/tmp/new-auth.json"},
+        )
+        token = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account_dry_run", "token": "secret"},
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "account_onboarding_preview")
+        self.assertFalse(result["confirmation_required"])
+        self.assertFalse(result["post_action_refresh_required"])
+        self.assertEqual(result["result"]["onboarding"]["ui_state"], "dry_run_ready")
+        self.assertEqual(
+            result["result"]["onboarding"]["final_outcome"],
+            "dry_run_preview_ready",
+        )
+        self.assertTrue(result["result"]["onboarding"]["preview_only"])
+        self.assertEqual(result["result"]["onboarding"]["candidate_source_kind"], "server_owned_only")
+        self.assertEqual(result["result"]["onboarding"]["required_follow_up"], "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS")
+        self.assertEqual(result["result"]["changed_files"], [])
+        self.assertEqual(runner.calls, [])
+        for payload in [auth_ref, token]:
+            self.assertEqual(payload["status"], "integration_failure")
+            self.assertEqual(payload["action_role"], "blocked")
+            self.assertEqual(payload["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
 
     def test_http_action_endpoint_blocks_parked_actions_in_live_readonly_phase(self) -> None:
         runner = MappingRunner(live_payloads())

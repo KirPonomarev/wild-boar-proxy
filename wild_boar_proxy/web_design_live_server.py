@@ -112,6 +112,18 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "План ремонта stable",
         "human_meaning": "Показать план stable repair без применения изменений.",
     },
+    "onboard_account_dry_run": {
+        "adapter_command_id": "server_owned_account_connect_dry_run",
+        "action_role": "account_onboarding_preview",
+        "mutation_class": "account_admission_preview",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только dry-run preview подключения аккаунта; реальный import auth и registry mutation не выполняются",
+        "display_name": "Проверить подключение аккаунта",
+        "human_meaning": "Показать server-owned dry-run preview подключения аккаунта без browser secrets, file paths, auth import или registry mutation.",
+    },
     "onboard_account": {
         "adapter_command_id": "accounts_onboard",
         "action_role": "account_onboarding",
@@ -838,6 +850,8 @@ def run_ui_action(
         structured_args, blocked = _api_route_action_args(runner, payload, ui_action=ui_action)
         if blocked is not None:
             return blocked
+    if ui_action == "onboard_account_dry_run":
+        return _run_account_connect_dry_run_action()
     if ui_action == "launch_client_dispatch":
         if not launch_client_path:
             return _unavailable_action(
@@ -1535,7 +1549,7 @@ def _action_result(
         "changed_files": changed_files,
         "data": data if isinstance(data, dict) else {},
     }
-    if ui_action == "onboard_account":
+    if ui_action in {"onboard_account", "onboard_account_dry_run"}:
         payload["onboarding"] = _onboarding_summary(packet, command_status=str(result["status"]))
     return payload
 
@@ -1565,6 +1579,24 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
             "reserve_first_proven": False,
             "operator_action_required": True,
             "reason": "onboarding_result отсутствует или не является объектом",
+        }
+    if onboarding_result.get("preview_only") is True:
+        raw_blocked_reasons = onboarding_result.get("blocked_reasons")
+        blocked_reasons = raw_blocked_reasons if isinstance(raw_blocked_reasons, list) else []
+        return {
+            "ui_state": str(onboarding_result.get("ui_state") or "dry_run_ready"),
+            "final_outcome": str(onboarding_result.get("final_outcome") or "dry_run_preview_ready"),
+            "selected_backend_id": "",
+            "reserve_first_proven": False,
+            "operator_action_required": onboarding_result.get("operator_action_required") is True,
+            "reason": str(onboarding_result.get("reason") or ""),
+            "preview_only": True,
+            "candidate_source_kind": str(onboarding_result.get("candidate_source_kind") or "server_owned_only"),
+            "reserve_first_boundary": str(onboarding_result.get("reserve_first_boundary") or "required"),
+            "required_follow_up": str(onboarding_result.get("required_follow_up") or "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS"),
+            "blocked_reasons": [str(reason) for reason in blocked_reasons if str(reason)],
+            "write_scope": str(onboarding_result.get("write_scope") or "ui_session_only"),
+            "changed_files_count": int(onboarding_result.get("changed_files_count") or 0),
         }
 
     final_outcome = str(onboarding_result.get("final_outcome") or "unknown_outcome")
@@ -1625,6 +1657,58 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
         "status_observed": onboarding_result.get("status_observed")
         if isinstance(onboarding_result.get("status_observed"), dict)
         else {},
+    }
+
+
+def _account_connect_dry_run_packet() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": "Dry-run preview подготовлен. Реальное подключение не выполнялось.",
+        "next_action": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+        "changed_files": [],
+        "onboarding_result": {
+            "preview_only": True,
+            "ui_state": "dry_run_ready",
+            "final_outcome": "dry_run_preview_ready",
+            "candidate_source_kind": "server_owned_only",
+            "reserve_first_boundary": "required",
+            "required_follow_up": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+            "operator_action_required": True,
+            "blocked_reasons": [],
+            "write_scope": "ui_session_only",
+            "changed_files_count": 0,
+            "reason": "Preview построен без auth import, registry mutation и runtime mutation.",
+        },
+    }
+
+
+def _run_account_connect_dry_run_action() -> dict[str, Any]:
+    result = {
+        "status": "ok",
+        "ui_state": "dry_run_ready",
+        "machine_error_code": "OK",
+        "human_message": "Dry-run preview подготовлен. Реальное подключение аккаунта не выполнялось.",
+        "exit_code": 0,
+        "changed_files": [],
+        "next_action": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+        "packet": _account_connect_dry_run_packet(),
+    }
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "source": "ui_action",
+        "ui_action": "onboard_account_dry_run",
+        "action_role": "account_onboarding_preview",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только dry-run preview подключения аккаунта; реальный import auth и registry mutation не выполняются",
+        "mutation_class": "account_admission_preview",
+        "account_id": "",
+        "route_id": "",
+        "result": _action_result(result, ui_action="onboard_account_dry_run"),
     }
 
 

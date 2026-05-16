@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "SERVER_OWNED_ACCOUNT_CONNECT_DRY_RUN_PREVIEW_ADDED",
+  "final_outcome": "ACCOUNT_CONNECT_DRY_RUN_ADMITTED_RESULT",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "955f000",
+  "scope": {
+    "ui_action": "onboard_account_dry_run",
+    "browser_payload_bounded": true,
+    "registry_mutation_performed": false,
+    "runtime_mutation_performed": false,
+    "cli_or_shell_onboarding_touched": false
+  },
+  "result_surface": {
+    "states": [
+      "dry-run ready",
+      "dry-run denied",
+      "dry-run preview",
+      "required next step",
+      "operator action later"
+    ],
+    "selected_backend_exposed": false,
+    "success_wording_exposed": false,
+    "raw_auth_details_exposed": false
+  },
+  "verification": {
+    "unit_tests": [
+      "python3 -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui"
+    ],
+    "browser_check": {
+      "url": "http://127.0.0.1:51357/?screen=accounts&source=live",
+      "button_text": "Проверить подключение",
+      "ui_action": "onboard_account_dry_run",
+      "machine_code": "OK",
+      "banner": "Dry-run preview готов. Реальное подключение не выполнялось.",
+      "summary": "Показан только preview. Аккаунт не подключён.",
+      "selected_backend": "-",
+      "panel_class": "action-panel compact-action-panel neutral onboarding-result-expanded"
+    },
+    "live_account_connect_performed": false
+  },
+  "next_admitted_contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS"
+}

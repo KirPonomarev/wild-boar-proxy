@@ -355,6 +355,11 @@ const CONFIRMATION_POLICY = {
     policy: "bounded-dispatch",
     warning: "Это запрашивает только server-owned запуск приложения. Это не доказывает старт приложения или здоровье runtime."
   },
+  onboard_account_dry_run: {
+    severity: "low",
+    policy: "account-preview",
+    warning: "Это показывает только dry-run preview подключения аккаунта. Реальная авторизация и импорт не выполняются."
+  },
   onboard_account: {
     severity: "high",
     policy: "account-admission",
@@ -1704,7 +1709,7 @@ function setActionPanel(payload, refreshState = "none") {
   const panel = document.getElementById("actionPanel");
   const panelVisualClass = exportModel
     ? exportModel.visual
-    : payload.ui_action === "onboard_account"
+    : ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action)
     ? actionPanelVisualForOnboarding(onboardingModel, display)
     : display.visualClass;
   const displayStateLabel = exportModel ? exportModel.state : display.displayState;
@@ -1777,7 +1782,7 @@ function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") 
   if (!flow) {
     return;
   }
-  const isOnboarding = payload.ui_action === "onboard_account";
+  const isOnboarding = ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action);
   flow.hidden = !isOnboarding;
   const panel = document.getElementById("actionPanel");
   if (panel && panel.classList && typeof panel.classList.toggle === "function") {
@@ -1810,6 +1815,43 @@ function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") 
 }
 
 function onboardingResultModel(onboarding, payload = {}, refreshState = "none") {
+  if (onboarding.preview_only === true || payload.ui_action === "onboard_account_dry_run") {
+    const denied = onboarding.ui_state === "dry_run_denied";
+    const blockedReasons = Array.isArray(onboarding.blocked_reasons) && onboarding.blocked_reasons.length
+      ? onboarding.blocked_reasons.join(", ")
+      : "none";
+    const nextStep = onboarding.required_follow_up || "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS";
+    return {
+      finalOutcome: onboarding.final_outcome || (denied ? "dry_run_preview_denied" : "dry_run_preview_ready"),
+      visual: denied ? "amber" : "neutral",
+      title: denied ? "Dry-run preview заблокирован" : "Dry-run preview готов",
+      summary: denied
+        ? "Preview не admitted без дополнительных условий."
+        : "Показан только preview. Аккаунт не подключён.",
+      summaryNote: "UI не импортирует auth, не меняет registry и не показывает success.",
+      modeLabel: denied ? "dry-run denied" : "dry-run preview",
+      banner: denied
+        ? "Dry-run preview заблокирован. Реальное подключение не запускалось."
+        : "Dry-run preview готов. Реальное подключение не выполнялось.",
+      newBackendIds: "-",
+      selectedBackendId: "-",
+      selectionStatus: onboarding.candidate_source_kind || "server_owned_only",
+      selectionVisual: denied ? "amber" : "neutral",
+      poolLabel: onboarding.reserve_first_boundary || "required",
+      poolVisual: denied ? "amber" : "blue",
+      reserveFirst: "обязательно",
+      reserveVisual: "blue",
+      validateOutcome: "not run",
+      validateVisual: "neutral",
+      syncOutcome: "not run",
+      syncVisual: "neutral",
+      statusProof: "preview only",
+      statusProofVisual: "neutral",
+      refreshState: "not required",
+      refreshVisual: "neutral",
+      nextAction: `Следующий шаг: ${nextStep}. blocked_reasons=${blockedReasons}`
+    };
+  }
   const uiState = onboarding.ui_state || "unknown_outcome";
   const finalOutcome = onboarding.final_outcome || "unknown_outcome";
   const successfulOutcome = [
@@ -2181,8 +2223,17 @@ function actionLedgerTimestamp() {
 function actionSpecialDetails(payload) {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
-  if (payload.ui_action === "onboard_account" && Object.keys(onboarding).length) {
+  if (["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action) && Object.keys(onboarding).length) {
     const newIds = Array.isArray(onboarding.new_backend_ids) ? onboarding.new_backend_ids.length : 0;
+    if (onboarding.preview_only === true) {
+      const blockedReasons = Array.isArray(onboarding.blocked_reasons) ? onboarding.blocked_reasons.length : 0;
+      return [
+        `preview_only=true`,
+        `candidate_source=${onboarding.candidate_source_kind || "server_owned_only"}`,
+        `blocked_reasons=${blockedReasons}`,
+        `required_follow_up=${onboarding.required_follow_up || "-"}`
+      ].join(" · ");
+    }
     return [
       `selected_backend_id=${onboarding.selected_backend_id || "-"}`,
       `new_backend_ids=${newIds}`,
@@ -3437,7 +3488,7 @@ function closeOnboardModal() {
 
 function runOnboardFromModal() {
   closeOnboardModal();
-  maybeConfirmAndRun("onboard_account");
+  maybeConfirmAndRun("onboard_account_dry_run");
 }
 
 function setScreen(screen, updateUrl = false, settingsSection = null) {

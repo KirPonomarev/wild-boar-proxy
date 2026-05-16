@@ -314,7 +314,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("secret_ref: —", section)
         self.assertIn('href="?screen=api-connections"', section)
         self.assertIn('href="?screen=accounts"', section)
-        self.assertIn('data-ui-action="onboard_account"', section)
+        self.assertIn('data-ui-action="onboard_account_dry_run"', section)
         self.assertIn('data-ui-action="api_route_check"', section)
         self.assertIn('data-route-id=""', section)
         self.assertIn("quickStartAccountsFixtureFromOverview", js)
@@ -387,9 +387,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("promote_account", js)
         self.assertIn("demote_account", js)
         self.assertIn("retire_account", js)
-        self.assertIn("onboard_account", html + js)
+        self.assertIn("onboard_account_dry_run", html + js)
         self.assertIn('id="accountAddAction" class="button primary accounts-only onboard-action"', html)
-        self.assertIn('data-ui-action="onboard_account"', html)
+        self.assertIn('data-ui-action="onboard_account_dry_run"', html)
 
     def test_account_detail_drawer_projects_accounts_snapshot_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -789,11 +789,12 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("account_id", js)
         self.assertIn("route_id", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
-        self.assertIn('maybeConfirmAndRun("onboard_account")', js)
+        self.assertIn('maybeConfirmAndRun("onboard_account_dry_run")', js)
+        self.assertIn("Dry-run preview готов", js)
         self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
-        self.assertIn("только сначала в резерв", html)
-        self.assertIn("no-new-auth и ambiguous identity требуют действия оператора", html)
-        self.assertIn("не доказывает включение в рабочий поток", html)
+        self.assertIn("только reserve-first preview", html)
+        self.assertIn("live connect остаётся отдельным контуром", html)
+        self.assertIn("не импортирует auth и не доказывает включение в рабочий поток", html)
         self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
         self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
@@ -2099,10 +2100,10 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-modal-surface="onboard-reserve-request"', html)
         self.assertIn('class="confirm-boundary"', html)
         self.assertIn('class="modal-state-list"', html)
-        self.assertIn("reserve-only success", html)
-        self.assertIn("no-new-auth", html)
-        self.assertIn("ambiguous identity", html)
-        self.assertIn("автоповышения нет", html)
+        self.assertIn("dry-run preview", html)
+        self.assertIn("dry-run denied", html)
+        self.assertIn("operator action later", html)
+        self.assertIn("реальный import отключён", html)
         self.assertIn("Не меняет другие routes и не утверждает runtime readiness.", js)
         self.assertIn("command request", html)
         self.assertIn("не runtime truth", html)
@@ -2541,6 +2542,156 @@ if (elements.onboardingResultBanner.className !== "onboarding-result-banner red"
 }
 if (elements.actionPanel.className !== "action-panel compact-action-panel red") {
   throw new Error(`onboarding invalid_json outer panel must be red: ${elements.actionPanel.className}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_onboarding_dry_run_flow_stays_preview_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "onboardingResultFlow",
+  "onboardingResultModeChip",
+  "onboardingResultTitle",
+  "onboardingResultSummary",
+  "onboardingResultSummaryNote",
+  "onboardingResultBanner",
+  "onboardingResultNewIds",
+  "onboardingResultSelected",
+  "onboardingResultSelectionChip",
+  "onboardingResultPoolChip",
+  "onboardingResultReserveChip",
+  "onboardingResultValidateChip",
+  "onboardingResultSyncChip",
+  "onboardingResultStatusProofChip",
+  "onboardingResultRefreshChip",
+  "onboardingResultNextAction"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.onboardingResultModeChip.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "accounts", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=accounts" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.setActionPanel({
+  status: "ok",
+  ui_action: "onboard_account_dry_run",
+  action_role: "account_onboarding_preview",
+  post_action_refresh_required: false,
+  result: {
+    status: "ok",
+    machine_error_code: "OK",
+    human_message: "Dry-run preview prepared.",
+    next_action: "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+    changed_files: [],
+    onboarding: {
+      preview_only: true,
+      ui_state: "dry_run_ready",
+      final_outcome: "dry_run_preview_ready",
+      candidate_source_kind: "server_owned_only",
+      reserve_first_boundary: "required",
+      required_follow_up: "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+      blocked_reasons: [],
+      operator_action_required: true
+    }
+  }
+});
+
+const serialized = JSON.stringify(elements);
+if (elements.onboardingResultFlow.hidden !== false) {
+  throw new Error("dry-run onboarding flow must be visible");
+}
+if (elements.actionPanel.className === "action-panel compact-action-panel green") {
+  throw new Error("dry-run preview must not render green outer panel");
+}
+if (!elements.onboardingResultBanner.textContent.includes("Dry-run preview")) {
+  throw new Error(`dry-run banner missing: ${elements.onboardingResultBanner.textContent}`);
+}
+if (elements.onboardingResultSelected.textContent !== "-") {
+  throw new Error(`dry-run preview must not show selected backend: ${elements.onboardingResultSelected.textContent}`);
+}
+if (!elements.onboardingResultSummary.textContent.includes("Аккаунт не подключён")) {
+  throw new Error(`dry-run summary overclaims success: ${elements.onboardingResultSummary.textContent}`);
+}
+if (!elements.onboardingResultNextAction.textContent.includes("WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS")) {
+  throw new Error(`dry-run next step missing: ${elements.onboardingResultNextAction.textContent}`);
+}
+if (serialized.includes("Аккаунт добавлен в резерв") || serialized.includes("можно использовать")) {
+  throw new Error(`dry-run preview leaked success wording: ${serialized}`);
 }
 """
         result = subprocess.run(
