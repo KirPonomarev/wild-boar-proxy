@@ -276,6 +276,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("secondary-action-tile", overview)
         self.assertIn("overview-utility-strip", overview)
         self.assertIn("compact-action-panel", overview)
+        self.assertIn('id="uiLaneExitSummary"', overview)
+        self.assertIn("STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION", overview + (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
+        self.assertNotIn('data-ui-action="STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION"', overview)
         self.assertLess(overview.find('class="card system-card"'), overview.find('id="actionPanel"'))
         self.assertLess(overview.find('id="eventList"'), overview.find('id="actionPanel"'))
         self.assertIn(".secondary-action-tile", css)
@@ -3705,6 +3708,181 @@ if (!elements.snapshotCommandLedgerScope.className.includes("red")) {
 }
 if (sessionText.includes("status · primary") || sessionText.includes("rollout_rotation_inspect")) {
   throw new Error(`snapshot command ledger polluted session action ledger: ${sessionText}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_ui_readonly_lane_exit_summary_stays_display_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.dataset = {};
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      if (!item) {
+        continue;
+      }
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  setAttribute(name, value) {
+    this[name] = value;
+  }
+}
+
+const ids = [
+  "uiLaneExitChip",
+  "uiLaneExitSource",
+  "uiLaneExitTruthNote",
+  "uiLaneExitCurrentSource",
+  "uiLaneExitSnapshotState",
+  "uiLaneExitLiveChain",
+  "uiLaneExitMetadataStatus",
+  "uiLaneExitSafeSummary",
+  "uiLaneExitNextContour",
+  "uiLaneExitBlockedList",
+  "uiLaneExitSafeList",
+  "uiLaneExitForbiddenList",
+  "snapshotCommandLedgerList",
+  "snapshotCommandLedgerScope",
+  "snapshotCommandLedgerSurface"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.uiLaneExitChip.lastElementChild = { textContent: "" };
+elements.snapshotCommandLedgerScope.lastElementChild = { textContent: "" };
+const desktop = new Node("div");
+desktop.dataset = { screen: "overview", source: "live" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext(`
+actionMetadata = {
+  sync_runtime: {
+    available: false,
+    availability_state: "disabled_live_action",
+    disabled_reason_code: "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+  },
+  launch_smoke: {
+    available: false,
+    availability_state: "disabled_live_action",
+    disabled_reason_code: "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+  },
+  refresh_health_detail: {
+    available: false,
+    availability_state: "disabled_live_action",
+    disabled_reason_code: "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+  }
+};
+`, sandbox);
+
+sandbox.setSnapshotCommandLedgerFromSnapshots("overview snapshot", {
+  status: "ok",
+  source: "live_readonly",
+  has_warnings: true,
+  commands: {
+    status: {
+      status: "ok",
+      ui_state: "healthy",
+      role: "primary",
+      machine_error_code: "OK",
+      exit_code: 0,
+      next_action: "none"
+    }
+  }
+});
+sandbox.renderUiReadonlyLaneExitSummary();
+
+const blockedText = JSON.stringify(elements.uiLaneExitBlockedList);
+const safeText = JSON.stringify(elements.uiLaneExitSafeList);
+const forbiddenText = JSON.stringify(elements.uiLaneExitForbiddenList);
+if (elements.uiLaneExitChip.className.includes("green")) {
+  throw new Error(`exit summary must not be green: ${elements.uiLaneExitChip.className}`);
+}
+if (!elements.uiLaneExitTruthNote.textContent.includes("runtime diagnosis")) {
+  throw new Error(`exit summary must hand off to runtime diagnosis: ${elements.uiLaneExitTruthNote.textContent}`);
+}
+if (elements.uiLaneExitCurrentSource.textContent !== "live-readonly") {
+  throw new Error(`unexpected current source: ${elements.uiLaneExitCurrentSource.textContent}`);
+}
+if (!elements.uiLaneExitSnapshotState.textContent.includes("1 bounded summaries")) {
+  throw new Error(`unexpected snapshot state: ${elements.uiLaneExitSnapshotState.textContent}`);
+}
+if (!elements.uiLaneExitMetadataStatus.textContent.includes("3 live actions blocked")) {
+  throw new Error(`unexpected metadata status: ${elements.uiLaneExitMetadataStatus.textContent}`);
+}
+if (elements.uiLaneExitNextContour.textContent !== "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION") {
+  throw new Error(`unexpected next contour: ${elements.uiLaneExitNextContour.textContent}`);
+}
+if (!blockedText.includes("LOCK_HELD") || !blockedText.includes("policy_drift_detected")) {
+  throw new Error(`blocked list missing canon blockers: ${blockedText}`);
+}
+if (!safeText.includes("Read-only truth display only.") || !safeText.includes("Snapshot command summary inspection.")) {
+  throw new Error(`safe list missing readonly scope: ${safeText}`);
+}
+if (!forbiddenText.includes("runtime sync dispatch") || !forbiddenText.includes("route mutation")) {
+  throw new Error(`forbidden list missing blocked scope: ${forbiddenText}`);
+}
+if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-action")) {
+  throw new Error(`exit summary must stay display-only: blocked=${blockedText} forbidden=${forbiddenText}`);
 }
 """
         result = subprocess.run(

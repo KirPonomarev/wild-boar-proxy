@@ -94,6 +94,31 @@ const ACCOUNT_VISUAL_CLASS = {
 const ACTION_LEDGER_LIMIT = 5;
 const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
+const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
+const UI_READONLY_LANE_BLOCKERS = [
+  ["LOCK_HELD", "Повторный selector owner path не admitted до локализации lock contention."],
+  ["claim_gate_blocked", "Runtime truth снова показывает blocked claim gate."],
+  ["policy_drift_detected", "Runtime truth снова показывает detected policy drift."],
+  ["selector_evidence_no_progress", "Нового selector progress packet нет."],
+  ["exact_auth_source_not_singleton", "Exact auth-source admission не singleton-ready."],
+  ["onboarding_not_admitted", "Onboarding и auth materialization остаются parked."],
+  ["STAGE_PILOT_NOT_ADMITTED", "Stage admission claims запрещены до runtime diagnosis."]
+];
+const UI_READONLY_LANE_SAFE_SCOPE = [
+  "Read-only truth display only.",
+  "Disabled live-action reasons inspection.",
+  "Snapshot command summary inspection."
+];
+const UI_READONLY_LANE_FORBIDDEN_SCOPE = [
+  "runtime sync dispatch",
+  "smoke dispatch",
+  "stable repair apply",
+  "onboarding admission",
+  "auth source materialization",
+  "selector retry loop",
+  "route mutation",
+  "stage proof admission"
+];
 const DATA_LAYOUT_FIXTURES = {
   healthy: {
     key: "initialized_healthy",
@@ -1217,6 +1242,7 @@ function setLiveReadonlyPendingUi() {
   }
   setSourceCopy("live");
   setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
+  renderUiReadonlyLaneExitSummary();
 }
 
 function renderOverviewLivePendingState() {
@@ -2316,6 +2342,91 @@ function snapshotCommandLedgerRow(entry) {
   }
   row.append(head, truth, detailGrid);
   return row;
+}
+
+function renderUiReadonlyLaneExitSummary() {
+  const summary = document.getElementById("uiLaneExitSummary");
+  if (!summary) {
+    return;
+  }
+  const chip = document.getElementById("uiLaneExitChip");
+  const model = uiReadonlyLaneExitSummaryModel();
+  if (chip) {
+    chip.className = `chip ${model.visual}`;
+    chip.lastElementChild.textContent = model.chipLabel;
+  }
+  text("uiLaneExitSource", model.sourceLabel);
+  text("uiLaneExitTruthNote", model.truthNote);
+  text("uiLaneExitCurrentSource", model.currentSource);
+  text("uiLaneExitSnapshotState", model.snapshotState);
+  text("uiLaneExitLiveChain", model.liveChain);
+  text("uiLaneExitMetadataStatus", model.metadataStatus);
+  text("uiLaneExitSafeSummary", model.safeSummary);
+  text("uiLaneExitNextContour", UI_READONLY_LANE_NEXT_CONTOUR);
+  renderUiReadonlyLaneExitList("uiLaneExitBlockedList", model.blockedNow, "amber");
+  renderUiReadonlyLaneExitList("uiLaneExitSafeList", model.safeNow, "blue");
+  renderUiReadonlyLaneExitList("uiLaneExitForbiddenList", model.forbiddenNow, "red");
+}
+
+function uiReadonlyLaneExitSummaryModel() {
+  const desktop = document.querySelector(".desktop");
+  const source = desktop?.dataset?.source === "live" ? "live-readonly" : "fixture preview";
+  const screen = currentScreen();
+  const snapshotState = snapshotCommandLedgerState.entries.length
+    ? `${snapshotCommandLedgerState.entries.length} bounded summaries · ${snapshotCommandLedgerState.status}`
+    : (snapshotCommandLedgerState.status === "integration_failure"
+      ? "snapshot unavailable"
+      : "no bounded summaries loaded");
+  const parkedCount = Object.values(actionMetadata).filter((metadata) => (
+    metadata?.disabled_reason_code === "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+    || metadata?.availability_state === "disabled_live_action"
+  )).length;
+  const metadataStatus = parkedCount
+    ? `${parkedCount} live actions blocked in current metadata`
+    : "metadata loaded without parked-action count";
+  const visual = snapshotCommandLedgerState.status === "integration_failure" ? "red" : "amber";
+  return {
+    visual,
+    chipLabel: snapshotCommandLedgerState.status === "integration_failure" ? "blocked truth" : "parked handoff",
+    sourceLabel: `${screen} · ${source} · no new commands`,
+    truthNote: snapshotCommandLedgerState.status === "integration_failure"
+      ? "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now, but current live snapshot truth is degraded and the next contour must return to runtime diagnosis."
+      : "Runtime/live-action chain remains parked. Read-only UI lane is sufficient for now and should stop here; the next contour must return to runtime diagnosis instead of another UI panel.",
+    currentSource: source,
+    snapshotState,
+    liveChain: "parked by canon-backed runtime blockers",
+    metadataStatus,
+    safeSummary: "read-only truth, disabled reasons, snapshot command summaries",
+    blockedNow: UI_READONLY_LANE_BLOCKERS,
+    safeNow: UI_READONLY_LANE_SAFE_SCOPE.map((entry) => [entry, "No dispatch, no mutation, no new runtime truth claim."]),
+    forbiddenNow: UI_READONLY_LANE_FORBIDDEN_SCOPE.map((entry) => [entry, "Blocked until runtime diagnosis closes the parked chain."])
+  };
+}
+
+function renderUiReadonlyLaneExitList(containerId, entries, visual) {
+  const container = document.getElementById(containerId);
+  if (!container || typeof container.replaceChildren !== "function") {
+    return;
+  }
+  container.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "action-ledger-empty";
+    empty.textContent = "Нет данных для этой сводки.";
+    container.append(empty);
+    return;
+  }
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = `action-ledger-row ${visual}`;
+    const title = document.createElement("strong");
+    title.textContent = safeLedgerText(entry[0], "-");
+    const note = document.createElement("div");
+    note.className = "action-ledger-meta";
+    note.textContent = safeLedgerText(entry[1], "-");
+    row.append(title, note);
+    container.append(row);
+  }
 }
 
 function actionSupportDetails(payload) {
@@ -3562,6 +3673,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   currentAccountsSnapshot = safeAccounts;
   currentApiConnectionsSnapshot = safeApi;
   setSnapshotCommandLedgerFromSnapshots("quick-start snapshot", [safeAccounts, safeApi]);
+  renderUiReadonlyLaneExitSummary();
 
   const desktop = document.querySelector(".desktop");
   desktop.dataset.fixtureState = fixtureState;
@@ -4047,6 +4159,7 @@ function renderAccountsSnapshot(snapshot) {
   );
   currentAccountsSnapshot = safeSnapshot;
   setSnapshotCommandLedgerFromSnapshots("accounts snapshot", safeSnapshot);
+  renderUiReadonlyLaneExitSummary();
   renderAccountRows(safeSnapshot.accounts);
   renderAccountDetailDrawer();
 
@@ -4114,6 +4227,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   text("apiConnectionsPagination", noData ? "Нет данных для таблицы" : `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
   currentApiConnectionsSnapshot = safeSnapshot;
   setSnapshotCommandLedgerFromSnapshots("api-connections snapshot", safeSnapshot);
+  renderUiReadonlyLaneExitSummary();
   renderApiConnectionRows(safeSnapshot.routes);
 
   const sidebarDot = document.getElementById("sidebarDot");
@@ -4975,6 +5089,7 @@ function renderSnapshot(snapshot) {
   desktop.dataset.fixtureState = safeSnapshot.state_id || safeSnapshot.ui_state || visualState;
   desktop.dataset.source = source;
   setSnapshotCommandLedgerFromSnapshots("overview snapshot", safeSnapshot);
+  renderUiReadonlyLaneExitSummary();
 
   const picker = document.getElementById("statePicker");
   picker.value = canonicalState(safeSnapshot.state_id || safeSnapshot.ui_state);

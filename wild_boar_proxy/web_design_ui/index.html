@@ -344,6 +344,48 @@
           <div id="eventList" class="log-list" aria-live="polite"></div>
         </section>
 
+        <section id="uiLaneExitSummary" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">UI Readonly Exit</div>
+              <div id="uiLaneExitSource" class="secondary">Сводка read-only lane без новых команд.</div>
+            </div>
+            <span id="uiLaneExitChip" class="chip amber"><span class="dot"></span><span>parked</span></span>
+          </div>
+          <p id="uiLaneExitTruthNote" class="action-summary-message">
+            Read-only UI lane объясняет текущее состояние, но не выполняет runtime repair.
+          </p>
+          <div class="action-panel-grid">
+            <div>Current source</div><div id="uiLaneExitCurrentSource">fixture preview</div>
+            <div>Snapshot evidence</div><div id="uiLaneExitSnapshotState">нет bounded summaries</div>
+            <div>Live-action chain</div><div id="uiLaneExitLiveChain">parked</div>
+            <div>Action metadata</div><div id="uiLaneExitMetadataStatus">metadata pending</div>
+            <div>Safe now</div><div id="uiLaneExitSafeSummary">read-only inspection only</div>
+            <div>Next contour</div><div id="uiLaneExitNextContour" class="mono-value">STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION</div>
+          </div>
+          <div class="action-ledger-head">
+            <div>
+              <div class="card-title">Blocked now</div>
+              <div class="secondary">Canon-backed blockers only</div>
+            </div>
+          </div>
+          <div id="uiLaneExitBlockedList" class="action-ledger-list" aria-label="Текущие blockers UI-readonly lane"></div>
+          <div class="action-ledger-head">
+            <div>
+              <div class="card-title">Safe now</div>
+              <div class="secondary">Allowed read-only work only</div>
+            </div>
+          </div>
+          <div id="uiLaneExitSafeList" class="action-ledger-list" aria-label="Разрешённые read-only действия"></div>
+          <div class="action-ledger-head">
+            <div>
+              <div class="card-title">Forbidden now</div>
+              <div class="secondary">Do not continue the UI lane with runtime actions</div>
+            </div>
+          </div>
+          <div id="uiLaneExitForbiddenList" class="action-ledger-list" aria-label="Запрещённые действия"></div>
+        </section>
+
           <section id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite">
           <div class="action-summary-head">
             <div>
