@@ -3626,9 +3626,16 @@ if (elements.actionLedgerList.children.length > 5) {
         self.assertIn('data-ui-action="launch_client_dispatch"', html)
         self.assertIn("disabled", html)
         self.assertIn("applyActionAvailability", js)
-        self.assertIn("metadata.available !== false", js)
+        self.assertIn("actionAvailabilityForButton", js)
+        self.assertIn("metadata.availability_state", js)
+        self.assertIn("metadata.disabled_reason_code", js)
+        self.assertIn("metadata.disabled_reasons", js)
         self.assertIn("metadata.unavailable_reason", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
+        self.assertIn("unknown_disabled", js)
+        self.assertIn("LIVE_SOURCE_REQUIRED", js)
+        self.assertIn("READONLY_ROUTE_ACTION_DEFERRED", js)
+        self.assertIn("ROUTE_STATE_REQUIREMENT_NOT_MET", js)
         self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
         self.assertIn(".diagnostics-only", js)
         self.assertIn(".settings-only", js)
@@ -3749,41 +3756,103 @@ actionMetadata = {
 };
 `, sandbox);
 
+function assertAvailability(button, expected) {
+  for (const [key, value] of Object.entries(expected)) {
+    if (button.dataset[key] !== value) {
+      throw new Error(`unexpected ${key} for ${button.dataset.uiAction}: ${button.dataset[key]} !== ${value}; ${JSON.stringify(button)}`);
+    }
+  }
+}
+
 desktop.dataset.source = "fixture";
 sandbox.applyActionAvailability();
 if (!enabledButton.disabled || !enabledButton.title.includes("Переключите экран на live-источник")) {
   throw new Error(`enabled route in fixture source should be blocked: ${JSON.stringify(enabledButton)}`);
 }
+assertAvailability(enabledButton, {
+  available: "false",
+  availabilityState: "not_admitted",
+  disabledReasonCode: "LIVE_SOURCE_REQUIRED",
+  disabledReasons: JSON.stringify(["live_source_required"])
+});
 
 desktop.dataset.source = "live";
 sandbox.applyActionAvailability();
 if (enabledButton.disabled) {
   throw new Error(`enabled route in live source should be available: ${JSON.stringify(enabledButton)}`);
 }
+assertAvailability(enabledButton, {
+  available: "true",
+  availabilityState: "displayable_readonly",
+  disabledReasonCode: "",
+  disabledReasons: ""
+});
 if (!disabledRouteButton.disabled || !disabledRouteButton.title.includes("Маршрут отключён")) {
   throw new Error(`disabled route should stay blocked: ${JSON.stringify(disabledRouteButton)}`);
 }
+assertAvailability(disabledRouteButton, {
+  available: "false",
+  availabilityState: "not_admitted",
+  disabledReasonCode: "ROUTE_STATE_REQUIREMENT_NOT_MET",
+  disabledReasons: JSON.stringify(["route_state_requirement_not_met"])
+});
 if (!allowDisabledRouteButton.disabled) {
   throw new Error(`allow should stay deferred in readonly registry: ${JSON.stringify(allowDisabledRouteButton)}`);
 }
 if (!allowDisabledRouteButton.title.includes("отложено")) {
   throw new Error(`allow should explain deferred route mutation: ${JSON.stringify(allowDisabledRouteButton)}`);
 }
+assertAvailability(allowDisabledRouteButton, {
+  available: "false",
+  availabilityState: "disabled_live_action",
+  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
+  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+});
 if (!allowEnabledRouteButton.disabled) {
   throw new Error(`allow should be blocked for enabled route: ${JSON.stringify(allowEnabledRouteButton)}`);
 }
+assertAvailability(allowEnabledRouteButton, {
+  available: "false",
+  availabilityState: "not_admitted",
+  disabledReasonCode: "ROUTE_STATE_REQUIREMENT_NOT_MET",
+  disabledReasons: JSON.stringify(["route_state_requirement_not_met"])
+});
 if (removeDisabledRouteButton.disabled) {
   throw new Error(`remove should be available only for proven disabled route in live source: ${JSON.stringify(removeDisabledRouteButton)}`);
 }
+assertAvailability(removeDisabledRouteButton, {
+  available: "true",
+  availabilityState: "displayable_readonly",
+  disabledReasonCode: "",
+  disabledReasons: ""
+});
 if (!removeEnabledRouteButton.disabled || !removeEnabledRouteButton.title.includes("Маршрут уже разрешён")) {
   throw new Error(`remove should be blocked for enabled route: ${JSON.stringify(removeEnabledRouteButton)}`);
 }
+assertAvailability(removeEnabledRouteButton, {
+  available: "false",
+  availabilityState: "not_admitted",
+  disabledReasonCode: "ROUTE_STATE_REQUIREMENT_NOT_MET",
+  disabledReasons: JSON.stringify(["route_state_requirement_not_met"])
+});
 if (!profileDisabledRouteButton.disabled || !profileDisabledRouteButton.title.includes("отложено")) {
   throw new Error(`profile packet should stay deferred in readonly registry: ${JSON.stringify(profileDisabledRouteButton)}`);
 }
+assertAvailability(profileDisabledRouteButton, {
+  available: "false",
+  availabilityState: "disabled_live_action",
+  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
+  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+});
 if (!evidenceDisabledRouteButton.disabled || !evidenceDisabledRouteButton.title.includes("отложено")) {
   throw new Error(`evidence capture should stay deferred in readonly registry: ${JSON.stringify(evidenceDisabledRouteButton)}`);
 }
+assertAvailability(evidenceDisabledRouteButton, {
+  available: "false",
+  availabilityState: "disabled_live_action",
+  disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
+  disabledReasons: JSON.stringify(["readonly_registry_deferred"])
+});
 if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);
 }

@@ -18,6 +18,9 @@ from wild_boar_proxy.web_design_live_server import (
     API_CONNECTIONS_READONLY_COMMAND_IDS,
     FULL_ACTION_PHASE,
     LIVE_READONLY_ACTION_PHASE,
+    LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+    LIVE_READONLY_ACTION_DISABLED_REASONS,
+    PARKED_IN_LIVE_READONLY_ACTIONS,
     READONLY_COMMAND_IDS,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
@@ -473,8 +476,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(api_connections["status"], "ok")
         self.assertEqual(api_connections["source"], "api_connections_readonly")
         self.assertEqual(metadata["action_phase"], LIVE_READONLY_ACTION_PHASE)
-        self.assertTrue(metadata["actions"]["refresh_health_detail"]["available"])
-        self.assertTrue(metadata["actions"]["stable_repair_plan"]["available"])
+        self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
+        self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertNotIn(("sync", "--json"), runner.calls)
@@ -501,19 +504,34 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("legacy_import", metadata["actions"])
         self.assertNotIn("import_apply", metadata["actions"])
         self.assertNotIn("installer_init", metadata["actions"])
-        self.assertTrue(metadata["actions"]["refresh_health_detail"]["available"])
-        self.assertTrue(metadata["actions"]["stable_repair_plan"]["available"])
+        self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
+        self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
         self.assertFalse(metadata["actions"]["onboard_account"]["available"])
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertFalse(metadata["actions"]["api_route_validate"]["available"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
+        for ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+            action = metadata["actions"][ui_action]
+            self.assertFalse(action["available"], ui_action)
+            self.assertEqual(action["availability_state"], "disabled_live_action")
+            self.assertEqual(
+                action["disabled_reason_code"],
+                LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+            )
+            self.assertEqual(
+                tuple(action["disabled_reasons"]),
+                LIVE_READONLY_ACTION_DISABLED_REASONS,
+            )
+            self.assertIn("LOCK_HELD", action["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
 
         self.assertTrue(full_metadata["actions"]["sync_runtime"]["available"])
+        self.assertTrue(full_metadata["actions"]["refresh_health_detail"]["available"])
+        self.assertTrue(full_metadata["actions"]["stable_repair_plan"]["available"])
         self.assertTrue(full_metadata["actions"]["set_mode_stable"]["confirmation_required"])
         self.assertTrue(full_metadata["actions"]["set_mode_managed"]["confirmation_required"])
         self.assertFalse(full_metadata["actions"]["launch_smoke"]["confirmation_required"])
@@ -533,6 +551,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         thread.start()
         try:
             base_url = f"http://127.0.0.1:{server.server_port}"
+            health = json.loads(
+                post_json(f"{base_url}/api/action", {"ui_action": "refresh_health_detail"})
+            )
+            repair_plan = json.loads(
+                post_json(f"{base_url}/api/action", {"ui_action": "stable_repair_plan"})
+            )
             diagnostics = json.loads(
                 post_json(f"{base_url}/api/action", {"ui_action": "export_diagnostics"})
             )
@@ -547,10 +571,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=5)
 
+        self.assertEqual(health["status"], "integration_failure")
+        self.assertEqual(
+            health["result"]["machine_error_code"],
+            LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+        )
+        self.assertEqual(health["availability_state"], "disabled_live_action")
+        self.assertEqual(repair_plan["status"], "integration_failure")
+        self.assertEqual(
+            repair_plan["result"]["machine_error_code"],
+            LIVE_READONLY_ACTION_DISABLED_REASON_CODE,
+        )
+        self.assertEqual(repair_plan["availability_state"], "disabled_live_action")
         self.assertEqual(diagnostics["status"], "integration_failure")
-        self.assertEqual(diagnostics["result"]["machine_error_code"], "UI_ACTION_PHASE_PARKED")
+        self.assertEqual(diagnostics["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
         self.assertEqual(validate["status"], "integration_failure")
-        self.assertEqual(validate["result"]["machine_error_code"], "UI_ACTION_PHASE_PARKED")
+        self.assertEqual(validate["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
         self.assertEqual(runner.calls, [])
 
     def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:

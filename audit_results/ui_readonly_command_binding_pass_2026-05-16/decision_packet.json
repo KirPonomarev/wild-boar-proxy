@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "contour": "UI_READONLY_COMMAND_BINDING_PASS",
+  "status": "completed",
+  "decision": "GO_TO_UI_READONLY_BINDING_NEXT_SAFE_SLICE",
+  "live_mutation_performed": false,
+  "runtime_live_action_chain": {
+    "status": "parked",
+    "blocked_actions_reason_code": "RUNTIME_LIVE_ACTION_CHAIN_PARKED",
+    "blocked_reasons": [
+      "LOCK_HELD",
+      "claim_gate_blocked",
+      "policy_drift_detected",
+      "selector_evidence_no_progress",
+      "exact_auth_source_not_singleton",
+      "onboarding_not_admitted",
+      "stage_pilot_not_admitted"
+    ]
+  },
+  "ui_binding": {
+    "metadata_phase": "live_readonly",
+    "unknown_default": "unknown_disabled",
+    "parked_action_state": "disabled_live_action",
+    "client_fields": [
+      "data-available",
+      "data-availability-state",
+      "data-disabled-reason-code",
+      "data-disabled-reasons"
+    ],
+    "server_action_dispatch": "parked_actions_blocked_before_execute_command"
+  },
+  "forbidden_claims": [
+    "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY",
+    "selector_refresh_success",
+    "exact_auth_source_ready",
+    "onboarding_ready",
+    "pilot_ready",
+    "stage_proved"
+  ],
+  "next_contour": "GO_TO_UI_READONLY_BINDING_NEXT_SAFE_SLICE"
+}

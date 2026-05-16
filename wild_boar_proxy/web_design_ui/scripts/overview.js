@@ -653,6 +653,9 @@ function metadataFor(uiAction) {
     post_action_refresh_required: true,
     action_claim_scope: "unknown",
     available: false,
+    availability_state: "unknown_disabled",
+    disabled_reason_code: "UI_ACTION_METADATA_UNAVAILABLE",
+    disabled_reasons: ["unknown_disabled"],
     unavailable_reason: "Метаданные действия не удалось загрузить."
   };
 }
@@ -921,52 +924,87 @@ function isApiRouteActionDeferredInReadonlyRegistry(uiAction) {
   ].includes(uiAction);
 }
 
+function actionAvailabilityForButton(button) {
+  const metadata = metadataFor(button.dataset.uiAction);
+  const requiresLive = (
+    button.classList.contains("account-action")
+    || button.classList.contains("onboard-action")
+    || button.classList.contains("api-route-action")
+  );
+  const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
+  const routeEnabled = button.dataset.routeEnabled !== "false";
+  const routeStateProven = button.dataset.routeStateProven === "true";
+  const routeStateRequirement = button.dataset.routeStateRequirement || "any";
+  const routeStateAllowed = routeStateRequirement === "disabled"
+    ? (!routeEnabled && routeStateProven)
+    : (routeStateRequirement === "enabled" ? (routeEnabled && routeStateProven) : true);
+  const routeActionDeferred = button.classList.contains("api-route-action")
+    && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
+
+  if (!routeStateAllowed) {
+    return {
+      available: false,
+      availabilityState: "not_admitted",
+      disabledReasonCode: routeStateProven ? "ROUTE_STATE_REQUIREMENT_NOT_MET" : "ROUTE_STATE_NOT_PROVEN",
+      disabledReasons: routeStateProven ? ["route_state_requirement_not_met"] : ["route_state_not_proven"],
+      title: routeStateRequirement === "disabled"
+        ? (
+          routeStateProven
+            ? "Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов."
+            : "Состояние маршрута не доказано. Нужен readonly route packet."
+        )
+        : (
+          routeStateProven
+            ? "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
+            : "Состояние маршрута не доказано. Нужен readonly route packet."
+        )
+    };
+  }
+  if (routeActionDeferred) {
+    return {
+      available: false,
+      availabilityState: "disabled_live_action",
+      disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
+      disabledReasons: ["readonly_registry_deferred"],
+      title: "Это действие маршрута отложено в этом readonly registry contour."
+    };
+  }
+  if (requiresLive && !isLiveSource) {
+    return {
+      available: false,
+      availabilityState: "not_admitted",
+      disabledReasonCode: "LIVE_SOURCE_REQUIRED",
+      disabledReasons: ["live_source_required"],
+      title: "Переключите экран на live-источник перед выполнением действий."
+    };
+  }
+  if (metadata.available === false) {
+    return {
+      available: false,
+      availabilityState: metadata.availability_state || "unknown_disabled",
+      disabledReasonCode: metadata.disabled_reason_code || "UI_ACTION_DISABLED",
+      disabledReasons: metadata.disabled_reasons || [],
+      title: metadata.unavailable_reason || "Действие недоступно"
+    };
+  }
+  return {
+    available: true,
+    availabilityState: "displayable_readonly",
+    disabledReasonCode: "",
+    disabledReasons: [],
+    title: ""
+  };
+}
+
 function applyActionAvailability() {
   for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
-    const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = (
-      button.classList.contains("account-action")
-      || button.classList.contains("onboard-action")
-      || button.classList.contains("api-route-action")
-    );
-    const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
-    const routeEnabled = button.dataset.routeEnabled !== "false";
-    const routeStateProven = button.dataset.routeStateProven === "true";
-    const routeStateRequirement = button.dataset.routeStateRequirement || "any";
-    const routeStateAllowed = routeStateRequirement === "disabled"
-      ? (!routeEnabled && routeStateProven)
-      : (routeStateRequirement === "enabled" ? (routeEnabled && routeStateProven) : true);
-    const routeActionDeferred = button.classList.contains("api-route-action") && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed && !routeActionDeferred;
-    button.disabled = !available;
-    button.dataset.available = available ? "true" : "false";
-    button.title = available
-      ? ""
-      : (
-        !routeStateAllowed
-          ? (
-            routeStateRequirement === "disabled"
-              ? (
-                routeStateProven
-                  ? "Маршрут уже разрешён. Это действие доступно только для отключённых маршрутов."
-                  : "Состояние маршрута не доказано. Нужен readonly route packet."
-              )
-              : (
-                routeStateProven
-                  ? "Маршрут отключён. Это действие доступно только для разрешённых маршрутов."
-                  : "Состояние маршрута не доказано. Нужен readonly route packet."
-              )
-          )
-          : (
-            routeActionDeferred
-              ? "Это действие маршрута отложено в этом readonly registry contour."
-              : (
-            requiresLive && !isLiveSource
-              ? "Переключите экран на live-источник перед выполнением действий."
-              : (metadata.unavailable_reason || "Действие недоступно")
-              )
-          )
-      );
+    const state = actionAvailabilityForButton(button);
+    button.disabled = !state.available;
+    button.dataset.available = state.available ? "true" : "false";
+    button.dataset.availabilityState = state.availabilityState;
+    button.dataset.disabledReasonCode = state.disabledReasonCode;
+    button.dataset.disabledReasons = state.available ? "" : JSON.stringify(state.disabledReasons);
+    button.title = state.title;
   }
   updateSettingsActionMetadata();
 }
@@ -2892,21 +2930,12 @@ function renderDataLayoutSnapshot(snapshot) {
 
 function setActionsBusy(isBusy) {
   for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
-    const metadata = metadataFor(button.dataset.uiAction);
-    const requiresLive = (
-      button.classList.contains("account-action")
-      || button.classList.contains("onboard-action")
-      || button.classList.contains("api-route-action")
-    );
-    const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
-    const routeEnabled = button.dataset.routeEnabled !== "false";
-    const routeStateRequirement = button.dataset.routeStateRequirement || "any";
-    const routeStateAllowed = routeStateRequirement === "disabled"
-      ? !routeEnabled
-      : (routeStateRequirement === "enabled" ? routeEnabled : true);
-    const routeActionDeferred = button.classList.contains("api-route-action") && isApiRouteActionDeferredInReadonlyRegistry(button.dataset.uiAction);
-    const available = metadata.available !== false && (!requiresLive || isLiveSource) && routeStateAllowed && !routeActionDeferred;
-    button.disabled = isBusy || !available;
+    const state = actionAvailabilityForButton(button);
+    button.disabled = isBusy || !state.available;
+    button.dataset.available = state.available ? "true" : "false";
+    button.dataset.availabilityState = state.availabilityState;
+    button.dataset.disabledReasonCode = state.disabledReasonCode;
+    button.dataset.disabledReasons = state.available ? "" : JSON.stringify(state.disabledReasons);
   }
 }
 

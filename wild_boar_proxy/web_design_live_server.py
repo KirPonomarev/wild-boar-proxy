@@ -331,10 +331,24 @@ LIVE_READONLY_ACTION_PHASE = "live_readonly"
 FULL_ACTION_PHASE = "full"
 LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE = (
     "Текущее live-readonly окно не допускает action dispatch. "
-    "Сначала завершите readonly admission и sandbox binding contours."
+    "Runtime/live-action chain parked: repeated LOCK_HELD, blocked claim_gate, "
+    "detected policy_drift, selector evidence not refreshed, exact auth source "
+    "not singleton, onboarding and stage/pilot actions not admitted."
+)
+LIVE_READONLY_ACTION_DISABLED_REASON_CODE = "RUNTIME_LIVE_ACTION_CHAIN_PARKED"
+LIVE_READONLY_ACTION_DISABLED_REASONS = (
+    "LOCK_HELD",
+    "claim_gate_blocked",
+    "policy_drift_detected",
+    "selector_evidence_no_progress",
+    "exact_auth_source_not_singleton",
+    "onboarding_not_admitted",
+    "stage_pilot_not_admitted",
 )
 PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
     {
+        "refresh_health_detail",
+        "stable_repair_plan",
         "onboard_account",
         "validate_account",
         "promote_account",
@@ -672,7 +686,21 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 action_phase=action_phase,
             ),
-            "UI_ACTION_PHASE_PARKED",
+            _action_unavailable_code(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
+            availability_state=_action_availability_state(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
+            disabled_reasons=_action_disabled_reasons(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
         )
 
     allowed_payload_keys = {"ui_action"}
@@ -733,36 +761,56 @@ def ui_action_metadata(
     launch_client_path: str | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> dict[str, Any]:
+    actions: dict[str, dict[str, Any]] = {}
+    for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items()):
+        available = _action_available(
+            ui_action,
+            launch_client_path=launch_client_path,
+            action_phase=action_phase,
+        )
+        actions[ui_action] = {
+            "ui_action": ui_action,
+            "display_name": str(action_spec["display_name"]),
+            "human_meaning": str(action_spec["human_meaning"]),
+            "action_role": str(action_spec["action_role"]),
+            "mutates_runtime": bool(action_spec["mutates_runtime"]),
+            "affects_primary_truth": bool(action_spec["affects_primary_truth"]),
+            "mutation_class": str(action_spec.get("mutation_class", "")),
+            "confirmation_required": bool(action_spec["confirmation_required"]),
+            "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
+            "action_claim_scope": str(action_spec["action_claim_scope"]),
+            "available": available,
+            "availability_state": _action_availability_state(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
+            "disabled_reason_code": _action_unavailable_code(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            )
+            if not available
+            else "",
+            "disabled_reasons": _action_disabled_reasons(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            )
+            if not available
+            else [],
+            "unavailable_reason": _action_unavailable_reason(
+                ui_action,
+                launch_client_path=launch_client_path,
+                action_phase=action_phase,
+            ),
+        }
     return {
         "schema_version": 1,
         "status": "ok",
         "source": "ui_action_metadata",
         "action_phase": action_phase,
-        "actions": {
-            ui_action: {
-                "ui_action": ui_action,
-                "display_name": str(action_spec["display_name"]),
-                "human_meaning": str(action_spec["human_meaning"]),
-                "action_role": str(action_spec["action_role"]),
-                "mutates_runtime": bool(action_spec["mutates_runtime"]),
-                "affects_primary_truth": bool(action_spec["affects_primary_truth"]),
-                "mutation_class": str(action_spec.get("mutation_class", "")),
-                "confirmation_required": bool(action_spec["confirmation_required"]),
-                "post_action_refresh_required": bool(action_spec["post_action_refresh_required"]),
-                "action_claim_scope": str(action_spec["action_claim_scope"]),
-                "available": _action_available(
-                    ui_action,
-                    launch_client_path=launch_client_path,
-                    action_phase=action_phase,
-                ),
-                "unavailable_reason": _action_unavailable_reason(
-                    ui_action,
-                    launch_client_path=launch_client_path,
-                    action_phase=action_phase,
-                ),
-            }
-            for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items())
-        },
+        "actions": actions,
     }
 
 
@@ -865,6 +913,9 @@ def _blocked_action(ui_action: str, human_message: str) -> dict[str, Any]:
         "source": "ui_action",
         "ui_action": ui_action,
         "action_role": "blocked",
+        "availability_state": "unknown_disabled",
+        "disabled_reason_code": "UI_ACTION_NOT_ALLOWED",
+        "disabled_reasons": ["unknown_disabled"],
         "mutates_runtime": False,
         "affects_primary_truth": False,
         "confirmation_required": False,
@@ -881,13 +932,23 @@ def _blocked_action(ui_action: str, human_message: str) -> dict[str, Any]:
     }
 
 
-def _unavailable_action(ui_action: str, human_message: str, machine_error_code: str) -> dict[str, Any]:
+def _unavailable_action(
+    ui_action: str,
+    human_message: str,
+    machine_error_code: str,
+    *,
+    availability_state: str = "blocked",
+    disabled_reasons: tuple[str, ...] | list[str] = (),
+) -> dict[str, Any]:
     return {
         "schema_version": 1,
         "status": "integration_failure",
         "source": "ui_action",
         "ui_action": ui_action,
         "action_role": "blocked",
+        "availability_state": availability_state,
+        "disabled_reason_code": machine_error_code,
+        "disabled_reasons": list(disabled_reasons),
         "mutates_runtime": False,
         "affects_primary_truth": False,
         "confirmation_required": False,
@@ -1164,6 +1225,51 @@ def _action_available(
     if ui_action == "launch_client_dispatch":
         return bool(launch_client_path)
     return True
+
+
+def _action_availability_state(
+    ui_action: str,
+    *,
+    launch_client_path: str | None,
+    action_phase: str,
+) -> str:
+    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        return "disabled_live_action"
+    if ui_action == "launch_client_dispatch" and not launch_client_path:
+        return "not_admitted"
+    if ui_action not in UI_ACTION_ALLOWLIST:
+        return "unknown_disabled"
+    return "displayable_readonly"
+
+
+def _action_unavailable_code(
+    ui_action: str,
+    *,
+    launch_client_path: str | None,
+    action_phase: str,
+) -> str:
+    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        return LIVE_READONLY_ACTION_DISABLED_REASON_CODE
+    if ui_action == "launch_client_dispatch" and not launch_client_path:
+        return "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE"
+    if ui_action not in UI_ACTION_ALLOWLIST:
+        return "UI_ACTION_NOT_ALLOWED"
+    return ""
+
+
+def _action_disabled_reasons(
+    ui_action: str,
+    *,
+    launch_client_path: str | None,
+    action_phase: str,
+) -> tuple[str, ...]:
+    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        return LIVE_READONLY_ACTION_DISABLED_REASONS
+    if ui_action == "launch_client_dispatch" and not launch_client_path:
+        return ("launch_client_path_unavailable",)
+    if ui_action not in UI_ACTION_ALLOWLIST:
+        return ("unknown_disabled",)
+    return ()
 
 
 def _action_unavailable_reason(
