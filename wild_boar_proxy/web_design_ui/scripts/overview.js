@@ -3329,6 +3329,9 @@ function confirmationReadyLabel(uiAction) {
   if (uiAction === "api_route_remove") {
     return "Удалить route";
   }
+  if (uiAction === "onboard_account") {
+    return "Подключить в reserve";
+  }
   if (uiAction === "retire_account") {
     return "Вывести из пула";
   }
@@ -3467,7 +3470,7 @@ function closeOnboardModal() {
 
 function runOnboardFromModal() {
   closeOnboardModal();
-  maybeConfirmAndRun("onboard_account_dry_run");
+  maybeConfirmAndRun("onboard_account");
 }
 
 function setScreen(screen, updateUrl = false, settingsSection = null) {

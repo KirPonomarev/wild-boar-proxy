@@ -39,6 +39,8 @@ PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
 LAUNCH_COPY_PREFLIGHT_REQUIRED_CODE = "UI_LAUNCH_COPY_PREFLIGHT_REQUIRED"
 LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE = "UI_LAUNCH_COPY_ISOLATION_UNPROVEN"
+ACCOUNT_CONNECT_PREFLIGHT_REQUIRED_CODE = "UI_ACCOUNT_CONNECT_PREFLIGHT_REQUIRED"
+ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE = "UI_ACCOUNT_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN"
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
 API_CONNECTIONS_READONLY_COMMAND_IDS = (
     "external_models_status",
@@ -491,6 +493,82 @@ def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any
     }
 
 
+def _account_connect_live_preflight(accounts_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(accounts_snapshot, dict):
+        return {
+            "status": "denied",
+            "machine_error_code": ACCOUNT_CONNECT_PREFLIGHT_REQUIRED_CODE,
+            "reason": "Server-owned accounts-readonly preflight отсутствует.",
+            "source_kind": "unknown",
+            "write_surface": "unknown",
+            "refresh_surface": "accounts-readonly",
+            "reserve_first_required": True,
+            "current_session_untouched": False,
+        }
+
+    if str(accounts_snapshot.get("status", "")) != "ok":
+        human_message = str(
+            accounts_snapshot.get("summary", {}).get("human_message", "")
+            if isinstance(accounts_snapshot.get("summary"), dict)
+            else ""
+        )
+        return {
+            "status": "denied",
+            "machine_error_code": ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE,
+            "reason": human_message or "Accounts readonly snapshot не подтвердил server-owned source.",
+            "source_kind": str(accounts_snapshot.get("source") or "unknown"),
+            "write_surface": "account_registry_auth_mutation_only",
+            "refresh_surface": "accounts-readonly",
+            "reserve_first_required": True,
+            "current_session_untouched": False,
+        }
+
+    registry_identity = accounts_snapshot.get("registry_identity")
+    if not isinstance(registry_identity, dict):
+        return {
+            "status": "denied",
+            "machine_error_code": ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE,
+            "reason": "Accounts readonly snapshot не содержит registry identity.",
+            "source_kind": str(accounts_snapshot.get("source") or "unknown"),
+            "write_surface": "account_registry_auth_mutation_only",
+            "refresh_surface": "accounts-readonly",
+            "reserve_first_required": True,
+            "current_session_untouched": False,
+        }
+
+    registry_status = str(registry_identity.get("status") or "")
+    registry_code = str(registry_identity.get("machine_error_code") or "")
+    registry_next_action = str(registry_identity.get("next_action") or "")
+    if (
+        str(accounts_snapshot.get("source") or "") != "accounts_readonly"
+        or accounts_snapshot.get("primary_truth_ok") is not True
+        or registry_status != "ok"
+        or registry_code != "OK"
+        or registry_next_action not in {"", "none"}
+    ):
+        return {
+            "status": "denied",
+            "machine_error_code": ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE,
+            "reason": "Server-owned accounts-readonly gate не admitted для live onboarding.",
+            "source_kind": str(accounts_snapshot.get("source") or "unknown"),
+            "write_surface": "account_registry_auth_mutation_only",
+            "refresh_surface": "accounts-readonly",
+            "reserve_first_required": True,
+            "current_session_untouched": False,
+        }
+
+    return {
+        "status": "admitted",
+        "machine_error_code": "OK",
+        "reason": "Server-owned accounts-readonly gate admitted live onboarding path.",
+        "source_kind": "server_owned_accounts_readonly",
+        "write_surface": "account_registry_auth_mutation_only",
+        "refresh_surface": "accounts-readonly",
+        "reserve_first_required": True,
+        "current_session_untouched": True,
+    }
+
+
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     commands: dict[str, dict[str, Any]] = {}
     for command_id in PRIMARY_COMMAND_IDS:
@@ -839,6 +917,11 @@ def run_ui_action(
     unsupported_keys = sorted(set(payload) - allowed_payload_keys)
     if unsupported_keys:
         return _blocked_action(ui_action, f"Неподдерживаемые поля UI action: {', '.join(unsupported_keys)}.")
+    if ui_action == "onboard_account" and action_phase != LIVE_READONLY_ACTION_PHASE:
+        accounts_snapshot = build_accounts_readonly_snapshot(runner)
+        account_connect_preflight = _account_connect_live_preflight(accounts_snapshot)
+        if account_connect_preflight["status"] != "admitted":
+            return _account_connect_preflight_denied(ui_action, account_connect_preflight)
 
     structured_args: dict[str, str] | None = None
     allow_disabled = False
@@ -1129,6 +1212,19 @@ def _public_launch_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _public_account_connect_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(preflight.get("status", "denied")),
+        "machine_error_code": str(preflight.get("machine_error_code", "unknown")),
+        "reason": str(preflight.get("reason", "")),
+        "source_kind": str(preflight.get("source_kind", "unknown")),
+        "write_surface": str(preflight.get("write_surface", "unknown")),
+        "refresh_surface": str(preflight.get("refresh_surface", "accounts-readonly")),
+        "reserve_first_required": preflight.get("reserve_first_required") is True,
+        "current_session_untouched": preflight.get("current_session_untouched") is True,
+    }
+
+
 def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -1153,6 +1249,35 @@ def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> 
             "data": {
                 "launch_preflight": _public_launch_preflight_summary(preflight),
                 "launch_phase": "preflight_denied",
+            },
+        },
+    }
+
+
+def _account_connect_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": "blocked",
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": str(preflight.get("machine_error_code", ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE)),
+        "disabled_reasons": ["account_connect_preflight_blocked"],
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "preflight_only",
+        "result": {
+            "status": "integration_failure",
+            "machine_error_code": str(preflight.get("machine_error_code", ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE)),
+            "human_message": str(preflight.get("reason", "Live account connect не admitted.")),
+            "next_action": "user_action",
+            "changed_files": [],
+            "data": {
+                "account_connect_preflight": _public_account_connect_preflight_summary(preflight),
+                "onboarding_phase": "preflight_denied",
             },
         },
     }

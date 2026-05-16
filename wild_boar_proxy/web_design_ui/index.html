@@ -108,9 +108,9 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
               <span>Запустить клиент</span>
             </button>
-            <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account_dry_run" hidden>
+            <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account" hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
-              <span>Проверить подключение</span>
+              <span>Подключить аккаунт</span>
             </button>
             <button id="diagnosticsExportAction" class="button live-action diagnostics-only" type="button" data-ui-action="export_diagnostics" hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
@@ -158,9 +158,9 @@
               <div id="quickStartAccountList" class="quick-start-account-list" aria-live="polite"></div>
 
               <div class="quick-start-card-actions">
-                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account_dry_run">
+                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
-                  <span>Проверить подключение</span>
+                  <span>Подключить аккаунт</span>
                 </button>
                 <button id="quickStartCheckAccountsAction" class="button small disabled" type="button" disabled title="Массовая проверка требует отдельного admitted action mapping.">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
@@ -429,7 +429,7 @@
               <div>
                 <div class="eyebrow">Добавление аккаунта</div>
                 <h3 id="onboardingResultTitle">Итог onboarding</h3>
-                <p id="onboardingResultSubtitle">Отображается только из результата <span class="mono-value">onboard_account_dry_run</span>; реальное подключение не выполняется.</p>
+                <p id="onboardingResultSubtitle">Отображается только из результата <span class="mono-value">onboard_account</span>; успех признаётся только при reserve-first proof и canonical refresh.</p>
               </div>
               <span id="onboardingResultModeChip" class="chip neutral"><span class="dot"></span><span>reserve-first</span></span>
             </div>
@@ -2433,51 +2433,51 @@
             <div class="eyebrow">Добавление аккаунта</div>
             <h2 id="onboardTitle">Добавление аккаунта</h2>
             <p>
-              Проверьте dry-run preview подключения аккаунта без реального onboarding command.
-              Браузер не передаёт секреты, исходные расположения, auth-файлы или идентификаторы бекенда.
+              Запустите один server-owned live onboarding path без browser credentials, путей
+              и raw auth surface. Успех признаётся только при reserve-first proof.
             </p>
           </div>
           <div class="onboard-stepper" aria-label="Шаги onboarding">
             <div class="onboard-step active"><span>1</span><strong>Источник</strong><small>server-owned</small></div>
-            <div class="onboard-step"><span>2</span><strong>Preview</strong><small>dry-run only</small></div>
-            <div class="onboard-step"><span>3</span><strong>Следующий шаг</strong><small>live later</small></div>
-            <div class="onboard-step"><span>4</span><strong>Результат</strong><small>no success claim</small></div>
+            <div class="onboard-step"><span>2</span><strong>Допуск</strong><small>reserve-first gate</small></div>
+            <div class="onboard-step"><span>3</span><strong>Команда</strong><small>existing live path</small></div>
+            <div class="onboard-step"><span>4</span><strong>Результат</strong><small>proof only</small></div>
           </div>
           <div class="confirm-boundary" aria-label="Граница результата подключения">
-            <span>dry-run preview</span>
+            <span>live request</span>
             <span>резерв сначала</span>
             <span>результат только из packet</span>
-            <span>реальный import отключён</span>
+            <span>accounts-readonly refresh</span>
           </div>
           <section class="onboard-source-card" aria-label="Источник onboarding">
             <span class="onboard-source-icon"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
             <div>
               <div class="eyebrow">Источник auth</div>
-              <strong>server-owned preview surface</strong>
-              <p>Ручной выбор файла доступен только в desktop/native flow; web не принимает путь, не читает файлы и не импортирует auth.</p>
+              <strong>server-owned onboarding surface</strong>
+              <p>Web не принимает путь, не читает файлы, не передаёт токены и не подсовывает backend id; сервер запускает только существующий admitted live path.</p>
             </div>
-            <span class="mini-pill amber">desktop/native only</span>
+            <span class="mini-pill blue">server-owned only</span>
           </section>
           <div class="confirm-facts">
-            <div>Запуск</div><div><span class="mono-value">onboard_account_dry_run</span> без browser args</div>
-            <div>Размещение</div><div>только reserve-first preview</div>
-            <div>Запись</div><div>никакой registry/auth/runtime mutation</div>
-            <div>Подтверждение</div><div>только server-owned dry-run packet</div>
-            <div>Следующий шаг</div><div>live connect остаётся отдельным контуром</div>
+            <div>Запуск</div><div><span class="mono-value">onboard_account</span> без browser args</div>
+            <div>Допуск</div><div>server-owned source + reserve-first gate</div>
+            <div>Запись</div><div>только onboarding write surface команды</div>
+            <div>Подтверждение</div><div>packet proof + existing <span class="mono-value">accounts-readonly</span></div>
+            <div>Следующий шаг</div><div>promotion остаётся отдельным действием</div>
           </div>
           <div class="modal-state-list" aria-label="Состояния результата подключения">
-            <div class="modal-state-row neutral"><span>dry-run preview</span><strong>показать план и required next step, но не success</strong></div>
-            <div class="modal-state-row amber"><span>dry-run denied</span><strong>остановить и показать blocked reason</strong></div>
-            <div class="modal-state-row neutral"><span>operator action later</span><strong>live connect остаётся отдельным действием</strong></div>
-            <div class="modal-state-row red"><span>никакой import/apply</span><strong>не показывать зелёный результат</strong></div>
+            <div class="modal-state-row neutral"><span>live request admitted</span><strong>отправить существующий live path и дождаться packet proof</strong></div>
+            <div class="modal-state-row amber"><span>live request denied</span><strong>остановить и показать blocked reason</strong></div>
+            <div class="modal-state-row neutral"><span>reserve-first success only</span><strong>active-ready не заявляется автоматически</strong></div>
+            <div class="modal-state-row red"><span>proof missing</span><strong>не показывать зелёный результат</strong></div>
           </div>
           <p class="confirm-note">
-            Это окно запускает ограниченный dry-run preview request. Оно не сканирует файлы,
-            не загружает учётные данные, не импортирует auth и не доказывает включение в рабочий поток.
+            Это окно запускает только существующий server-owned live onboarding request.
+            Оно не принимает browser secrets, не выбирает файлы и не заявляет успех без reserve-first proof.
           </p>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
-            <button id="runOnboardAction" class="button primary" type="button">Показать preview</button>
+            <button id="runOnboardAction" class="button primary" type="button">Подключить в reserve</button>
           </div>
         </section>
       </div>

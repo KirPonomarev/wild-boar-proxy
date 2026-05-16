@@ -675,7 +675,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["onboarding"]["external_command_status"], "nonzero")
         self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
         self.assertEqual(result["result"]["onboarding"]["selected_backend_id"], "acct-new")
-        self.assertEqual(runner.calls, [("accounts", "onboard", "--json")])
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "onboard", "--json"),
+            ],
+        )
 
     def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -703,6 +709,39 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(payload["action_role"], "blocked")
             self.assertEqual(payload["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
         self.assertEqual(runner.calls, [])
+
+    def test_onboard_account_blocks_live_connect_when_server_owned_preflight_is_not_admitted(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "list", "--json"): accounts_packet(
+                    registry_identity={
+                        "status": "error",
+                        "machine_error_code": "REGISTRY_IDENTITY_UNPROVEN",
+                        "next_action": "repair_registry",
+                    }
+                ),
+            }
+        )
+
+        result = run_ui_action(runner, {"ui_action": "onboard_account"})
+
+        self.assertEqual(result["status"], "integration_failure")
+        self.assertEqual(result["action_role"], "blocked")
+        self.assertEqual(result["availability_state"], "preflight_blocked")
+        self.assertEqual(
+            result["result"]["machine_error_code"],
+            "UI_ACCOUNT_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN",
+        )
+        self.assertEqual(
+            result["result"]["data"]["account_connect_preflight"]["status"],
+            "denied",
+        )
+        self.assertEqual(
+            result["result"]["data"]["account_connect_preflight"]["refresh_surface"],
+            "accounts-readonly",
+        )
+        self.assertEqual(runner.calls, [("accounts", "list", "--json")])
 
     def test_onboard_outcomes_do_not_overclaim_success_without_reserve_proof(self) -> None:
         no_new_runner = MappingRunner(
@@ -2128,6 +2167,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("accounts", "list", "--json"),
             ],
             [
+                ("accounts", "list", "--json"),
                 ("accounts", "onboard", "--json"),
                 ("accounts", "list", "--json"),
             ],
