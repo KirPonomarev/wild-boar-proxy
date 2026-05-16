@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.48
+PLAN_VERSION: 1.49
 PLAN_DATE: 2026-05-16
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Stable/sandbox truth recalibration wave active; recent contours truthfully narrowed sandbox onboarding auth blockers through family repair and runtime reproof, but canonical selector refresh via `sync --json` reopened a managed-lane policy/runtime contradiction; next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`; exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until stable policy/runtime truth is reconciled and cross-lane drift is cleared
+PLAN_STATUS: Stable/sandbox truth recalibration wave active; stable policy/runtime reconciliation and runtime reproof recently restored the approved-target runtime lane once, but `SELECTOR_REFRESH_OWNER_PATH_PASS` v3 stopped after `sync --json` returned `LOCK_HELD` and runtime-green preconditions regressed before retry; next primary contour is `RUNTIME_REPROOF_PASS`; selector refresh, exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until runtime-green state is re-earned and selector refresh can proceed under clear preconditions
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -92,8 +92,8 @@ Current implication:
 
 ## Current Recalibration Correction
 
-Recent machine-carried evidence closed part of the stable/sandbox chain and also
-exposed a new boundary that this plan now treats as explicit.
+Recent machine-carried evidence closed part of the stable/sandbox chain and
+then exposed a fresh precondition boundary during selector refresh.
 
 What was truthfully gained:
 
@@ -101,34 +101,37 @@ What was truthfully gained:
   `stable repair --apply --json`
 - runtime reproof later promoted the approved repair target to effective runtime
   truth through `launch smoke --json`
-- stale selected-backend participation evidence was refreshed through the
-  canonical owner path `sync --json`
+- selector refresh was attempted through the canonical owner path after runtime
+  truth had been re-earned
 
 What remains blocked:
 
-- the sync-produced selected-backend snapshot is now fresh, but
-  `rollout rotation inspect --json` reports
-  `ROTATION_EVIDENCE_CONTRADICTED` with `policy_drift_detected`
-- `status --json` reports `claim_gate = blocked`
-- `status --json` reports `policy_drift = detected`
-- post-sync runtime truth is in the managed lane while the sandbox auth chain
-  still depends on stable-lane restoration
-- `stable repair --dry-run --json` again reports pending reconciliation work
+- selector refresh did not complete and did not produce a successful
+  `sync --json` packet
+- the first `sync --json` attempt returned `LOCK_HELD` with no changed files
+- before a clean retry, `status --json` again reported
+  `claim_gate = blocked`
+- before a clean retry, `status --json` again reported
+  `policy_drift = detected`
+- effective stable runtime consumer truth regressed to
+  `observed_source_active`
+- consumer activation readiness regressed to `activation_pending`
+- activation evidence became `snapshot_stale`
 
 Interpretation rule:
 
-- this is not treated as stale-selector ambiguity anymore
+- this is not treated as successful selector refresh
 - this is not treated as sandbox auth-source readiness
-- this is treated as a cross-lane stable-policy/runtime contradiction reopened
-  by canonical `sync --json`
+- this is treated as runtime precondition loss before selector retry
+- selector refresh may resume only after runtime-green state is re-earned
 
 Current implication:
 
-- the next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`
-- `SELECTOR_REFRESH_OWNER_PATH_PASS` is considered closed and must not be
-  repeated by inertia
-- `EXACT_AUTH_REF_SOURCE_ADMISSION_PASS` remains parked until stable
-  policy/runtime truth is reconciled again
+- the next primary contour is `RUNTIME_REPROOF_PASS`
+- `SELECTOR_REFRESH_OWNER_PATH_PASS` is stopped and must not be retried until
+  runtime-green preconditions are true again
+- `EXACT_AUTH_REF_SOURCE_ADMISSION_PASS` remains parked until runtime truth and
+  selector evidence are aligned again
 - sandbox `auth.json` materialization remains parked
 
 ## Anti-Loop Rule
@@ -165,17 +168,21 @@ contour` text, this section wins.
 Current active truth:
 
 - stable sandbox auth chain is not currently admission-ready
-- canonical selector refresh through `sync --json` already happened
-- selected-backend participation evidence is fresh
-- refreshed participation evidence is contradicted by active `policy_drift`
+- canonical selector refresh through `sync --json` was attempted but did not
+  complete
+- selected-backend participation evidence remains stale
+- the first selector refresh attempt returned `LOCK_HELD`
+- runtime-green preconditions regressed before selector refresh could be retried
 - `claim_gate` is blocked
-- post-sync runtime truth is currently in the managed lane
-- stable repair again reports pending reconciliation work
+- `policy_drift` is detected
+- effective stable runtime consumer truth is `observed_source_active`
+- consumer activation readiness is `activation_pending`
+- activation evidence is `snapshot_stale`
 
 Current active implication:
 
-- the next primary contour is `STABLE_POLICY_RUNTIME_RECONCILIATION_PASS`
-- no further selector refresh by inertia
+- the next primary contour is `RUNTIME_REPROOF_PASS`
+- no further selector refresh until runtime-green state is re-earned
 - no exact auth-source admission
 - no sandbox `auth.json` materialization
 - no onboarding rerun
@@ -190,15 +197,16 @@ narrative convenience.
 | `stable repair --dry-run --json` | stable | policy/source-copy reconciliation truth | authoritative |
 | `status --json` | runtime | current mode, claim-gate, effective-source truth | authoritative |
 | `rollout rotation inspect --json` | participation | validates selected-backend evidence against policy/runtime truth | authoritative |
-| `sync --json` selected-backend snapshot | managed participation | refreshes bounded selector evidence only | not sufficient by itself |
-| `launch smoke --json` activation evidence | stable runtime activation | proved prior runtime activation success | historical support only, not current selector authority |
+| `sync --json` selected-backend snapshot | managed participation | attempted selector refresh; latest attempt stopped on `LOCK_HELD` | blocked until runtime-green preconditions are restored |
+| `launch smoke --json` activation evidence | stable runtime activation | proved prior runtime activation success | historical support only until reproof is refreshed |
 
 Current interpretation rule:
 
-- fresh selector evidence does not outrank contradicted rotation truth
-- managed-lane refresh does not by itself restore stable-lane auth readiness
+- stale selector evidence does not outrank regressed runtime truth
+- managed-lane refresh cannot be retried honestly while runtime-green
+  preconditions are false
 - exact auth-source work may resume only after stable policy/runtime
-  reconciliation clears the active contradiction
+  reconciliation, runtime activation truth, and selector evidence are aligned
 
 ## Historical Next-Contour Marker Rule
 
