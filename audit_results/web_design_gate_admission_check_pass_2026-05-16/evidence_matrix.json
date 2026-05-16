@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_DESIGN_GATE_ADMISSION_CHECK_PASS",
+  "date": "2026-05-16",
+  "evidence_used": [
+    {
+      "path": "AGENTS.md",
+      "role": "execution_gate_rule",
+      "finding": "Design polish requires EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY before start."
+    },
+    {
+      "path": "audit_results/stage20_c6_verification_packet.json",
+      "role": "machine_backed_gate_token",
+      "finding": "Committed verification packet sets final_verdict to EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY."
+    },
+    {
+      "path": "audit_results/stage20_c6_closeout_report.md",
+      "role": "human_closeout_support",
+      "finding": "Closeout states the gate was earned through non-repo-owned NO_GO path and was pushed."
+    },
+    {
+      "path": "README.md",
+      "role": "current_repo_status_support",
+      "finding": "Current status says companion UI work stays gated behind the token, but does not revoke that token."
+    },
+    {
+      "path": "MASTER_PLAN.md",
+      "role": "product_sequence_support",
+      "finding": "Plan sequence places WEB_DESIGN_FINISH_PASS after functional contours, consistent with design being next once gate is admitted."
+    }
+  ],
+  "evidence_rejected": [
+    {
+      "path": "MASTER_PLAN.md",
+      "reason": "Contour ordering alone is not enough to admit the gate."
+    },
+    {
+      "path": "audit_results/plan_recenter_to_product_work_2026-05-16/decision_packet.json",
+      "reason": "This contour intentionally did not claim design gate ready; that non-claim is not a revocation of stage20_c6."
+    },
+    {
+      "path": "README.md",
+      "reason": "README alone is supporting context, not sufficient proof of gate admission."
+    },
+    {
+      "path": "narrative memory",
+      "reason": "Not admitted as evidence."
+    }
+  ],
+  "revocation_check": {
+    "higher_priority_revocation_found": false,
+    "sources_checked": [
+      "CANON.md",
+      "MASTER_PLAN.md",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "summary": "No higher-priority canon or execution source explicitly revokes the committed stage20_c6 gate token."
+  },
+  "audit_adjudication": {
+    "dissenting_audit": {
+      "auditor": "Franklin",
+      "proposed_conclusion_audited": "DESIGN_GATE_ADMITTED",
+      "verdict": "FAIL",
+      "reason": "Treated live blockers in stage20_c6 as automatically incompatible with gate admission."
+    },
+    "accepted_audit": {
+      "auditor": "Sagan",
+      "proposed_conclusion_audited": "DESIGN_GATE_ADMITTED",
+      "verdict": "PASS",
+      "reason": "Confirmed the repo's own stage20_c6 evidence explicitly separates non-repo-owned NO_GO blockers from gate admission and does not revoke the earned token."
+    },
+    "maintainer_resolution": "Accepted Sagan PASS. stage20_c6 explicitly says the gate was earned through the non-repo-owned NO_GO path and keeps later live blockers separate rather than revoking the token."
+  }
+}
