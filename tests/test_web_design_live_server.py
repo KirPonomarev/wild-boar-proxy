@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import tempfile
 import unittest
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -22,6 +23,7 @@ from wild_boar_proxy.web_design_live_server import (
     LIVE_READONLY_ACTION_DISABLED_REASONS,
     PARKED_IN_LIVE_READONLY_ACTIONS,
     READONLY_COMMAND_IDS,
+    LaunchCopyContract,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
     build_handler,
@@ -34,6 +36,18 @@ from wild_boar_proxy.web_design_live_server import (
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+TEST_LAUNCH_CLIENT_PATH = "/bin/sh"
+
+
+def launch_copy_contract(*, action_server_port: int | None = None) -> LaunchCopyContract:
+    copy_port = 9321 if action_server_port != 9321 else 9322
+    return LaunchCopyContract(
+        client_path=TEST_LAUNCH_CLIENT_PATH,
+        profile_dir="/tmp/wbp-copy-profile",
+        data_dir="/tmp/wbp-copy-data",
+        copy_port=copy_port,
+        action_server_port=action_server_port,
+    )
 
 
 def command_packet(**overrides: object) -> dict[str, object]:
@@ -487,7 +501,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
         metadata = ui_action_metadata()
         full_metadata = ui_action_metadata(action_phase=FULL_ACTION_PHASE)
         bounded_metadata = ui_action_metadata(
-            launch_client_path="/Applications/Codex.app",
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            launch_copy_contract=launch_copy_contract(),
             action_phase=FULL_ACTION_PHASE,
         )
 
@@ -540,9 +555,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
         self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
         self.assertTrue(full_metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
+        self.assertFalse(full_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertEqual(bounded_metadata["actions"]["launch_client_dispatch"]["unavailable_reason"], "")
-        self.assertNotIn("/Applications/Codex.app", json.dumps(bounded_metadata))
+        self.assertEqual(
+            bounded_metadata["actions"]["launch_client_dispatch"]["launch_preflight"]["status"],
+            "admitted",
+        )
+        self.assertTrue(
+            bounded_metadata["actions"]["launch_client_dispatch"]["launch_preflight"]["process_confirmation_possible"]
+        )
+        self.assertNotIn(TEST_LAUNCH_CLIENT_PATH, json.dumps(bounded_metadata))
 
     def test_http_action_endpoint_blocks_parked_actions_in_live_readonly_phase(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -1538,12 +1561,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 "ui_action": "launch_client_dispatch",
                 "client_path": "/Applications/Unsafe.app",
             },
-            launch_client_path="/Applications/Codex.app",
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            launch_copy_contract=launch_copy_contract(),
         )
         dispatched = run_ui_action(
             runner,
             {"ui_action": "launch_client_dispatch"},
-            launch_client_path="/Applications/Codex.app",
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            launch_copy_contract=launch_copy_contract(),
         )
 
         self.assertEqual(unavailable["status"], "integration_failure")
@@ -1558,10 +1583,100 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(dispatched["confirmation_required"])
         self.assertTrue(dispatched["post_action_refresh_required"])
         self.assertIn("не успех сессии внешнего клиента", dispatched["action_claim_scope"])
+        self.assertEqual(dispatched["result"]["data"]["launch_preflight"]["status"], "admitted")
+        self.assertNotIn(TEST_LAUNCH_CLIENT_PATH, json.dumps(dispatched))
+        self.assertNotIn("/tmp/wbp-copy-profile", json.dumps(dispatched))
+        self.assertNotIn("/tmp/wbp-copy-data", json.dumps(dispatched))
         self.assertEqual(
             runner.calls[-1],
-            ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+            ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"),
         )
+
+    def test_launch_client_dispatch_requires_isolated_copy_preflight(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        denied = run_ui_action(
+            runner,
+            {"ui_action": "launch_client_dispatch"},
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            action_phase=FULL_ACTION_PHASE,
+        )
+
+        self.assertEqual(denied["status"], "integration_failure")
+        self.assertEqual(denied["availability_state"], "preflight_blocked")
+        self.assertEqual(
+            denied["result"]["machine_error_code"],
+            "UI_LAUNCH_COPY_PREFLIGHT_REQUIRED",
+        )
+        self.assertEqual(denied["result"]["data"]["launch_phase"], "preflight_denied")
+        self.assertEqual(
+            denied["result"]["data"]["launch_preflight"]["status"],
+            "denied",
+        )
+        self.assertEqual(runner.calls, [])
+
+    def test_launch_client_dispatch_blocks_app_bundle_target_without_process_proof(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            app_bundle = Path(tmpdir) / "FakeCodex.app"
+            app_bundle.mkdir()
+            denied = run_ui_action(
+                runner,
+                {"ui_action": "launch_client_dispatch"},
+                launch_client_path=str(app_bundle),
+                launch_copy_contract=LaunchCopyContract(
+                    client_path=str(app_bundle),
+                    profile_dir="/tmp/wbp-copy-profile",
+                    data_dir="/tmp/wbp-copy-data",
+                    copy_port=9321,
+                ),
+                action_phase=FULL_ACTION_PHASE,
+            )
+
+        self.assertEqual(denied["status"], "integration_failure")
+        self.assertEqual(
+            denied["result"]["machine_error_code"],
+            "UI_LAUNCH_COPY_ISOLATION_UNPROVEN",
+        )
+        self.assertEqual(denied["result"]["data"]["launch_phase"], "preflight_denied")
+        self.assertEqual(
+            denied["result"]["data"]["launch_preflight"]["target_kind"],
+            "app_bundle",
+        )
+        self.assertFalse(
+            denied["result"]["data"]["launch_preflight"]["process_confirmation_possible"]
+        )
+        self.assertEqual(runner.calls, [])
+
+    def test_launch_client_dispatch_redacts_changed_files_in_ui_result(self) -> None:
+        runner = MappingRunner(
+            {
+                ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"): command_packet(
+                    human_message="Client dispatch requested.",
+                    changed_files=["/tmp/private-client-path"],
+                    client_launch_result={
+                        "dispatch_method": "detached_executable_spawn",
+                        "dispatch_observed": True,
+                        "dispatch_attempted": True,
+                        "final_outcome": "dispatch_requested",
+                    },
+                )
+            }
+        )
+
+        dispatched = run_ui_action(
+            runner,
+            {"ui_action": "launch_client_dispatch"},
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=FULL_ACTION_PHASE,
+        )
+
+        self.assertEqual(
+            dispatched["result"]["changed_files"],
+            ["launch_dispatch_metadata"],
+        )
+        self.assertNotIn("/tmp/private-client-path", json.dumps(dispatched))
 
     def test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -1693,7 +1808,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ("127.0.0.1", free_port()),
             build_handler(
                 runner=runner,
-                launch_client_path="/Applications/Codex.app",
+                launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+                launch_copy_contract=launch_copy_contract(),
                 action_phase=FULL_ACTION_PHASE,
             ),
         )
@@ -1726,15 +1842,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "integration_failure")
         self.assertIn("sync_runtime", metadata["actions"])
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
-        self.assertNotIn("/Applications/Codex.app", json.dumps(metadata))
+        self.assertNotIn(TEST_LAUNCH_CLIENT_PATH, json.dumps(metadata))
         self.assertEqual(launch["status"], "ok")
+        self.assertEqual(launch["result"]["data"]["launch_preflight"]["status"], "admitted")
         self.assertEqual(validate["status"], "ok")
         self.assertEqual(validate["action_role"], "account_verification")
         self.assertEqual(
             runner.calls,
             [
                 ("diagnostics", "export", "--json"),
-                ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+                ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"),
                 ("accounts", "list", "--json"),
                 ("accounts", "validate", "acct-active", "--json"),
             ],
@@ -1765,7 +1882,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ("127.0.0.1", free_port()),
             build_handler(
                 runner=runner,
-                launch_client_path="/Applications/Codex.app",
+                launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+                launch_copy_contract=launch_copy_contract(),
                 action_phase=FULL_ACTION_PHASE,
             ),
         )
@@ -1876,6 +1994,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(action_results["launch_client_dispatch"]["confirmation_required"])
         self.assertIn("не успех сессии внешнего клиента", action_results["launch_client_dispatch"]["action_claim_scope"])
         self.assertEqual(
+            action_results["launch_client_dispatch"]["result"]["data"]["launch_preflight"]["status"],
+            "admitted",
+        )
+        self.assertEqual(
             action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
             "reserve_only_success",
         )
@@ -1931,7 +2053,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("rollout", "rotation", "inspect", "--json"),
             ],
             [
-                ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"),
+                ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"),
                 ("status", "--json"),
                 ("mode", "get", "--json"),
                 ("accounts", "list", "--json"),
@@ -2086,9 +2208,15 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("mode", "set", "stable", "--json"): command_packet(human_message="Stable mode requested."),
         ("mode", "set", "managed", "--json"): command_packet(human_message="Managed mode requested."),
         ("launch", "smoke", "--json"): command_packet(human_message="Launch smoke passed."),
-        ("launch", "client", "--client-path", "/Applications/Codex.app", "--json"): command_packet(
+        ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"): command_packet(
             human_message="Client dispatch requested.",
             data={"launch_claim_scope": "dispatch_requested"},
+            client_launch_result={
+                "dispatch_method": "detached_executable_spawn",
+                "dispatch_observed": True,
+                "dispatch_attempted": True,
+                "final_outcome": "dispatch_requested",
+            },
         ),
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."

@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import mimetypes
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -35,6 +37,8 @@ READONLY_COMMAND_IDS = (
 )
 PRIMARY_COMMAND_IDS = ("status", "mode_get", "accounts_list")
 DETAIL_COMMAND_IDS = ("healthcheck", "rollout_rotation_inspect")
+LAUNCH_COPY_PREFLIGHT_REQUIRED_CODE = "UI_LAUNCH_COPY_PREFLIGHT_REQUIRED"
+LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE = "UI_LAUNCH_COPY_ISOLATION_UNPROVEN"
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
 API_CONNECTIONS_READONLY_COMMAND_IDS = (
     "external_models_status",
@@ -373,6 +377,108 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class LaunchCopyContract:
+    client_path: str | None = None
+    profile_dir: str | None = None
+    data_dir: str | None = None
+    copy_port: int | None = None
+    action_server_port: int | None = None
+
+
+def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any]:
+    if contract is None or not contract.client_path:
+        return {
+            "status": "denied",
+            "machine_error_code": LAUNCH_COPY_PREFLIGHT_REQUIRED_CODE,
+            "reason": "Server-owned contract для изолированной копии не предоставлен.",
+            "target_kind": "unknown",
+            "target_exists": False,
+            "separate_profile": False,
+            "separate_data_dir": False,
+            "separate_port": False,
+            "process_confirmation_possible": False,
+            "current_session_untouched": False,
+        }
+
+    client_path = Path(contract.client_path).expanduser()
+    target_exists = client_path.exists()
+    target_kind = "unknown"
+    process_confirmation_possible = False
+    if client_path.suffix == ".app" and client_path.is_dir():
+        target_kind = "app_bundle"
+    elif client_path.is_file() and os.access(client_path, os.X_OK):
+        target_kind = "executable"
+        process_confirmation_possible = True
+
+    profile_dir = Path(contract.profile_dir).expanduser() if contract.profile_dir else None
+    data_dir = Path(contract.data_dir).expanduser() if contract.data_dir else None
+    separate_profile = bool(profile_dir and profile_dir.is_absolute())
+    separate_data_dir = bool(data_dir and data_dir.is_absolute())
+    distinct_dirs = bool(
+        separate_profile
+        and separate_data_dir
+        and profile_dir is not None
+        and data_dir is not None
+        and profile_dir != data_dir
+    )
+    separate_port = isinstance(contract.copy_port, int) and contract.copy_port > 0
+    if separate_port and contract.action_server_port:
+        separate_port = contract.copy_port != contract.action_server_port
+
+    if not target_exists:
+        return {
+            "status": "denied",
+            "machine_error_code": "UI_LAUNCH_COPY_TARGET_MISSING",
+            "reason": "Server-owned цель запуска не найдена.",
+            "target_kind": target_kind,
+            "target_exists": False,
+            "separate_profile": distinct_dirs and separate_profile,
+            "separate_data_dir": distinct_dirs and separate_data_dir,
+            "separate_port": separate_port,
+            "process_confirmation_possible": process_confirmation_possible,
+            "current_session_untouched": False,
+        }
+    if target_kind != "executable":
+        return {
+            "status": "denied",
+            "machine_error_code": LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE,
+            "reason": "Изолированная копия допускается только для bounded executable target; app bundle не доказывает отдельный процесс.",
+            "target_kind": target_kind,
+            "target_exists": True,
+            "separate_profile": distinct_dirs and separate_profile,
+            "separate_data_dir": distinct_dirs and separate_data_dir,
+            "separate_port": separate_port,
+            "process_confirmation_possible": False,
+            "current_session_untouched": False,
+        }
+    if not distinct_dirs or not separate_port:
+        return {
+            "status": "denied",
+            "machine_error_code": LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE,
+            "reason": "Изоляция копии не доказана: нужны отдельные absolute profile/data каталоги и отдельный порт.",
+            "target_kind": target_kind,
+            "target_exists": True,
+            "separate_profile": distinct_dirs and separate_profile,
+            "separate_data_dir": distinct_dirs and separate_data_dir,
+            "separate_port": separate_port,
+            "process_confirmation_possible": True,
+            "current_session_untouched": False,
+        }
+    return {
+        "status": "admitted",
+        "machine_error_code": "OK",
+        "reason": "Preflight подтвердил изолированную копию: отдельные profile/data каталоги и отдельный port заданы.",
+        "target_kind": target_kind,
+        "target_exists": True,
+        "separate_profile": True,
+        "separate_data_dir": True,
+        "separate_port": True,
+        "process_confirmation_possible": True,
+        "current_session_untouched": True,
+    }
+
+
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
     commands: dict[str, dict[str, Any]] = {}
     for command_id in PRIMARY_COMMAND_IDS:
@@ -650,6 +756,7 @@ def run_ui_action(
     payload: dict[str, Any],
     *,
     launch_client_path: str | None = None,
+    launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = FULL_ACTION_PHASE,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
@@ -674,9 +781,14 @@ def run_ui_action(
             "Bounded путь запуска клиента недоступен.",
             "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
         )
+    if ui_action == "launch_client_dispatch" and action_phase != LIVE_READONLY_ACTION_PHASE and launch_client_path:
+        launch_preflight = _launch_copy_preflight(launch_copy_contract)
+        if launch_preflight["status"] != "admitted":
+            return _launch_copy_preflight_denied(ui_action, launch_preflight)
     if not _action_available(
         ui_action,
         launch_client_path=launch_client_path,
+        launch_copy_contract=launch_copy_contract,
         action_phase=action_phase,
     ):
         return _unavailable_action(
@@ -684,21 +796,25 @@ def run_ui_action(
             _action_unavailable_reason(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
             _action_unavailable_code(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
             availability_state=_action_availability_state(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
             disabled_reasons=_action_disabled_reasons(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
         )
@@ -729,6 +845,9 @@ def run_ui_action(
                 "Bounded путь запуска клиента недоступен.",
                 "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
             )
+        launch_preflight = _launch_copy_preflight(launch_copy_contract)
+        if launch_preflight["status"] != "admitted":
+            return _launch_copy_preflight_denied(ui_action, launch_preflight)
         structured_args = {"client_path": launch_client_path}
         allow_disabled = True
 
@@ -738,6 +857,9 @@ def run_ui_action(
         structured_args=structured_args,
         allow_disabled=allow_disabled,
     )
+    launch_preflight = None
+    if ui_action == "launch_client_dispatch":
+        launch_preflight = _launch_copy_preflight(launch_copy_contract)
     return {
         "schema_version": 1,
         "status": "ok" if result["status"] == "ok" else "command_error",
@@ -752,13 +874,14 @@ def run_ui_action(
         "mutation_class": action_spec.get("mutation_class", ""),
         "account_id": structured_args.get("account_id") if structured_args else "",
         "route_id": structured_args.get("route_id") if structured_args else "",
-        "result": _action_result(result, ui_action=ui_action),
+        "result": _action_result(result, ui_action=ui_action, launch_preflight=launch_preflight),
     }
 
 
 def ui_action_metadata(
     *,
     launch_client_path: str | None = None,
+    launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> dict[str, Any]:
     actions: dict[str, dict[str, Any]] = {}
@@ -766,6 +889,7 @@ def ui_action_metadata(
         available = _action_available(
             ui_action,
             launch_client_path=launch_client_path,
+            launch_copy_contract=launch_copy_contract,
             action_phase=action_phase,
         )
         actions[ui_action] = {
@@ -783,11 +907,13 @@ def ui_action_metadata(
             "availability_state": _action_availability_state(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
             "disabled_reason_code": _action_unavailable_code(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             )
             if not available
@@ -795,6 +921,7 @@ def ui_action_metadata(
             "disabled_reasons": _action_disabled_reasons(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             )
             if not available
@@ -802,9 +929,14 @@ def ui_action_metadata(
             "unavailable_reason": _action_unavailable_reason(
                 ui_action,
                 launch_client_path=launch_client_path,
+                launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
             ),
         }
+        if ui_action == "launch_client_dispatch":
+            actions[ui_action]["launch_preflight"] = _public_launch_preflight_summary(
+                _launch_copy_preflight(launch_copy_contract)
+            )
     return {
         "schema_version": 1,
         "status": "ok",
@@ -819,6 +951,7 @@ def build_handler(
     runner: CommandRunner | None = None,
     static_dir: Path = WEB_DESIGN_UI,
     launch_client_path: str | None = None,
+    launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
@@ -840,6 +973,7 @@ def build_handler(
                 self._send_json(
                     ui_action_metadata(
                         launch_client_path=launch_client_path,
+                        launch_copy_contract=launch_copy_contract,
                         action_phase=action_phase,
                     )
                 )
@@ -856,6 +990,7 @@ def build_handler(
                     command_runner,
                     self._read_json_body(),
                     launch_client_path=launch_client_path,
+                    launch_copy_contract=launch_copy_contract,
                     action_phase=action_phase,
                 )
             )
@@ -961,6 +1096,50 @@ def _unavailable_action(
             "next_action": "user_action",
             "changed_files": [],
             "data": {},
+        },
+    }
+
+
+def _public_launch_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(preflight.get("status", "denied")),
+        "machine_error_code": str(preflight.get("machine_error_code", "unknown")),
+        "reason": str(preflight.get("reason", "")),
+        "target_kind": str(preflight.get("target_kind", "unknown")),
+        "target_exists": preflight.get("target_exists") is True,
+        "separate_profile": preflight.get("separate_profile") is True,
+        "separate_data_dir": preflight.get("separate_data_dir") is True,
+        "separate_port": preflight.get("separate_port") is True,
+        "process_confirmation_possible": preflight.get("process_confirmation_possible") is True,
+        "current_session_untouched": preflight.get("current_session_untouched") is True,
+    }
+
+
+def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": "blocked",
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": str(preflight.get("machine_error_code", LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE)),
+        "disabled_reasons": ["launch_copy_preflight_blocked"],
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "preflight_only",
+        "result": {
+            "status": "integration_failure",
+            "machine_error_code": str(preflight.get("machine_error_code", LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE)),
+            "human_message": str(preflight.get("reason", "Изолированная копия не admitted.")),
+            "next_action": "user_action",
+            "changed_files": [],
+            "data": {
+                "launch_preflight": _public_launch_preflight_summary(preflight),
+                "launch_phase": "preflight_denied",
+            },
         },
     }
 
@@ -1218,12 +1397,13 @@ def _action_available(
     ui_action: str,
     *,
     launch_client_path: str | None,
+    launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> bool:
     if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         return False
     if ui_action == "launch_client_dispatch":
-        return bool(launch_client_path)
+        return bool(launch_client_path) and _launch_copy_preflight(launch_copy_contract)["status"] == "admitted"
     return True
 
 
@@ -1231,12 +1411,15 @@ def _action_availability_state(
     ui_action: str,
     *,
     launch_client_path: str | None,
+    launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
     if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         return "disabled_live_action"
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "not_admitted"
+    if ui_action == "launch_client_dispatch" and _launch_copy_preflight(launch_copy_contract)["status"] != "admitted":
+        return "preflight_blocked"
     if ui_action not in UI_ACTION_ALLOWLIST:
         return "unknown_disabled"
     return "displayable_readonly"
@@ -1246,12 +1429,15 @@ def _action_unavailable_code(
     ui_action: str,
     *,
     launch_client_path: str | None,
+    launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
     if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         return LIVE_READONLY_ACTION_DISABLED_REASON_CODE
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE"
+    if ui_action == "launch_client_dispatch":
+        return str(_launch_copy_preflight(launch_copy_contract)["machine_error_code"])
     if ui_action not in UI_ACTION_ALLOWLIST:
         return "UI_ACTION_NOT_ALLOWED"
     return ""
@@ -1261,12 +1447,17 @@ def _action_disabled_reasons(
     ui_action: str,
     *,
     launch_client_path: str | None,
+    launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> tuple[str, ...]:
     if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         return LIVE_READONLY_ACTION_DISABLED_REASONS
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return ("launch_client_path_unavailable",)
+    if ui_action == "launch_client_dispatch":
+        launch_preflight = _launch_copy_preflight(launch_copy_contract)
+        if launch_preflight["status"] != "admitted":
+            return ("launch_copy_preflight_blocked",)
     if ui_action not in UI_ACTION_ALLOWLIST:
         return ("unknown_disabled",)
     return ()
@@ -1276,16 +1467,25 @@ def _action_unavailable_reason(
     ui_action: str,
     *,
     launch_client_path: str | None,
+    launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
     if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "Bounded путь запуска клиента недоступен."
+    if ui_action == "launch_client_dispatch":
+        launch_preflight = _launch_copy_preflight(launch_copy_contract)
+        return "" if launch_preflight["status"] == "admitted" else str(launch_preflight["reason"])
     return ""
 
 
-def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, Any]:
+def _action_result(
+    result: dict[str, Any],
+    *,
+    ui_action: str = "",
+    launch_preflight: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     packet = result.get("packet")
     packet_data = packet.get("data", {}) if isinstance(packet, dict) else {}
     data = dict(packet_data) if isinstance(packet_data, dict) else {}
@@ -1300,6 +1500,33 @@ def _action_result(result: dict[str, Any], *, ui_action: str = "") -> dict[str, 
         data["claim_scope"] = "support_artifact_only"
         if isinstance(changed_files, list):
             changed_files = ["diagnostics_bundle"] * len(changed_files)
+    if ui_action == "launch_client_dispatch":
+        client_launch_result = packet.get("client_launch_result") if isinstance(packet, dict) else None
+        launch_state = "launch_failed"
+        process_confirmed = False
+        dispatch_method = ""
+        if isinstance(client_launch_result, dict):
+            dispatch_method = str(client_launch_result.get("dispatch_method", ""))
+            dispatch_observed = client_launch_result.get("dispatch_observed") is True
+            if dispatch_method == "detached_executable_spawn" and dispatch_observed:
+                launch_state = "process_confirmed"
+                process_confirmed = True
+            elif dispatch_observed:
+                launch_state = "launch_requested"
+            elif client_launch_result.get("dispatch_attempted") is True:
+                launch_state = "launch_requested"
+        data = {
+            "launch_preflight": _public_launch_preflight_summary(launch_preflight or {}),
+            "launch_phase": launch_state,
+            "process_confirmed": process_confirmed,
+            "dispatch_method": dispatch_method or "unreported",
+            "launch_claim_scope": "os_dispatch_only",
+            "current_session_untouched": (
+                bool(launch_preflight) and launch_preflight.get("current_session_untouched") is True
+            ),
+        }
+        if isinstance(changed_files, list):
+            changed_files = ["launch_dispatch_metadata"] * len(changed_files)
     payload = {
         "status": result["status"],
         "machine_error_code": result["machine_error_code"],
@@ -1869,12 +2096,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument("--launch-client-path", default=None)
+    parser.add_argument("--launch-copy-profile-dir", default=None)
+    parser.add_argument("--launch-copy-data-dir", default=None)
+    parser.add_argument("--launch-copy-port", type=int, default=None)
     args = parser.parse_args(argv)
+    launch_copy_contract = LaunchCopyContract(
+        client_path=args.launch_client_path,
+        profile_dir=args.launch_copy_profile_dir,
+        data_dir=args.launch_copy_data_dir,
+        copy_port=args.launch_copy_port,
+        action_server_port=args.port,
+    )
 
     server = ThreadingHTTPServer(
         (args.host, args.port),
         build_handler(
             launch_client_path=args.launch_client_path,
+            launch_copy_contract=launch_copy_contract,
             action_phase=LIVE_READONLY_ACTION_PHASE,
         ),
     )

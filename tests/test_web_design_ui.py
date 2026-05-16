@@ -1532,11 +1532,13 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn('data-settings-subflow="client"', client_markup)
         self.assertIn('data-client-launch-surface="bounded-dispatch-preview"', client_markup)
         self.assertIn("clientLaunchModelFromSnapshot", js)
+        self.assertIn("launchPreflightSummary", js)
         self.assertIn("renderClientLaunchSnapshot", js)
         self.assertIn('url.searchParams.set("section", nextSettingsSection)', js)
         self.assertIn("Client status недоступен. Предыдущие fixture-данные не используются.", js)
         self.assertIn("Client status устарел. Требуется refresh из bounded packet.", js)
-        self.assertIn("Демо-режим. Клиент показан как preview, не как найденное локальное приложение.", js)
+        self.assertIn("Демо-режим. Изолированная копия admitted только через server-owned preflight.", js)
+        self.assertIn("Демо-режим. Изолированная копия не admitted без server-owned preflight.", js)
 
         self.assertIn("Выбранный клиент", client_markup)
         self.assertIn("Launch readiness", client_markup)
@@ -1546,12 +1548,18 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("selected client · readiness · bounded dispatch only", client_markup)
         self.assertIn("Client preview не является runtime readiness или доказательством локального файла.", client_markup)
         self.assertIn("Command OK означает dispatch requested, не app/session truth.", client_markup)
+        self.assertIn("Copy preflight", client_markup)
+        self.assertIn("Process proof", client_markup)
         self.assertIn("Запрос запуска отправлен ≠ активная app session", client_markup)
         self.assertIn("Launch dispatch показывает запрос запуска, не здоровье runtime", client_markup)
+        self.assertIn("Preflight first.", client_markup)
         self.assertIn("Кандидаты выбираются только из command-owned list.", client_markup)
         self.assertIn("Ручной выбор файла: desktop/native only.", client_markup)
         self.assertIn("Web path payload forbidden.", client_markup)
         self.assertIn("Показать в Finder · human-open not admitted", client_markup)
+        self.assertIn("Запустить копию", client_markup)
+        self.assertIn('id="clientActionPreflight"', client_markup)
+        self.assertIn('id="clientActionPhase"', client_markup)
 
         self.assertIn('data-ui-action="launch_client_dispatch"', client_markup)
         self.assertIn('data-ui-action="launch_smoke"', client_markup)
@@ -2110,6 +2118,12 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("Current pool", html)
         self.assertIn("Requested action", html)
         self.assertIn("Подтверждением результата остаётся command packet плюс canonical refresh.", html)
+        self.assertIn("launchClientPreflight", html)
+        self.assertIn("Isolated copy preflight", html)
+        self.assertIn("Separate profile", html)
+        self.assertIn("Separate data dir", html)
+        self.assertIn("Separate port", html)
+        self.assertIn("Process proof", html)
         self.assertIn("apiRouteRemovePreflight", html)
         self.assertIn("Route exists", html)
         self.assertIn("remove registry route", html)
@@ -2130,6 +2144,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred"
         self.assertIn("setLiveReadonly(false)", js)
         self.assertIn("ACCOUNT_UI_ACTIONS", js)
         self.assertIn("renderAccountActionPreflight", js)
+        self.assertIn("renderLaunchClientPreflight", js)
         self.assertIn("findAccountById", js)
         self.assertIn("confirmationReadyLabel", js)
         self.assertIn("renderApiRouteRemovePreflight", js)
@@ -3952,6 +3967,7 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
         self.assertIn("metadata.disabled_reason_code", js)
         self.assertIn("metadata.disabled_reasons", js)
         self.assertIn("metadata.unavailable_reason", js)
+        self.assertIn("launch_preflight", js)
         self.assertIn("UI_ACTION_UNAVAILABLE", js)
         self.assertIn("unknown_disabled", js)
         self.assertIn("LIVE_SOURCE_REQUIRED", js)
@@ -4073,7 +4089,21 @@ actionMetadata = {
   api_route_remove: { available: true, unavailable_reason: "", ui_action: "api_route_remove" },
   api_route_profile: { available: true, unavailable_reason: "", ui_action: "api_route_profile" },
   api_route_evidence_capture: { available: true, unavailable_reason: "", ui_action: "api_route_evidence_capture" },
-  launch_client_dispatch: { available: false, unavailable_reason: "server-owned path недоступен", ui_action: "launch_client_dispatch" }
+  launch_client_dispatch: {
+    available: false,
+    unavailable_reason: "preflight не подтверждён",
+    ui_action: "launch_client_dispatch",
+    launch_preflight: {
+      status: "denied",
+      reason: "Изолированная копия не admitted.",
+      target_kind: "app_bundle",
+      separate_profile: false,
+      separate_data_dir: false,
+      separate_port: false,
+      process_confirmation_possible: false,
+      current_session_untouched: false
+    }
+  }
 };
 `, sandbox);
 
@@ -4174,7 +4204,7 @@ assertAvailability(evidenceDisabledRouteButton, {
   disabledReasonCode: "READONLY_ROUTE_ACTION_DEFERRED",
   disabledReasons: JSON.stringify(["readonly_registry_deferred"])
 });
-if (settingsLaunchAvailability.textContent.indexOf("недоступно") === -1) {
+if (settingsLaunchAvailability.textContent.indexOf("preflight blocked") === -1) {
   throw new Error(`settings availability was not updated: ${settingsLaunchAvailability.textContent}`);
 }
 """

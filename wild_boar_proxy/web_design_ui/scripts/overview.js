@@ -688,7 +688,19 @@ function metadataFor(uiAction) {
     availability_state: "unknown_disabled",
     disabled_reason_code: "UI_ACTION_METADATA_UNAVAILABLE",
     disabled_reasons: ["unknown_disabled"],
-    unavailable_reason: "Метаданные действия не удалось загрузить."
+    unavailable_reason: "Метаданные действия не удалось загрузить.",
+    launch_preflight: {
+      status: "denied",
+      machine_error_code: "UI_ACTION_METADATA_UNAVAILABLE",
+      reason: "Метаданные preflight не удалось загрузить.",
+      target_kind: "unknown",
+      target_exists: false,
+      separate_profile: false,
+      separate_data_dir: false,
+      separate_port: false,
+      process_confirmation_possible: false,
+      current_session_untouched: false
+    }
   };
 }
 
@@ -1682,6 +1694,13 @@ function setActionPanel(payload, refreshState = "none") {
   const safeMessage = safeLedgerText(result.human_message || "-", "-");
   const safeNextAction = safeLedgerText(result.next_action || "none", "none");
   const safeSupportDetails = safeLedgerText(actionSupportDetails(payload), "-");
+  const launchResultData = payload.ui_action === "launch_client_dispatch" ? (result.data || {}) : {};
+  const launchPreflightState = payload.ui_action === "launch_client_dispatch"
+    ? safeLedgerText(launchResultData.launch_preflight?.status || "not run", "not run")
+    : "not run";
+  const launchPhase = payload.ui_action === "launch_client_dispatch"
+    ? safeLedgerText(launchResultData.launch_phase || "not run", "not run")
+    : "not run";
   const panel = document.getElementById("actionPanel");
   const panelVisualClass = exportModel
     ? exportModel.visual
@@ -1721,6 +1740,8 @@ function setActionPanel(payload, refreshState = "none") {
   text("clientActionUiAction", safeUiAction || "нет");
   text("clientActionMachineCode", safeMachineCode);
   text("clientActionRefresh", refreshLabel);
+  text("clientActionPreflight", launchPreflightState);
+  text("clientActionPhase", launchPhase);
   text("clientActionMessage", safeMessage || "Запуск клиента ещё не запрашивался.");
   setAccountsPolicyChip("accountsPolicyActionChip", panelVisualClass, actionDisplayLabel(displayStateLabel));
   text("accountsPolicyActionName", safeUiAction || "нет");
@@ -2610,9 +2631,10 @@ function updateSettingsActionMetadata() {
   if (!target) {
     return;
   }
+  const preflight = launchPreflightSummary(launch);
   target.textContent = launch.available === false
-    ? `недоступно · ${launch.unavailable_reason || "server-owned target не предоставлен"}`
-    : "доступно · server-owned bounded dispatch";
+    ? `${preflight.statusLabel} · ${preflight.reason}`
+    : `${preflight.statusLabel} · isolated copy admitted`;
 }
 
 function setClientLaunchChip(id, visual, label) {
@@ -2627,12 +2649,30 @@ function setClientLaunchChip(id, visual, label) {
   }
 }
 
+function launchPreflightSummary(metadata) {
+  const raw = metadata?.launch_preflight || {};
+  const admitted = raw.status === "admitted";
+  return {
+    admitted,
+    status: raw.status || "denied",
+    reason: raw.reason || (metadata?.unavailable_reason || "preflight не подтверждён"),
+    targetKind: raw.target_kind || "unknown",
+    separateProfile: raw.separate_profile === true,
+    separateDataDir: raw.separate_data_dir === true,
+    separatePort: raw.separate_port === true,
+    processConfirmationPossible: raw.process_confirmation_possible === true,
+    currentSessionUntouched: raw.current_session_untouched === true,
+    statusLabel: admitted ? "preflight admitted" : "preflight blocked"
+  };
+}
+
 function clientLaunchModelFromSnapshot(snapshot) {
   const runtime = snapshot?.runtime || {};
   const source = snapshot?.source === "live_readonly" ? "live" : "fixture";
   const state = snapshot?.state_id || snapshot?.ui_state || runtime.visual_state || "unknown";
   const liveFailure = source === "live" && snapshot?.status === "integration_failure";
   const launch = metadataFor("launch_client_dispatch");
+  const launchPreflight = launchPreflightSummary(launch);
   const launchAdmitted = launch.available !== false;
   const runtimeDown = state === "down" || liveFailure;
   const stale = state === "stale";
@@ -2655,18 +2695,22 @@ function clientLaunchModelFromSnapshot(snapshot) {
     ? "mismatch"
     : (runtimeDown ? "unknown" : (stale ? "stale" : "OK"));
   const accountsAvailable = state === "healthy" ? "OK" : (runtimeDown ? "unknown" : (stale || degraded ? "warning" : "unknown"));
-  const dispatch = launchAdmitted ? "admitted" : `disabled · ${launch.unavailable_reason || "server-owned target missing"}`;
+  const dispatch = launchAdmitted ? "dispatch admitted" : `disabled · ${launch.unavailable_reason || "server-owned target missing"}`;
+  const processProof = launchPreflight.processConfirmationPossible ? "possible after packet proof" : "not admitted";
   return {
     source,
     visual,
     candidateVisual,
     launchAdmitted,
+    launchPreflight,
     panelLabel: liveFailure ? "unavailable" : (stale ? "stale" : (degraded ? "requires check" : "ready preview")),
     bannerCopy: liveFailure
       ? "Client status недоступен. Предыдущие fixture-данные не используются."
       : (stale
         ? "Client status устарел. Требуется refresh из bounded packet."
-        : "Демо-режим. Клиент показан как preview, не как найденное локальное приложение."),
+        : (launchPreflight.admitted
+          ? "Демо-режим. Изолированная копия admitted только через server-owned preflight."
+          : "Демо-режим. Изолированная копия не admitted без server-owned preflight.")),
     selectedName,
     selectedStatus,
     selectedSource: source === "live" ? "command-owned packet" : "fixture preview",
@@ -2678,7 +2722,9 @@ function clientLaunchModelFromSnapshot(snapshot) {
     runtimeReachable,
     modeCompatible,
     accountsAvailable,
-    dispatch
+    preflight: launchPreflight.statusLabel,
+    dispatch,
+    processProof
   };
 }
 
@@ -2702,7 +2748,9 @@ function renderClientLaunchSnapshot(snapshot) {
   text("clientReadyRuntime", model.runtimeReachable);
   text("clientReadyMode", model.modeCompatible);
   text("clientReadyAccounts", model.accountsAvailable);
+  text("clientReadyPreflight", model.preflight);
   text("clientReadyDispatch", model.dispatch);
+  text("clientReadyProcess", model.processProof);
 
   const banner = document.getElementById("settingsBanner");
   if (banner && currentScreen() === "settings" && currentSettingsSection() === "client") {
@@ -3236,6 +3284,7 @@ function openConfirmation(uiAction, metadata, policy, extraPayload = {}) {
   text("confirmScope", metadata.action_claim_scope || "unknown");
   text("confirmTruthWarning", policy.warning || CONSERVATIVE_CONFIRMATION_POLICY.warning);
   renderAccountActionPreflight(uiAction, extraPayload, metadata);
+  renderLaunchClientPreflight(uiAction, metadata);
   renderApiRouteRemovePreflight(uiAction, extraPayload);
   const confirmButton = document.getElementById("confirmAction");
   if (confirmButton) {
@@ -3252,6 +3301,9 @@ function confirmationReadyLabel(uiAction) {
   }
   if (uiAction === "retire_account") {
     return "Вывести из пула";
+  }
+  if (uiAction === "launch_client_dispatch") {
+    return "Запустить копию";
   }
   return "Подтвердить";
 }
@@ -3275,6 +3327,25 @@ function renderAccountActionPreflight(uiAction, extraPayload = {}, metadata = {}
   );
   text("accountActionPreflightAction", metadata.display_name || uiAction);
   text("accountActionPreflightRefresh", metadata.post_action_refresh_required ? "required" : "not required");
+}
+
+function renderLaunchClientPreflight(uiAction, metadata = {}) {
+  const block = document.getElementById("launchClientPreflight");
+  if (!block) {
+    return;
+  }
+  if (uiAction !== "launch_client_dispatch") {
+    block.hidden = true;
+    return;
+  }
+  const preflight = launchPreflightSummary(metadata);
+  block.hidden = false;
+  text("launchClientPreflightTarget", preflight.targetKind);
+  text("launchClientPreflightProfile", preflight.separateProfile ? "separate" : "not proven");
+  text("launchClientPreflightDataDir", preflight.separateDataDir ? "separate" : "not proven");
+  text("launchClientPreflightPort", preflight.separatePort ? "separate" : "not proven");
+  text("launchClientPreflightProcess", preflight.processConfirmationPossible ? "packet-confirmable" : "not confirmable");
+  text("launchClientPreflightNote", preflight.reason);
 }
 
 function renderApiRouteRemovePreflight(uiAction, extraPayload = {}) {

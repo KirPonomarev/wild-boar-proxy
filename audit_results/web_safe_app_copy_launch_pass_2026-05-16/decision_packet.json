@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_SAFE_APP_COPY_LAUNCH_PASS",
+  "status": "verified_pending_git_close",
+  "decision": "ISOLATED_COPY_PREFLIGHT_GATE_ADDED_TO_BOUNDED_WEB_LAUNCH",
+  "final_outcome": "PREFLIGHT_ONLY_ADMITTED_RESULT",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_contour": "7060053",
+  "scope": {
+    "ui_action": "launch_client_dispatch",
+    "server_owned_target_only": true,
+    "browser_path_payload_forbidden": true,
+    "broad_runtime_refactor": false
+  },
+  "preflight_contract": {
+    "requires_separate_profile": true,
+    "requires_separate_data_dir": true,
+    "requires_separate_port": true,
+    "requires_executable_target": true,
+    "app_bundle_admitted": false
+  },
+  "result_surface": {
+    "states": [
+      "preflight passed",
+      "preflight denied",
+      "launch requested",
+      "process confirmed",
+      "launch failed"
+    ],
+    "raw_paths_exposed": false,
+    "profile_context_exposed": false,
+    "current_session_untouched_claim_machine_backed": true
+  },
+  "verification": {
+        "unit_tests": [
+            "python3 -m unittest -q tests.test_web_design_live_server",
+            "python3 -m unittest -q tests.test_web_design_ui",
+            "python3 -m unittest -q tests.test_web_design_command_adapter"
+        ],
+    "browser_check": {
+      "url": "http://127.0.0.1:58547/?screen=settings&section=client&source=live",
+      "runner_mode": "safe fake runner",
+      "launch_target_kind": "executable",
+      "availability_text": "preflight admitted · isolated copy admitted",
+      "action_ui": "launch_client_dispatch",
+      "action_machine_code": "OK",
+      "action_preflight": "admitted",
+      "action_phase": "process_confirmed"
+    },
+    "live_runtime_launch_performed": false
+  },
+  "next_admitted_contour": "WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS"
+}

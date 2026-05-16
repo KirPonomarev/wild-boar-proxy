@@ -1353,7 +1353,9 @@
                   <div><span>Runtime reachable</span><strong id="clientReadyRuntime">unknown</strong></div>
                   <div><span>Mode compatible</span><strong id="clientReadyMode">unknown</strong></div>
                   <div><span>Accounts available</span><strong id="clientReadyAccounts">unknown</strong></div>
+                  <div><span>Copy preflight</span><strong id="clientReadyPreflight">unknown</strong></div>
                   <div><span>Launch dispatch</span><strong id="clientReadyDispatch">disabled</strong></div>
+                  <div><span>Process proof</span><strong id="clientReadyProcess">not confirmed</strong></div>
                 </div>
               </section>
 
@@ -1369,7 +1371,7 @@
                 <div class="client-launch-actions">
                   <button id="clientLaunchDispatchAction" class="button small live-action client-launch-action" type="button" data-ui-action="launch_client_dispatch">
                     <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
-                    <span>Запустить клиент</span>
+                    <span>Запустить копию</span>
                   </button>
                   <button class="button small live-action client-launch-action" type="button" data-ui-action="launch_smoke">
                     <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
@@ -1380,7 +1382,7 @@
                     <span>Открыть диагностику</span>
                   </a>
                 </div>
-                <div class="client-launch-note">Запрос запуска отправлен ≠ активная app session. Нужен packet proof и refresh.</div>
+                <div class="client-launch-note">Preflight first. Запрос запуска отправлен ≠ активная app session. Нужен packet proof и refresh.</div>
               </section>
 
               <section class="card client-launch-card client-launch-boundary-card" data-client-launch-card="boundary">
@@ -1415,6 +1417,7 @@
                 <div class="client-launch-list">
                   <div><span>ui_action / machine</span><strong><span id="clientActionUiAction">нет</span> · <span id="clientActionMachineCode">—</span></strong></div>
                   <div><span>refresh / proof</span><strong id="clientActionRefresh">не запрашивалось</strong></div>
+                  <div><span>preflight / phase</span><strong><span id="clientActionPreflight">not run</span> · <span id="clientActionPhase">not run</span></strong></div>
                 </div>
                 <p id="clientActionMessage" class="client-launch-message">Запуск клиента ещё не запрашивался.</p>
               </section>
@@ -2511,6 +2514,19 @@
             </div>
             <p class="confirm-note">
               Эти факты взяты только из выбранного accounts JSON. Подтверждением результата остаётся command packet плюс canonical refresh.
+            </p>
+          </section>
+          <section id="launchClientPreflight" class="account-action-preflight" aria-label="Preflight запуска изолированной копии" hidden>
+            <div class="eyebrow">Isolated copy preflight</div>
+            <div class="confirm-facts">
+              <div>Target kind</div><div id="launchClientPreflightTarget">-</div>
+              <div>Separate profile</div><div id="launchClientPreflightProfile">-</div>
+              <div>Separate data dir</div><div id="launchClientPreflightDataDir">-</div>
+              <div>Separate port</div><div id="launchClientPreflightPort">-</div>
+              <div>Process proof</div><div id="launchClientPreflightProcess">-</div>
+            </div>
+            <p id="launchClientPreflightNote" class="confirm-note">
+              Реальный запуск разрешён только после подтверждённой изоляции копии.
             </p>
           </section>
           <section id="apiRouteRemovePreflight" class="api-route-remove-preflight" aria-label="Preflight удаления disabled route" hidden>
