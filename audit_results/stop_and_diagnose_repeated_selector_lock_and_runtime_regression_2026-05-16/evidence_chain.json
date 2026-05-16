@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "contour": "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION",
+  "basis_branch": "codex/external-agent-lab-isolated",
+  "basis_head": "af8dae9",
+  "chronology": [
+    {
+      "order": 1,
+      "source": "audit_results/runtime_selector_prerequisite_regression_diagnose_pass_2026-05-16/prereq_regression_basis.json",
+      "facts": {
+        "claim_gate": "blocked",
+        "policy_drift": "detected",
+        "effective_stable_runtime_consumer_source": "observed_source_active",
+        "consumer_activation_readiness": "activation_pending",
+        "stable_repair_dry_run_machine_error_code": "LOCK_HELD"
+      },
+      "takeaway": "runtime and selector prereq surfaces were already regressed before later runtime reproof"
+    },
+    {
+      "order": 2,
+      "source": "audit_results/runtime_reproof_pass_2026-05-16_v4/decision_packet.json",
+      "facts": {
+        "post_smoke_claim_gate": "clear",
+        "post_smoke_policy_drift": "clear",
+        "effective_source_after": "approved_target_active_by_activation_evidence"
+      },
+      "takeaway": "runtime lane was temporarily re-earned after launch smoke, but selector evidence still stayed stale"
+    },
+    {
+      "order": 3,
+      "source": "audit_results/runtime_reproof_pass_2026-05-16_v4/selector_followup_evaluation.json",
+      "facts": {
+        "selector_followup_needed": true,
+        "post_runtime_rotation_machine_error_code": "ROTATION_EVIDENCE_STALE",
+        "evidence_reason": "selected_backend_snapshot_stale",
+        "policy_drift_status": "clear"
+      },
+      "takeaway": "selector lane remained blocked only by stale selected-backend snapshot immediately after runtime reproof"
+    },
+    {
+      "order": 4,
+      "source": "audit_results/selector_refresh_owner_path_pass_2026-05-16_v3/sync_refresh_packet.json",
+      "facts": {
+        "sync_machine_error_code": "LOCK_HELD",
+        "changed_files": []
+      },
+      "takeaway": "first selector refresh attempt did not mutate selector evidence"
+    },
+    {
+      "order": 5,
+      "source": "audit_results/selector_refresh_owner_path_pass_2026-05-16_v3/precondition_regression_status.json",
+      "facts": {
+        "claim_gate": "blocked",
+        "policy_drift": "detected",
+        "effective_stable_runtime_consumer_source": "observed_source_active",
+        "consumer_activation_readiness": "activation_pending",
+        "activation_evidence_surface_status": "snapshot_stale"
+      },
+      "takeaway": "runtime-green preconditions had already regressed before a clean retry was admitted"
+    },
+    {
+      "order": 6,
+      "source": "audit_results/stop_and_diagnose_selector_lock_held_2026-05-16/lock_verdict.json",
+      "facts": {
+        "blocker_class": "true_concurrent_lock_with_post_packet_release",
+        "stale_lock_classification": false,
+        "code_contradiction_found": false
+      },
+      "takeaway": "first LOCK_HELD was localized as true concurrent contention, not stale-lock cleanup failure"
+    },
+    {
+      "order": 7,
+      "source": "audit_results/selector_refresh_owner_path_pass_retry_once_2026-05-16/decision_packet.json",
+      "facts": {
+        "sync_status": "LOCK_HELD",
+        "rotation_after_status": "LOCK_HELD",
+        "runtime_truth_after_sync": {
+          "claim_gate_status": "blocked",
+          "policy_drift_status": "detected"
+        },
+        "machine_reason": "REPEATED_LOCK_HELD_WITH_RUNTIME_REGRESSION"
+      },
+      "takeaway": "bounded retry exhausted itself without selector progress and with the runtime lane still regressed"
+    }
+  ],
+  "code_path_findings": [
+    {
+      "path": "wild_boar_proxy/runtime.py:5061-5113",
+      "fact": "serialized_lock raises LOCK_HELD only for a live holder pid and unlinks stale lock files before retrying acquisition"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:1337-1365",
+      "fact": "selected_backend_snapshot is materialized only on successful sync owner-path completion"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:1997-2025",
+      "fact": "approved-target policy-drift surface is admitted only while activation snapshot and live runtime truth still support it"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:3142-3232",
+      "fact": "stable runtime consumer truth falls back to observed_source_active and activation_pending when desired approved target no longer matches effective observation"
+    },
+    {
+      "path": "wild_boar_proxy/runtime.py:5171-5325",
+      "fact": "status --json computes policy_drift first, then claim_gate from that chosen policy_drift surface"
+    }
+  ],
+  "test_evidence": [
+    {
+      "path": "tests/test_cli.py:14803-14842",
+      "test": "test_sync_blocks_held_lock_without_mutation / test_sync_clears_stale_lock_and_proceeds_past_lock_gate",
+      "fact": "held lock yields LOCK_HELD with no mutation; stale lock is cleared and does not stay LOCK_HELD"
+    },
+    {
+      "path": "tests/test_cli.py:14958-14979",
+      "test": "test_sync_failure_does_not_mutate_selected_backend_snapshot",
+      "fact": "failed sync preserves existing selected_backend_snapshot"
+    },
+    {
+      "path": "tests/test_cli.py:3879-3955",
+      "test": "test_status_reports_stable_policy_drift_without_greenwash",
+      "fact": "policy_drift=detected truthfully blocks claim_gate without greenwash"
+    },
+    {
+      "path": "tests/test_cli.py:6227-6288",
+      "test": "test_status_uses_approved_target_policy_drift_surface_when_live_activation_evidence_is_valid",
+      "fact": "claim_gate clears only when live activation evidence keeps approved-target policy surface admitted"
+    }
+  ]
+}
