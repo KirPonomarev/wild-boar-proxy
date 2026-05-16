@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "contour": "CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES",
+  "run_label": "v1",
+  "verdict": "aligned",
+  "machine_reason": "ACTIVE_GOVERNING_TRUTH_UPDATED_TO_MATCH_RUNTIME_BEHAVIOR",
+  "findings": [
+    "launch smoke --json legitimately writes config.toml",
+    "the mismatch was in contour/governing declaration rather than runtime behavior",
+    "historical runtime-reproof artifacts remain preserved as evidence",
+    "active master-plan truth now points to contract alignment before further live progression"
+  ],
+  "scope_of_alignment": [
+    "PLAN_STATUS",
+    "Current Recalibration Correction",
+    "Active Truth State",
+    "Lane Authority Quick Map"
+  ],
+  "runtime_behavior_changed": false,
+  "tests_required_for_alignment_only": true
+}

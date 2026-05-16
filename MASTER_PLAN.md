@@ -4,10 +4,10 @@
 # Wild Boar Proxy Master Plan
 
 PLAN_NAME: Wild Boar Proxy Master Plan
-PLAN_VERSION: 1.49
+PLAN_VERSION: 1.50
 PLAN_DATE: 2026-05-16
 PLAN_OWNER: Product and Platform Team
-PLAN_STATUS: Stable/sandbox truth recalibration wave active; stable policy/runtime reconciliation and runtime reproof recently restored the approved-target runtime lane once, but `SELECTOR_REFRESH_OWNER_PATH_PASS` v3 stopped after `sync --json` returned `LOCK_HELD` and runtime-green preconditions regressed before retry; next primary contour is `RUNTIME_REPROOF_PASS`; selector refresh, exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until runtime-green state is re-earned and selector refresh can proceed under clear preconditions
+PLAN_STATUS: Stable/sandbox truth recalibration wave active; `RUNTIME_REPROOF_PASS` v5 re-earned runtime preconditions through `launch smoke --json` and the follow-up `status --json` packet cleared `claim_gate` and `policy_drift`, but the contour then closed as `STOP_AND_DIAGNOSE` because `launch smoke --json` truthfully reported a legitimate `config.toml` write outside the contour's declared write surfaces; next primary contour is `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`; selector refresh, exact auth-source admission, sandbox auth materialization, onboarding rerun, route mutation, and stage/pilot claims remain parked until launch-smoke write-surface truth is aligned with governing contour truth and the next live re-entry contour is named from aligned evidence
 PLAN_CLASS: Experimental managed companion control app
 
 ## Summary
@@ -92,8 +92,9 @@ Current implication:
 
 ## Current Recalibration Correction
 
-Recent machine-carried evidence closed part of the stable/sandbox chain and
-then exposed a fresh precondition boundary during selector refresh.
+Recent machine-carried evidence first exposed a selector-refresh precondition
+boundary, then later exposed a contour-contract alignment gap inside the
+runtime reproof lane.
 
 What was truthfully gained:
 
@@ -103,6 +104,8 @@ What was truthfully gained:
   truth through `launch smoke --json`
 - selector refresh was attempted through the canonical owner path after runtime
   truth had been re-earned
+- the latest runtime reproof packet set cleared `claim_gate` and
+  `policy_drift` after `launch smoke --json`
 
 What remains blocked:
 
@@ -117,19 +120,33 @@ What remains blocked:
   `observed_source_active`
 - consumer activation readiness regressed to `activation_pending`
 - activation evidence became `snapshot_stale`
+- the later `RUNTIME_REPROOF_PASS` v5 contour reported
+  `/Users/kirillponomarev/.codex-custom-cli/config.toml` in
+  `launch smoke --json` `changed_files`
+- that write was later diagnosed as legitimate repo/runtime owner-path behavior
+  rather than a runtime bug
+- the contour's declared launch-smoke write surfaces were narrower than the
+  runtime truth they were supposed to admit
 
 Interpretation rule:
 
 - this is not treated as successful selector refresh
 - this is not treated as sandbox auth-source readiness
-- this is treated as runtime precondition loss before selector retry
-- selector refresh may resume only after runtime-green state is re-earned
+- the earlier selector-refresh stop was treated as runtime precondition loss
+  before selector retry
+- the later runtime reproof packet set is treated as runtime preconditions
+  re-earned
+- selector refresh still may not resume yet because launch-smoke write-surface
+  truth is not fully aligned with governing contour truth
+- contract alignment must close before the next live runtime or selector contour
 
 Current implication:
 
-- the next primary contour is `RUNTIME_REPROOF_PASS`
-- `SELECTOR_REFRESH_OWNER_PATH_PASS` is stopped and must not be retried until
-  runtime-green preconditions are true again
+- the next primary contour is
+  `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`
+- `SELECTOR_REFRESH_OWNER_PATH_PASS` remains stopped and must not be retried
+  until launch-smoke write-surface truth is aligned and a fresh live re-entry
+  contour is named from aligned evidence
 - `EXACT_AUTH_REF_SOURCE_ADMISSION_PASS` remains parked until runtime truth and
   selector evidence are aligned again
 - sandbox `auth.json` materialization remains parked
@@ -172,17 +189,23 @@ Current active truth:
   complete
 - selected-backend participation evidence remains stale
 - the first selector refresh attempt returned `LOCK_HELD`
-- runtime-green preconditions regressed before selector refresh could be retried
-- `claim_gate` is blocked
-- `policy_drift` is detected
-- effective stable runtime consumer truth is `observed_source_active`
-- consumer activation readiness is `activation_pending`
-- activation evidence is `snapshot_stale`
+- runtime-green preconditions later regressed before selector refresh could be
+  retried
+- the latest runtime reproof packet set re-earned runtime preconditions
+- the latest follow-up `status --json` packet reported:
+  - `claim_gate = clear`
+  - `policy_drift = clear`
+- `launch smoke --json` legitimately writes `config.toml` as part of its
+  owner-path behavior
+- the active contract/governing truth for launch-smoke write surfaces is
+  under-aligned with repo/runtime truth
 
 Current active implication:
 
-- the next primary contour is `RUNTIME_REPROOF_PASS`
-- no further selector refresh until runtime-green state is re-earned
+- the next primary contour is
+  `CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES`
+- no further selector refresh until launch-smoke write-surface truth is
+  aligned and the next live contour is named from aligned evidence
 - no exact auth-source admission
 - no sandbox `auth.json` materialization
 - no onboarding rerun
@@ -197,16 +220,18 @@ narrative convenience.
 | `stable repair --dry-run --json` | stable | policy/source-copy reconciliation truth | authoritative |
 | `status --json` | runtime | current mode, claim-gate, effective-source truth | authoritative |
 | `rollout rotation inspect --json` | participation | validates selected-backend evidence against policy/runtime truth | authoritative |
-| `sync --json` selected-backend snapshot | managed participation | attempted selector refresh; latest attempt stopped on `LOCK_HELD` | blocked until runtime-green preconditions are restored |
-| `launch smoke --json` activation evidence | stable runtime activation | proved prior runtime activation success | historical support only until reproof is refreshed |
+| `sync --json` selected-backend snapshot | managed participation | attempted selector refresh; latest attempt stopped on `LOCK_HELD` | blocked until launch-smoke write-surface truth is aligned and the next live contour is named from aligned evidence |
+| `launch smoke --json` activation evidence | stable runtime activation | latest packet set re-earned runtime preconditions and exposed a legitimate `config.toml` owner-path write | authoritative for activation evidence and launch-smoke write-surface alignment |
 
 Current interpretation rule:
 
-- stale selector evidence does not outrank regressed runtime truth
-- managed-lane refresh cannot be retried honestly while runtime-green
-  preconditions are false
+- stale selector evidence does not outrank either regressed runtime truth or an
+  unresolved contract mismatch in the active lane
+- managed-lane refresh cannot be retried honestly while launch-smoke
+  write-surface truth remains under-aligned
 - exact auth-source work may resume only after stable policy/runtime
-  reconciliation, runtime activation truth, and selector evidence are aligned
+  reconciliation, runtime activation truth, selector evidence, and governing
+  write-surface truth are aligned
 
 ## Historical Next-Contour Marker Rule
 

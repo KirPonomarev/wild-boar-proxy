@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "contour": "CONTRACT_ALIGNMENT_FOR_LAUNCH_SMOKE_WRITE_SURFACES",
+  "run_label": "v1",
+  "status": "completed",
+  "next_contour": "RUNTIME_REPROOF_PASS_REENTRY",
+  "machine_reason": "CONTRACT_ALIGNMENT_COMPLETE_RUNTIME_REENTRY_REQUIRED_FOR_FRESH_LIVE_TRUTH",
+  "why_not_selector_refresh_directly": [
+    "the prior runtime packet set is historical support only after the stop-and-diagnose interruption",
+    "fresh live truth should be re-earned under aligned write-surface declarations before selector refresh resumes"
+  ],
+  "selector_refresh_reentry_allowed_now": false,
+  "next_action": "open a narrow runtime re-entry contour using aligned launch-smoke write surfaces, then name selector refresh only from fresh packet truth"
+}
