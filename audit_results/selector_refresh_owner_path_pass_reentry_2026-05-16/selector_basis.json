@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "contour": "SELECTOR_REFRESH_OWNER_PATH_PASS",
+  "run_label": "reentry_v1",
+  "sequence": [
+    "rollout rotation inspect --json",
+    "sync --json",
+    "rollout rotation inspect --json",
+    "status --json"
+  ],
+  "rotation_before_sync": {
+    "status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "next_action": "retry"
+  },
+  "sync_refresh": {
+    "status": "error",
+    "machine_error_code": "LOCK_HELD",
+    "changed_files": [],
+    "next_action": "retry"
+  },
+  "rotation_after_sync": {
+    "status": "error",
+    "machine_error_code": "ROTATION_EVIDENCE_STALE",
+    "next_action": "retry"
+  },
+  "status_after_sync": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "claim_gate_status": "clear",
+    "policy_drift_status": "clear"
+  },
+  "post_attempt_lock_observation": {
+    "lock_file_present_now": false,
+    "pid_45666_present_now": false
+  }
+}
