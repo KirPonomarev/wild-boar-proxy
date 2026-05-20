@@ -190,7 +190,13 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("width: min(var(--window-width), calc(100vw - 56px));", css)
         self.assertIn("height: min(var(--window-height), calc(100vh - 56px));", css)
         self.assertIn("padding: 66px 24px 28px;", css)
-        self.assertIn("width: 92px;", css)
+        self.assertIn("width: 180px;", css)
+        self.assertIn("font-size: 16px;", css)
+        self.assertIn("line-height: 20px;", css)
+        self.assertIn("display: none;", css)
+        self.assertIn("gap: 8px;", css)
+        self.assertIn("height: 42px;", css)
+        self.assertIn("padding: 0 14px;", css)
         self.assertIn("padding: 48px 40px 32px;", css)
         self.assertIn("--radius-window: 24px;", css)
         self.assertIn("--radius-card: 18px;", css)
@@ -345,15 +351,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("--qs-card-padding: 22px", css)
         self.assertIn("--qs-row-height: 58px", css)
         self.assertIn("--qs-control-height: 40px", css)
-        self.assertIn(".desktop[data-screen=\"quick-start\"] .brand img", css)
         self.assertIn("width: 180px", css)
-        self.assertIn(".desktop[data-screen=\"quick-start\"] .brand .name", css)
         self.assertIn("font-size: 16px", css)
         self.assertIn("line-height: 20px", css)
-        self.assertIn(".desktop[data-screen=\"quick-start\"] .brand .caption", css)
         self.assertIn("display: none", css)
-        self.assertIn('"quick-start": ""', js)
         self.assertIn('document.getElementById("brandCaption").textContent = "";', js)
+        self.assertNotIn('function liveBrandCaptionForScreen', js)
+        self.assertNotIn('.desktop[data-screen="quick-start"] .brand img', css)
+        self.assertNotIn('.desktop[data-screen="quick-start"] .brand .name', css)
+        self.assertNotIn('.desktop[data-screen="quick-start"] .brand .caption', css)
         self.assertNotIn("quick start · live readonly", html + js)
         self.assertNotIn("quick start · v0.2.0", html + js)
         self.assertIn("align-items: start", css)
@@ -3404,8 +3410,8 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   if (elements.statePicker.disabled !== true) {
     throw new Error("state picker must be disabled while live readonly is pending");
   }
-  if (elements.brandCaption.textContent !== "live только чтение") {
-    throw new Error(`overview live caption missing: ${elements.brandCaption.textContent}`);
+  if (elements.brandCaption.textContent !== "") {
+    throw new Error(`overview live brand caption must stay empty: ${elements.brandCaption.textContent}`);
   }
   if (elements.runtimeChip.lastElementChild.textContent !== "Загрузка") {
     throw new Error(`runtime chip must show loading while fetch pending: ${elements.runtimeChip.lastElementChild.textContent}`);

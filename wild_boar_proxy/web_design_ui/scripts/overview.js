@@ -1211,15 +1211,6 @@ function setSourceCopy(source) {
   updateImportExistingCopy(source);
 }
 
-function liveBrandCaptionForScreen(screen) {
-  return {
-    "quick-start": "",
-    accounts: "аккаунты · live только чтение",
-    "api-connections": "API-подключения · список маршрутов",
-    overview: "live только чтение"
-  }[screen] || "live только чтение";
-}
-
 function setLiveReadonlyPendingUi() {
   const screen = currentScreen();
   const desktop = document.querySelector(".desktop");
@@ -1234,8 +1225,7 @@ function setLiveReadonlyPendingUi() {
     statePicker.disabled = true;
   }
   if (brandCaption) {
-    const captionScreen = screenFromLocation() === "quick-start" ? "quick-start" : screen;
-    brandCaption.textContent = liveBrandCaptionForScreen(captionScreen);
+    brandCaption.textContent = "";
   }
   setSourceCopy("live");
   setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
@@ -4284,9 +4274,7 @@ function renderAccountsSnapshot(snapshot) {
   desktop.dataset.source = source;
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
-  document.getElementById("brandCaption").textContent = source === "live"
-    ? "аккаунты · live только чтение"
-    : "аккаунты · демо-просмотр";
+  document.getElementById("brandCaption").textContent = "";
   document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
   setSourceCopy(source);
 
@@ -4350,9 +4338,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   desktop.dataset.source = source;
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
-  document.getElementById("brandCaption").textContent = source === "live"
-    ? "API-подключения · список маршрутов"
-    : "API-подключения · демо";
+  document.getElementById("brandCaption").textContent = "";
   document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
   setSourceCopy(source);
 
@@ -5263,9 +5249,7 @@ function renderSnapshot(snapshot) {
   picker.value = canonicalState(safeSnapshot.state_id || safeSnapshot.ui_state);
   picker.disabled = source === "live";
   document.getElementById("sourcePicker").value = source;
-  document.getElementById("brandCaption").textContent = source === "live"
-    ? "live только чтение"
-    : "демо-просмотр UI";
+  document.getElementById("brandCaption").textContent = "";
   setSourceCopy(source);
   document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
 
