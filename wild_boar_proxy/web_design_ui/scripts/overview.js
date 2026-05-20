@@ -1213,7 +1213,7 @@ function setSourceCopy(source) {
 
 function liveBrandCaptionForScreen(screen) {
   return {
-    "quick-start": "quick start · live readonly",
+    "quick-start": "",
     accounts: "аккаунты · live только чтение",
     "api-connections": "API-подключения · список маршрутов",
     overview: "live только чтение"
@@ -1234,7 +1234,8 @@ function setLiveReadonlyPendingUi() {
     statePicker.disabled = true;
   }
   if (brandCaption) {
-    brandCaption.textContent = liveBrandCaptionForScreen(screen);
+    const captionScreen = screenFromLocation() === "quick-start" ? "quick-start" : screen;
+    brandCaption.textContent = liveBrandCaptionForScreen(captionScreen);
   }
   setSourceCopy("live");
   setSnapshotCommandLedgerFromSnapshots(`${screen} live-readonly pending`, []);
@@ -3841,9 +3842,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   desktop.dataset.source = source;
   document.getElementById("sourcePicker").value = source;
   document.getElementById("statePicker").disabled = source === "live";
-  document.getElementById("brandCaption").textContent = source === "live"
-    ? "quick start · live readonly"
-    : "quick start · v0.2.0";
+  document.getElementById("brandCaption").textContent = "";
   document.getElementById("refreshFixture").lastElementChild.textContent = "Обновить";
   setSourceCopy(source);
 

@@ -6449,20 +6449,18 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .brand img {
-  margin-bottom: 12px;
-  width: 72px;
+  margin-bottom: 10px;
+  width: 180px;
 }
 
 .desktop[data-screen="quick-start"] .brand .name {
-  font-size: 20px;
+  font-size: 16px;
   letter-spacing: .07em;
-  line-height: 25px;
+  line-height: 20px;
 }
 
 .desktop[data-screen="quick-start"] .brand .caption {
-  font-size: 12px;
-  line-height: 16px;
-  margin-top: 8px;
+  display: none;
 }
 
 .desktop[data-screen="quick-start"] .nav {
