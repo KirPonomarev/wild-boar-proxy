@@ -110,6 +110,7 @@ def external_snapshot() -> ExternalModelsSnapshot:
         profile_ready=False,
         routes_count=1,
         observed_routes_count=0,
+        observed_routes={},
         local_token_present=False,
         models_source="local_routes_registry",
         models=(

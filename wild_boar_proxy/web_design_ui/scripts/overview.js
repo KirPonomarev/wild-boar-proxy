@@ -946,10 +946,24 @@ function actionRequestKey(payload) {
 }
 
 function apiRouteRemoveRefreshState(payload, refreshed) {
-  if (payload.ui_action !== "api_route_remove") {
+  if (!payload.ui_action || !payload.ui_action.startsWith("api_route_")) {
     return "complete";
   }
-  return apiRoutePresentInSnapshot(refreshed, payload.route_id) ? "mismatch" : "complete";
+  const snapshot = actionRefreshSurfaceSnapshot(payload, refreshed);
+  if (payload.ui_action === "api_route_remove") {
+    return apiRoutePresentInSnapshot(snapshot, payload.route_id) ? "mismatch" : "complete";
+  }
+  const route = apiRouteByIdFromSnapshot(snapshot, payload.route_id);
+  if (!route) {
+    return "mismatch";
+  }
+  if (payload.ui_action === "api_route_allow") {
+    return route.enabled === true ? "complete" : "mismatch";
+  }
+  if (payload.ui_action === "api_route_disable") {
+    return route.enabled === false ? "complete" : "mismatch";
+  }
+  return "complete";
 }
 
 function accountsSnapshotFromRefreshPayload(refreshed) {
@@ -1003,7 +1017,7 @@ function actionRefreshSucceeded(payload, refreshed) {
 }
 
 function canonicalActionRefreshState(payload, refreshed) {
-  if (payload.ui_action === "api_route_remove") {
+  if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
     return apiRouteRemoveRefreshState(payload, refreshed);
   }
   if (payload.ui_action === "onboard_account") {
@@ -1012,12 +1026,16 @@ function canonicalActionRefreshState(payload, refreshed) {
   return "complete";
 }
 
-function apiRoutePresentInSnapshot(snapshot, routeId) {
+function apiRouteByIdFromSnapshot(snapshot, routeId) {
   if (!routeId) {
-    return false;
+    return null;
   }
   const routes = Array.isArray(snapshot?.routes) ? snapshot.routes : [];
-  return routes.some((route) => route?.route_id === routeId);
+  return routes.find((route) => route?.route_id === routeId) || null;
+}
+
+function apiRoutePresentInSnapshot(snapshot, routeId) {
+  return apiRouteByIdFromSnapshot(snapshot, routeId) !== null;
 }
 
 function boundedUiActionPayload(uiAction, extraPayload = {}) {
@@ -3946,7 +3964,8 @@ function quickStartApiModel(snapshot, source) {
     validationState: primary.validation_label || primary.status_label || "not checked",
     lastCheck: primary.last_checked || "нет данных",
     routeCount: routes.length,
-    confirmed: source !== "live" || primary.role_label === "main route" || primary.role_label === "primary" || primary.is_primary === true || primary.primary === true
+    confirmed: source !== "live" || primary.role_label === "main route" || primary.role_label === "primary" || primary.is_primary === true || primary.primary === true,
+    routeEnabled: primary.enabled === true
   };
 }
 
@@ -4029,11 +4048,10 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
 
   const apiAction = document.getElementById("quickStartCheckApiAction");
   apiAction.dataset.routeId = apiModel.routeId || "";
-  apiAction.dataset.routeEnabled = apiModel.state === "ok" ? "true" : "false";
+  apiAction.dataset.routeEnabled = apiModel.routeEnabled ? "true" : "false";
   apiAction.dataset.routeStateProven = apiModel.confirmed && apiModel.routeId ? "true" : "false";
-  apiAction.disabled = true;
   apiAction.title = apiModel.confirmed && apiModel.routeId
-    ? "Проверка API остаётся disabled в Quick Start до отдельного admitted action mapping."
+    ? "Проверка маршрута требует packet + sandbox-owned readonly refresh."
     : "Нужен confirmed main route из bounded snapshot.";
 
   const banner = document.getElementById("quickStartBanner");
@@ -5621,6 +5639,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("cancelOnboardAction").addEventListener("click", () => closeOnboardModal());
   document.getElementById("runOnboardAction").addEventListener("click", () => runOnboardFromModal());
+  document.getElementById("quickStartCheckApiAction")?.addEventListener("click", () => {
+    const button = document.getElementById("quickStartCheckApiAction");
+    maybeConfirmAndRun(button.dataset.uiAction || "api_route_check", { route_id: button.dataset.routeId || "" });
+  });
   document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
   document.getElementById("confirmAction").addEventListener("click", () => confirmPendingAction());
   sourcePicker.addEventListener("change", () => {

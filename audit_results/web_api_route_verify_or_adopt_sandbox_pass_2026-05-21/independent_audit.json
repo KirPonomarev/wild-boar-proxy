@@ -1,0 +1,24 @@
+{
+  "findings": [],
+  "overall_verdict": "pass",
+  "residual_risks": [
+    {
+      "note": "sandbox_actions still admits route lifecycle/support actions (allow, disable, remove, profile, evidence_capture) in addition to verify actions; Quick Start itself only wires api_route_check and does not expose those management actions directly.",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:396-407",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:221-230",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:4049-4055",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/scripts/overview.js:5642-5644"
+      ]
+    },
+    {
+      "note": "The evidence pack shows secret_ref only, not the secret value, and the route-check packet is verification-only with sandbox-owned refresh; that behavior is aligned with the contour but should stay covered by regression tests.",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_ui/index.html:193-203",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/evidence/api-route-check-packet.json:1",
+        "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_verify_or_adopt_sandbox_pass_2026-05-21/evidence/api-connections-readonly-after.json:1",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py:1139-1151"
+      ]
+    }
+  ]
+}

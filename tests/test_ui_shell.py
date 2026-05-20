@@ -527,6 +527,7 @@ class ExternalModelsSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.models_source, "local_routes_registry")
         self.assertEqual(snapshot.models[0].route_id, "wbp-deepseek-v3")
         self.assertEqual(snapshot.routes[0].secret_ref, "OPENROUTER_API_KEY")
+        self.assertEqual(snapshot.observed_routes, {})
 
     def test_build_external_models_snapshot_rejects_non_object_auth(self) -> None:
         broken_routes = external_routes_payload(

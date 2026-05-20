@@ -62,6 +62,17 @@ EXTERNAL_STATUS_FIELDS = (
     "adapter",
     "local_auth",
 )
+EXTERNAL_OBSERVED_ROUTE_FIELDS = (
+    "availability_state",
+    "evidence_level",
+    "last_verified_at",
+    "last_validate",
+    "last_check",
+    "last_error",
+    "latency_ms",
+    "fallback_used",
+    "effective_model",
+)
 EXTERNAL_MODELS_FIELDS = (
     "models",
     "count",
@@ -434,6 +445,7 @@ class ExternalModelsSnapshot:
     profile_ready: bool
     routes_count: int
     observed_routes_count: int
+    observed_routes: dict[str, dict[str, Any]]
     local_token_present: bool
     models_source: str
     models: tuple[ExternalModelRecord, ...]
@@ -452,6 +464,7 @@ class ExternalModelsSnapshot:
             profile_ready=False,
             routes_count=0,
             observed_routes_count=0,
+            observed_routes={},
             local_token_present=False,
             models_source="integration_failure",
             models=(),
@@ -695,6 +708,9 @@ def build_external_models_snapshot(
     local_auth = status_data["local_auth"]
     if not isinstance(local_auth, dict):
         raise UiShellError("external-models status local_auth must be an object")
+    observed_routes = _normalize_external_observed_routes(
+        status_data.get("observed_routes", {})
+    )
 
     return ExternalModelsSnapshot(
         foundation_phase=str(status_data["foundation_phase"]),
@@ -721,6 +737,7 @@ def build_external_models_snapshot(
             status_data["observed_routes_count"],
             "external-models observed_routes_count",
         ),
+        observed_routes=observed_routes,
         local_token_present=require_bool(
             local_auth.get("token_present", False), "external-models local token present"
         ),
@@ -729,6 +746,25 @@ def build_external_models_snapshot(
         routes=routes,
         integration_error="",
     )
+
+
+def _normalize_external_observed_routes(payload: Any) -> dict[str, dict[str, Any]]:
+    if payload in ({}, None):
+        return {}
+    if not isinstance(payload, dict):
+        raise UiShellError("external-models observed_routes must be an object")
+    normalized: dict[str, dict[str, Any]] = {}
+    for route_id, route_state in payload.items():
+        if not isinstance(route_id, str) or not route_id:
+            raise UiShellError("external-models observed route id must be a non-empty string")
+        if not isinstance(route_state, dict):
+            raise UiShellError("external-models observed route state must be an object")
+        normalized_state: dict[str, Any] = {}
+        for field in EXTERNAL_OBSERVED_ROUTE_FIELDS:
+            if field in route_state:
+                normalized_state[field] = route_state[field]
+        normalized[route_id] = normalized_state
+    return normalized
 
 
 def load_external_models_snapshot(runner: JsonCommandRunner) -> ExternalModelsSnapshot:

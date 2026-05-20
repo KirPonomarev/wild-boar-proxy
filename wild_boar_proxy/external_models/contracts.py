@@ -86,6 +86,25 @@ OBSERVED_ROUTE_ALLOWED_FIELDS = frozenset(
 )
 
 
+def sanitize_observed_routes(routes_payload: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(routes_payload, dict):
+        return {}
+    sanitized: dict[str, dict[str, Any]] = {}
+    for route_id, route_state in routes_payload.items():
+        if not isinstance(route_id, str) or not route_id.strip():
+            continue
+        if not isinstance(route_state, dict):
+            continue
+        bounded = {
+            field: route_state[field]
+            for field in OBSERVED_ROUTE_ALLOWED_FIELDS
+            if field in route_state
+        }
+        if bounded:
+            sanitized[route_id] = bounded
+    return sanitized
+
+
 def utc_now_iso() -> str:
     return (
         datetime.now(timezone.utc)

@@ -3293,6 +3293,75 @@ if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_api_route_refresh_uses_api_snapshot_from_quick_start_composite_payload(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const payload = {
+  ui_action: "api_route_check",
+  route_id: "wbp-deepseek-v3",
+  result: { status: "ok" }
+};
+const refreshed = {
+  accounts: {
+    status: "ok",
+    accounts: []
+  },
+  apiConnections: {
+    status: "ok",
+    routes: [{ route_id: "wbp-deepseek-v3", enabled: true }]
+  }
+};
+if (sandbox.actionRefreshSucceeded(payload, refreshed) !== true) {
+  throw new Error("composite quick-start refresh must be treated as successful for api route check");
+}
+if (sandbox.canonicalActionRefreshState(payload, refreshed) !== "complete") {
+  throw new Error(`expected api route refresh complete, got ${sandbox.canonicalActionRefreshState(payload, refreshed)}`);
+}
+const mismatch = {
+  accounts: {
+    status: "ok",
+    accounts: []
+  },
+  apiConnections: {
+    status: "ok",
+    routes: []
+  }
+};
+if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
+  throw new Error("missing route after api route check must yield refresh mismatch");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_action_ledger_rendering_executes_status_mapping(self) -> None:
         script = r"""
 const fs = require("fs");

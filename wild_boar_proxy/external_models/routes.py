@@ -288,6 +288,7 @@ def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
         "profile_ready": False,
         "routes_count": len(routes_payload["routes"]),
         "observed_routes_count": len(state_payload["routes"]),
+        "observed_routes": contracts.sanitize_observed_routes(state_payload.get("routes", {})),
         "paths": {
             "routes_file": str(paths.routes_file),
             "state_file": str(paths.state_file),

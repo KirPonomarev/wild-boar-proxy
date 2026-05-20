@@ -2175,12 +2175,71 @@ def _public_command_results(commands: dict[str, dict[str, Any]]) -> dict[str, di
 
 
 def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
+    route_by_id = {
+        route.route_id: route for route in external_models.routes if getattr(route, "route_id", "")
+    }
+    enabled_route_ids = [
+        route.route_id for route in external_models.routes if getattr(route, "enabled", False) is True
+    ]
+    primary_route_ids: set[str] = set()
+    if len(enabled_route_ids) == 1:
+        primary_route_ids.add(enabled_route_ids[0])
+    elif len(external_models.routes) == 1:
+        primary_route_ids.add(external_models.routes[0].route_id)
     rows: list[dict[str, Any]] = []
     for model in external_models.models:
+        route = route_by_id.get(model.route_id)
         status_code, status_label, visual_state, note = _api_connection_status(
             model,
             local_token_present=external_models.local_token_present,
         )
+        observed = {}
+        if isinstance(getattr(external_models, "observed_routes", {}), dict):
+            observed = external_models.observed_routes.get(model.route_id, {}) or {}
+        secret_ref = _safe_short_text(getattr(route, "secret_ref", ""), max_length=64)
+        if secret_ref and external_models.local_token_present:
+            secret_status_label = "available"
+            secret_visual_state = "green"
+        elif secret_ref:
+            secret_status_label = "missing"
+            secret_visual_state = "amber"
+        else:
+            secret_status_label = "unknown"
+            secret_visual_state = "neutral"
+        validation_label = "blocked by secret" if secret_status_label == "missing" else "not checked"
+        validation_visual_state = "amber" if secret_status_label == "missing" else "neutral"
+        last_checked = ""
+        if secret_status_label != "missing":
+            observed_state = str(observed.get("availability_state", "")).strip()
+            last_checked = _safe_short_text(
+                str(
+                    observed.get("last_check")
+                    or observed.get("last_validate")
+                    or observed.get("last_verified_at")
+                    or ""
+                ),
+                max_length=32,
+            )
+            if observed_state == "verified":
+                validation_label = "ok"
+                validation_visual_state = "green"
+                note = "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth."
+            elif observed_state == "model_visible":
+                validation_label = "ok"
+                validation_visual_state = "blue"
+                note = "Проверка provider route завершилась без runtime claims."
+            elif observed_state in {"provider_auth_failed", "model_not_available"}:
+                validation_label = "validate failed"
+                validation_visual_state = "red"
+                note = "Последняя provider-проверка маршрута завершилась ошибкой."
+            elif observed_state in {"provider_network_failed", "limited"}:
+                validation_label = "check failed"
+                validation_visual_state = "amber"
+                note = "Последняя проверка маршрута требует внимания оператора."
+            elif observed_state == "blocked":
+                validation_label = "blocked"
+                validation_visual_state = "amber"
+        is_primary = model.route_id in primary_route_ids
         rows.append(
             {
                 "route_id": _safe_short_text(model.route_id, max_length=64),
@@ -2191,11 +2250,22 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
                 "status_code": status_code,
                 "status_label": status_label,
                 "visual_state": visual_state,
-                "role_label": _api_connection_role_label(
-                    lane_role=model.lane_role,
-                    fallback_eligible=model.fallback_eligible,
+                "role_label": (
+                    "main route"
+                    if is_primary
+                    else _api_connection_role_label(
+                        lane_role=model.lane_role,
+                        fallback_eligible=model.fallback_eligible,
+                    )
                 ),
-                "last_checked": "",
+                "primary": is_primary,
+                "is_primary": is_primary,
+                "secret_ref": secret_ref,
+                "secret_status_label": secret_status_label,
+                "secret_visual_state": secret_visual_state,
+                "validation_label": validation_label,
+                "validation_visual_state": validation_visual_state,
+                "last_checked": last_checked,
                 "note": note,
             }
         )
