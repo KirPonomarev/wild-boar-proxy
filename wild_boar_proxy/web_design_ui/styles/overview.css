@@ -1346,6 +1346,7 @@ button:disabled {
   display: flex;
   inset: 0;
   justify-content: center;
+  overflow-y: auto;
   padding: 40px;
   position: absolute;
   z-index: 40;
@@ -1393,152 +1394,148 @@ button:disabled {
 }
 
 .onboard-modal {
-  max-height: min(820px, calc(100vh - 96px));
-  padding: 24px 28px;
-  width: min(100%, 680px);
+  max-height: min(760px, calc(100vh - 96px));
+  padding: 32px;
+  width: min(100%, 600px);
 }
 
 .onboard-modal::before {
-  left: 28px;
-  right: 28px;
-  top: 16px;
+  left: 32px;
+  right: 32px;
+  top: 20px;
 }
 
 .onboard-modal .confirm-modal-header {
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 .onboard-modal .confirm-modal-header h2 {
-  margin: 8px 0;
+  font-size: 24px;
+  line-height: 30px;
+  margin: 10px 0 8px;
 }
 
-.onboard-stepper {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 14px;
-}
-
-.onboard-step {
-  background: #fffaf6;
-  border: 1px solid rgba(217, 208, 195, .78);
-  border-radius: 16px;
-  display: grid;
-  gap: 3px;
-  min-height: 58px;
-  padding: 8px;
-}
-
-.onboard-step span {
-  align-items: center;
-  background: var(--neutral-bg);
-  border-radius: 999px;
+.onboard-modal .confirm-modal-header p {
   color: var(--secondary);
-  display: inline-flex;
-  font-size: 11px;
-  font-weight: 700;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
+  font-size: 14px;
+  line-height: 22px;
+  max-width: 500px;
 }
 
-.onboard-step strong,
-.onboard-step small {
-  display: block;
-}
-
-.onboard-step strong {
-  color: var(--text);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.onboard-step small {
-  color: var(--secondary);
-  font-size: 10px;
-  line-height: 12px;
-}
-
-.onboard-step.active {
-  border-color: rgba(47, 111, 168, .28);
-  box-shadow: inset 3px 0 0 rgba(47, 111, 168, .72);
-}
-
-.onboard-step.active span {
-  background: var(--blue);
-  color: #fff;
-}
-
-.onboard-source-card {
-  align-items: center;
+.onboard-facts-grid {
   background: #fffaf6;
-  border: 1px solid rgba(217, 208, 195, .8);
+  border: 1px solid rgba(217, 208, 195, .82);
   border-radius: 18px;
   display: grid;
-  gap: 12px;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  margin-top: 12px;
-  padding: 12px;
+  gap: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 22px 0 0;
+  overflow: hidden;
 }
 
-.onboard-source-card strong,
-.onboard-source-card p {
-  display: block;
+.onboard-facts-grid div {
+  border-bottom: 1px solid rgba(217, 208, 195, .62);
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 14px 16px;
 }
 
-.onboard-source-card strong {
+.onboard-facts-grid div:nth-child(odd) {
+  border-right: 1px solid rgba(217, 208, 195, .62);
+}
+
+.onboard-facts-grid div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.onboard-facts-grid dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+.onboard-facts-grid dd {
   color: var(--text);
   font-size: 13px;
+  font-weight: 600;
   line-height: 18px;
-  margin-top: 3px;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.onboard-source-card p {
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 16px;
-  margin-top: 2px;
+.onboard-modal .onboard-note {
+  background: #f7eee0;
+  border-color: #d9d0c3;
+  color: #6e675f;
+  font-size: 13px;
+  line-height: 19px;
+  margin-top: 16px !important;
+  padding: 12px 14px;
 }
 
-.onboard-modal .confirm-boundary {
+.onboard-technical-boundaries {
+  border: 1px solid rgba(217, 208, 195, .72);
+  border-radius: 14px;
   margin-top: 14px;
+  overflow: hidden;
 }
 
-.onboard-modal .confirm-facts {
+.onboard-technical-boundaries summary {
+  color: var(--blue-dark);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  list-style: none;
+  padding: 12px 14px;
+}
+
+.onboard-technical-boundaries summary::-webkit-details-marker {
   display: none;
-  font-size: 11px;
-  gap: 5px 12px;
-  margin-top: 12px;
-  padding: 10px 12px;
 }
 
-.onboard-modal .modal-state-list {
-  gap: 6px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 10px;
+.onboard-technical-boundaries summary::after {
+  content: "+";
+  float: right;
+  font-weight: 700;
 }
 
-.onboard-modal .modal-state-row {
-  gap: 3px;
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 44px;
-  padding: 7px 10px;
+.onboard-technical-boundaries[open] summary {
+  border-bottom: 1px solid rgba(217, 208, 195, .72);
 }
 
-.onboard-modal .modal-state-row span,
-.onboard-modal .modal-state-row strong {
-  line-height: 14px;
+.onboard-technical-boundaries[open] summary::after {
+  content: "-";
 }
 
-.onboard-modal .confirm-note {
-  font-size: 11px;
-  line-height: 15px;
-  margin-top: 12px !important;
-  padding: 9px 11px;
+.onboard-technical-boundaries .details-label-open {
+  display: none;
+}
+
+.onboard-technical-boundaries[open] .details-label-closed {
+  display: none;
+}
+
+.onboard-technical-boundaries[open] .details-label-open {
+  display: inline;
+}
+
+.onboard-technical-boundaries ul {
+  color: var(--secondary);
+  display: grid;
+  font-size: 12px;
+  gap: 8px;
+  line-height: 18px;
+  margin: 0;
+  padding: 12px 16px 14px 30px;
 }
 
 .onboard-modal .confirm-actions {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .confirm-modal-header {
@@ -6296,6 +6293,7 @@ button:disabled {
 @media (max-width: 1120px) {
   .confirm-overlay {
     align-items: flex-start;
+    overflow-y: auto;
     padding: 24px;
   }
 
@@ -6317,6 +6315,33 @@ button:disabled {
 
   .confirm-actions .button {
     width: 100%;
+  }
+
+  .onboard-modal {
+    max-height: calc(100vh - 24px);
+    padding: 20px 20px 18px;
+  }
+
+  .onboard-modal::before {
+    left: 20px;
+    right: 20px;
+  }
+
+  .onboard-modal .confirm-actions {
+    margin-top: 14px;
+  }
+
+  .onboard-facts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .onboard-facts-grid div,
+  .onboard-facts-grid div:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .onboard-facts-grid div:nth-last-child(2) {
+    border-bottom: 1px solid rgba(217, 208, 195, .62);
   }
 
   .diag-layout,

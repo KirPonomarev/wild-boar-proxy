@@ -2430,54 +2430,33 @@
       <div id="onboardOverlay" class="confirm-overlay" hidden>
         <section class="confirm-modal onboard-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" data-modal-surface="onboard-reserve-request">
           <div class="confirm-modal-header">
-            <div class="eyebrow">Добавление аккаунта</div>
-            <h2 id="onboardTitle">Добавление аккаунта</h2>
-            <p>
-              Запустите один server-owned live onboarding path без browser credentials, путей
-              и raw auth surface. Успех признаётся только при reserve-first proof.
-            </p>
+            <div class="eyebrow">ДОБАВЛЕНИЕ АККАУНТА</div>
+            <h2 id="onboardTitle">Подключить аккаунт</h2>
+            <p>Аккаунт будет добавлен в резервный пул. Активная маршрутизация не изменится.</p>
           </div>
-          <div class="onboard-stepper" aria-label="Шаги onboarding">
-            <div class="onboard-step active"><span>1</span><strong>Источник</strong><small>server-owned</small></div>
-            <div class="onboard-step"><span>2</span><strong>Допуск</strong><small>reserve-first gate</small></div>
-            <div class="onboard-step"><span>3</span><strong>Команда</strong><small>existing live path</small></div>
-            <div class="onboard-step"><span>4</span><strong>Результат</strong><small>proof only</small></div>
-          </div>
-          <div class="confirm-boundary" aria-label="Граница результата подключения">
-            <span>live request</span>
-            <span>резерв сначала</span>
-            <span>результат только из packet</span>
-            <span>accounts-readonly refresh</span>
-          </div>
-          <section class="onboard-source-card" aria-label="Источник onboarding">
-            <span class="onboard-source-icon"><img class="ui-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true"></span>
-            <div>
-              <div class="eyebrow">Источник auth</div>
-              <strong>server-owned onboarding surface</strong>
-              <p>Web не принимает путь, не читает файлы, не передаёт токены и не подсовывает backend id; сервер запускает только существующий admitted live path.</p>
-            </div>
-            <span class="mini-pill blue">server-owned only</span>
-          </section>
-          <div class="confirm-facts">
-            <div>Запуск</div><div><span class="mono-value">onboard_account</span> без browser args</div>
-            <div>Допуск</div><div>server-owned source + reserve-first gate</div>
-            <div>Запись</div><div>только onboarding write surface команды</div>
-            <div>Подтверждение</div><div>packet proof + existing <span class="mono-value">accounts-readonly</span></div>
-            <div>Следующий шаг</div><div>promotion остаётся отдельным действием</div>
-          </div>
-          <div class="modal-state-list" aria-label="Состояния результата подключения">
-            <div class="modal-state-row neutral"><span>live request admitted</span><strong>отправить существующий live path и дождаться packet proof</strong></div>
-            <div class="modal-state-row amber"><span>live request denied</span><strong>остановить и показать blocked reason</strong></div>
-            <div class="modal-state-row neutral"><span>reserve-first success only</span><strong>active-ready не заявляется автоматически</strong></div>
-            <div class="modal-state-row red"><span>proof missing</span><strong>не показывать зелёный результат</strong></div>
-          </div>
-          <p class="confirm-note">
-            Это окно запускает только существующий server-owned live onboarding request.
-            Оно не принимает browser secrets, не выбирает файлы и не заявляет успех без reserve-first proof.
-          </p>
+          <dl class="onboard-facts-grid" aria-label="Краткие условия подключения">
+            <div><dt>Источник</dt><dd>server-owned onboarding</dd></div>
+            <div><dt>Пул</dt><dd>Резерв</dd></div>
+            <div><dt>После команды</dt><dd>Обновить accounts JSON</dd></div>
+            <div><dt>Успех</dt><dd>reserve-first proof</dd></div>
+          </dl>
+          <p class="confirm-note onboard-note">Web не принимает токены, файлы и локальные пути.</p>
+          <details class="onboard-technical-boundaries">
+            <summary>
+              <span class="details-label-closed">Показать технические границы</span>
+              <span class="details-label-open">Скрыть технические границы</span>
+            </summary>
+            <ul>
+              <li>Browser не передаёт secrets, auth files или local paths.</li>
+              <li>Команда запускается только как <span class="mono-value">onboard_account</span>.</li>
+              <li>No-new-auth не считается успехом.</li>
+              <li>Ambiguous identity требует действия оператора.</li>
+              <li>Аккаунт не переводится в active автоматически.</li>
+            </ul>
+          </details>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
-            <button id="runOnboardAction" class="button primary" type="button">Подключить в reserve</button>
+            <button id="runOnboardAction" class="button primary" type="button">Подключить в резерв</button>
           </div>
         </section>
       </div>

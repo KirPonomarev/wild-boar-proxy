@@ -3330,7 +3330,7 @@ function confirmationReadyLabel(uiAction) {
     return "Удалить route";
   }
   if (uiAction === "onboard_account") {
-    return "Подключить в reserve";
+    return "Подключить в резерв";
   }
   if (uiAction === "retire_account") {
     return "Вывести из пула";

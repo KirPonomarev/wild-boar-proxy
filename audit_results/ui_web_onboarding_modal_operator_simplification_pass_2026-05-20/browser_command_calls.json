@@ -1,0 +1,23 @@
+[
+  [
+    "accounts",
+    "list",
+    "--json"
+  ],
+  [
+    "external-models",
+    "status",
+    "--json"
+  ],
+  [
+    "external-models",
+    "models",
+    "--json"
+  ],
+  [
+    "external-models",
+    "routes",
+    "list",
+    "--json"
+  ]
+]
