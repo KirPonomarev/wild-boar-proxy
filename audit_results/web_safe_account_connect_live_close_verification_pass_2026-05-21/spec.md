@@ -6,21 +6,23 @@
 ## Objective
 
 Close the already-implemented live Quick Start onboarding lane with one real
-sandbox execution, but only if canonical owner authorization is explicitly
-present in the active thread.
+sandbox execution, owner packet evidence, canonical refresh proof, and
+independent audit.
 
 ## In Scope
 
 - owner-authorization gate check
 - sandbox target proof capture
-- live-lane readiness proof from `/api/actions`
-- dry-run preview packet capture
-- blocked/live decision for execution close
-- independent factual audit
+- one real Quick Start dry-run preview followed by live sandbox onboarding
+- owner packet capture from the live `onboard_account` lane
+- canonical refresh capture from sandbox `accounts list --json`
+- narrow repair of the factual blocker where sandbox actions refreshed through
+  global readonly endpoints
+- independent factual audit of diff and evidence
 
 ## Out of Scope
 
-- new feature work
+- new feature work beyond the narrow refresh-path repair
 - API route work
 - lifecycle actions
 - desktop port
@@ -29,41 +31,53 @@ present in the active thread.
 
 ## Constraints
 
-- no live mutation without the exact owner phrase required by `CANON.md`
+- live mutation is allowed only because the exact owner phrase required by
+  `CANON.md` is present in the active thread
 - browser surfaces remain forbidden from token/auth/path/backend payloads
 - success cannot be inferred without `accounts onboard --json` plus
   `accounts list --json`
-- if the owner gate is blocked, this contour closes only as
-  `preflight_ready_but_owner_authorization_blocked`
+- rollback truth is not invented when the packet does not expose it
 
 ## Assumptions
 
-- `WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS` code is already merged locally
-- sandbox action phase and Quick Start two-step modal flow are already working
-- local stub verification is acceptable for technical readiness proof, but not
-  for live-close proof
+- `WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS` code was already merged locally before
+  this close contour
+- sandbox action phase and Quick Start two-step modal flow were already working
+- a narrow blocker discovered during close verification may be repaired inside
+  this contour when it is localized, evidenced, and re-verified
 
 ## Acceptance Criteria
 
-- [x] exact canonical owner-authorization requirement localized
+- [x] exact canonical owner authorization present in the active thread
 - [x] sandbox target proof captured machine-readably
-- [x] `onboard_account` live lane shown as technically admitted in sandbox phase
-- [x] dry-run preview packet captured
-- [ ] one real sandbox live onboarding executed under canonical owner authorization
-- [ ] owner packet + canonical refresh captured from a real run
+- [x] one real sandbox Quick Start dry-run preview executed
+- [x] one real sandbox Quick Start live onboarding executed
+- [x] owner packet captured with `reserve_only_success`, `selected_backend_id`,
+      `reserve_first_proven`, `validate_outcome`, and `sync_outcome`
+- [x] canonical refresh captured from sandbox truth
+- [x] narrow refresh-mismatch blocker localized and repaired
+- [x] Quick Start UI and action panel show `canonical refresh complete`
+- [x] sandbox `accounts-readonly` refresh shows backend `auth` in `reserve`
+- [x] independent audit found no medium-or-higher defects in the repaired lane
 
 ## Verification
 
 - tests:
-  - no new code changes; rely on already green live contour tests
+  - targeted real sandbox HTTP tests added and passed
+  - existing live server/UI/adapter suites re-run
 - build:
+  - `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`
   - `git diff --check`
-- manual:
-  - local stub server packet capture for `/api/actions` and dry-run preview
+- browser:
+  - fresh sandbox Quick Start run with screenshots and persisted network trace
 - live evidence:
-  - blocked until the exact owner phrase is present in the active thread
+  - `ui-run-network.json`
+  - `ui-run-summary.json`
+  - `accounts-list-canonical-after.json`
+  - `accounts-readonly-after.json`
+  - `status-canonical-after.json`
 
 ## Open Questions
 
-- once canonical owner authorization is provided, the next exact move is a real
-  sandbox Quick Start live onboarding, not another planning contour
+- none for this contour; the remaining open product work moves to the next
+  contour chosen from the master plan

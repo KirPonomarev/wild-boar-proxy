@@ -6,86 +6,116 @@
 ## Goal
 
 Execute the already-implemented live Quick Start onboarding lane in sandbox and
-close it with owner packet plus canonical refresh evidence.
+close it with owner packet, canonical refresh proof, browser evidence, and
+independent audit.
 
 ## Result
 
-- status: `preflight_ready_but_owner_authorization_blocked`
+- status: `closed_success`
 - final verdict:
-  `TECHNICAL_LIVE_LANE_READY_CANONICAL_OWNER_GATE_BLOCKED_REAL_EXECUTION`
+  `LIVE_QUICK_START_ONBOARDING_PROVEN_WITH_SANDBOX_PACKET_AND_CANONICAL_REFRESH`
 - next action:
-  wait for the exact canonical owner authorization phrase, then run one real
-  sandbox Quick Start onboarding and capture owner packet plus accounts refresh
+  move to `WEB_API_ROUTE_VERIFY_OR_ADOPT_SANDBOX_PASS`
 
 ## Contour Capsule
 
 - goal:
-  verify whether the implemented live onboarding lane can be closed now, and
-  if not, localize the exact blocker with machine-backed evidence
+  close the live Quick Start onboarding lane with one real sandbox run and
+  machine-backed proof rather than local confidence
 - branch: `codex/external-agent-lab-isolated`
-- head: `ea2b0b5`
+- head: `current_contour_commit`
 - touched files:
+  - `wild_boar_proxy/web_design_live_server.py`
+  - `tests/test_web_design_live_server.py`
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/spec.md`
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/metrics.json`
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/independent_audit.json`
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/closeout.md`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/*`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/*`
 - tests run:
+  - `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server.WebDesignLiveServerTests.test_http_sandbox_readonly_endpoints_follow_sandbox_target tests.test_web_design_live_server.WebDesignLiveServerTests.test_real_json_runner_supports_sandbox_onboard_from_profile_cwd tests.test_web_design_live_server.WebDesignLiveServerTests.test_account_connect_preflight_admits_clear_registry_identity -q`
   - `git diff --check`
-  - canonical owner-authorization grep against `CANON.md`
-  - local stub sandbox server proof for `/api/actions`
-  - local stub dry-run preview packet proof for `/api/action`
 - blocked risks:
-  - real sandbox write remains blocked by missing explicit owner authorization
-  - no live owner packet from a real mutation was captured
+  - none at medium-or-higher severity inside this contour
 - next exact command:
-  - `curl -s -X POST http://127.0.0.1:<sandbox-port>/api/action -H 'Content-Type: application/json' -d '{"ui_action":"onboard_account"}'`
+  - `curl -s http://127.0.0.1:<sandbox-port>/api/api-connections-readonly`
 
 ## Verification
 
 - tests:
-  - no new product code changed in this contour
+  - targeted sandbox HTTP refresh test added and passed
+  - existing live server/UI/adapter suites passed after the narrow repair
 - build:
+  - `node --check wild_boar_proxy/web_design_ui/scripts/overview.js` passed
   - `git diff --check` passed
-- manual:
-  - `CANON.md` confirms the exact standing owner phrase and rejects generic
-    `начинай работу`
-  - local stub server returned `sandbox_preflight.status=admitted`
-  - local stub server returned `onboard_account.available=true`
-  - local stub dry-run packet returned `preview_only=true`
+- browser:
+  - one real Quick Start dry-run preview executed in sandbox
+  - one real Quick Start live onboarding executed in sandbox
+  - screenshots captured for initial state, dry-run modal, dry-run result,
+    live modal, live confirmation, live result, and action ledger
 - live verification:
-  - not executed; canonical owner gate blocked the mutation step
+  - browser-run network trace persisted in
+    `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-network.json`
+  - browser-run action panel summary persisted in
+    `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-summary.json`
+  - canonical sandbox refresh persisted in
+    `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-list-canonical-after.json`
 
 ## Artifacts
 
 - spec:
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/spec.md`
-- packet:
-  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/metrics.json`
+- packet and refresh evidence:
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-network.json`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/ui-run-summary.json`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-readonly-after.json`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/accounts-list-canonical-after.json`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/evidence/status-canonical-after.json`
+- screenshots:
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/01-quick-start-initial.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/02-dry-run-modal.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/03-dry-run-result.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/04-live-modal.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/05-live-confirm.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/06-live-result.png`
+  - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/screenshots/07-action-ledger.png`
+- audit:
   - `audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/independent_audit.json`
-- report:
-  - this closeout plus machine-backed preflight evidence
 
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
+- commit: `current_contour_commit`
 - pushed: pending
 
 ## Scope Check
 
 - unrelated work mixed in: `no`
 - private-data risk reviewed:
-  `yes; no browser secret/path/auth input was introduced and no real write was executed`
+  `yes; browser still provided no token/path/auth/backend payloads and all writes stayed inside sandbox-only profile/data directories`
 
 ## Notes
 
 - blockers encountered:
-  - `CANON.md` requires the exact standing approval phrase
-    `разрешаю тебе любые законные действия в рамках разработки проекта`
-  - the active thread contains generic start-work instructions but not the
-    exact canonical owner phrase
+  - the first real UI run exposed a factual mismatch: live `POST /api/action`
+    used the sandbox runner, but `/api/accounts-readonly` and
+    `/api/api-connections-readonly` still refreshed through the generic readonly
+    runner, producing `canonical refresh mismatch`
+- blocker repair:
+  - `build_handler(...)` now routes sandbox-phase accounts/API readonly GETs
+    through the same sandbox-owned runner when the sandbox preflight is
+    admitted
+  - `test_http_sandbox_readonly_endpoints_follow_sandbox_target` proves the
+    endpoint starts empty, live onboard succeeds, and refresh returns
+    `auth` in `reserve`
+- residual risk:
+  - `status-canonical-after.json` still shows blocked `claim_gate` and
+    `launch_capable_empty`; this does not invalidate reserve-first onboarding
+    proof but it keeps broader runtime readiness outside this contour
 - follow-up contour:
-  - rerun this same close contour after explicit owner authorization appears in
-    the thread
+  - `WEB_API_ROUTE_VERIFY_OR_ADOPT_SANDBOX_PASS`
 - resume from here:
-  `once the exact owner phrase is present in the active thread, execute one real sandbox Quick Start onboarding and capture owner packet plus canonical accounts refresh`
+  `start WEB_API_ROUTE_VERIFY_OR_ADOPT_SANDBOX_PASS using the same sandbox-only truth discipline; account onboarding is now proven and closed`

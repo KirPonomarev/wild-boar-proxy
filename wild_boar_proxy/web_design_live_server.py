@@ -619,7 +619,7 @@ def _account_connect_live_preflight(accounts_snapshot: dict[str, Any] | None) ->
     if (
         str(accounts_snapshot.get("source") or "") != "accounts_readonly"
         or accounts_snapshot.get("primary_truth_ok") is not True
-        or registry_status != "ok"
+        or registry_status not in {"ok", "clear"}
         or registry_code != "OK"
         or registry_next_action not in {"", "none"}
     ):
@@ -1133,6 +1133,8 @@ def build_handler(
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
+    accounts_readonly_runner = command_runner
+    api_connections_readonly_runner = command_runner
     action_runner = command_runner
     if (
         runner is None
@@ -1144,6 +1146,8 @@ def build_handler(
             cwd=str(Path(launch_copy_contract.profile_dir or "").expanduser()),
             env=_sandbox_action_runner_env(launch_copy_contract),
         )
+        accounts_readonly_runner = sandbox_runner
+        api_connections_readonly_runner = sandbox_runner
         action_runner = sandbox_runner
     static_root = static_dir.resolve()
 
@@ -1154,10 +1158,12 @@ def build_handler(
                 self._send_json(build_live_readonly_snapshot(readonly_runner))
                 return
             if parsed.path == "/api/accounts-readonly":
-                self._send_json(build_accounts_readonly_snapshot(readonly_runner))
+                self._send_json(build_accounts_readonly_snapshot(accounts_readonly_runner))
                 return
             if parsed.path == "/api/api-connections-readonly":
-                self._send_json(build_api_connections_readonly_snapshot(readonly_runner))
+                self._send_json(
+                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                )
                 return
             if parsed.path == "/api/actions":
                 self._send_json(
@@ -1364,6 +1370,12 @@ def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     profile_dir = Path(contract.profile_dir or "").expanduser()
     data_dir = Path(contract.data_dir or "").expanduser()
     env = dict(os.environ)
+    repo_root = str(ROOT)
+    current_pythonpath = env.get("PYTHONPATH", "")
+    pythonpath_parts = [part for part in current_pythonpath.split(os.pathsep) if part]
+    if repo_root not in pythonpath_parts:
+        pythonpath_parts.insert(0, repo_root)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     env["WBP_PROFILE_DIR"] = str(profile_dir)
     env["WBP_MANAGED_DIR"] = str(data_dir)
     env["WBP_EXTERNAL_MODELS_DIR"] = str(data_dir / "external-models")
@@ -1871,9 +1883,27 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
 
     final_outcome = str(onboarding_result.get("final_outcome") or "unknown_outcome")
     selected_backend_id = str(onboarding_result.get("selected_backend_id") or "")
+    lifecycle_admission = (
+        onboarding_result.get("lifecycle_admission")
+        if isinstance(onboarding_result.get("lifecycle_admission"), dict)
+        else {}
+    )
+    selected_backend_pool = str(lifecycle_admission.get("selected_backend_pool") or "")
+    raw_pool_after_onboarding = onboarding_result.get("pool_after_onboarding")
+    if selected_backend_pool:
+        pool_after_onboarding = selected_backend_pool
+    elif isinstance(raw_pool_after_onboarding, str) and raw_pool_after_onboarding:
+        pool_after_onboarding = raw_pool_after_onboarding
+    elif (
+        onboarding_result.get("reserve_first_enforced") is True
+        and onboarding_result.get("active_routing_changed") is False
+    ):
+        pool_after_onboarding = "reserve"
+    else:
+        pool_after_onboarding = str(raw_pool_after_onboarding or "")
     reserve_first_proven = (
         onboarding_result.get("reserve_first_enforced") is True
-        and onboarding_result.get("pool_after_onboarding") == "reserve"
+        and pool_after_onboarding == "reserve"
         and onboarding_result.get("active_routing_changed") is False
     )
     successful_outcome = final_outcome in {
@@ -1910,7 +1940,7 @@ def _onboarding_summary(packet: object, *, command_status: str) -> dict[str, Any
         "reason": reason,
         "input_mode": str(onboarding_result.get("input_mode") or ""),
         "selection_status": str(onboarding_result.get("selection_status") or ""),
-        "pool_after_onboarding": str(onboarding_result.get("pool_after_onboarding") or ""),
+        "pool_after_onboarding": pool_after_onboarding,
         "active_routing_changed": onboarding_result.get("active_routing_changed"),
         "validate_outcome": str(onboarding_result.get("validate_outcome") or ""),
         "sync_outcome": str(onboarding_result.get("sync_outcome") or ""),

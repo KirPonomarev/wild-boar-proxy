@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import threading
 import tempfile
@@ -11,7 +12,9 @@ import unittest
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
+from wild_boar_proxy.runtime import RuntimePaths, run_installer_init
 from wild_boar_proxy.ui_shell import CommandResult
 from wild_boar_proxy.web_design_command_adapter import ALLOWLIST
 from wild_boar_proxy.web_design_live_server import (
@@ -31,6 +34,7 @@ from wild_boar_proxy.web_design_live_server import (
     build_live_readonly_snapshot,
     run_ui_action,
     ui_action_metadata,
+    _sandbox_action_runner_env,
 )
 
 
@@ -799,6 +803,187 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("accounts", "list", "--json"),
                 ("accounts", "onboard", "--json"),
             ],
+        )
+
+    def test_real_json_runner_supports_sandbox_onboard_from_profile_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(data_dir / "external-models"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                paths = RuntimePaths.from_env()
+                install_payload = run_installer_init(paths)
+            self.assertEqual(install_payload["status"], "ok")
+            (profile_dir / "auth.json").write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "apikey",
+                        "OPENAI_API_KEY": "test-key",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9341,
+                action_server_port=9340,
+            )
+            from wild_boar_proxy.ui_shell import JsonCommandRunner
+
+            runner = JsonCommandRunner(
+                cwd=str(profile_dir),
+                env=_sandbox_action_runner_env(contract),
+            )
+
+            readonly_before = build_accounts_readonly_snapshot(runner)
+            self.assertEqual(readonly_before["status"], "ok")
+            self.assertEqual(readonly_before["accounts"], [])
+            self.assertEqual(readonly_before["registry_identity"]["status"], "clear")
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "onboard_account"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(
+                result["result"]["onboarding"]["final_outcome"],
+                "reserve_only_success",
+            )
+            self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
+
+            readonly_after = build_accounts_readonly_snapshot(runner)
+            self.assertEqual(readonly_after["status"], "ok")
+            self.assertEqual(len(readonly_after["accounts"]), 1)
+            self.assertEqual(readonly_after["accounts"][0]["id"], "auth")
+            self.assertEqual(readonly_after["accounts"][0]["pool"], "reserve")
+
+    def test_http_sandbox_readonly_endpoints_follow_sandbox_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(data_dir / "external-models"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                paths = RuntimePaths.from_env()
+                install_payload = run_installer_init(paths)
+            self.assertEqual(install_payload["status"], "ok")
+            (profile_dir / "auth.json").write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "apikey",
+                        "OPENAI_API_KEY": "test-key",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+                    launch_copy_contract=LaunchCopyContract(
+                        client_path=TEST_LAUNCH_CLIENT_PATH,
+                        profile_dir=str(profile_dir),
+                        data_dir=str(data_dir),
+                        copy_port=9343,
+                        action_server_port=9342,
+                    ),
+                    action_phase=SANDBOX_ACTION_PHASE,
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                base_url = f"http://127.0.0.1:{server.server_port}"
+                before_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+                before_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
+                dry_run = json.loads(
+                    post_json(
+                        f"{base_url}/api/action",
+                        {"ui_action": "onboard_account_dry_run"},
+                    )
+                )
+                live = json.loads(
+                    post_json(
+                        f"{base_url}/api/action",
+                        {"ui_action": "onboard_account"},
+                    )
+                )
+                after_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+                after_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+
+            self.assertEqual(before_accounts["status"], "ok")
+            self.assertEqual(before_accounts["source"], "accounts_readonly")
+            self.assertEqual(before_accounts["accounts"], [])
+            self.assertEqual(before_api["status"], "ok")
+            self.assertEqual(before_api["source"], "api_connections_readonly")
+            self.assertEqual(before_api["routes"], [])
+            self.assertEqual(dry_run["status"], "ok")
+            self.assertEqual(
+                dry_run["result"]["onboarding"]["final_outcome"],
+                "dry_run_preview_ready",
+            )
+            self.assertEqual(live["status"], "ok")
+            self.assertEqual(
+                live["result"]["onboarding"]["final_outcome"],
+                "reserve_only_success",
+            )
+            self.assertEqual(after_accounts["status"], "ok")
+            self.assertEqual(len(after_accounts["accounts"]), 1)
+            self.assertEqual(after_accounts["accounts"][0]["id"], "auth")
+            self.assertEqual(after_accounts["accounts"][0]["pool"], "reserve")
+            self.assertEqual(after_api["status"], "ok")
+            self.assertEqual(after_api["routes"], [])
+
+    def test_account_connect_preflight_admits_clear_registry_identity(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "list", "--json"): accounts_packet(
+                    accounts=[],
+                    registry_identity={
+                        "status": "clear",
+                        "machine_error_code": "OK",
+                        "next_action": "none",
+                    },
+                ),
+            }
+        )
+        preflight = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account"},
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8789,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(preflight["status"], "ok")
+        self.assertEqual(
+            preflight["result"]["onboarding"]["final_outcome"],
+            "reserve_only_success",
         )
 
     def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
