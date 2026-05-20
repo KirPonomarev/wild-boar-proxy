@@ -4596,7 +4596,7 @@ function renderAccountRows(accounts) {
       td("", account.pool_label || poolLabel(account.pool)),
       td("", statusChip(account)),
       errorCell,
-      td("right mono-value", account.last_success || account.cooldown_until || "—"),
+      td("right mono-value", accountTableCheckLabel(account.last_success || account.cooldown_until)),
       td("account-actions-cell", accountActionButtons(account, { rowMenu: true }))
     );
     row.dataset.accountId = accountId;
@@ -4619,6 +4619,18 @@ function renderAccountRows(accounts) {
   }
   updateAccountsSelectionUi();
   applyActionAvailability();
+}
+
+function accountTableCheckLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "—";
+  }
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[3]}.${isoMatch[2]}, ${isoMatch[4]}:${isoMatch[5]}`;
+  }
+  return raw;
 }
 
 function isInteractiveAccountRowTarget(target) {

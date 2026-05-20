@@ -565,7 +565,7 @@
                 <div>
                   <div class="eyebrow">Детали аккаунта</div>
                   <h2 id="accountDetailTitle">Аккаунт не выбран</h2>
-                  <div id="accountDetailSubtitle" class="secondary">Данные берутся только из accounts JSON.</div>
+                  <div id="accountDetailSubtitle" class="secondary">Только текущий accounts JSON.</div>
                 </div>
                 <button id="accountDetailClose" class="button icon-button" type="button" aria-label="Закрыть детали аккаунта">
                   <img class="ui-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -586,7 +586,7 @@
                 <div class="account-detail-section-head">
                   <div>
                     <div class="card-title">Состояние аккаунта</div>
-                    <div class="secondary">Bounded facts из текущего accounts JSON.</div>
+                    <div class="secondary">Факты только из текущего accounts JSON.</div>
                   </div>
                   <span id="accountDetailTruthChip" class="mini-pill neutral">readonly packet</span>
                 </div>
@@ -610,10 +610,10 @@
                   </div>
                 </div>
                 <div class="account-detail-stat-grid">
-                  <div><span>Checks 24h</span><strong id="accountDetailChecks24h">нет данных</strong></div>
-                  <div><span>Failures</span><strong id="accountDetailFail">нет данных</strong></div>
-                  <div><span>Last latency</span><strong id="accountDetailLatency">нет данных</strong></div>
-                  <div><span>Recovery attempts</span><strong id="accountDetailRecovery">нет данных</strong></div>
+                  <div><span>Проверки 24ч</span><strong id="accountDetailChecks24h">нет данных</strong></div>
+                  <div><span>Ошибки</span><strong id="accountDetailFail">нет данных</strong></div>
+                  <div><span>Задержка</span><strong id="accountDetailLatency">нет данных</strong></div>
+                  <div><span>Восстановления</span><strong id="accountDetailRecovery">нет данных</strong></div>
                 </div>
                 <div id="accountDetailCounterNote" class="account-detail-note">Счётчики не являются runtime truth без bounded packet.</div>
               </section>
@@ -621,7 +621,7 @@
               <section id="accountDetailTimelineSection" class="account-detail-section">
                 <div class="account-detail-section-head">
                   <div>
-                    <div class="card-title">Lifecycle timeline</div>
+                    <div class="card-title">История lifecycle</div>
                     <div class="secondary">Только bounded history packet или безопасная fixture-сводка.</div>
                   </div>
                 </div>
@@ -636,7 +636,7 @@
                 <div id="accountDetailActions" class="account-action-group account-detail-action-group"></div>
                 <div class="account-detail-danger">
                   <div>
-                    <div class="card-title">Danger zone</div>
+                    <div class="card-title">Опасные действия</div>
                     <div class="secondary">Терминальное действие отдельно и только через confirmation.</div>
                   </div>
                   <div id="accountDetailDangerActions" class="account-detail-action-group"></div>

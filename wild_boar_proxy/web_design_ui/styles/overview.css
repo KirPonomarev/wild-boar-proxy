@@ -2258,6 +2258,168 @@ button:disabled {
   padding: 18px 20px 14px;
 }
 
+.desktop[data-screen="accounts"] .main {
+  padding: 36px 36px 28px;
+}
+
+.desktop[data-screen="accounts"] .main-header {
+  margin-bottom: 16px;
+}
+
+.desktop[data-screen="accounts"] h1 {
+  font-size: 34px;
+  line-height: 40px;
+}
+
+.desktop[data-screen="accounts"] .subtitle {
+  font-size: 14px;
+  line-height: 22px;
+  margin-top: 7px;
+  max-width: 780px;
+}
+
+.desktop[data-screen="accounts"] .header-actions {
+  gap: 10px;
+}
+
+.desktop[data-screen="accounts"] .fixture-banner {
+  border-radius: 13px;
+  font-size: 13px;
+  line-height: 18px;
+  margin-bottom: 14px;
+  min-height: 42px;
+  padding-inline: 14px;
+}
+
+.desktop[data-screen="accounts"] .accounts-filter-row {
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.desktop[data-screen="accounts"] .left-filters {
+  gap: 10px;
+}
+
+.desktop[data-screen="accounts"] .search {
+  background: var(--neutral-bg);
+  border-color: rgba(217, 208, 195, .72);
+  color: var(--muted);
+  font-size: 12px;
+  height: 34px;
+  line-height: 16px;
+  padding-inline: 12px;
+  width: min(220px, 100%);
+}
+
+.desktop[data-screen="accounts"] .filter-seg {
+  border-radius: 11px;
+  height: 34px;
+  padding: 3px;
+}
+
+.desktop[data-screen="accounts"] .filter-seg span {
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 15px;
+  min-width: 68px;
+  padding-inline: 10px;
+}
+
+.desktop[data-screen="accounts"] .accounts-chips {
+  gap: 6px;
+}
+
+.desktop[data-screen="accounts"] .accounts-chips .chip {
+  font-size: 11px;
+  gap: 5px;
+  height: 24px;
+  line-height: 15px;
+  padding-inline: 8px;
+}
+
+.desktop[data-screen="accounts"] .accounts-chips .dot {
+  height: 6px;
+  width: 6px;
+}
+
+.desktop[data-screen="accounts"] .accounts-table-card {
+  border-radius: 18px;
+  max-height: calc(100vh - 298px);
+  padding: 16px 18px 12px;
+}
+
+.desktop[data-screen="accounts"] .table-top {
+  margin-bottom: 6px;
+}
+
+.desktop[data-screen="accounts"] .table-top .card-title {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.desktop[data-screen="accounts"] .table-top .secondary {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.desktop[data-screen="accounts"] .accounts-table {
+  min-width: 940px;
+}
+
+.desktop[data-screen="accounts"] .accounts-table th {
+  height: 36px;
+  padding: 0 10px 8px;
+}
+
+.desktop[data-screen="accounts"] .accounts-table td {
+  font-size: 12px;
+  height: 52px;
+  line-height: 17px;
+  padding: 8px 10px;
+}
+
+.desktop[data-screen="accounts"] .account-main {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+.desktop[data-screen="accounts"] .account-sub {
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.desktop[data-screen="accounts"] .account-error-cell {
+  max-width: 100%;
+}
+
+.desktop[data-screen="accounts"] .account-action-menu-trigger {
+  border-radius: 10px;
+  height: 28px;
+  width: 32px;
+}
+
+.desktop[data-screen="accounts"] .account-action-menu-list {
+  min-width: 196px;
+  top: 34px;
+}
+
+.desktop[data-screen="accounts"] .account-menu-item,
+.desktop[data-screen="accounts"] .button.small.account-menu-item {
+  font-size: 12px;
+  height: 30px;
+  line-height: 16px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-trigger,
+.desktop[data-screen="accounts"] .button.small.account-action {
+  height: 26px;
+}
+
+.desktop[data-screen="accounts"] .pagination {
+  height: 30px;
+  padding-top: 8px;
+}
+
 .api-connections-table-card {
   max-height: calc(100vh - 520px);
   overflow: auto;
@@ -2634,11 +2796,23 @@ button:disabled {
   padding: 20px 26px;
 }
 
+.desktop[data-screen="accounts"] .account-detail-drawer {
+  gap: 8px;
+  max-width: min(520px, 100vw);
+  min-width: min(500px, 100vw);
+  padding: 18px 22px;
+}
+
 .drawer-head {
   align-items: flex-start;
   display: grid;
   gap: 14px;
   grid-template-columns: 42px minmax(0, 1fr) 38px;
+}
+
+.desktop[data-screen="accounts"] .drawer-head {
+  gap: 12px;
+  grid-template-columns: 38px minmax(0, 1fr) 34px;
 }
 
 .drawer-head h2 {
@@ -2650,6 +2824,11 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.desktop[data-screen="accounts"] .drawer-head h2 {
+  font-size: 20px;
+  line-height: 26px;
+}
+
 .account-detail-avatar {
   align-items: center;
   background: var(--blue-bg);
@@ -2658,6 +2837,19 @@ button:disabled {
   height: 42px;
   justify-content: center;
   width: 42px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-avatar {
+  border-radius: 12px;
+  height: 38px;
+  width: 38px;
+}
+
+.desktop[data-screen="accounts"] .icon-button {
+  height: 34px;
+  max-width: 34px;
+  min-width: 34px;
+  width: 34px;
 }
 
 .icon-button {
@@ -2684,6 +2876,10 @@ button:disabled {
   gap: 8px;
 }
 
+.desktop[data-screen="accounts"] .account-detail-summary {
+  gap: 6px;
+}
+
 .account-detail-section {
   background: #fffdfa;
   border: 1px solid var(--border);
@@ -2691,6 +2887,13 @@ button:disabled {
   display: grid;
   gap: 10px;
   padding: 12px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-section,
+.desktop[data-screen="accounts"] .account-detail-actions {
+  border-radius: 14px;
+  gap: 8px;
+  padding: 10px;
 }
 
 #accountDetailLastCommandSection[hidden],
@@ -2722,12 +2925,22 @@ button:disabled {
   overflow: hidden;
 }
 
+.desktop[data-screen="accounts"] .account-detail-grid {
+  font-size: 12px;
+  grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
+}
+
 .account-detail-grid > div {
   border-bottom: 1px solid rgba(217, 208, 195, .62);
   line-height: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 5px 8px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-grid > div {
+  line-height: 15px;
+  padding: 6px 8px;
 }
 
 .account-detail-grid > div:nth-child(odd) {
@@ -2773,12 +2986,21 @@ button:disabled {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.desktop[data-screen="accounts"] .account-detail-stat-grid {
+  gap: 6px;
+}
+
 .account-detail-stat-grid > div {
   background: #f8f3ee;
   border: 1px solid rgba(217, 208, 195, .68);
   border-radius: 12px;
   min-width: 0;
   padding: 6px 8px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-stat-grid > div {
+  border-radius: 10px;
+  padding: 6px;
 }
 
 .account-detail-stat-grid span,
@@ -2842,6 +3064,11 @@ button:disabled {
   display: grid;
   gap: 8px;
   padding-top: 8px;
+}
+
+.desktop[data-screen="accounts"] .account-detail-danger {
+  gap: 6px;
+  padding-top: 7px;
 }
 
 .account-detail-disabled-action {

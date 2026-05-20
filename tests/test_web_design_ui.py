@@ -574,6 +574,8 @@ if (descendants(control).some((item) => String(item.className || "").split(/\s+/
     def test_accounts_screen_is_readonly_and_redacted(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+        accounts_markup = self._section_html(html, "accountsScreen")
 
         self.assertIn('data-screen-link="accounts"', html)
         self.assertIn('id="accountsScreen"', html)
@@ -589,6 +591,41 @@ if (descendants(control).some((item) => String(item.className || "").split(/\s+/
         self.assertIn("onboard_account", html + js)
         self.assertIn('id="accountAddAction" class="button primary accounts-only onboard-action"', html)
         self.assertIn('data-ui-action="onboard_account"', html)
+        self.assertIn("function accountTableCheckLabel", js)
+        self.assertIn("accountTableCheckLabel(account.last_success || account.cooldown_until)", js)
+        self.assertIn('.desktop[data-screen="accounts"] .accounts-filter-row', css)
+        self.assertIn('.desktop[data-screen="accounts"] .accounts-table-card', css)
+        self.assertIn('.desktop[data-screen="accounts"] .account-detail-drawer', css)
+        self.assertIn('class="search" aria-label="Поиск аккаунта"', accounts_markup)
+        self.assertIn("Только текущий accounts JSON.", accounts_markup)
+        self.assertIn("Опасные действия", accounts_markup)
+        self.assertNotIn("Danger zone", accounts_markup)
+        self.assertNotIn('type="file"', accounts_markup)
+        self.assertNotIn("showOpenFilePicker", html + js)
+        self.assertNotIn("browser-submitted", html + js)
+
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+const sandbox = { console, document: { addEventListener() {} }, window: { location: { search: "" }, history: { replaceState() {} } }, URL, URLSearchParams };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+const formatted = sandbox.accountTableCheckLabel("2026-05-08T20:56:41.885472+00:00");
+if (formatted !== "08.05, 20:56") {
+  throw new Error(`account table leaked raw timestamp: ${formatted}`);
+}
+if (sandbox.accountTableCheckLabel("") !== "—") {
+  throw new Error("account table empty check label should be dash");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_account_detail_drawer_projects_accounts_snapshot_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

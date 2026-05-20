@@ -1,0 +1,48 @@
+{
+  "pass": true,
+  "findings": [
+    {
+      "severity": "info",
+      "check": "scope_isolation",
+      "result": "pass",
+      "evidence": "git diff --name-only shows only tests/test_web_design_ui.py, wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, wild_boar_proxy/web_design_ui/styles/overview.css. No runtime/adapter/live_server/web_ui/ui_shell/canon docs are in the tracked diff."
+    },
+    {
+      "severity": "info",
+      "check": "js_change_is_presentation_only",
+      "result": "pass",
+      "evidence": "scripts/overview.js changes only swap the table cell formatter from raw last_success/cooldown_until to accountTableCheckLabel(...), plus the new formatter function. No changes to maybeConfirmAndRun, applyActionAvailability, accountActionEligibility, or run_* dispatch helpers."
+    },
+    {
+      "severity": "info",
+      "check": "css_is_accounts_scoped",
+      "result": "pass",
+      "evidence": "all new CSS selectors are prefixed with .desktop[data-screen=\"accounts\"], including .accounts-filter-row, .accounts-table-card, and .account-detail-drawer. No broad quick-start or overview selectors were added."
+    },
+    {
+      "severity": "info",
+      "check": "metrics_honesty",
+      "result": "pass",
+      "evidence": "metrics.json records screenshot_captured=false with browser_plugin_error='Timed out running CDP command \"Page.captureScreenshot\" for tab 1', while gates are all true. That is internally consistent and not a fake success."
+    },
+    {
+      "severity": "info",
+      "check": "forbidden_payloads",
+      "result": "pass",
+      "evidence": "No forbidden inputs/path/token/browser payload were introduced in the changed UI files. The new test file contains negative assertions for showOpenFilePicker and browser-submitted, but those are test-only checks, not UI payloads."
+    }
+  ],
+  "verified_commands": [
+    "git status --short --branch && git diff --name-only -- . ':(exclude)audit_results/**' ':(exclude)Security/**' ':(exclude)Security.zip'",
+    "sed -n '1,240p' audit_results/ui_web_accounts_page_operator_alignment_pass_2026-05-20/metrics.json",
+    "git diff --unified=0 -- wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css wild_boar_proxy/web_design_ui/index.html tests/test_web_design_ui.py",
+    "rg -n \"accountTableCheckLabel|accountTable|check label|checkLabel|check.*label|table check\" wild_boar_proxy/web_design_ui/scripts/overview.js tests/test_web_design_ui.py wild_boar_proxy/web_design_ui/styles/overview.css wild_boar_proxy/web_design_ui/index.html",
+    "rg -n \"path|token|browser|file_inputs|showOpenFilePicker|auth_ref|raw_command|argv|secret|input|textarea|select|contenteditable|browser-submitted\" wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js wild_boar_proxy/web_design_ui/styles/overview.css tests/test_web_design_ui.py",
+    "python3 - <<'PY'\nimport json, pathlib\np = pathlib.Path('audit_results/ui_web_accounts_page_operator_alignment_pass_2026-05-20/metrics.json')\nobj = json.loads(p.read_text())\nprint(json.dumps({\n    'screenshot_captured': obj['accounts_live']['screenshot_capture']['captured'],\n    'screenshot_error': obj['accounts_live']['screenshot_capture'].get('browser_plugin_error'),\n    'gates_true_count': sum(1 for v in obj['accounts_live']['gates'].values() if v is True),\n    'gates_false_count': sum(1 for v in obj['accounts_live']['gates'].values() if v is False),\n    'drawer_payload_only_ui_action_and_account_id': obj['accounts_live']['drawer_payload_only_ui_action_and_account_id'],\n    'forbidden_copy_present': obj['accounts_live']['forbidden_copy_present'],\n}, indent=2, ensure_ascii=False))\nPY"
+  ],
+  "residual_risks": [
+    "The screenshot capture failed in metrics, so the visual claim is supported by DOM metrics plus gate checks, not a successful screenshot artifact.",
+    "The working tree is still dirty with unrelated untracked files, including Security/, Security.zip, and many audit_results/* files, but they are outside this contour's tracked diff.",
+    "The audit did not execute the full test suite; it relied on diff inspection, string checks, and the provided metrics.json for this contour."
+  ]
+}
