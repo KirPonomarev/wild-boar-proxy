@@ -290,6 +290,11 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn(".secondary-action-tile", css)
         self.assertIn(".overview-utility-strip", css)
         self.assertIn(".compact-action-panel", css)
+        self.assertIn('.desktop[data-screen="overview"] .main-header', css)
+        self.assertIn('.desktop[data-screen="overview"] .overview-top', css)
+        self.assertIn("grid-template-columns: minmax(500px, 1fr) minmax(500px, 1fr)", css)
+        self.assertIn('.desktop[data-screen="overview"] .kpi-card', css)
+        self.assertIn("min-height: 92px", css)
         self.assertIn("events.slice(0, 2)", (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
         self.assertIn("log-empty", css + (WEB_DESIGN_UI / "scripts" / "overview.js").read_text())
 

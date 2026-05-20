@@ -1930,6 +1930,92 @@ button:disabled {
   margin-top: 22px;
 }
 
+.desktop[data-screen="overview"] .main-header {
+  margin-bottom: 16px;
+}
+
+.desktop[data-screen="overview"] h1 {
+  font-size: 34px;
+  line-height: 40px;
+}
+
+.desktop[data-screen="overview"] .subtitle {
+  font-size: 14px;
+  line-height: 22px;
+  margin-top: 7px;
+  max-width: 780px;
+}
+
+.desktop[data-screen="overview"] .header-actions {
+  gap: 10px;
+  max-width: min(100%, 620px);
+}
+
+.desktop[data-screen="overview"] .source-pill {
+  height: 34px;
+  padding-inline: 13px;
+}
+
+.desktop[data-screen="overview"] .fixture-banner {
+  border-radius: 13px;
+  font-size: 13px;
+  line-height: 18px;
+  margin-bottom: 16px;
+  min-height: 42px;
+  padding-inline: 14px;
+}
+
+.desktop[data-screen="overview"] .overview-top {
+  gap: 24px;
+  grid-template-columns: minmax(500px, 1fr) minmax(500px, 1fr);
+}
+
+.desktop[data-screen="overview"] .system-card,
+.desktop[data-screen="overview"] .mode-card {
+  padding: 20px 22px;
+}
+
+.desktop[data-screen="overview"] .system-card .kv {
+  gap: 9px 18px;
+  margin-top: 14px;
+}
+
+.desktop[data-screen="overview"] .mode-card {
+  gap: 12px;
+}
+
+.desktop[data-screen="overview"] .segmented {
+  height: 40px;
+  margin-top: 2px;
+}
+
+.desktop[data-screen="overview"] .overview-utility-strip {
+  padding-bottom: 10px;
+}
+
+.desktop[data-screen="overview"] .overview-utility-strip .button {
+  height: 28px;
+}
+
+.desktop[data-screen="overview"] .secondary-action-tile {
+  min-height: 40px;
+}
+
+.desktop[data-screen="overview"] .overview-kpis {
+  gap: 24px;
+  margin-top: 18px;
+}
+
+.desktop[data-screen="overview"] .kpi-card {
+  min-height: 92px;
+  padding: 16px 20px;
+}
+
+.desktop[data-screen="overview"] .kpi-number {
+  font-size: 30px;
+  line-height: 32px;
+}
+
 .api-connections-summary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 18px;

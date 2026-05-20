@@ -1,0 +1,87 @@
+{
+  "contour": "UI_WEB_OVERVIEW_TOP_VIEWPORT_ALIGNMENT_PASS",
+  "date": "2026-05-20",
+  "browser_metric_source": "Codex in-app browser DOM metrics",
+  "overview_live": {
+    "broken_images": [],
+    "first_kpi_card": {
+      "bottom": 565,
+      "height": 92,
+      "top": 473,
+      "width": 272
+    },
+    "first_top_card": {
+      "bottom": 454,
+      "height": 212,
+      "top": 242,
+      "width": 567
+    },
+    "fixture_banner_height": 42,
+    "no_horizontal_overflow": true,
+    "overview_top": {
+      "bottom": 455,
+      "height": 213,
+      "top": 242,
+      "width": 1158
+    },
+    "overview_top_column_count": 2,
+    "screen": "overview",
+    "scrollWidth": 1600,
+    "second_top_card": {
+      "bottom": 455,
+      "height": 213,
+      "top": 242,
+      "width": 567
+    },
+    "url": "http://127.0.0.1:8765/?screen=overview&source=live",
+    "viewport": {
+      "height": 1000,
+      "width": 1600
+    },
+    "visible_img_icons": 17,
+    "visible_svg_icons": 0
+  },
+  "quick_start_regression": {
+    "brand_caption_text": "",
+    "brand_image": {
+      "height": 180,
+      "width": 180
+    },
+    "brand_name": {
+      "font_size": "16px",
+      "line_height": "20px"
+    },
+    "broken_images": [],
+    "no_horizontal_overflow": true,
+    "screen": "quick-start",
+    "scrollWidth": 1600,
+    "url": "http://127.0.0.1:8765/?screen=quick-start&source=live",
+    "viewport": {
+      "height": 1000,
+      "width": 1600
+    },
+    "visible_svg_icons": 0
+  },
+  "screenshot_capture": {
+    "requested_files": [
+      "screenshots/overview-top-viewport.png",
+      "screenshots/quick-start-regression-check.png"
+    ],
+    "captured": false,
+    "browser_plugin_error": "Page.captureScreenshot timed out for tab 1",
+    "macos_screencapture_error": "could not create image from display",
+    "closeout_claim": "not captured; DOM viewport metrics used as evidence"
+  },
+  "gates": {
+    "overview_1600x1000_no_horizontal_overflow": true,
+    "overview_two_top_columns": true,
+    "overview_fixture_banner_compact": true,
+    "overview_kpi_height_92": true,
+    "overview_visible_svg_icons_zero": true,
+    "overview_broken_images_empty": true,
+    "quick_start_brand_caption_removed": true,
+    "quick_start_brand_logo_preserved_180": true,
+    "quick_start_brand_name_preserved_16_20": true,
+    "quick_start_no_horizontal_overflow": true
+  }
+}
