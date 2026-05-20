@@ -1,0 +1,58 @@
+{
+  "contour": "UI_WEB_SIDEBAR_BRAND_DENSITY_POLISH_PASS",
+  "date": "2026-05-20",
+  "metrics": {
+    "brand": {
+      "bottom": 257,
+      "height": 158,
+      "left": 53,
+      "right": 308,
+      "top": 99,
+      "width": 255
+    },
+    "brandImage": {
+      "bottom": 171,
+      "height": 72,
+      "left": 145,
+      "right": 217,
+      "top": 99,
+      "width": 72
+    },
+    "brandName": {
+      "bottom": 233,
+      "height": 50,
+      "left": 120,
+      "right": 241,
+      "top": 183,
+      "width": 121
+    },
+    "brandNameStyle": {
+      "fontSize": "20px",
+      "letterSpacing": "1.4px",
+      "lineHeight": "25px"
+    },
+    "brokenImages": [],
+    "nav": {
+      "bottom": 585,
+      "height": 292,
+      "left": 53,
+      "right": 308,
+      "top": 293,
+      "width": 255
+    },
+    "noHorizontalOverflow": true,
+    "url": "http://127.0.0.1:8765/?screen=quick-start&source=live",
+    "viewport": {
+      "height": 1000,
+      "width": 1600
+    },
+    "visibleSvgIcons": 0
+  },
+  "gates": {
+    "brandImageWidth72": true,
+    "brandNameHeightCompact": true,
+    "noHorizontalOverflow": true,
+    "visibleSvgIconsZero": true,
+    "brokenImagesEmpty": true
+  }
+}

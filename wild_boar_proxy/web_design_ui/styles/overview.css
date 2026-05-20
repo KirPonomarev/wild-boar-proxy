@@ -6444,18 +6444,19 @@ button:disabled {
 }
 
 .desktop[data-screen="quick-start"] .brand {
-  margin-bottom: 40px;
-  margin-top: 6px;
+  margin-bottom: 36px;
+  margin-top: 4px;
 }
 
 .desktop[data-screen="quick-start"] .brand img {
-  margin-bottom: 14px;
-  width: 86px;
+  margin-bottom: 12px;
+  width: 72px;
 }
 
 .desktop[data-screen="quick-start"] .brand .name {
-  font-size: 28px;
-  line-height: 32px;
+  font-size: 20px;
+  letter-spacing: .07em;
+  line-height: 25px;
 }
 
 .desktop[data-screen="quick-start"] .brand .caption {
