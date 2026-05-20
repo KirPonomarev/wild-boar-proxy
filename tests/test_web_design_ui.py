@@ -325,7 +325,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("secret_ref: —", section)
         self.assertIn('href="?screen=api-connections"', section)
         self.assertIn('href="?screen=accounts"', section)
-        self.assertIn('data-ui-action="onboard_account"', section)
+        self.assertIn('data-ui-action="onboard_account_dry_run"', section)
         self.assertIn('data-ui-action="api_route_check"', section)
         self.assertIn('data-route-id=""', section)
         self.assertIn("quickStartAccountsFixtureFromOverview", js)
@@ -590,7 +590,7 @@ if (descendants(control).some((item) => String(item.className || "").split(/\s+/
         self.assertIn("onboard_account_dry_run", html + js)
         self.assertIn("onboard_account", html + js)
         self.assertIn('id="accountAddAction" class="button primary accounts-only onboard-action"', html)
-        self.assertIn('data-ui-action="onboard_account"', html)
+        self.assertIn('data-ui-action="onboard_account_dry_run"', html)
         self.assertIn("function accountTableCheckLabel", js)
         self.assertIn("accountTableCheckLabel(account.last_success || account.cooldown_until)", js)
         self.assertIn('.desktop[data-screen="accounts"] .accounts-filter-row', css)
@@ -1021,7 +1021,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn('id="onboardingResultReserveChip"', html)
         self.assertIn('id="onboardingResultNextAction"', html)
         self.assertIn("Итог onboarding", html)
-        self.assertIn("Аккаунт добавлен в резерв", js)
+        self.assertIn("Аккаунт не подключён", js)
         self.assertIn('class="onboard-facts-grid"', html)
         self.assertIn('class="onboard-technical-boundaries"', html)
         self.assertIn('id="onboardingResultStatusProofChip"', html)
@@ -1031,12 +1031,12 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("account_id", js)
         self.assertIn("route_id", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
-        self.assertIn('maybeConfirmAndRun("onboard_account")', js)
+        self.assertIn('maybeConfirmAndRun("onboard_account_dry_run")', js)
         self.assertIn("Dry-run preview готов", js)
         self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
-        self.assertIn("Аккаунт будет добавлен в резервный пул", html)
+        self.assertIn("Сначала выполняется безопасный dry-run preview", html)
         self.assertIn("Web не принимает токены, файлы и локальные пути.", html)
-        self.assertIn("Аккаунт не переводится в active автоматически.", html)
+        self.assertIn("Реальное добавление в резерв остаётся следующим контуром.", html)
         self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
         self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
@@ -2416,22 +2416,23 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
         onboard_modal = self._overlay_html(html, "onboardOverlay", "confirmOverlay")
 
-        self.assertIn("<h2 id=\"onboardTitle\">Подключить аккаунт</h2>", onboard_modal)
-        self.assertIn("Аккаунт будет добавлен в резервный пул. Активная маршрутизация не изменится.", onboard_modal)
-        self.assertIn("<dt>Источник</dt><dd>server-owned onboarding</dd>", onboard_modal)
-        self.assertIn("<dt>Пул</dt><dd>Резерв</dd>", onboard_modal)
-        self.assertIn("<dt>После команды</dt><dd>Обновить accounts JSON</dd>", onboard_modal)
-        self.assertIn("<dt>Успех</dt><dd>reserve-first proof</dd>", onboard_modal)
+        self.assertIn("<h2 id=\"onboardTitle\">Проверить подключение аккаунта</h2>", onboard_modal)
+        self.assertIn("Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется.", onboard_modal)
+        self.assertIn("<dt>Источник</dt><dd>server-owned preview</dd>", onboard_modal)
+        self.assertIn("<dt>Режим</dt><dd>Dry-run</dd>", onboard_modal)
+        self.assertIn("<dt>После команды</dt><dd>Live accounts не меняются</dd>", onboard_modal)
+        self.assertIn("<dt>Результат</dt><dd>packet preview only</dd>", onboard_modal)
         self.assertIn("Web не принимает токены, файлы и локальные пути.", onboard_modal)
         self.assertIn("<details class=\"onboard-technical-boundaries\">", onboard_modal)
         self.assertNotIn("<details class=\"onboard-technical-boundaries\" open", onboard_modal)
-        self.assertIn("Команда запускается только как <span class=\"mono-value\">onboard_account</span>.", onboard_modal)
-        self.assertIn("No-new-auth не считается успехом.", onboard_modal)
+        self.assertIn("Команда запускается только как <span class=\"mono-value\">onboard_account_dry_run</span>.", onboard_modal)
+        self.assertIn("Preview не импортирует auth и не меняет registry.", onboard_modal)
+        self.assertIn("No-new-auth не считается live-успехом.", onboard_modal)
         self.assertIn("Ambiguous identity требует действия оператора.", onboard_modal)
-        self.assertIn("Аккаунт не переводится в active автоматически.", onboard_modal)
-        self.assertIn('id="runOnboardAction" class="button primary" type="button">Подключить в резерв</button>', onboard_modal)
-        self.assertIn('maybeConfirmAndRun("onboard_account")', js)
-        self.assertIn('return "Подключить в резерв";', js)
+        self.assertIn("Реальное добавление в резерв остаётся следующим контуром.", onboard_modal)
+        self.assertIn('id="runOnboardAction" class="button primary" type="button">Проверить подключение</button>', onboard_modal)
+        self.assertIn('maybeConfirmAndRun("onboard_account_dry_run")', js)
+        self.assertIn('return "Проверить подключение";', js)
 
         self.assertNotIn("onboard-stepper", onboard_modal)
         self.assertNotIn("onboard-source-card", onboard_modal)
@@ -3587,7 +3588,7 @@ desktop.dataset = { screen: "overview", source: "fixture", fixtureState: "health
 
 const onboardButton = new Node("button");
 onboardButton.className = "button primary onboard-action";
-onboardButton.dataset = { uiAction: "onboard_account" };
+onboardButton.dataset = { uiAction: "onboard_account_dry_run" };
 
 let actionsFetchCount = 0;
 const liveSnapshot = {
@@ -3664,16 +3665,16 @@ const sandbox = {
         ok: true,
         json: async () => ({
           actions: {
-            onboard_account: {
-              ui_action: "onboard_account",
-              display_name: "Подключить аккаунт",
-              human_meaning: "live onboarding",
-              action_role: "live_onboarding",
-              mutates_runtime: true,
-              affects_primary_truth: true,
-              confirmation_required: true,
-              post_action_refresh_required: true,
-              action_claim_scope: "account_registry",
+            onboard_account_dry_run: {
+              ui_action: "onboard_account_dry_run",
+              display_name: "Проверить подключение аккаунта",
+              human_meaning: "dry-run onboarding preview",
+              action_role: "account_onboarding_preview",
+              mutates_runtime: false,
+              affects_primary_truth: false,
+              confirmation_required: false,
+              post_action_refresh_required: false,
+              action_claim_scope: "preview_only",
               available: true,
               availability_state: "displayable_readonly",
               disabled_reason_code: "",

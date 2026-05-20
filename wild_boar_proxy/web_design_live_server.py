@@ -370,6 +370,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
     {
         "refresh_health_detail",
         "stable_repair_plan",
+        "onboard_account_dry_run",
         "onboard_account",
         "validate_account",
         "promote_account",
@@ -394,7 +395,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
 )
 SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS = frozenset(
     {
-        "onboard_account",
+        "onboard_account_dry_run",
         "api_route_validate",
         "api_route_check",
         "api_route_allow",
@@ -405,8 +406,8 @@ SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS = frozenset(
     }
 )
 SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE = (
-    "Sandbox action phase допускает только reserve-first onboarding и bounded API route actions. "
-    "Остальные runtime mutations и lifecycle chains остаются parked до следующих контуров."
+    "Sandbox action phase допускает только dry-run preview подключения аккаунта и bounded API route actions. "
+    "Live onboarding, runtime mutations и lifecycle chains остаются parked до следующих контуров."
 )
 SANDBOX_ACTION_PHASE_DISABLED_REASON_CODE = "UI_ACTION_PHASE_NOT_ADMITTED"
 SANDBOX_ACTION_PHASE_DISABLED_REASONS = ("sandbox_phase_limited",)

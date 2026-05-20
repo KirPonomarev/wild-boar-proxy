@@ -528,7 +528,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
         self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
-        self.assertTrue(metadata["actions"]["onboard_account_dry_run"]["available"])
+        self.assertFalse(metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertFalse(metadata["actions"]["onboard_account"]["available"])
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
@@ -553,10 +553,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(sandbox_blocked["action_phase"], SANDBOX_ACTION_PHASE)
         self.assertEqual(sandbox_blocked["sandbox_preflight"]["status"], "denied")
+        self.assertFalse(sandbox_blocked["actions"]["onboard_account_dry_run"]["available"])
+        self.assertEqual(
+            sandbox_blocked["actions"]["onboard_account_dry_run"]["disabled_reason_code"],
+            "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        )
         self.assertFalse(sandbox_blocked["actions"]["onboard_account"]["available"])
         self.assertEqual(
             sandbox_blocked["actions"]["onboard_account"]["disabled_reason_code"],
-            "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+            "UI_ACTION_PHASE_NOT_ADMITTED",
         )
         self.assertFalse(sandbox_blocked["actions"]["validate_account"]["available"])
         self.assertEqual(
@@ -564,13 +569,18 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "UI_ACTION_PHASE_NOT_ADMITTED",
         )
         self.assertIn(
-            "Sandbox action phase допускает только reserve-first onboarding",
+            "Sandbox action phase допускает только dry-run preview подключения аккаунта",
             sandbox_blocked["actions"]["validate_account"]["unavailable_reason"],
         )
 
         self.assertEqual(sandbox_metadata["sandbox_preflight"]["status"], "admitted")
-        self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
+        self.assertFalse(sandbox_metadata["actions"]["onboard_account"]["available"])
+        self.assertEqual(
+            sandbox_metadata["actions"]["onboard_account"]["availability_state"],
+            "phase_not_admitted",
+        )
         self.assertFalse(sandbox_metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
             sandbox_metadata["actions"]["validate_account"]["availability_state"],
@@ -701,7 +711,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         try:
             base_url = f"http://127.0.0.1:{server.server_port}"
             metadata = json.loads(fetch(f"{base_url}/api/actions"))
-            onboard = json.loads(post_json(f"{base_url}/api/action", {"ui_action": "onboard_account"}))
+            onboard_preview = json.loads(post_json(f"{base_url}/api/action", {"ui_action": "onboard_account_dry_run"}))
             validate = json.loads(
                 post_json(
                     f"{base_url}/api/action",
@@ -715,14 +725,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(metadata["action_phase"], SANDBOX_ACTION_PHASE)
         self.assertEqual(metadata["sandbox_preflight"]["status"], "admitted")
-        self.assertTrue(metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(metadata["actions"]["onboard_account_dry_run"]["available"])
+        self.assertFalse(metadata["actions"]["onboard_account"]["available"])
         self.assertTrue(metadata["actions"]["api_route_check"]["available"])
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
             metadata["actions"]["validate_account"]["disabled_reason_code"],
             "UI_ACTION_PHASE_NOT_ADMITTED",
         )
-        self.assertEqual(onboard["status"], "ok")
+        self.assertEqual(onboard_preview["status"], "ok")
+        self.assertEqual(onboard_preview["ui_action"], "onboard_account_dry_run")
+        self.assertTrue(onboard_preview["result"]["onboarding"]["preview_only"])
         self.assertEqual(validate["status"], "integration_failure")
         self.assertEqual(validate["result"]["machine_error_code"], "UI_ACTION_PHASE_NOT_ADMITTED")
 
@@ -738,13 +751,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
 
         self.assertEqual(metadata["sandbox_preflight"]["status"], "denied")
-        self.assertFalse(metadata["actions"]["onboard_account"]["available"])
+        self.assertFalse(metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertEqual(
-            metadata["actions"]["onboard_account"]["availability_state"],
+            metadata["actions"]["onboard_account_dry_run"]["availability_state"],
             "preflight_blocked",
         )
         self.assertEqual(
-            metadata["actions"]["onboard_account"]["disabled_reason_code"],
+            metadata["actions"]["onboard_account_dry_run"]["disabled_reason_code"],
             "UI_SANDBOX_ACTION_TARGET_UNPROVEN",
         )
 

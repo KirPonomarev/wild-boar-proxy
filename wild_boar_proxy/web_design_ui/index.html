@@ -108,7 +108,7 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
               <span>Запустить клиент</span>
             </button>
-            <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account" hidden>
+            <button id="accountAddAction" class="button primary accounts-only onboard-action" type="button" data-ui-action="onboard_account_dry_run" hidden>
               <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
               <span>Подключить аккаунт</span>
             </button>
@@ -158,7 +158,7 @@
               <div id="quickStartAccountList" class="quick-start-account-list" aria-live="polite"></div>
 
               <div class="quick-start-card-actions">
-                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account">
+                <button id="quickStartAddAccountAction" class="button primary onboard-action" type="button" data-ui-action="onboard_account_dry_run">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/user-plus.png" alt="" aria-hidden="true">
                   <span>Подключить аккаунт</span>
                 </button>
@@ -429,7 +429,7 @@
               <div>
                 <div class="eyebrow">Добавление аккаунта</div>
                 <h3 id="onboardingResultTitle">Итог onboarding</h3>
-                <p id="onboardingResultSubtitle">Отображается только из результата <span class="mono-value">onboard_account</span>; успех признаётся только при reserve-first proof и canonical refresh.</p>
+                <p id="onboardingResultSubtitle">Отображается только из результата onboarding action; live-success признаётся только при reserve-first proof и canonical refresh.</p>
               </div>
               <span id="onboardingResultModeChip" class="chip neutral"><span class="dot"></span><span>reserve-first</span></span>
             </div>
@@ -2431,14 +2431,14 @@
         <section class="confirm-modal onboard-modal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" data-modal-surface="onboard-reserve-request">
           <div class="confirm-modal-header">
             <div class="eyebrow">ДОБАВЛЕНИЕ АККАУНТА</div>
-            <h2 id="onboardTitle">Подключить аккаунт</h2>
-            <p>Аккаунт будет добавлен в резервный пул. Активная маршрутизация не изменится.</p>
+            <h2 id="onboardTitle">Проверить подключение аккаунта</h2>
+            <p>Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется.</p>
           </div>
           <dl class="onboard-facts-grid" aria-label="Краткие условия подключения">
-            <div><dt>Источник</dt><dd>server-owned onboarding</dd></div>
-            <div><dt>Пул</dt><dd>Резерв</dd></div>
-            <div><dt>После команды</dt><dd>Обновить accounts JSON</dd></div>
-            <div><dt>Успех</dt><dd>reserve-first proof</dd></div>
+            <div><dt>Источник</dt><dd>server-owned preview</dd></div>
+            <div><dt>Режим</dt><dd>Dry-run</dd></div>
+            <div><dt>После команды</dt><dd>Live accounts не меняются</dd></div>
+            <div><dt>Результат</dt><dd>packet preview only</dd></div>
           </dl>
           <p class="confirm-note onboard-note">Web не принимает токены, файлы и локальные пути.</p>
           <details class="onboard-technical-boundaries">
@@ -2448,15 +2448,16 @@
             </summary>
             <ul>
               <li>Browser не передаёт secrets, auth files или local paths.</li>
-              <li>Команда запускается только как <span class="mono-value">onboard_account</span>.</li>
-              <li>No-new-auth не считается успехом.</li>
+              <li>Команда запускается только как <span class="mono-value">onboard_account_dry_run</span>.</li>
+              <li>Preview не импортирует auth и не меняет registry.</li>
+              <li>No-new-auth не считается live-успехом.</li>
               <li>Ambiguous identity требует действия оператора.</li>
-              <li>Аккаунт не переводится в active автоматически.</li>
+              <li>Реальное добавление в резерв остаётся следующим контуром.</li>
             </ul>
           </details>
           <div class="confirm-actions">
             <button id="cancelOnboardAction" class="button" type="button">Отмена</button>
-            <button id="runOnboardAction" class="button primary" type="button">Подключить в резерв</button>
+            <button id="runOnboardAction" class="button primary" type="button">Проверить подключение</button>
           </div>
         </section>
       </div>
