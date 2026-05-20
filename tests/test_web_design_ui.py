@@ -1087,16 +1087,22 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn('data-diagnostics-mode="fixture-demo"', html)
         self.assertIn('data-fixture-only="true"', html)
         self.assertIn('data-live-state="deferred"', html)
-        self.assertIn("bounded history view", html)
+        self.assertIn("ограниченная сводка", html)
         self.assertIn('class="diagnostics-line-chart"', html)
         self.assertIn('class="telemetry-scale"', html)
         self.assertIn('class="tick failure"', html)
         self.assertIn('class="tick success"', html)
         self.assertEqual(html.count('class="tick '), 100)
-        self.assertIn("failures", html)
-        self.assertIn("stale", html)
-        self.assertIn("no data", html)
-        self.assertIn("Live-история появится только после bounded redacted JSON command surface", html)
+        self.assertIn("аккаунт Codex", html)
+        self.assertIn("Норма", html)
+        self.assertIn("Устарело", html)
+        self.assertIn("сбой", html)
+        self.assertIn("устарело", html)
+        self.assertIn("нет данных", html)
+        self.assertIn("история недоступна", html)
+        self.assertIn("записи недоступны", html)
+        self.assertIn("заблокировано", html)
+        self.assertIn("Live-история появится только после отдельного redacted JSON packet", html)
         self.assertIn("Live-записи не выводятся из журнального потока", html)
         self.assertIn("updateDiagnosticsDetailSource", js)
         self.assertIn('node.hidden = !fixtureOnly', js)
@@ -1108,9 +1114,10 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn(".diagnostics-detail-stack", css)
         self.assertIn(".diagnostics-support-meta", css)
         self.assertIn(".diagnostics-deferred-state[hidden]", css)
+        self.assertIn(".diag-detail .diagnostics-actions-card .action-note", css)
         self.assertNotIn("runtime summary", (html + js).lower())
-        self.assertIn("missing command surface", html)
-        self.assertIn("human-open deferred", html)
+        self.assertIn("нет командной поверхности", html)
+        self.assertIn("открытие журналов отложено", html)
         self.assertNotIn("Ссылка на артефакт", html)
         self.assertIn(
             'const SCREENS = ["quick-start", "overview", "accounts", "api-connections", "diagnostics", "settings", "setup", "select-client", "import-existing"]',
@@ -1131,6 +1138,12 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn("scale proof", html + js)
         diagnostics_markup = html.split('id="diagnosticsScreen"', 1)[1].split('id="settingsScreen"', 1)[0]
         self.assertEqual(diagnostics_markup.count('data-ui-action="export_diagnostics"'), 0)
+        self.assertNotIn("bounded history view", diagnostics_markup)
+        self.assertNotIn("history unavailable", diagnostics_markup)
+        self.assertNotIn("records unavailable", diagnostics_markup)
+        self.assertNotIn("missing command surface · human-open deferred", diagnostics_markup)
+        self.assertNotIn("Codex account", diagnostics_markup)
+        self.assertNotIn("Proxy process", diagnostics_markup)
         self.assertNotIn('data-ui-action="stable_repair_apply"', diagnostics_markup)
         self.assertNotIn('data-ui-action="promote_account"', diagnostics_markup)
         self.assertNotIn('data-ui-action="demote_account"', diagnostics_markup)
@@ -1191,8 +1204,8 @@ if (nodes.diagnosticsFixtureChart.hidden || nodes.diagnosticsFixtureRecords.hidd
 if (!nodes.diagnosticsHistoryDeferred.hidden || !nodes.diagnosticsRecordsDeferred.hidden) {
   throw new Error("deferred live states should be hidden in fixture source");
 }
-if (nodes.diagnosticsHistoryModeChip.lastElementChild.textContent !== "fixture/demo") {
-  throw new Error("fixture chip was not marked fixture/demo");
+if (nodes.diagnosticsHistoryModeChip.lastElementChild.textContent !== "демо") {
+  throw new Error("fixture chip was not marked demo");
 }
 
 sandbox.updateDiagnosticsDetailSource("live");
@@ -1202,7 +1215,7 @@ if (!nodes.diagnosticsFixtureChart.hidden || !nodes.diagnosticsFixtureRecords.hi
 if (nodes.diagnosticsHistoryDeferred.hidden || nodes.diagnosticsRecordsDeferred.hidden) {
   throw new Error("deferred live states should be visible in live source");
 }
-if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "deferred") {
+if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отложено") {
   throw new Error("live chip was not marked deferred");
 }
 """

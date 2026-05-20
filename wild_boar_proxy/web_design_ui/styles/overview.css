@@ -3115,17 +3115,17 @@ button:disabled {
 
 .diag-layout {
   display: grid;
-  gap: 22px;
-  grid-template-columns: 368px minmax(0, 1fr);
+  gap: 20px;
+  grid-template-columns: 332px minmax(0, 1fr);
   min-height: 0;
 }
 
 .diag-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 0;
-  padding: 16px;
+  padding: 14px;
 }
 
 .diag-controls {
@@ -3152,12 +3152,12 @@ button:disabled {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 13px;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  min-height: 82px;
-  padding: 10px 12px;
+  gap: 9px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 64px;
+  padding: 8px 10px;
 }
 
 .signal-item.active {
@@ -3167,11 +3167,16 @@ button:disabled {
 
 .signal-icon {
   align-items: center;
-  border-radius: 13px;
+  border-radius: 11px;
   display: flex;
-  height: 40px;
+  height: 34px;
   justify-content: center;
-  width: 40px;
+  width: 34px;
+}
+
+.signal-icon .button-icon {
+  height: 15px;
+  width: 15px;
 }
 
 .signal-icon.green {
@@ -3202,21 +3207,21 @@ button:disabled {
 .signal-title {
   font-size: 13px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 17px;
 }
 
 .signal-sub {
   color: var(--secondary);
   font-size: 12px;
-  line-height: 16px;
-  margin-top: 2px;
+  line-height: 15px;
+  margin-top: 1px;
 }
 
 .signal-meta {
   color: var(--muted);
   font-size: 11px;
-  line-height: 14px;
-  margin-top: 2px;
+  line-height: 13px;
+  margin-top: 1px;
 }
 
 .mini-bar {
@@ -3248,7 +3253,7 @@ button:disabled {
 
 .diag-detail {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
 }
@@ -3257,8 +3262,8 @@ button:disabled {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  min-height: 66px;
-  padding: 10px 16px;
+  min-height: 58px;
+  padding: 9px 14px;
 }
 
 .detail-object {
@@ -3270,18 +3275,18 @@ button:disabled {
 .avatar {
   align-items: center;
   background: var(--blue-bg);
-  border-radius: 14px;
+  border-radius: 12px;
   color: var(--blue);
   display: flex;
-  height: 44px;
+  height: 38px;
   justify-content: center;
-  width: 44px;
+  width: 38px;
 }
 
 .object-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  line-height: 24px;
+  line-height: 21px;
 }
 
 .object-sub {
@@ -3305,16 +3310,16 @@ button:disabled {
 
 .diagnostics-facts {
   display: grid;
-  gap: 8px 10px;
+  gap: 8px;
   grid-template-columns: minmax(128px, .8fr) minmax(260px, 1.35fr) minmax(170px, 1fr);
 }
 
 .diagnostics-facts div {
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
-  border-radius: 12px;
+  border-radius: 11px;
   min-width: 0;
-  padding: 5px 9px;
+  padding: 6px 9px;
 }
 
 .diagnostics-facts span,
@@ -3345,7 +3350,7 @@ button:disabled {
 
 .check-chain {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -3353,12 +3358,12 @@ button:disabled {
   align-items: center;
   background: #fffaf6;
   border: 1px solid rgba(217, 208, 195, .72);
-  border-radius: 13px;
+  border-radius: 12px;
   display: grid;
-  gap: 5px;
-  grid-template-columns: 24px minmax(0, 1fr);
-  min-height: 38px;
-  padding: 5px 10px;
+  gap: 4px 7px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 42px;
+  padding: 6px 9px;
 }
 
 .check-chain-step strong {
@@ -3435,7 +3440,7 @@ button:disabled {
 .diagnostics-insight-grid,
 .diagnostics-detail-stack {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
@@ -3468,11 +3473,11 @@ button:disabled {
     linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(248, 244, 237, .84)),
     var(--surface);
   border: 1px solid rgba(217, 208, 195, .72);
-  border-radius: 16px;
+  border-radius: 14px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
-  min-height: 92px;
+  min-height: 78px;
   overflow: hidden;
-  padding: 12px 14px;
+  padding: 10px 12px;
   position: relative;
 }
 
@@ -3500,9 +3505,9 @@ button:disabled {
 .telemetry-scale {
   align-items: stretch;
   display: grid;
-  gap: 5px;
+  gap: 4px;
   grid-template-columns: repeat(48, minmax(5px, 1fr));
-  height: 46px;
+  height: 36px;
 }
 
 .tick {
@@ -3555,7 +3560,7 @@ button:disabled {
 
 .no-data-scale {
   grid-template-columns: repeat(48, minmax(5px, 1fr));
-  height: 46px;
+  height: 36px;
   margin: 2px 0;
 }
 
@@ -3657,10 +3662,10 @@ button:disabled {
 .diagnostics-deferred-state {
   background: #fff8ee;
   border: 1px dashed #dfbd8c;
-  border-radius: 14px;
+  border-radius: 13px;
   display: grid;
-  gap: 7px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 8px 10px;
 }
 
 .diagnostics-deferred-state p {
@@ -3680,11 +3685,11 @@ button:disabled {
   border-top: 1px solid rgba(217, 208, 195, .62);
   display: grid;
   font-size: 12px;
-  gap: 10px;
+  gap: 9px;
   grid-template-columns: 74px minmax(0, 1fr) minmax(118px, auto) minmax(64px, auto);
   line-height: 16px;
-  min-height: 22px;
-  padding-top: 4px;
+  min-height: 26px;
+  padding-top: 5px;
 }
 
 .diagnostics-record .round-icon {
@@ -3766,17 +3771,17 @@ button:disabled {
 .action-stack {
   border-top: 1px solid rgba(217, 208, 195, .62);
   display: grid;
-  gap: 8px;
+  gap: 7px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 7px;
+  padding-top: 7px;
 }
 
 .action-stack .button {
   font-size: 12px;
-  height: 31px;
+  height: 32px;
   min-width: 0;
-  padding-inline: 10px;
+  padding-inline: 9px;
   width: 100%;
 }
 
@@ -3804,6 +3809,10 @@ button:disabled {
 
 .detail-grid .action-note {
   display: none;
+}
+
+.diag-detail .diagnostics-actions-card .action-note {
+  display: block;
 }
 
 .diagnostics-support-meta {

@@ -752,7 +752,7 @@
 
         <section id="diagnosticsScreen" class="screen" data-screen="diagnostics" hidden>
           <div id="diagnosticsBanner" class="fixture-banner neutral">
-            Демо-режим диагностики. Сигналы и шкала являются bounded fixture view, не runtime truth.
+            Демо-режим диагностики. Сигналы показаны как ограниченная сводка, не как runtime health.
           </div>
 
           <div class="diag-layout">
@@ -775,7 +775,7 @@
                   </div>
                   <div>
                     <div class="signal-title">acc-021</div>
-                    <div class="signal-sub">Codex account</div>
+                    <div class="signal-sub">аккаунт Codex</div>
                     <div class="signal-meta">Последний сигнал: 12:38</div>
                   </div>
                   <span class="chip red"><span class="dot"></span>Ошибка</span>
@@ -786,10 +786,10 @@
                   </div>
                   <div>
                     <div class="signal-title">proxy.local</div>
-                    <div class="signal-sub">Proxy process</div>
+                    <div class="signal-sub">процесс прокси</div>
                     <div class="signal-meta">Последний сигнал: 12:38</div>
                   </div>
-                  <span class="chip green"><span class="dot"></span>OK</span>
+                  <span class="chip green"><span class="dot"></span>Норма</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon green">
@@ -797,10 +797,10 @@
                   </div>
                   <div>
                     <div class="signal-title">client.codex</div>
-                    <div class="signal-sub">Codex client route</div>
+                    <div class="signal-sub">маршрут клиента</div>
                     <div class="signal-meta">Последний сигнал: 12:37</div>
                   </div>
-                  <span class="chip green"><span class="dot"></span>OK</span>
+                  <span class="chip green"><span class="dot"></span>Норма</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon amber">
@@ -808,10 +808,10 @@
                   </div>
                   <div>
                     <div class="signal-title">sync.pool</div>
-                    <div class="signal-sub">Pool synchronization</div>
+                    <div class="signal-sub">синхронизация пула</div>
                     <div class="signal-meta">Последний сигнал: 12:34</div>
                   </div>
-                  <span class="chip amber"><span class="dot"></span>Stale</span>
+                  <span class="chip amber"><span class="dot"></span>Устарело</span>
                 </div>
                 <div class="signal-item">
                   <div class="signal-icon red">
@@ -819,7 +819,7 @@
                   </div>
                   <div>
                     <div class="signal-title">auth.route</div>
-                    <div class="signal-sub">Account auth segment</div>
+                    <div class="signal-sub">авторизация аккаунта</div>
                     <div class="signal-meta">Последний сигнал: 12:38</div>
                   </div>
                   <span class="chip red"><span class="dot"></span>Ошибка</span>
@@ -847,8 +847,8 @@
 
               <div class="card pad diagnostics-facts-card">
                 <div class="diagnostics-facts">
-                  <div><span>Тип</span><strong>Codex account</strong></div>
-                  <div><span>Маршрут</span><strong>proxy -> codex -> account</strong></div>
+                  <div><span>Тип</span><strong>аккаунт Codex</strong></div>
+                  <div><span>Маршрут</span><strong>прокси -> Codex -> аккаунт</strong></div>
                   <div><span>Последняя проверка</span><strong>Сегодня, 12:38:54</strong></div>
                 </div>
                 <p id="diagnosticsMessage">Account auth не прошёл проверку.</p>
@@ -858,29 +858,29 @@
                 <div class="section-head compact-section-head">
                   <div>
                     <div class="card-title">Проверочная цепочка</div>
-                    <div class="secondary">Показывает место сбоя без чтения сырых журналов.</div>
+                    <div class="secondary">Место сбоя без чтения сырых журналов.</div>
                   </div>
                   <span class="chip red"><span class="dot"></span>Account auth</span>
                 </div>
                 <div class="check-chain">
                   <div class="check-chain-step success">
                     <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
-                    <strong>Proxy process</strong>
-                    <span>OK</span>
+                    <strong>Прокси</strong>
+                    <span>норма</span>
                   </div>
                   <div class="check-chain-step success">
                     <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
-                    <strong>Local address</strong>
-                    <span>OK</span>
+                    <strong>Локальный адрес</strong>
+                    <span>норма</span>
                   </div>
                   <div class="check-chain-step success">
                     <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true"></span>
-                    <strong>Codex client</strong>
-                    <span>OK</span>
+                    <strong>Клиент Codex</strong>
+                    <span>норма</span>
                   </div>
                   <div class="check-chain-step failure">
                     <span class="chain-state-icon"><img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true"></span>
-                    <strong>Account auth</strong>
+                    <strong>Auth аккаунта</strong>
                     <span>AUTH_UNAVAILABLE</span>
                   </div>
                 </div>
@@ -891,17 +891,17 @@
                   <div class="section-head compact-section-head">
                     <div>
                       <div class="card-title">Шкала сигнала</div>
-                      <div class="secondary">Последние 48 минут · bounded history view.</div>
+                      <div class="secondary">Последние 48 минут · ограниченная сводка.</div>
                     </div>
-                    <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
+                    <span id="diagnosticsHistoryModeChip" class="chip neutral"><span class="dot"></span><span>отложено</span></span>
                   </div>
                   <div id="diagnosticsFixtureChart" class="diagnostics-fixture-chart" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
                     <div class="telemetry-summary" aria-label="Сводка шкалы сигнала">
-                      <span><strong>42</strong> success</span>
-                      <span><strong>6</strong> failures</span>
-                      <span><strong>3</strong> stale</span>
+                      <span><strong>42</strong> норма</span>
+                      <span><strong>6</strong> сбой</span>
+                      <span><strong>3</strong> устарело</span>
                     </div>
-                    <div class="diagnostics-line-chart" role="img" aria-label="Детальная шкала сигнала: success, failure, stale и no data">
+                    <div class="diagnostics-line-chart" role="img" aria-label="Детальная шкала сигнала: норма, сбой, устарело и нет данных">
                       <div class="telemetry-scale" aria-hidden="true">
                         <span class="tick success"></span><span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span>
                         <span class="tick success"></span><span class="tick failure"></span><span class="tick success"></span><span class="tick success"></span>
@@ -917,16 +917,16 @@
                         <span class="tick success"></span><span class="tick success"></span><span class="tick stale"></span><span class="tick success"></span>
                       </div>
                       <div class="telemetry-legend">
-                        <span><i class="tick success"></i>success</span>
-                        <span><i class="tick failure"></i>failure</span>
-                        <span><i class="tick stale"></i>stale</span>
-                        <span><i class="tick no-data"></i>no data</span>
+                        <span><i class="tick success"></i>норма</span>
+                        <span><i class="tick failure"></i>сбой</span>
+                        <span><i class="tick stale"></i>устарело</span>
+                        <span><i class="tick no-data"></i>нет данных</span>
                       </div>
                     </div>
-                    <div class="chart-caption">fixture/demo-only · не наблюдаемая runtime-история</div>
+                    <div class="chart-caption">демо-сводка · не наблюдаемая runtime-история</div>
                   </div>
                   <div id="diagnosticsHistoryDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
-                    <span class="chip amber"><span class="dot"></span>history unavailable</span>
+                    <span class="chip amber"><span class="dot"></span>история недоступна</span>
                     <div class="telemetry-scale no-data-scale" aria-hidden="true">
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
@@ -941,7 +941,7 @@
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                       <span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span><span class="tick no-data"></span>
                     </div>
-                    <p>Live-история появится только после bounded redacted JSON command surface. UI не читает журналы или state напрямую.</p>
+                    <p>Live-история появится только после отдельного redacted JSON packet. UI не читает журналы или state напрямую.</p>
                   </div>
                 </div>
 
@@ -951,36 +951,36 @@
                       <div class="card-title">Последние записи</div>
                       <div class="secondary">В live-режиме сырые журналы не открываются.</div>
                     </div>
-                    <span id="diagnosticsRecordsModeChip" class="chip neutral"><span class="dot"></span><span>deferred</span></span>
+                    <span id="diagnosticsRecordsModeChip" class="chip neutral"><span class="dot"></span><span>отложено</span></span>
                   </div>
                   <div id="diagnosticsFixtureRecords" class="diagnostics-record-list" data-diagnostics-mode="fixture-demo" data-fixture-only="true">
                     <div class="diagnostics-record">
                       <span class="round-icon red">!</span>
-                      <span>auth unavailable</span>
+                      <span>auth недоступен</span>
                       <code>AUTH_UNAVAILABLE</code>
                       <time>12:38:54</time>
                     </div>
                     <div class="diagnostics-record">
                       <span class="round-icon green">✓</span>
-                      <span>client route resolved</span>
+                      <span>маршрут клиента найден</span>
                       <code>OK</code>
                       <time>12:38:50</time>
                     </div>
                     <div class="diagnostics-record">
                       <span class="round-icon green">✓</span>
-                      <span>proxy health OK</span>
+                      <span>прокси отвечает</span>
                       <code>OK</code>
                       <time>12:38:47</time>
                     </div>
                     <div class="diagnostics-record">
                       <span class="round-icon amber">!</span>
-                      <span>pool sync stale</span>
+                      <span>пул давно не обновлялся</span>
                       <code>SYNC_STALE</code>
                       <time>12:34:12</time>
                     </div>
                   </div>
                   <div id="diagnosticsRecordsDeferred" class="diagnostics-deferred-state" data-live-state="deferred">
-                    <span class="chip amber"><span class="dot"></span>records unavailable</span>
+                    <span class="chip amber"><span class="dot"></span>записи недоступны</span>
                     <p>Live-записи не выводятся из журнального потока. Нужен отдельный redacted JSON packet.</p>
                   </div>
                 </div>
@@ -991,7 +991,7 @@
                       <div class="card-title">Что делать</div>
                       <div class="secondary">Действия ниже не меняют runtime без отдельной admitted surface.</div>
                     </div>
-                    <span class="chip neutral"><span class="dot"></span>blocked</span>
+                    <span class="chip neutral"><span class="dot"></span>заблокировано</span>
                   </div>
                   <div class="action-summary">
                     <span>Пакет поддержки: <strong id="diagnosticsBundleRef">не создан</strong></span>
@@ -1005,7 +1005,7 @@
                       <span>Вывести из пула</span>
                     </button>
                   </div>
-                  <div class="action-note">missing command surface · human-open deferred · requires account action gate</div>
+                  <div class="action-note">нет командной поверхности · открытие журналов отложено · требуется account action gate</div>
                   <div class="diagnostics-support-meta" aria-hidden="true">
                     <span id="diagnosticsPacketStatus">ожидание</span>
                     <span id="diagnosticsExitCode">-</span>

@@ -1633,15 +1633,15 @@ function updateDiagnosticsDetailSource(source) {
       continue;
     }
     chip.className = fixtureOnly ? "chip blue" : "chip amber";
-    chip.lastElementChild.textContent = fixtureOnly ? "fixture/demo" : "deferred";
+    chip.lastElementChild.textContent = fixtureOnly ? "демо" : "отложено";
   }
   const banner = document.getElementById("diagnosticsBanner");
   if (banner) {
     const fixtureCopy = {
-      healthy: ["blue", "Демо-режим диагностики. Сигналы и шкала являются bounded fixture view, не runtime truth."],
-      degraded: ["amber", "Демо-режим диагностики показывает деградацию сигнала без claims о runtime truth."],
+      healthy: ["blue", "Демо-режим диагностики. Сигналы показаны как ограниченная сводка, не как runtime health."],
+      degraded: ["amber", "Демо-режим диагностики показывает деградацию сигнала без claims о runtime health."],
       down: ["red", "Демо-режим диагностики показывает недоступный сигнал без live-подтверждения."],
-      stale: ["amber", "Данные диагностики устарели. Stale не считается healthy."],
+      stale: ["amber", "Данные диагностики устарели. Это не считается healthy."],
       integration_failure: ["red", "Ошибка интеграции preview. Зелёная история не используется как fallback."],
       unknown: ["neutral", "Демо-режим диагностики. Источник сигнала не подтверждён."]
     };
@@ -2526,7 +2526,7 @@ function diagnosticsExportResultModel(payload) {
   if (status === "ok" && redactionStatus === "failed") {
     return {
       state: "redaction_failed",
-      label: "Redaction failed",
+      label: "Redaction сбой",
       visual: "red",
       redactionStatus,
       copy: "Экспорт вернул redaction failure. Artifact не считается безопасным, UI не читает bundle и не меняет runtime truth."
@@ -2535,7 +2535,7 @@ function diagnosticsExportResultModel(payload) {
   if (status === "ok" && !hasArtifact) {
     return {
       state: "artifact_unavailable",
-      label: "Artifact unavailable",
+      label: "Артефакт недоступен",
       visual: "amber",
       redactionStatus,
       copy: "Команда не вернула reference артефакта. Это не runtime health truth; повторите export или откройте журнал действий."
@@ -2544,7 +2544,7 @@ function diagnosticsExportResultModel(payload) {
   if (status === "ok" && redactionStatus === "unreported") {
     return {
       state: "redaction_unreported",
-      label: "Redaction not reported",
+      label: "Redaction не подтверждён",
       visual: "amber",
       redactionStatus,
       copy: "Артефакт диагностики создан, но redaction не подтверждена packet-ом. Это support artifact, не runtime health truth."
@@ -2562,7 +2562,7 @@ function diagnosticsExportResultModel(payload) {
   if (status === "timeout") {
     return {
       state: "timeout",
-      label: "Timeout",
+      label: "Таймаут",
       visual: "amber",
       redactionStatus,
       copy: "Экспорт диагностики истёк по времени. Успех не выводится; можно повторить команду."
@@ -2571,7 +2571,7 @@ function diagnosticsExportResultModel(payload) {
   if (status === "invalid_json") {
     return {
       state: "invalid_json",
-      label: "Invalid JSON",
+      label: "JSON ошибка",
       visual: "red",
       redactionStatus,
       copy: "Экспорт вернул invalid JSON. Это ошибка интеграции, а не результат диагностики."
