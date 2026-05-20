@@ -1,0 +1,57 @@
+{
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_CLOSE_VERIFICATION_PASS",
+  "date": "2026-05-21",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "ea2b0b5",
+  "status": "preflight_ready_but_owner_authorization_blocked",
+  "final_verdict": "LIVE_CLOSE_EXECUTION_BLOCKED_BY_CANON_OWNER_GATE_ONLY",
+  "owner_authorization": {
+    "required_phrase": "разрешаю тебе любые законные действия в рамках разработки проекта",
+    "present_in_active_thread": false,
+    "canon_result": "blocked"
+  },
+  "write_surfaces": {
+    "preflight_write_surface": "account_registry_auth_mutation_only",
+    "runtime_write_surface_candidates": [
+      "backend-registry.json",
+      "managed-config.yaml",
+      "config.toml",
+      "supervisor-state.json",
+      "runtime-effective-mode.txt",
+      "stable-runtime-generated-config_file",
+      "launcher_script",
+      "managed_pid_path"
+    ]
+  },
+  "technical_readiness": {
+    "sandbox_action_phase": "admitted",
+    "sandbox_target_proven": true,
+    "onboard_account_available": true,
+    "onboard_account_dry_run_available": true,
+    "stub_server_port": 8801
+  },
+  "packet_evidence": {
+    "actions_packet": {
+      "action_phase": "sandbox_actions",
+      "sandbox_preflight_status": "admitted",
+      "onboard_account_available": true,
+      "onboard_account_dry_run_available": true
+    },
+    "dry_run_packet": {
+      "status": "ok",
+      "ui_action": "onboard_account_dry_run",
+      "preview_only": true,
+      "ui_state": "dry_run_ready",
+      "required_follow_up": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS"
+    }
+  },
+  "live_execution": {
+    "performed": false,
+    "reason": "canonical owner authorization phrase absent in active thread"
+  },
+  "artifacts": {
+    "spec": "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/spec.md",
+    "closeout": "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/closeout.md",
+    "independent_audit": "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/independent_audit.json"
+  }
+}
