@@ -1,0 +1,62 @@
+{
+  "contour": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+  "date": "2026-05-21",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_commit": "7704627",
+  "status": "implemented_and_verified_with_stub_live_path",
+  "final_verdict": "QUICK_START_CAN_NOW_PROMOTE_FROM_PREVIEW_TO_LIVE_RESERVE_FIRST_ONBOARDING_IN_SANDBOX_PHASE",
+  "changed_files": [
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/index.html",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py"
+  ],
+  "verification": {
+    "node_check": "passed",
+    "unit_tests": {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q",
+      "result": "passed"
+    },
+    "git_diff_check": "passed",
+    "http_stub_verification": {
+      "server": "build_handler + MappingRunner(live_payloads)",
+      "action_phase": "sandbox_actions",
+      "metadata": {
+        "sandbox_preflight_status": "admitted",
+        "onboard_account_dry_run_available": true,
+        "onboard_account_available": true
+      },
+      "dry_run_packet": {
+        "status": "ok",
+        "ui_action": "onboard_account_dry_run",
+        "preview_only": true,
+        "ui_state": "dry_run_ready",
+        "required_follow_up": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS"
+      },
+      "live_packet": {
+        "status": "ok",
+        "ui_action": "onboard_account",
+        "final_outcome": "reserve_only_success",
+        "reserve_first_proven": true,
+        "selected_backend_id": "acct-new",
+        "pool_after_onboarding": "reserve",
+        "active_routing_changed": false,
+        "validate_outcome": "ok",
+        "sync_outcome": "ok"
+      }
+    }
+  },
+  "canonical_limits": {
+    "real_live_mutation_executed": false,
+    "reason": "explicit owner authorization phrase required by CANON.md was not present in the thread",
+    "rollback_truth_synthesized": false,
+    "browser_secret_inputs_added": false
+  },
+  "artifacts": {
+    "spec": "audit_results/web_safe_account_connect_live_pass_2026-05-21/spec.md",
+    "closeout": "audit_results/web_safe_account_connect_live_pass_2026-05-21/closeout.md",
+    "independent_audit": "audit_results/web_safe_account_connect_live_pass_2026-05-21/independent_audit.json",
+    "screenshots_readme": "audit_results/web_safe_account_connect_live_pass_2026-05-21/screenshots/README.md"
+  }
+}

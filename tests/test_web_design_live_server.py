@@ -561,7 +561,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(sandbox_blocked["actions"]["onboard_account"]["available"])
         self.assertEqual(
             sandbox_blocked["actions"]["onboard_account"]["disabled_reason_code"],
-            "UI_ACTION_PHASE_NOT_ADMITTED",
+            "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
         )
         self.assertFalse(sandbox_blocked["actions"]["validate_account"]["available"])
         self.assertEqual(
@@ -569,18 +569,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "UI_ACTION_PHASE_NOT_ADMITTED",
         )
         self.assertIn(
-            "Sandbox action phase допускает только dry-run preview подключения аккаунта",
+            "Sandbox action phase допускает reserve-first onboarding lane",
             sandbox_blocked["actions"]["validate_account"]["unavailable_reason"],
         )
 
         self.assertEqual(sandbox_metadata["sandbox_preflight"]["status"], "admitted")
         self.assertTrue(sandbox_metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
-        self.assertFalse(sandbox_metadata["actions"]["onboard_account"]["available"])
-        self.assertEqual(
-            sandbox_metadata["actions"]["onboard_account"]["availability_state"],
-            "phase_not_admitted",
-        )
+        self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
         self.assertFalse(sandbox_metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
             sandbox_metadata["actions"]["validate_account"]["availability_state"],
@@ -726,7 +722,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(metadata["action_phase"], SANDBOX_ACTION_PHASE)
         self.assertEqual(metadata["sandbox_preflight"]["status"], "admitted")
         self.assertTrue(metadata["actions"]["onboard_account_dry_run"]["available"])
-        self.assertFalse(metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(metadata["actions"]["onboard_account"]["available"])
         self.assertTrue(metadata["actions"]["api_route_check"]["available"])
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
@@ -764,7 +760,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
     def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
         runner = MappingRunner(live_payloads())
 
-        result = run_ui_action(runner, {"ui_action": "onboard_account"})
+        result = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account"},
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8789,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
 
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["action_role"], "account_onboarding")
@@ -836,7 +842,17 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
         )
 
-        result = run_ui_action(runner, {"ui_action": "onboard_account"})
+        result = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account"},
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8789,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
 
         self.assertEqual(result["status"], "integration_failure")
         self.assertEqual(result["action_role"], "blocked")

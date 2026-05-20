@@ -1031,12 +1031,12 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("account_id", js)
         self.assertIn("route_id", js)
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
-        self.assertIn('maybeConfirmAndRun("onboard_account_dry_run")', js)
+        self.assertIn('maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run")', js)
         self.assertIn("Dry-run preview готов", js)
         self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
         self.assertIn("Сначала выполняется безопасный dry-run preview", html)
         self.assertIn("Web не принимает токены, файлы и локальные пути.", html)
-        self.assertIn("Реальное добавление в резерв остаётся следующим контуром.", html)
+        self.assertIn("После admitted preview можно вернуться и подтвердить live connect в sandbox.", html)
         self.assertIn("терминальный вывод из lifecycle", js)
         self.assertIn("accountActionButtons", js)
         self.assertIn("Маршрут отключён. Это действие доступно только для разрешённых маршрутов.", js)
@@ -2417,22 +2417,28 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         onboard_modal = self._overlay_html(html, "onboardOverlay", "confirmOverlay")
 
         self.assertIn("<h2 id=\"onboardTitle\">Проверить подключение аккаунта</h2>", onboard_modal)
+        self.assertIn("id=\"onboardIntro\"", onboard_modal)
         self.assertIn("Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется.", onboard_modal)
-        self.assertIn("<dt>Источник</dt><dd>server-owned preview</dd>", onboard_modal)
-        self.assertIn("<dt>Режим</dt><dd>Dry-run</dd>", onboard_modal)
-        self.assertIn("<dt>После команды</dt><dd>Live accounts не меняются</dd>", onboard_modal)
-        self.assertIn("<dt>Результат</dt><dd>packet preview only</dd>", onboard_modal)
+        self.assertIn("<dt>Источник</dt><dd id=\"onboardSourceValue\">server-owned preview</dd>", onboard_modal)
+        self.assertIn("<dt>Режим</dt><dd id=\"onboardModeValue\">Dry-run</dd>", onboard_modal)
+        self.assertIn("<dt>После команды</dt><dd id=\"onboardAfterValue\">Live accounts не меняются</dd>", onboard_modal)
+        self.assertIn("<dt>Результат</dt><dd id=\"onboardResultValue\">packet preview only</dd>", onboard_modal)
         self.assertIn("Web не принимает токены, файлы и локальные пути.", onboard_modal)
         self.assertIn("<details class=\"onboard-technical-boundaries\">", onboard_modal)
         self.assertNotIn("<details class=\"onboard-technical-boundaries\" open", onboard_modal)
+        self.assertIn("id=\"onboardTechnicalCommand\"", onboard_modal)
+        self.assertIn("id=\"onboardTechnicalPreview\"", onboard_modal)
         self.assertIn("Команда запускается только как <span class=\"mono-value\">onboard_account_dry_run</span>.", onboard_modal)
         self.assertIn("Preview не импортирует auth и не меняет registry.", onboard_modal)
         self.assertIn("No-new-auth не считается live-успехом.", onboard_modal)
         self.assertIn("Ambiguous identity требует действия оператора.", onboard_modal)
-        self.assertIn("Реальное добавление в резерв остаётся следующим контуром.", onboard_modal)
+        self.assertIn("id=\"onboardTechnicalNextStep\"", onboard_modal)
+        self.assertIn("После admitted preview можно вернуться и подтвердить live connect в sandbox.", onboard_modal)
         self.assertIn('id="runOnboardAction" class="button primary" type="button">Проверить подключение</button>', onboard_modal)
-        self.assertIn('maybeConfirmAndRun("onboard_account_dry_run")', js)
+        self.assertIn("populateOnboardModal()", js)
+        self.assertIn('maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run")', js)
         self.assertIn('return "Проверить подключение";', js)
+        self.assertIn('return "Подключить в резерв";', js)
 
         self.assertNotIn("onboard-stepper", onboard_modal)
         self.assertNotIn("onboard-source-card", onboard_modal)
@@ -2995,6 +3001,287 @@ if (!elements.onboardingResultNextAction.textContent.includes("WEB_SAFE_ACCOUNT_
 }
 if (serialized.includes("Аккаунт добавлен в резерв") || serialized.includes("можно использовать")) {
   throw new Error(`dry-run preview leaked success wording: ${serialized}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_onboard_modal_switches_to_live_connect_after_admitted_preview(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.dataset = {};
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: () => false,
+      add: () => {},
+      remove: () => {},
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  focus() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionLedgerList",
+  "onboardingResultFlow",
+  "onboardingResultModeChip",
+  "onboardingResultTitle",
+  "onboardingResultSummary",
+  "onboardingResultSummaryNote",
+  "onboardingResultBanner",
+  "onboardingResultNewIds",
+  "onboardingResultSelected",
+  "onboardingResultSelectionChip",
+  "onboardingResultPoolChip",
+  "onboardingResultReserveChip",
+  "onboardingResultValidateChip",
+  "onboardingResultSyncChip",
+  "onboardingResultStatusProofChip",
+  "onboardingResultRefreshChip",
+  "onboardingResultNextAction",
+  "onboardOverlay",
+  "onboardTitle",
+  "onboardIntro",
+  "onboardSourceValue",
+  "onboardModeValue",
+  "onboardAfterValue",
+  "onboardResultValue",
+  "onboardTechnicalCommand",
+  "onboardTechnicalPreview",
+  "onboardTechnicalNextStep",
+  "runOnboardAction"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.onboardingResultModeChip.lastElementChild = { textContent: "" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url === "api/actions") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          actions: {
+            onboard_account_dry_run: {
+              ui_action: "onboard_account_dry_run",
+              display_name: "Проверить подключение аккаунта",
+              human_meaning: "dry-run onboarding preview",
+              action_role: "account_onboarding_preview",
+              mutates_runtime: false,
+              affects_primary_truth: false,
+              confirmation_required: false,
+              post_action_refresh_required: false,
+              action_claim_scope: "preview_only",
+              available: true,
+              availability_state: "displayable_readonly",
+              disabled_reason_code: "",
+              disabled_reasons: [],
+              unavailable_reason: ""
+            },
+            onboard_account: {
+              ui_action: "onboard_account",
+              display_name: "Подключить аккаунт в резерв",
+              human_meaning: "live reserve-first onboarding",
+              action_role: "account_onboarding",
+              mutates_runtime: true,
+              affects_primary_truth: true,
+              confirmation_required: true,
+              post_action_refresh_required: true,
+              action_claim_scope: "packet_plus_refresh",
+              available: true,
+              availability_state: "displayable_readonly",
+              disabled_reason_code: "",
+              disabled_reasons: [],
+              unavailable_reason: ""
+            }
+          }
+        })
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  await sandbox.loadActionMetadata();
+  sandbox.setActionPanel({
+    status: "ok",
+    ui_action: "onboard_account_dry_run",
+    action_role: "account_onboarding_preview",
+    post_action_refresh_required: false,
+    result: {
+      status: "ok",
+      machine_error_code: "OK",
+      human_message: "Dry-run preview prepared.",
+      next_action: "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+      changed_files: [],
+      onboarding: {
+        preview_only: true,
+        ui_state: "dry_run_ready",
+        final_outcome: "dry_run_preview_ready",
+        candidate_source_kind: "server_owned_only",
+        reserve_first_boundary: "required",
+        required_follow_up: "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+        blocked_reasons: []
+      }
+    }
+  });
+  sandbox.openOnboardModal();
+  if (elements.onboardTitle.textContent !== "Подключить аккаунт в резерв") {
+    throw new Error(`modal must switch to live title: ${elements.onboardTitle.textContent}`);
+  }
+  if (elements.onboardModeValue.textContent !== "Live reserve-first") {
+    throw new Error(`modal must switch to live mode: ${elements.onboardModeValue.textContent}`);
+  }
+  if (!elements.onboardTechnicalCommand.textContent.includes("onboard_account")) {
+    throw new Error(`modal must expose live command lane: ${elements.onboardTechnicalCommand.textContent}`);
+  }
+  if (elements.runOnboardAction.textContent !== "Подключить в резерв") {
+    throw new Error(`modal action must switch to live label: ${elements.runOnboardAction.textContent}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_onboarding_refresh_uses_accounts_snapshot_from_quick_start_composite_payload(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const payload = {
+  ui_action: "onboard_account",
+  result: {
+    onboarding: {
+      final_outcome: "reserve_only_success",
+      selected_backend_id: "acct-new"
+    }
+  }
+};
+const refreshed = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-new", pool: "reserve" }]
+  },
+  apiConnections: {
+    status: "ok",
+    routes: []
+  }
+};
+if (sandbox.actionRefreshSucceeded(payload, refreshed) !== true) {
+  throw new Error("composite quick-start refresh must be treated as successful for onboarding");
+}
+if (sandbox.canonicalActionRefreshState(payload, refreshed) !== "complete") {
+  throw new Error(`expected onboarding refresh complete, got ${sandbox.canonicalActionRefreshState(payload, refreshed)}`);
+}
+const mismatch = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-new", pool: "active" }]
+  },
+  apiConnections: {
+    status: "ok",
+    routes: []
+  }
+};
+if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
+  throw new Error("active pool after live onboarding must yield refresh mismatch");
 }
 """
         result = subprocess.run(

@@ -2432,13 +2432,13 @@
           <div class="confirm-modal-header">
             <div class="eyebrow">ДОБАВЛЕНИЕ АККАУНТА</div>
             <h2 id="onboardTitle">Проверить подключение аккаунта</h2>
-            <p>Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется.</p>
+            <p id="onboardIntro">Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется.</p>
           </div>
           <dl class="onboard-facts-grid" aria-label="Краткие условия подключения">
-            <div><dt>Источник</dt><dd>server-owned preview</dd></div>
-            <div><dt>Режим</dt><dd>Dry-run</dd></div>
-            <div><dt>После команды</dt><dd>Live accounts не меняются</dd></div>
-            <div><dt>Результат</dt><dd>packet preview only</dd></div>
+            <div><dt>Источник</dt><dd id="onboardSourceValue">server-owned preview</dd></div>
+            <div><dt>Режим</dt><dd id="onboardModeValue">Dry-run</dd></div>
+            <div><dt>После команды</dt><dd id="onboardAfterValue">Live accounts не меняются</dd></div>
+            <div><dt>Результат</dt><dd id="onboardResultValue">packet preview only</dd></div>
           </dl>
           <p class="confirm-note onboard-note">Web не принимает токены, файлы и локальные пути.</p>
           <details class="onboard-technical-boundaries">
@@ -2448,11 +2448,11 @@
             </summary>
             <ul>
               <li>Browser не передаёт secrets, auth files или local paths.</li>
-              <li>Команда запускается только как <span class="mono-value">onboard_account_dry_run</span>.</li>
-              <li>Preview не импортирует auth и не меняет registry.</li>
+              <li id="onboardTechnicalCommand">Команда запускается только как <span class="mono-value">onboard_account_dry_run</span>.</li>
+              <li id="onboardTechnicalPreview">Preview не импортирует auth и не меняет registry.</li>
               <li>No-new-auth не считается live-успехом.</li>
               <li>Ambiguous identity требует действия оператора.</li>
-              <li>Реальное добавление в резерв остаётся следующим контуром.</li>
+              <li id="onboardTechnicalNextStep">После admitted preview можно вернуться и подтвердить live connect в sandbox.</li>
             </ul>
           </details>
           <div class="confirm-actions">

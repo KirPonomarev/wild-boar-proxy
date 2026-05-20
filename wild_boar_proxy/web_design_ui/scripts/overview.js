@@ -445,6 +445,7 @@ let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
 let currentApiConnectionsSnapshot = null;
+let lastOnboardingActionPayload = null;
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
@@ -895,12 +896,12 @@ async function runUiAction(uiAction, extraPayload = {}) {
         : (
           currentScreen() === "api-connections"
             ? "api-connections"
-            : (currentScreen() === "settings" ? "settings" : "overview")
+            : (currentScreen() === "settings" ? "settings" : (currentScreen() === "quick-start" ? "quick-start" : "overview"))
         );
       text("actionRefreshStatus", `обновление live ${refreshTarget}`);
       const refreshed = await setLiveReadonly(false);
-      if (refreshed.status === "ok") {
-        const refreshState = apiRouteRemoveRefreshState(payload, refreshed);
+      if (actionRefreshSucceeded(payload, refreshed)) {
+        const refreshState = canonicalActionRefreshState(payload, refreshed);
         setActionPanel(payload, refreshState);
         setMiniPill(
           "onboardingResultRefreshChip",
@@ -949,6 +950,66 @@ function apiRouteRemoveRefreshState(payload, refreshed) {
     return "complete";
   }
   return apiRoutePresentInSnapshot(refreshed, payload.route_id) ? "mismatch" : "complete";
+}
+
+function accountsSnapshotFromRefreshPayload(refreshed) {
+  if (refreshed && Array.isArray(refreshed.accounts)) {
+    return refreshed;
+  }
+  if (refreshed && refreshed.accounts && Array.isArray(refreshed.accounts.accounts)) {
+    return refreshed.accounts;
+  }
+  return null;
+}
+
+function onboardingRefreshState(payload, refreshed) {
+  if (payload.ui_action !== "onboard_account") {
+    return "complete";
+  }
+  const onboarding = payload.result?.onboarding || {};
+  const finalOutcome = onboarding.final_outcome || "";
+  const successfulOutcome = ["reserve_only_success", "explicit_auth_imported_to_reserve"].includes(finalOutcome);
+  if (!successfulOutcome) {
+    return "complete";
+  }
+  const accountsSnapshot = accountsSnapshotFromRefreshPayload(refreshed);
+  const selectedBackendId = onboarding.selected_backend_id || "";
+  if (!accountsSnapshot || accountsSnapshot.status !== "ok" || !selectedBackendId) {
+    return "mismatch";
+  }
+  const account = Array.isArray(accountsSnapshot.accounts)
+    ? accountsSnapshot.accounts.find((item) => item?.id === selectedBackendId)
+    : null;
+  return account?.pool === "reserve" ? "complete" : "mismatch";
+}
+
+function actionRefreshSurfaceSnapshot(payload, refreshed) {
+  if (payload.ui_action === "onboard_account") {
+    return accountsSnapshotFromRefreshPayload(refreshed);
+  }
+  if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
+    if (refreshed && Array.isArray(refreshed.routes)) {
+      return refreshed;
+    }
+    if (refreshed && refreshed.apiConnections && Array.isArray(refreshed.apiConnections.routes)) {
+      return refreshed.apiConnections;
+    }
+  }
+  return refreshed;
+}
+
+function actionRefreshSucceeded(payload, refreshed) {
+  return actionRefreshSurfaceSnapshot(payload, refreshed)?.status === "ok";
+}
+
+function canonicalActionRefreshState(payload, refreshed) {
+  if (payload.ui_action === "api_route_remove") {
+    return apiRouteRemoveRefreshState(payload, refreshed);
+  }
+  if (payload.ui_action === "onboard_account") {
+    return onboardingRefreshState(payload, refreshed);
+  }
+  return "complete";
 }
 
 function apiRoutePresentInSnapshot(snapshot, routeId) {
@@ -1674,6 +1735,9 @@ function updateDiagnosticsDetailSource(source) {
 function setActionPanel(payload, refreshState = "none") {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
+  lastOnboardingActionPayload = ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action)
+    ? payload
+    : lastOnboardingActionPayload;
   const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
@@ -1808,7 +1872,11 @@ function onboardingResultModel(onboarding, payload = {}, refreshState = "none") 
     const blockedReasons = Array.isArray(onboarding.blocked_reasons) && onboarding.blocked_reasons.length
       ? onboarding.blocked_reasons.join(", ")
       : "none";
-    const nextStep = onboarding.required_follow_up || "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS";
+    const liveMetadata = metadataFor("onboard_account");
+    const liveReady = !denied && liveMetadata.available === true;
+    const nextStep = liveReady
+      ? "Откройте диалог ещё раз и подтвердите live connect в sandbox."
+      : (onboarding.required_follow_up || "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS");
     return {
       finalOutcome: onboarding.final_outcome || (denied ? "dry_run_preview_denied" : "dry_run_preview_ready"),
       visual: denied ? "amber" : "neutral",
@@ -1837,7 +1905,9 @@ function onboardingResultModel(onboarding, payload = {}, refreshState = "none") 
       statusProofVisual: "neutral",
       refreshState: "not required",
       refreshVisual: "neutral",
-      nextAction: `Следующий шаг: ${nextStep}. blocked_reasons=${blockedReasons}`
+      nextAction: liveReady
+        ? nextStep
+        : `Следующий шаг: ${nextStep}. blocked_reasons=${blockedReasons}`
     };
   }
   const uiState = onboarding.ui_state || "unknown_outcome";
@@ -1904,6 +1974,55 @@ function onboardingResultModel(onboarding, payload = {}, refreshState = "none") 
     refreshVisual: refreshState === "complete" ? "green" : (refreshState === "failed" ? "red" : (payload.post_action_refresh_required ? "amber" : "neutral")),
     nextAction: onboardingNextAction(uiState, finalOutcome, success, syncSkipped)
   };
+}
+
+function onboardingLiveReadyInSession() {
+  const payload = lastOnboardingActionPayload;
+  if (!payload || payload.ui_action !== "onboard_account_dry_run") {
+    return false;
+  }
+  const onboarding = payload.result?.onboarding || {};
+  if (onboarding.preview_only !== true || onboarding.ui_state === "dry_run_denied") {
+    return false;
+  }
+  return metadataFor("onboard_account").available === true;
+}
+
+function populateOnboardModal() {
+  const liveStep = onboardingLiveReadyInSession();
+  text("onboardTitle", liveStep ? "Подключить аккаунт в резерв" : "Проверить подключение аккаунта");
+  text(
+    "onboardIntro",
+    liveStep
+      ? "Preview уже admitted в текущей сессии. Следующий шаг выполнит live reserve-first connect только в sandbox."
+      : "Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется."
+  );
+  text("onboardSourceValue", liveStep ? "server-owned live lane" : "server-owned preview");
+  text("onboardModeValue", liveStep ? "Live reserve-first" : "Dry-run");
+  text("onboardAfterValue", liveStep ? "Нужен canonical accounts refresh" : "Live accounts не меняются");
+  text("onboardResultValue", liveStep ? "owner packet + refresh proof" : "packet preview only");
+  text(
+    "onboardTechnicalCommand",
+    liveStep
+      ? "Команда запускается как onboard_account только после admitted preview и sandbox preflight."
+      : "Команда запускается только как onboard_account_dry_run."
+  );
+  text(
+    "onboardTechnicalPreview",
+    liveStep
+      ? "Preview и live-result не смешиваются: success признаётся только после packet + refresh."
+      : "Preview не импортирует auth и не меняет registry."
+  );
+  text(
+    "onboardTechnicalNextStep",
+    liveStep
+      ? "Новый backend должен остаться в reserve; active routing меняться не должна."
+      : "После admitted preview можно вернуться и подтвердить live connect в sandbox."
+  );
+  const runButton = document.getElementById("runOnboardAction");
+  if (runButton) {
+    runButton.textContent = liveStep ? "Подключить в резерв" : "Проверить подключение";
+  }
 }
 
 function onboardingResultBanner(uiState, finalOutcome) {
@@ -3472,6 +3591,7 @@ async function confirmPendingAction() {
 }
 
 function openOnboardModal() {
+  populateOnboardModal();
   document.getElementById("onboardOverlay").hidden = false;
   document.getElementById("runOnboardAction").focus({ preventScroll: true });
 }
@@ -3482,7 +3602,7 @@ function closeOnboardModal() {
 
 function runOnboardFromModal() {
   closeOnboardModal();
-  maybeConfirmAndRun("onboard_account_dry_run");
+  maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run");
 }
 
 function setScreen(screen, updateUrl = false, settingsSection = null) {
