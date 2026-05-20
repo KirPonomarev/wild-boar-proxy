@@ -344,14 +344,18 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("font-size: 20px", css)
         self.assertIn("line-height: 25px", css)
         self.assertIn("align-items: start", css)
-        self.assertIn("grid-template-columns: minmax(620px, 1fr) minmax(460px, 500px)", css)
+        self.assertIn("grid-template-columns: minmax(620px, 1fr) minmax(380px, 460px)", css)
         self.assertIn("height: auto", css)
         self.assertIn("padding: var(--qs-main-padding) var(--qs-main-padding) 28px", css)
-        self.assertIn("@media (max-width: 1540px)", css)
+        self.assertIn("@media (max-width: 1511px)", css)
         self.assertIn("font-size: 34px", css)
         self.assertIn("min-height: 76px", css)
         self.assertIn("min-height: 102px", css)
         self.assertIn("white-space: nowrap", css)
+        self.assertIn("quickStartFormatCheckLabel", js)
+        self.assertIn("quickStartAccountControl", js)
+        self.assertIn(".quick-start-row-action", css)
+        self.assertIn("grid-template-columns: 36px minmax(0, 1fr) minmax(132px, 156px)", css)
         self.assertIn(".quick-start-route-hint", css)
         self.assertIn('id="quickStartCheckAllAction" class="button quick-start-only"', html)
         self.assertNotIn('id="quickStartCheckAllAction" class="button primary', html)
@@ -385,6 +389,163 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("missing_secret_ref", js)
         self.assertIn('setQuickStartChecklistChip("quickStartApiSecretChip", apiModel.state === "missing_secret_ref" ? "amber"', js)
         self.assertIn('const primary = source === "live"', js)
+
+    def test_quick_start_live_rows_format_operator_copy(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.children = [];
+    this.dataset = {};
+    this.hidden = false;
+    this.disabled = false;
+    this.className = "";
+    this.textContent = "";
+    this.title = "";
+    this.type = "";
+    this.src = "";
+    this.alt = "";
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (name) => String(this.className || "").split(/\s+/).includes(name),
+      add: (name) => {
+        if (!this.classList.contains(name)) {
+          this.className = `${this.className} ${name}`.trim();
+        }
+      }
+    };
+  }
+  append(...nodes) {
+    for (const item of nodes) {
+      if (!item) {
+        continue;
+      }
+      item.parentNode = this;
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...nodes);
+  }
+  addEventListener() {}
+  setAttribute(name, value) {
+    this[name] = value;
+  }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement(tag) { return new Node(tag); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderQuickStartAccountRows({
+  status: "ok",
+  accounts: [
+    {
+      id: "open17-plus",
+      pool: "retired",
+      pool_label: "Выведен",
+      status: "down",
+      visual_state: "red",
+      manual_hold: false,
+      last_success: "2026-05-08T20:56:41.885472+00:00",
+      last_error_summary: ""
+    },
+    {
+      id: "k-gpt-pro-2",
+      pool: "active",
+      status: "healthy",
+      visual_state: "green",
+      manual_hold: false,
+      last_success: "2026-05-11T15:20:29.052628+00:00",
+      last_error_summary: ""
+    },
+    {
+      id: "reserve",
+      pool: "reserve",
+      status: "healthy",
+      visual_state: "blue",
+      manual_hold: false,
+      last_success: "",
+      last_error_summary: ""
+    }
+  ]
+});
+
+function collectText(item) {
+  if (!item) {
+    return "";
+  }
+  return [item.textContent || "", ...item.children.map((child) => collectText(child))].join(" ");
+}
+function descendants(item) {
+  return [item, ...item.children.flatMap((child) => descendants(child))];
+}
+
+const list = node("quickStartAccountList");
+const text = collectText(list);
+if (text.includes("2026-05-08T") || text.includes("last check")) {
+  throw new Error(`quick-start leaked raw timestamp copy: ${text}`);
+}
+if (!text.includes("Выведен · проверка 08.05, 20:56")) {
+  throw new Error(`retired row was not operator formatted: ${text}`);
+}
+if (!text.includes("Активен · проверка 11.05, 15:20")) {
+  throw new Error(`active row was not operator formatted: ${text}`);
+}
+if (!text.includes("Резерв · проверки нет")) {
+  throw new Error(`reserve row did not show no-check copy: ${text}`);
+}
+const firstRow = list.children[0];
+const control = firstRow.children[2];
+if (control.tag !== "span" || !String(control.className).includes("quick-start-row-action")) {
+  throw new Error(`problem row control should be an inert action marker, got ${control.tag} ${control.className}`);
+}
+if (control["data-ui-action"] || control.dataset.action) {
+  throw new Error("quick-start check marker must not expose a command action payload");
+}
+if (descendants(control).some((item) => String(item.className || "").split(/\s+/).includes("dot"))) {
+  throw new Error("quick-start check action must not include a floating status dot");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
     def test_accounts_screen_is_readonly_and_redacted(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

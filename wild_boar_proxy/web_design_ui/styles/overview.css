@@ -6537,7 +6537,7 @@ button:disabled {
   align-items: start;
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(620px, 1fr) minmax(460px, 500px);
+  grid-template-columns: minmax(620px, 1fr) minmax(380px, 460px);
   min-height: 0;
 }
 
@@ -6636,7 +6636,7 @@ button:disabled {
   border-bottom: 1px solid rgba(217, 208, 195, .86);
   display: grid;
   gap: 12px;
-  grid-template-columns: 40px minmax(0, 1fr) 126px;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(132px, 156px);
   min-height: var(--qs-row-height);
   padding: 9px 0;
 }
@@ -6649,10 +6649,10 @@ button:disabled {
   display: inline-flex;
   font-size: 11px;
   font-weight: 700;
-  height: 36px;
+  height: 34px;
   justify-content: center;
   line-height: 14px;
-  width: 36px;
+  width: 34px;
 }
 
 .quick-start-account-index.green {
@@ -6683,6 +6683,10 @@ button:disabled {
   white-space: nowrap;
 }
 
+.quick-start-account-copy {
+  min-width: 0;
+}
+
 .quick-start-account-row strong {
   color: var(--text);
   font-size: 15px;
@@ -6698,7 +6702,31 @@ button:disabled {
 .quick-start-account-row .chip {
   justify-content: center;
   height: 28px;
-  min-width: 126px;
+  min-width: 132px;
+}
+
+.quick-start-account-row .quick-start-row-action {
+  align-items: center;
+  background: rgba(247, 232, 228, .68);
+  border: 1px solid rgba(182, 64, 44, .13);
+  border-radius: 999px;
+  color: var(--red);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  height: 30px;
+  justify-content: center;
+  line-height: 16px;
+  min-width: 132px;
+  opacity: 1;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
+.quick-start-account-row .quick-start-row-action .button-icon {
+  height: 14px;
+  width: 14px;
 }
 
 .quick-start-empty-state {
@@ -6742,7 +6770,8 @@ button:disabled {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: auto;
+  margin-top: 16px;
+  min-height: 40px;
 }
 
 .quick-start-card-actions .button {
@@ -6908,7 +6937,7 @@ button:disabled {
   line-height: 18px;
 }
 
-@media (max-width: 1540px) {
+@media (max-width: 1511px) {
   .quick-start-grid {
     grid-template-columns: minmax(0, 1fr);
   }

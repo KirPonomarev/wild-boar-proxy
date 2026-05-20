@@ -3595,18 +3595,82 @@ function quickStartAccountState(account, snapshotStatus) {
     return { key: "hold_pause", label: "Пауза", visual: "amber", order: 4 };
   }
   if (account.last_error_summary || account.visual_state === "red" || account.status === "down") {
-    return { key: "problem", label: "Проверить", visual: "red", order: 0 };
+    return { key: "problem", label: "Ошибка", visual: "red", order: 0 };
   }
   if (account.visual_state === "amber" || account.status === "degraded") {
     return { key: "stale", label: "Устарело", visual: "amber", order: 2 };
   }
   if (account.pool === "reserve") {
-    return { key: "reserve", label: "Резерв", visual: "green", order: 5 };
+    return { key: "reserve", label: "Резерв", visual: "blue", order: 5 };
   }
   if (account.status === "healthy" || account.visual_state === "green" || account.visual_state === "blue") {
     return { key: "ok", label: account.pool === "active" ? "Работает" : "Готов", visual: "green", order: 6 };
   }
   return { key: "checking", label: "Проверка", visual: "blue", order: 3 };
+}
+
+function quickStartFormatCheckLabel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "проверки нет";
+  }
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (isoMatch) {
+    return `проверка ${isoMatch[3]}.${isoMatch[2]}, ${isoMatch[4]}:${isoMatch[5]}`;
+  }
+  return `проверка ${raw}`;
+}
+
+function quickStartAccountOperatorLabel(account, state) {
+  if (account.manual_hold === true || state.key === "hold_pause") {
+    return "Пауза";
+  }
+  if (account.pool === "retired") {
+    return "Выведен";
+  }
+  if (account.pool === "reserve") {
+    return "Резерв";
+  }
+  if (account.pool === "active") {
+    return "Активен";
+  }
+  if (state.key === "problem") {
+    return "Ошибка";
+  }
+  if (state.key === "stale") {
+    return "Устарело";
+  }
+  return "Неизвестно";
+}
+
+function quickStartAccountNeedsCheck(state) {
+  return state.key === "problem" || state.key === "stale" || state.key === "checking";
+}
+
+function quickStartAccountControl(state) {
+  if (quickStartAccountNeedsCheck(state)) {
+    const action = document.createElement("span");
+    action.className = "quick-start-row-action";
+    action.title = "Точечная проверка аккаунта требует отдельного admitted action mapping.";
+    setNodeAttribute(action, "aria-disabled", "true");
+    const icon = document.createElement("img");
+    icon.className = "ui-icon button-icon";
+    icon.src = "assets/icons/phosphor/shield-check.png";
+    icon.alt = "";
+    setNodeAttribute(icon, "aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = "Проверить";
+    action.append(icon, label);
+    return action;
+  }
+  const chip = document.createElement("span");
+  chip.className = `chip quick-start-row-status ${state.visual}`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  const label = document.createElement("span");
+  label.textContent = state.label;
+  chip.append(dot, label);
+  return chip;
 }
 
 function renderQuickStartAccountRows(snapshot) {
@@ -3634,22 +3698,15 @@ function renderQuickStartAccountRows(snapshot) {
     indexNode.textContent = String(index + 1).padStart(2, "0");
 
     const copy = document.createElement("div");
+    copy.className = "quick-start-account-copy";
     const title = document.createElement("strong");
     title.textContent = item.account.id || "unknown-account";
     const meta = document.createElement("span");
-    const pool = item.account.pool_label || poolLabel(item.account.pool);
-    const check = item.account.last_success || item.account.cooldown_until || "нет данных";
-    meta.textContent = `${pool} · last check ${check}`;
+    const operatorLabel = quickStartAccountOperatorLabel(item.account, item.state);
+    meta.textContent = `${operatorLabel} · ${quickStartFormatCheckLabel(item.account.last_success)}`;
     copy.append(title, meta);
 
-    const chip = document.createElement("span");
-    chip.className = `chip ${item.state.visual}`;
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    const label = document.createElement("span");
-    label.textContent = item.state.label;
-    chip.append(dot, label);
-    row.append(indexNode, copy, chip);
+    row.append(indexNode, copy, quickStartAccountControl(item.state));
     list.append(row);
   });
 
