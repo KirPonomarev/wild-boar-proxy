@@ -664,33 +664,33 @@
 
         <section id="apiConnectionsScreen" class="screen" data-screen="api-connections" data-api-connections-mode="readonly-registry" hidden>
           <div id="apiConnectionsBanner" class="fixture-banner neutral">
-            Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.
+            Демо-режим. Маршруты показаны как ограниченная сводка, не как runtime config truth.
           </div>
 
           <div class="grid api-connections-summary" aria-label="Сводка API-подключений">
             <section class="card kpi-card blue">
-              <div class="kpi-head">Маршрутов</div>
+              <div class="kpi-head">В списке</div>
               <div>
-                <div class="kpi-line"><span id="apiConnectionsRoutesCount" class="kpi-number">0</span><span class="kpi-note">в списке</span></div>
+                <div class="kpi-line"><span id="apiConnectionsRoutesCount" class="kpi-number">0</span><span class="kpi-note">маршрутов</span></div>
                 <div id="apiConnectionsRoutesNote" class="kpi-note">демо</div>
               </div>
             </section>
             <section class="card kpi-card">
-              <div class="kpi-head">Registry enabled</div>
+              <div class="kpi-head">Разрешены</div>
               <div>
-                <div class="kpi-line"><span id="apiConnectionsEnabledCount" class="kpi-number">0</span><span class="kpi-note">registry</span></div>
+                <div class="kpi-line"><span id="apiConnectionsEnabledCount" class="kpi-number">0</span><span class="kpi-note">готовы</span></div>
                 <div id="apiConnectionsEnabledNote" class="kpi-note">демо</div>
               </div>
             </section>
             <section class="card kpi-card amber">
-              <div class="kpi-head">Требуют внимания</div>
+              <div class="kpi-head">Внимание</div>
               <div>
-                <div class="kpi-line"><span id="apiConnectionsAttentionCount" class="kpi-number">0</span><span class="kpi-note">маршрутов</span></div>
+                <div class="kpi-line"><span id="apiConnectionsAttentionCount" class="kpi-number">0</span><span class="kpi-note">проверить</span></div>
                 <div id="apiConnectionsAttentionNote" class="kpi-note">демо</div>
               </div>
             </section>
             <section class="card kpi-card">
-              <div class="kpi-head">Последняя проверка</div>
+              <div class="kpi-head">Проверка</div>
               <div>
                 <div class="kpi-line"><span id="apiConnectionsLatestCheck" class="kpi-number api-kpi-copy">-</span></div>
                 <div id="apiConnectionsLatestCheckNote" class="kpi-note">нет отдельной проверки маршрута</div>
@@ -708,24 +708,24 @@
             </div>
             <table class="table api-connections-table">
               <colgroup>
-                <col style="width:204px">
-                <col style="width:92px">
                 <col style="width:190px">
-                <col style="width:118px">
-                <col style="width:126px">
-                <col style="width:168px">
-                <col style="width:128px">
-                <col style="width:72px">
+                <col style="width:86px">
+                <col style="width:156px">
+                <col style="width:108px">
+                <col style="width:116px">
+                <col style="width:142px">
+                <col style="width:104px">
+                <col style="width:54px">
               </colgroup>
               <thead>
                 <tr>
                   <th>Маршрут</th>
                   <th>Провайдер</th>
                   <th>Модель</th>
-                  <th>Registry</th>
-                  <th>Validation</th>
-                  <th>Secret ref</th>
-                  <th class="right">Last check</th>
+                  <th>Состояние</th>
+                  <th>Проверка</th>
+                  <th>Секрет</th>
+                  <th class="right">Проверено</th>
                   <th>Действия</th>
                 </tr>
               </thead>
@@ -733,7 +733,7 @@
             </table>
             <div class="pagination">
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
-              <span>remove: disabled only · create/update deferred</span>
+              <span>удаление только для disabled route · создание и изменение отложены</span>
             </div>
           </section>
 
@@ -742,11 +742,11 @@
               <img class="ui-icon button-icon" src="assets/icons/phosphor/git-branch.png" alt="" aria-hidden="true">
             </div>
             <div>
-              <div class="card-title">Создание маршрута</div>
-              <div class="secondary">Требуется server-side bounded route builder.</div>
+              <div class="card-title">Новый маршрут</div>
+              <div class="secondary">Создание и изменение маршрутов только через отдельный server-side builder.</div>
             </div>
-            <span class="chip amber"><span class="dot"></span>deferred</span>
-            <button class="button small disabled" type="button" disabled title="Route builder needs a separate admitted command surface.">Черновик маршрута · missing surface</button>
+            <span class="chip amber"><span class="dot"></span>отложено</span>
+            <button class="button small disabled" type="button" disabled title="Route builder needs a separate admitted command surface.">Черновик недоступен</button>
           </section>
         </section>
 

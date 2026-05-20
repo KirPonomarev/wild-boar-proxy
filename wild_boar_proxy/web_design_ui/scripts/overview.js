@@ -4347,27 +4347,27 @@ function renderApiConnectionsSnapshot(snapshot) {
   banner.textContent = source === "live"
     ? (
       safeSnapshot.status === "ok"
-        ? "Live-readonly маршрутов. Удаление доступно только для disabled route после server preflight."
+        ? "Live-readonly маршрутов. Действия остаются server-owned и не утверждают runtime готовность."
         : "Live-readonly маршруты недоступны. Предыдущие данные не используются."
     )
-    : "Демо-режим. Маршруты показаны как bounded fixture view, не runtime config truth.";
+    : "Демо-режим. Маршруты показаны как ограниченная сводка, не как runtime config truth.";
 
   const summary = safeSnapshot.summary;
   const noData = source === "live" && safeSnapshot.status !== "ok";
-  const latestCheck = summary.latest_check || "Нет данных";
+  const latestCheck = routeTableCheckLabel(summary.latest_check);
   text("apiConnectionsRoutesCount", noData ? "—" : summary.routes_count);
   text("apiConnectionsEnabledCount", noData ? "—" : summary.enabled_count);
   text("apiConnectionsAttentionCount", noData ? "—" : summary.attention_count);
   text("apiConnectionsLatestCheck", noData ? "—" : latestCheck);
-  text("apiConnectionsRoutesNote", noData ? "нет данных" : (source === "live" ? "из пакета команд" : "bounded fixture"));
-  text("apiConnectionsEnabledNote", noData ? "нет данных" : "только registry state");
-  text("apiConnectionsAttentionNote", noData ? "нет данных" : "missing/invalid/disabled");
-  text("apiConnectionsLatestCheckNote", noData ? "нет данных" : (latestCheck === "Нет данных" ? "проверка маршрута ещё не запускалась" : "время последней проверки"));
+  text("apiConnectionsRoutesNote", noData ? "нет данных" : (source === "live" ? "из пакета команд" : "демо-сводка"));
+  text("apiConnectionsEnabledNote", noData ? "нет данных" : "registry state");
+  text("apiConnectionsAttentionNote", noData ? "нет данных" : "нет секрета / disabled");
+  text("apiConnectionsLatestCheckNote", noData ? "нет данных" : (latestCheck === "—" ? "проверка маршрута ещё не запускалась" : "последняя проверка"));
   text(
     "apiConnectionsRegistryStatus",
     noData
       ? `Недоступно · ${summary.machine_error_code}`
-      : `Контур: ${safeSnapshot.adapter.foundation_phase} · models source: ${safeSnapshot.adapter.models_source}`
+      : `Источник: ${safeSnapshot.adapter.foundation_phase} · модели: ${safeSnapshot.adapter.models_source}`
   );
   text("apiConnectionsVisibleCount", noData ? "Нет данных" : `Показано ${safeSnapshot.routes.length} из ${summary.routes_count}`);
   text("apiConnectionsPagination", noData ? "Нет данных для таблицы" : `Строки ${safeSnapshot.routes.length ? 1 : 0}-${safeSnapshot.routes.length} из ${summary.routes_count}`);
@@ -4389,7 +4389,7 @@ function renderApiConnectionRows(routes) {
     const cell = document.createElement("td");
     cell.colSpan = 8;
     cell.className = "dash";
-    cell.textContent = "Маршруты недоступны. Создание и изменение маршрутов остаются deferred до отдельного server-side builder.";
+    cell.textContent = "Маршруты недоступны. Создание и изменение маршрутов остаются отложены до отдельного server-side builder.";
     row.append(cell);
     body.append(row);
     return;
@@ -4403,7 +4403,7 @@ function renderApiConnectionRows(routes) {
       td("", routeStatusChip(route)),
       td("", routeValidationChip(route)),
       td("", routeSecretRef(route)),
-      td("right mono-value", route.last_checked || "—"),
+      td("right mono-value", routeTableCheckLabel(route.last_checked)),
       td("", routeActionButtons(route))
     );
     body.append(row);
@@ -4438,6 +4438,19 @@ function routeSubtitle(route) {
   return parts.filter(Boolean).join(" · ") || "registry entry";
 }
 
+function routeStatusLabel(route) {
+  const raw = String(route.status_label || route.status_code || "").trim().toLowerCase();
+  const labels = {
+    enabled: "разрешён",
+    disabled: "отключён",
+    missing_secret: "нет секрета",
+    "missing secret": "нет секрета",
+    stale: "устарел",
+    ok: "ok"
+  };
+  return labels[raw] || route.status_label || "нет данных";
+}
+
 function routeStatusChip(route) {
   const chip = document.createElement("span");
   const visual = ACCOUNT_VISUAL_CLASS[route.visual_state] || "neutral";
@@ -4445,9 +4458,22 @@ function routeStatusChip(route) {
   const dot = document.createElement("span");
   dot.className = "dot";
   const label = document.createElement("span");
-  label.textContent = route.status_label || "Нет данных";
+  label.textContent = routeStatusLabel(route);
   chip.append(dot, label);
   return chip;
+}
+
+function routeValidationLabel(route) {
+  const raw = String(route.validation_label || route.validation_status_label || "").trim().toLowerCase();
+  const fallback = route.status_code === "missing_secret" ? "blocked by secret" : "not checked";
+  const labels = {
+    "not checked": "не проверялся",
+    "blocked by secret": "нет секрета",
+    pending: "ожидает",
+    stale: "устарело",
+    ok: "ok"
+  };
+  return labels[raw] || labels[fallback] || route.validation_label || "не проверялся";
 }
 
 function routeValidationChip(route) {
@@ -4458,9 +4484,19 @@ function routeValidationChip(route) {
   const dot = document.createElement("span");
   dot.className = "dot";
   const label = document.createElement("span");
-  label.textContent = route.validation_label || route.validation_status_label || (route.status_code === "missing_secret" ? "blocked by secret" : "not checked");
+  label.textContent = routeValidationLabel(route);
   chip.append(dot, label);
   return chip;
+}
+
+function routeSecretStatusLabel(route) {
+  const raw = String(route.secret_status_label || "").trim().toLowerCase();
+  const labels = {
+    available: "есть",
+    missing: "нет",
+    unknown: "неизвестно"
+  };
+  return labels[raw] || route.secret_status_label || "неизвестно";
 }
 
 function routeSecretRef(route) {
@@ -4469,13 +4505,14 @@ function routeSecretRef(route) {
   const ref = document.createElement("div");
   ref.className = "mono-value";
   ref.textContent = route.secret_ref || "unknown";
+  ref.title = route.secret_ref || "unknown";
   const chip = document.createElement("span");
   const visual = ACCOUNT_VISUAL_CLASS[route.secret_visual_state] || "neutral";
   chip.className = `chip ${visual}`;
   const dot = document.createElement("span");
   dot.className = "dot";
   const label = document.createElement("span");
-  label.textContent = route.secret_status_label || "unknown";
+  label.textContent = routeSecretStatusLabel(route);
   chip.append(dot, label);
   wrap.append(ref, chip);
   return wrap;
@@ -4631,6 +4668,10 @@ function accountTableCheckLabel(value) {
     return `${isoMatch[3]}.${isoMatch[2]}, ${isoMatch[4]}:${isoMatch[5]}`;
   }
   return raw;
+}
+
+function routeTableCheckLabel(value) {
+  return accountTableCheckLabel(value);
 }
 
 function isInteractiveAccountRowTarget(target) {
