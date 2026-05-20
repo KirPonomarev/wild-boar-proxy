@@ -3736,6 +3736,180 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
         )
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
+    def test_live_source_pill_switches_to_sandbox_when_action_phase_is_admitted(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tagName = tag.toUpperCase();
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.value = "";
+    this.dataset = {};
+    this.children = [];
+    this.attributes = {};
+    this.style = {};
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      contains: (token) => this.className.split(/\s+/).filter(Boolean).includes(token),
+      add: () => {},
+      remove: () => {},
+      toggle: () => {}
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  querySelector() {
+    return new Node();
+  }
+  querySelectorAll() {
+    return [];
+  }
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
+}
+
+const ids = [
+  "refreshFixture",
+  "sourcePicker",
+  "statePicker",
+  "brandCaption",
+  "sourceFooter",
+  "subtitleText",
+  "sourcePill",
+  "runtimeChip",
+  "desiredMode",
+  "effectiveMode",
+  "endpoint",
+  "lastError",
+  "activeCount",
+  "reserveCount",
+  "holdCount",
+  "problemCount",
+  "activeNote",
+  "reserveNote",
+  "holdNote",
+  "problemNote",
+  "fixtureBanner",
+  "sidebarDot",
+  "sidebarStatus"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.refreshFixture.lastElementChild = { textContent: "" };
+elements.runtimeChip.lastElementChild = { textContent: "" };
+elements.sourcePill.lastElementChild = { textContent: "" };
+elements.sourcePicker.value = "live";
+elements.statePicker.value = "healthy";
+const desktop = new Node("div");
+desktop.dataset = { screen: "quick-start", source: "fixture", fixtureState: "healthy", settingsSection: "hub" };
+
+const sandbox = {
+  console,
+  Node,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelector(selector) {
+      if (selector === ".desktop") {
+        return desktop;
+      }
+      return null;
+    },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "?screen=quick-start&source=live", href: "http://127.0.0.1/?screen=quick-start&source=live" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url === "api/actions") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          action_phase: "sandbox_actions",
+          sandbox_preflight: {
+            status: "admitted",
+            machine_error_code: "OK",
+            reason: "sandbox proven",
+            separate_profile: true,
+            separate_data_dir: true,
+            separate_port: true,
+            current_session_untouched: true,
+            sandbox_target_proven: true
+          },
+          actions: {}
+        })
+      });
+    }
+    if (url === "api/accounts-readonly") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ status: "ok", source: "accounts_readonly", summary: { human_message: "" }, accounts: [], schema_version: 1, primary_truth_ok: true, registry_identity: { status: "ok", machine_error_code: "OK", next_action: "none" }, pool_summary: { total: 0, active: 0, reserve: 0, hold: 0, problem: 0 }, warnings: [] })
+      });
+    }
+    if (url === "api/api-connections-readonly") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ status: "ok", source: "api_connections_readonly", summary: { human_message: "" }, routes: [], schema_version: 1, primary_truth_ok: true, warnings: [] })
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  await sandbox.setLiveReadonly(false);
+  if (elements.sourcePill.textContent !== "Sandbox") {
+    throw new Error(`source pill must show Sandbox, got ${elements.sourcePill.textContent}`);
+  }
+  if (!elements.sourceFooter.textContent.includes("sandbox phase")) {
+    throw new Error(`source footer must mention sandbox phase, got ${elements.sourceFooter.textContent}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_diagnostics_export_result_renders_safe_artifact_metadata(self) -> None:
         script = r"""
 const fs = require("fs");

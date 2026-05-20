@@ -23,6 +23,7 @@ from wild_boar_proxy.web_design_live_server import (
     LIVE_READONLY_ACTION_DISABLED_REASONS,
     PARKED_IN_LIVE_READONLY_ACTIONS,
     READONLY_COMMAND_IDS,
+    SANDBOX_ACTION_PHASE,
     LaunchCopyContract,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
@@ -499,6 +500,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
     def test_ui_action_metadata_hides_adapter_commands_and_marks_confirmed_actions(self) -> None:
         metadata = ui_action_metadata()
+        sandbox_blocked = ui_action_metadata(action_phase=SANDBOX_ACTION_PHASE)
+        sandbox_metadata = ui_action_metadata(
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
         full_metadata = ui_action_metadata(action_phase=FULL_ACTION_PHASE)
         bounded_metadata = ui_action_metadata(
             launch_client_path=TEST_LAUNCH_CLIENT_PATH,
@@ -544,6 +550,37 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+
+        self.assertEqual(sandbox_blocked["action_phase"], SANDBOX_ACTION_PHASE)
+        self.assertEqual(sandbox_blocked["sandbox_preflight"]["status"], "denied")
+        self.assertFalse(sandbox_blocked["actions"]["onboard_account"]["available"])
+        self.assertEqual(
+            sandbox_blocked["actions"]["onboard_account"]["disabled_reason_code"],
+            "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED",
+        )
+        self.assertFalse(sandbox_blocked["actions"]["validate_account"]["available"])
+        self.assertEqual(
+            sandbox_blocked["actions"]["validate_account"]["disabled_reason_code"],
+            "UI_ACTION_PHASE_NOT_ADMITTED",
+        )
+        self.assertIn(
+            "Sandbox action phase допускает только reserve-first onboarding",
+            sandbox_blocked["actions"]["validate_account"]["unavailable_reason"],
+        )
+
+        self.assertEqual(sandbox_metadata["sandbox_preflight"]["status"], "admitted")
+        self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
+        self.assertFalse(sandbox_metadata["actions"]["validate_account"]["available"])
+        self.assertEqual(
+            sandbox_metadata["actions"]["validate_account"]["availability_state"],
+            "phase_not_admitted",
+        )
+        self.assertFalse(sandbox_metadata["actions"]["launch_client_dispatch"]["available"])
+        self.assertEqual(
+            sandbox_metadata["actions"]["launch_client_dispatch"]["disabled_reason_code"],
+            "UI_ACTION_PHASE_NOT_ADMITTED",
+        )
 
         self.assertTrue(full_metadata["actions"]["sync_runtime"]["available"])
         self.assertTrue(full_metadata["actions"]["refresh_health_detail"]["available"])
@@ -648,6 +685,68 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(validate["status"], "integration_failure")
         self.assertEqual(validate["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
         self.assertEqual(runner.calls, [])
+
+    def test_http_actions_endpoint_reports_sandbox_phase_and_opens_only_admitted_actions(self) -> None:
+        runner = MappingRunner(live_payloads())
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(
+                runner=runner,
+                launch_copy_contract=launch_copy_contract(),
+                action_phase=SANDBOX_ACTION_PHASE,
+            ),
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            metadata = json.loads(fetch(f"{base_url}/api/actions"))
+            onboard = json.loads(post_json(f"{base_url}/api/action", {"ui_action": "onboard_account"}))
+            validate = json.loads(
+                post_json(
+                    f"{base_url}/api/action",
+                    {"ui_action": "validate_account", "account_id": "acct-active"},
+                )
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(metadata["action_phase"], SANDBOX_ACTION_PHASE)
+        self.assertEqual(metadata["sandbox_preflight"]["status"], "admitted")
+        self.assertTrue(metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(metadata["actions"]["api_route_check"]["available"])
+        self.assertFalse(metadata["actions"]["validate_account"]["available"])
+        self.assertEqual(
+            metadata["actions"]["validate_account"]["disabled_reason_code"],
+            "UI_ACTION_PHASE_NOT_ADMITTED",
+        )
+        self.assertEqual(onboard["status"], "ok")
+        self.assertEqual(validate["status"], "integration_failure")
+        self.assertEqual(validate["result"]["machine_error_code"], "UI_ACTION_PHASE_NOT_ADMITTED")
+
+    def test_sandbox_phase_keeps_actions_disabled_when_target_is_unproven(self) -> None:
+        metadata = ui_action_metadata(
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8788,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(metadata["sandbox_preflight"]["status"], "denied")
+        self.assertFalse(metadata["actions"]["onboard_account"]["available"])
+        self.assertEqual(
+            metadata["actions"]["onboard_account"]["availability_state"],
+            "preflight_blocked",
+        )
+        self.assertEqual(
+            metadata["actions"]["onboard_account"]["disabled_reason_code"],
+            "UI_SANDBOX_ACTION_TARGET_UNPROVEN",
+        )
 
     def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
         runner = MappingRunner(live_payloads())

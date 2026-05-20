@@ -439,6 +439,8 @@ const CONSERVATIVE_CONFIRMATION_POLICY = {
 };
 
 let actionMetadata = {};
+let actionPhase = "live_readonly";
+let sandboxActionPreflight = null;
 let pendingConfirmedAction = null;
 let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
@@ -674,8 +676,12 @@ async function loadActionMetadata() {
     }
     const payload = await response.json();
     actionMetadata = payload.actions || {};
+    actionPhase = payload.action_phase || "live_readonly";
+    sandboxActionPreflight = payload.sandbox_preflight || null;
   } catch (error) {
     actionMetadata = {};
+    actionPhase = "live_readonly";
+    sandboxActionPreflight = null;
   }
 }
 
@@ -1190,8 +1196,18 @@ function setSourceCopy(source) {
     "select-client": "Выберите локальный клиент Codex из безопасно предоставленных кандидатов.",
     "import-existing": "Перенесите найденную конфигурацию без изменения рабочих файлов Codex."
   };
+  const sandboxActive = (
+    source === "live"
+    && actionPhase === "sandbox_actions"
+    && sandboxActionPreflight
+    && sandboxActionPreflight.status === "admitted"
+  );
   const sourceFooter = source === "live"
-    ? (footerByScreen[screen] || (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение"))
+    ? (
+      sandboxActive
+        ? `${footerByScreen[screen] || (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение")} · sandbox phase`
+        : (footerByScreen[screen] || (setupLike ? "Экраны настройки · отложенный каркас" : "Состояние · live только чтение"))
+    )
     : "Предпросмотр UI · без live-команд";
   const subtitle = subtitleByScreen[screen] || (
     source === "live"
@@ -1199,10 +1215,12 @@ function setSourceCopy(source) {
       : "Операторская сводка: фактическое состояние, режим работы, пул аккаунтов и последние события."
   );
   document.getElementById("sourceFooter").textContent = sourceFooter;
-  document.getElementById("subtitleText").textContent = subtitle;
+  document.getElementById("subtitleText").textContent = sandboxActive
+    ? `${subtitle} Данные остаются live-readonly, а admitted actions открыты через sandbox phase.`
+    : subtitle;
   const sourcePill = document.getElementById("sourcePill");
   if (sourcePill) {
-    sourcePill.textContent = source === "live" ? "Live" : "Demo";
+    sourcePill.textContent = sandboxActive ? "Sandbox" : (source === "live" ? "Live" : "Demo");
     sourcePill.className = source === "live" ? "source-pill live" : "source-pill";
   }
   updateDiagnosticsDetailSource(source);

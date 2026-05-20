@@ -41,6 +41,8 @@ LAUNCH_COPY_PREFLIGHT_REQUIRED_CODE = "UI_LAUNCH_COPY_PREFLIGHT_REQUIRED"
 LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE = "UI_LAUNCH_COPY_ISOLATION_UNPROVEN"
 ACCOUNT_CONNECT_PREFLIGHT_REQUIRED_CODE = "UI_ACCOUNT_CONNECT_PREFLIGHT_REQUIRED"
 ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE = "UI_ACCOUNT_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN"
+SANDBOX_ACTION_PREFLIGHT_REQUIRED_CODE = "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED"
+SANDBOX_ACTION_PREFLIGHT_UNSAFE_CODE = "UI_SANDBOX_ACTION_TARGET_UNPROVEN"
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
 API_CONNECTIONS_READONLY_COMMAND_IDS = (
     "external_models_status",
@@ -346,6 +348,7 @@ UI_ACTION_ALLOWLIST = {
 }
 
 LIVE_READONLY_ACTION_PHASE = "live_readonly"
+SANDBOX_ACTION_PHASE = "sandbox_actions"
 FULL_ACTION_PHASE = "full"
 LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE = (
     "Текущее live-readonly окно не допускает action dispatch. "
@@ -389,6 +392,24 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "export_diagnostics",
     }
 )
+SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS = frozenset(
+    {
+        "onboard_account",
+        "api_route_validate",
+        "api_route_check",
+        "api_route_allow",
+        "api_route_disable",
+        "api_route_remove",
+        "api_route_profile",
+        "api_route_evidence_capture",
+    }
+)
+SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE = (
+    "Sandbox action phase допускает только reserve-first onboarding и bounded API route actions. "
+    "Остальные runtime mutations и lifecycle chains остаются parked до следующих контуров."
+)
+SANDBOX_ACTION_PHASE_DISABLED_REASON_CODE = "UI_ACTION_PHASE_NOT_ADMITTED"
+SANDBOX_ACTION_PHASE_DISABLED_REASONS = ("sandbox_phase_limited",)
 
 
 @dataclass(frozen=True)
@@ -490,6 +511,60 @@ def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any
         "separate_port": True,
         "process_confirmation_possible": True,
         "current_session_untouched": True,
+    }
+
+
+def _current_runtime_target_paths() -> tuple[Path, Path]:
+    default_profile = "~/" + ".co" + "dex-custom-cli"
+    profile_dir = Path(os.environ.get("WBP_PROFILE_DIR", default_profile)).expanduser()
+    data_dir = Path(os.environ.get("WBP_MANAGED_DIR", str(profile_dir / "managed"))).expanduser()
+    return profile_dir, data_dir
+
+
+def _sandbox_action_preflight(contract: LaunchCopyContract | None) -> dict[str, Any]:
+    if contract is None:
+        return {
+            "status": "denied",
+            "machine_error_code": SANDBOX_ACTION_PREFLIGHT_REQUIRED_CODE,
+            "reason": "Sandbox action contract не предоставлен.",
+            "separate_profile": False,
+            "separate_data_dir": False,
+            "separate_port": False,
+            "current_session_untouched": False,
+            "sandbox_target_proven": False,
+        }
+
+    profile_dir = Path(contract.profile_dir).expanduser() if contract.profile_dir else None
+    data_dir = Path(contract.data_dir).expanduser() if contract.data_dir else None
+    current_profile_dir, current_data_dir = _current_runtime_target_paths()
+    separate_profile = bool(profile_dir and profile_dir.is_absolute() and profile_dir != current_profile_dir)
+    separate_data_dir = bool(data_dir and data_dir.is_absolute() and data_dir != current_data_dir)
+    separate_port = isinstance(contract.copy_port, int) and contract.copy_port > 0
+    if separate_port and contract.action_server_port:
+        separate_port = contract.copy_port != contract.action_server_port
+    if not separate_profile or not separate_data_dir or not separate_port:
+        return {
+            "status": "denied",
+            "machine_error_code": SANDBOX_ACTION_PREFLIGHT_UNSAFE_CODE,
+            "reason": (
+                "Sandbox action phase требует отдельные absolute profile/data каталоги и отдельный port; "
+                "рабочий Codex не должен совпадать с target."
+            ),
+            "separate_profile": separate_profile,
+            "separate_data_dir": separate_data_dir,
+            "separate_port": separate_port,
+            "current_session_untouched": False,
+            "sandbox_target_proven": False,
+        }
+    return {
+        "status": "admitted",
+        "machine_error_code": "OK",
+        "reason": "Sandbox action target доказан: profile/data каталоги и port отделены от текущего Codex.",
+        "separate_profile": True,
+        "separate_data_dir": True,
+        "separate_port": True,
+        "current_session_untouched": True,
+        "sandbox_target_proven": True,
     }
 
 
@@ -863,7 +938,7 @@ def run_ui_action(
         return _blocked_action(ui_action, "UI action отсутствует в allowlist.")
     if (
         ui_action == "launch_client_dispatch"
-        and action_phase != LIVE_READONLY_ACTION_PHASE
+        and action_phase == FULL_ACTION_PHASE
         and not launch_client_path
     ):
         return _unavailable_action(
@@ -871,7 +946,7 @@ def run_ui_action(
             "Bounded путь запуска клиента недоступен.",
             "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE",
         )
-    if ui_action == "launch_client_dispatch" and action_phase != LIVE_READONLY_ACTION_PHASE and launch_client_path:
+    if ui_action == "launch_client_dispatch" and action_phase == FULL_ACTION_PHASE and launch_client_path:
         launch_preflight = _launch_copy_preflight(launch_copy_contract)
         if launch_preflight["status"] != "admitted":
             return _launch_copy_preflight_denied(ui_action, launch_preflight)
@@ -1039,6 +1114,9 @@ def ui_action_metadata(
         "status": "ok",
         "source": "ui_action_metadata",
         "action_phase": action_phase,
+        "sandbox_preflight": _public_sandbox_action_preflight_summary(
+            _sandbox_action_preflight(launch_copy_contract)
+        ),
         "actions": actions,
     }
 
@@ -1052,19 +1130,32 @@ def build_handler(
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
+    readonly_runner = command_runner
+    action_runner = command_runner
+    if (
+        runner is None
+        and action_phase == SANDBOX_ACTION_PHASE
+        and _sandbox_action_preflight(launch_copy_contract)["status"] == "admitted"
+        and launch_copy_contract is not None
+    ):
+        sandbox_runner = JsonCommandRunner(
+            cwd=str(Path(launch_copy_contract.profile_dir or "").expanduser()),
+            env=_sandbox_action_runner_env(launch_copy_contract),
+        )
+        action_runner = sandbox_runner
     static_root = static_dir.resolve()
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             if parsed.path == "/api/live-readonly":
-                self._send_json(build_live_readonly_snapshot(command_runner))
+                self._send_json(build_live_readonly_snapshot(readonly_runner))
                 return
             if parsed.path == "/api/accounts-readonly":
-                self._send_json(build_accounts_readonly_snapshot(command_runner))
+                self._send_json(build_accounts_readonly_snapshot(readonly_runner))
                 return
             if parsed.path == "/api/api-connections-readonly":
-                self._send_json(build_api_connections_readonly_snapshot(command_runner))
+                self._send_json(build_api_connections_readonly_snapshot(readonly_runner))
                 return
             if parsed.path == "/api/actions":
                 self._send_json(
@@ -1084,7 +1175,7 @@ def build_handler(
                 return
             self._send_json(
                 run_ui_action(
-                    command_runner,
+                    action_runner,
                     self._read_json_body(),
                     launch_client_path=launch_client_path,
                     launch_copy_contract=launch_copy_contract,
@@ -1212,6 +1303,19 @@ def _public_launch_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _public_sandbox_action_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(preflight.get("status", "denied")),
+        "machine_error_code": str(preflight.get("machine_error_code", "unknown")),
+        "reason": str(preflight.get("reason", "")),
+        "separate_profile": preflight.get("separate_profile") is True,
+        "separate_data_dir": preflight.get("separate_data_dir") is True,
+        "separate_port": preflight.get("separate_port") is True,
+        "current_session_untouched": preflight.get("current_session_untouched") is True,
+        "sandbox_target_proven": preflight.get("sandbox_target_proven") is True,
+    }
+
+
 def _public_account_connect_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": str(preflight.get("status", "denied")),
@@ -1252,6 +1356,16 @@ def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> 
             },
         },
     }
+
+
+def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
+    profile_dir = Path(contract.profile_dir or "").expanduser()
+    data_dir = Path(contract.data_dir or "").expanduser()
+    env = dict(os.environ)
+    env["WBP_PROFILE_DIR"] = str(profile_dir)
+    env["WBP_MANAGED_DIR"] = str(data_dir)
+    env["WBP_EXTERNAL_MODELS_DIR"] = str(data_dir / "external-models")
+    return env
 
 
 def _account_connect_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
@@ -1539,8 +1653,13 @@ def _action_available(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> bool:
-    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
-        return False
+    if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        if action_phase == LIVE_READONLY_ACTION_PHASE:
+            return False
+        if action_phase == SANDBOX_ACTION_PHASE:
+            if ui_action not in SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS:
+                return False
+            return _sandbox_action_preflight(launch_copy_contract)["status"] == "admitted"
     if ui_action == "launch_client_dispatch":
         return bool(launch_client_path) and _launch_copy_preflight(launch_copy_contract)["status"] == "admitted"
     return True
@@ -1553,8 +1672,14 @@ def _action_availability_state(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
-    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
-        return "disabled_live_action"
+    if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        if action_phase == LIVE_READONLY_ACTION_PHASE:
+            return "disabled_live_action"
+        if action_phase == SANDBOX_ACTION_PHASE:
+            if ui_action not in SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS:
+                return "phase_not_admitted"
+            if _sandbox_action_preflight(launch_copy_contract)["status"] != "admitted":
+                return "preflight_blocked"
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "not_admitted"
     if ui_action == "launch_client_dispatch" and _launch_copy_preflight(launch_copy_contract)["status"] != "admitted":
@@ -1571,8 +1696,13 @@ def _action_unavailable_code(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
-    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
-        return LIVE_READONLY_ACTION_DISABLED_REASON_CODE
+    if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        if action_phase == LIVE_READONLY_ACTION_PHASE:
+            return LIVE_READONLY_ACTION_DISABLED_REASON_CODE
+        if action_phase == SANDBOX_ACTION_PHASE:
+            if ui_action not in SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS:
+                return SANDBOX_ACTION_PHASE_DISABLED_REASON_CODE
+            return str(_sandbox_action_preflight(launch_copy_contract)["machine_error_code"])
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "UI_LAUNCH_CLIENT_PATH_UNAVAILABLE"
     if ui_action == "launch_client_dispatch":
@@ -1589,8 +1719,15 @@ def _action_disabled_reasons(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> tuple[str, ...]:
-    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
-        return LIVE_READONLY_ACTION_DISABLED_REASONS
+    if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        if action_phase == LIVE_READONLY_ACTION_PHASE:
+            return LIVE_READONLY_ACTION_DISABLED_REASONS
+        if action_phase == SANDBOX_ACTION_PHASE:
+            if ui_action not in SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS:
+                return SANDBOX_ACTION_PHASE_DISABLED_REASONS
+            sandbox_preflight = _sandbox_action_preflight(launch_copy_contract)
+            if sandbox_preflight["status"] != "admitted":
+                return ("sandbox_target_unproven",)
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return ("launch_client_path_unavailable",)
     if ui_action == "launch_client_dispatch":
@@ -1609,8 +1746,14 @@ def _action_unavailable_reason(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
-    if action_phase == LIVE_READONLY_ACTION_PHASE and ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
-        return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE
+    if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
+        if action_phase == LIVE_READONLY_ACTION_PHASE:
+            return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE
+        if action_phase == SANDBOX_ACTION_PHASE:
+            if ui_action not in SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS:
+                return SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE
+            sandbox_preflight = _sandbox_action_preflight(launch_copy_contract)
+            return "" if sandbox_preflight["status"] == "admitted" else str(sandbox_preflight["reason"])
     if ui_action == "launch_client_dispatch" and not launch_client_path:
         return "Bounded путь запуска клиента недоступен."
     if ui_action == "launch_client_dispatch":
@@ -2304,6 +2447,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
+    parser.add_argument(
+        "--action-phase",
+        default=LIVE_READONLY_ACTION_PHASE,
+        choices=(LIVE_READONLY_ACTION_PHASE, SANDBOX_ACTION_PHASE, FULL_ACTION_PHASE),
+    )
     parser.add_argument("--launch-client-path", default=None)
     parser.add_argument("--launch-copy-profile-dir", default=None)
     parser.add_argument("--launch-copy-data-dir", default=None)
@@ -2322,7 +2470,7 @@ def main(argv: list[str] | None = None) -> int:
         build_handler(
             launch_client_path=args.launch_client_path,
             launch_copy_contract=launch_copy_contract,
-            action_phase=LIVE_READONLY_ACTION_PHASE,
+            action_phase=args.action_phase,
         ),
     )
     try:
