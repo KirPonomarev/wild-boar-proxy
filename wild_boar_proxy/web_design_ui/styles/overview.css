@@ -6697,6 +6697,20 @@ button:disabled {
   line-height: 16px;
 }
 
+.quick-start-account-row .quick-start-account-index {
+  align-items: center;
+  display: inline-flex;
+  font-feature-settings: "tnum" 1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  overflow: visible;
+  text-align: center;
+  text-overflow: clip;
+}
+
 .quick-start-account-row .chip {
   justify-content: center;
   height: 28px;
