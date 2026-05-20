@@ -793,6 +793,9 @@ function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "command_error") {
     return "Строгий JSON-пакет сообщил command_error. UI не должен показывать это как успех.";
   }
+  if (displayState === "partial_success") {
+    return "Verify bundle завершился частично: хотя бы один bounded truth surface требует следующего шага, поэтому ready не заявляется.";
+  }
   if (displayState === "integration_failure") {
     return "Ошибка интеграции UI/server. Успех команды не выводится по предположению.";
   }
@@ -998,6 +1001,17 @@ function onboardingRefreshState(payload, refreshed) {
 }
 
 function actionRefreshSurfaceSnapshot(payload, refreshed) {
+  if (payload.ui_action === "quick_start_check_all") {
+    if (
+      refreshed
+      && refreshed.accounts
+      && refreshed.apiConnections
+      && Array.isArray(refreshed.apiConnections.routes)
+    ) {
+      return refreshed;
+    }
+    return null;
+  }
   if (payload.ui_action === "onboard_account") {
     return accountsSnapshotFromRefreshPayload(refreshed);
   }
@@ -1013,10 +1027,20 @@ function actionRefreshSurfaceSnapshot(payload, refreshed) {
 }
 
 function actionRefreshSucceeded(payload, refreshed) {
-  return actionRefreshSurfaceSnapshot(payload, refreshed)?.status === "ok";
+  const snapshot = actionRefreshSurfaceSnapshot(payload, refreshed);
+  if (payload.ui_action === "quick_start_check_all") {
+    return snapshot?.accounts?.status === "ok" && snapshot?.apiConnections?.status === "ok";
+  }
+  return snapshot?.status === "ok";
 }
 
 function canonicalActionRefreshState(payload, refreshed) {
+  if (payload.ui_action === "quick_start_check_all") {
+    const snapshot = actionRefreshSurfaceSnapshot(payload, refreshed);
+    return snapshot?.accounts?.status === "ok" && snapshot?.apiConnections?.status === "ok"
+      ? "complete"
+      : "failed";
+  }
   if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
     return apiRouteRemoveRefreshState(payload, refreshed);
   }
@@ -1055,6 +1079,7 @@ function actionAvailabilityForButton(button) {
     button.classList.contains("account-action")
     || button.classList.contains("onboard-action")
     || button.classList.contains("api-route-action")
+    || button.classList.contains("check-all-action")
   );
   const isLiveSource = document.querySelector(".desktop").dataset.source === "live";
   const routeEnabled = button.dataset.routeEnabled !== "false";
@@ -1111,7 +1136,7 @@ function actionAvailabilityForButton(button) {
 }
 
 function applyActionAvailability() {
-  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action")) {
     const state = actionAvailabilityForButton(button);
     button.disabled = !state.available;
     button.dataset.available = state.available ? "true" : "false";
@@ -2629,6 +2654,21 @@ function renderUiReadonlyLaneExitList(containerId, entries, visual) {
 function actionSupportDetails(payload) {
   const result = payload.result || {};
   const data = result.data || {};
+  if (payload.ui_action === "quick_start_check_all") {
+    const bundle = data.bundle || {};
+    const accounts = bundle.accounts?.status || "unknown";
+    const api = bundle.api?.status || "unknown";
+    const runtime = bundle.runtime?.status || "unknown";
+    const routeId = bundle.api?.route_id || "no-route";
+    return [
+      `bundle_verdict=${data.bundle_verdict || "unknown"}`,
+      `accounts=${accounts}`,
+      `api=${api}`,
+      `runtime=${runtime}`,
+      `route=${routeId}`,
+      `hidden_mutation=${data.hidden_mutation_absent === true ? "absent" : "unknown"}`
+    ].join(" · ");
+  }
   if (payload.ui_action === "api_route_profile") {
     return [
       `writes_external_config=${data.writes_external_config === true ? "true" : "false"}`,
@@ -3406,7 +3446,7 @@ function renderDataLayoutSnapshot(snapshot) {
 }
 
 function setActionsBusy(isBusy) {
-  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action")) {
+  for (const button of document.querySelectorAll(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action")) {
     const state = actionAvailabilityForButton(button);
     button.disabled = isBusy || !state.available;
     button.dataset.available = state.available ? "true" : "false";
@@ -5642,6 +5682,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartCheckApiAction")?.addEventListener("click", () => {
     const button = document.getElementById("quickStartCheckApiAction");
     maybeConfirmAndRun(button.dataset.uiAction || "api_route_check", { route_id: button.dataset.routeId || "" });
+  });
+  document.getElementById("quickStartCheckAllAction")?.addEventListener("click", () => {
+    const button = document.getElementById("quickStartCheckAllAction");
+    maybeConfirmAndRun(button.dataset.uiAction || "quick_start_check_all");
   });
   document.getElementById("cancelAction").addEventListener("click", () => closeConfirmation());
   document.getElementById("confirmAction").addEventListener("click", () => confirmPendingAction());

@@ -594,6 +594,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertFalse(metadata["actions"]["api_route_validate"]["available"])
+        self.assertFalse(metadata["actions"]["quick_start_check_all"]["available"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
         for ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
             action = metadata["actions"][ui_action]
@@ -638,6 +639,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(sandbox_metadata["actions"]["onboard_account_dry_run"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["quick_start_check_all"]["available"])
         self.assertFalse(sandbox_metadata["actions"]["validate_account"]["available"])
         self.assertEqual(
             sandbox_metadata["actions"]["validate_account"]["availability_state"],
@@ -663,6 +665,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(full_metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
         self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
         self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
+        self.assertEqual(
+            full_metadata["actions"]["quick_start_check_all"]["action_role"],
+            "quick_start_verify_bundle",
+        )
         self.assertTrue(full_metadata["actions"]["launch_client_dispatch"]["confirmation_required"])
         self.assertFalse(full_metadata["actions"]["launch_client_dispatch"]["available"])
         self.assertTrue(bounded_metadata["actions"]["launch_client_dispatch"]["available"])
@@ -817,6 +823,65 @@ class WebDesignLiveServerTests(unittest.TestCase):
             metadata["actions"]["onboard_account_dry_run"]["disabled_reason_code"],
             "UI_SANDBOX_ACTION_TARGET_UNPROVEN",
         )
+
+    def test_quick_start_check_all_runs_verify_only_bundle_in_sandbox(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "status", "--json")]["data"]["local_auth"]["token_present"] = True  # type: ignore[index]
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[
+                account("acct-active", "active", "healthy"),
+                account("acct-reserve", "reserve", "healthy"),
+            ]
+        )
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "quick_start_check_all"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "quick_start_verify_bundle")
+        self.assertFalse(result["confirmation_required"])
+        self.assertTrue(result["post_action_refresh_required"])
+        self.assertEqual(result["result"]["machine_error_code"], "OK")
+        self.assertEqual(result["result"]["data"]["bundle_verdict"], "ready")
+        self.assertTrue(result["result"]["data"]["hidden_mutation_absent"])
+        self.assertEqual(result["result"]["data"]["bundle"]["accounts"]["status"], "ok")
+        self.assertEqual(result["result"]["data"]["bundle"]["api"]["status"], "ok")
+        self.assertEqual(result["result"]["data"]["bundle"]["runtime"]["status"], "ok")
+        self.assertEqual(
+            result["result"]["data"]["api_check_packet"]["machine_error_code"],
+            "OK",
+        )
+        self.assertNotIn(("sync", "--json"), runner.calls)
+        self.assertNotIn(("accounts", "onboard", "--json"), runner.calls)
+        self.assertNotIn(("mode", "set", "stable", "--json"), runner.calls)
+        self.assertNotIn(("mode", "set", "managed", "--json"), runner.calls)
+        self.assertIn(("external-models", "check", "--route", "wbp-deepseek-v3", "--json"), runner.calls)
+
+    def test_quick_start_check_all_maps_runtime_degraded_to_partial(self) -> None:
+        payloads = live_payloads()
+        payloads[("healthcheck", "--json")] = command_packet(
+            status="error",
+            machine_error_code="provider_network_failed",
+            human_message="Network failed.",
+        )
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "quick_start_check_all"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "partial_success")
+        self.assertEqual(result["result"]["machine_error_code"], "UI_CHECK_ALL_PARTIAL")
+        self.assertEqual(result["result"]["data"]["bundle_verdict"], "partial")
+        self.assertEqual(result["result"]["data"]["bundle"]["runtime"]["status"], "partial")
 
     def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
         runner = MappingRunner(live_payloads())

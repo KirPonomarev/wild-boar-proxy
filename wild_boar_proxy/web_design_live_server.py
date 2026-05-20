@@ -290,6 +290,18 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Собрать локальное свидетельство",
         "human_meaning": "Создать локальный support artifact по выбранному маршруту и показать только метаданные command packet.",
     },
+    "quick_start_check_all": {
+        "adapter_command_id": "server_owned_quick_start_check_all",
+        "action_role": "quick_start_verify_bundle",
+        "mutation_class": "quick_start_verify_bundle",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "только server-owned verify bundle из admitted checks и sandbox-owned readonly refresh surfaces; hidden mutations запрещены",
+        "display_name": "Проверить всё",
+        "human_meaning": "Последовательно проверить bounded account truth, основной API route и bounded runtime status без скрытых мутаций, затем обновить подтверждённые readonly карточки.",
+    },
     "sync_runtime": {
         "adapter_command_id": "sync",
         "action_role": "controlled_runtime_mutation",
@@ -385,6 +397,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "api_route_remove",
         "api_route_profile",
         "api_route_evidence_capture",
+        "quick_start_check_all",
         "sync_runtime",
         "set_mode_stable",
         "set_mode_managed",
@@ -404,6 +417,7 @@ SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS = frozenset(
         "api_route_remove",
         "api_route_profile",
         "api_route_evidence_capture",
+        "quick_start_check_all",
     }
 )
 SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE = (
@@ -918,6 +932,250 @@ def build_api_connections_readonly_snapshot(runner: CommandRunner) -> dict[str, 
     }
 
 
+def _primary_api_route_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    routes = snapshot.get("routes")
+    if not isinstance(routes, list) or not routes:
+        return None
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        if (
+            route.get("role_label") in {"main route", "primary"}
+            or route.get("is_primary") is True
+            or route.get("primary") is True
+        ):
+            return route
+    for route in routes:
+        if isinstance(route, dict) and route.get("enabled") is True:
+            return route
+    first = routes[0]
+    return first if isinstance(first, dict) else None
+
+
+def _runtime_check_all_component(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if snapshot.get("status") != "ok":
+        return {
+            "status": "failed",
+            "machine_error_code": str(snapshot.get("runtime", {}).get("machine_error_code") or "UI_CHECK_ALL_RUNTIME_UNAVAILABLE"),
+            "human_message": str(snapshot.get("runtime", {}).get("human_message") or "Runtime readonly truth unavailable."),
+            "visual_state": "integration_failure",
+            "source": str(snapshot.get("source") or "unknown"),
+        }
+    runtime = snapshot.get("runtime", {})
+    visual_state = str(runtime.get("visual_state") or snapshot.get("ui_state") or "unknown")
+    if visual_state == "healthy":
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": str(runtime.get("human_message") or "Runtime readonly truth is healthy."),
+            "visual_state": visual_state,
+            "source": str(snapshot.get("source") or "live_readonly"),
+        }
+    if visual_state in {"degraded", "stale", "unknown"}:
+        return {
+            "status": "partial",
+            "machine_error_code": str(runtime.get("machine_error_code") or "UI_CHECK_ALL_RUNTIME_DEGRADED"),
+            "human_message": str(runtime.get("human_message") or "Runtime readonly truth is degraded."),
+            "visual_state": visual_state,
+            "source": str(snapshot.get("source") or "live_readonly"),
+        }
+    return {
+        "status": "failed",
+        "machine_error_code": str(runtime.get("machine_error_code") or "UI_CHECK_ALL_RUNTIME_FAILED"),
+        "human_message": str(runtime.get("human_message") or "Runtime readonly truth failed."),
+        "visual_state": visual_state,
+        "source": str(snapshot.get("source") or "live_readonly"),
+    }
+
+
+def _run_quick_start_check_all_action(runner: CommandRunner) -> dict[str, Any]:
+    accounts_snapshot = build_accounts_readonly_snapshot(runner)
+    api_snapshot_before = build_api_connections_readonly_snapshot(runner)
+    runtime_snapshot = build_live_readonly_snapshot(runner)
+
+    accounts_summary = accounts_snapshot.get("summary", {})
+    visible_count = int(accounts_summary.get("visible_count") or 0) if isinstance(accounts_summary, dict) else 0
+    problem_count = int(accounts_summary.get("problem") or 0) if isinstance(accounts_summary, dict) else 0
+    if accounts_snapshot.get("status") != "ok":
+        accounts_component = {
+            "status": "failed",
+            "machine_error_code": str(accounts_summary.get("machine_error_code") or "UI_CHECK_ALL_ACCOUNTS_UNAVAILABLE"),
+            "human_message": str(accounts_summary.get("human_message") or "Accounts readonly truth unavailable."),
+            "source": str(accounts_snapshot.get("source") or "unknown"),
+        }
+    elif visible_count <= 0:
+        accounts_component = {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_NO_ACCOUNTS",
+            "human_message": "В sandbox пока нет подключённых аккаунтов; ready не подтверждается.",
+            "source": str(accounts_snapshot.get("source") or "accounts_readonly"),
+        }
+    elif problem_count > 0:
+        accounts_component = {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_ACCOUNTS_NEED_ATTENTION",
+            "human_message": "В accounts snapshot есть problem-аккаунты; нужен следующий шаг.",
+            "source": str(accounts_snapshot.get("source") or "accounts_readonly"),
+        }
+    else:
+        accounts_component = {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": str(accounts_summary.get("human_message") or "Accounts readonly truth confirmed."),
+            "source": str(accounts_snapshot.get("source") or "accounts_readonly"),
+        }
+
+    api_component: dict[str, Any]
+    api_check_result: dict[str, Any] | None = None
+    api_snapshot_after = api_snapshot_before
+    primary_route = _primary_api_route_from_snapshot(api_snapshot_before)
+    if api_snapshot_before.get("status") != "ok":
+        api_component = {
+            "status": "failed",
+            "machine_error_code": str(api_snapshot_before.get("summary", {}).get("machine_error_code") or "UI_CHECK_ALL_API_UNAVAILABLE"),
+            "human_message": str(api_snapshot_before.get("summary", {}).get("human_message") or "API readonly truth unavailable."),
+            "route_id": "",
+            "refresh_status": "failed",
+            "source": str(api_snapshot_before.get("source") or "unknown"),
+        }
+    elif primary_route is None:
+        api_component = {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_ROUTE_MISSING",
+            "human_message": "Основной API route не подтверждён bounded snapshot.",
+            "route_id": "",
+            "refresh_status": "complete",
+            "source": str(api_snapshot_before.get("source") or "api_connections_readonly"),
+        }
+    elif primary_route.get("enabled") is not True:
+        api_component = {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_ROUTE_DISABLED",
+            "human_message": "Основной API route отключён; ready не подтверждается.",
+            "route_id": str(primary_route.get("route_id") or ""),
+            "refresh_status": "complete",
+            "source": str(api_snapshot_before.get("source") or "api_connections_readonly"),
+        }
+    elif str(primary_route.get("secret_status_label") or "unknown") == "missing":
+        api_component = {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_SECRET_REF_MISSING",
+            "human_message": "Для основного API route отсутствует подтверждённый secret_ref.",
+            "route_id": str(primary_route.get("route_id") or ""),
+            "refresh_status": "complete",
+            "source": str(api_snapshot_before.get("source") or "api_connections_readonly"),
+        }
+    else:
+        route_id = str(primary_route.get("route_id") or "")
+        api_check_result = execute_command(
+            runner,
+            "external_models_check",
+            structured_args={"route_id": route_id},
+        )
+        api_snapshot_after = build_api_connections_readonly_snapshot(runner)
+        refreshed_route = _primary_api_route_from_snapshot(api_snapshot_after)
+        refresh_status = (
+            "complete"
+            if refreshed_route is not None and str(refreshed_route.get("route_id") or "") == route_id
+            else "mismatch"
+        )
+        if api_check_result["status"] == "ok" and api_snapshot_after.get("status") == "ok" and refresh_status == "complete":
+            validation_visual = str(refreshed_route.get("validation_visual_state") or "")
+            observed_status = (
+                "failed"
+                if validation_visual == "red"
+                else ("partial" if validation_visual == "amber" else "ok")
+            )
+            api_component = {
+                "status": observed_status,
+                "machine_error_code": "OK" if observed_status == "ok" else str(refreshed_route.get("status_code") or "UI_CHECK_ALL_API_ROUTE_UNCONFIRMED"),
+                "human_message": str(refreshed_route.get("note") or api_check_result["human_message"]),
+                "route_id": route_id,
+                "refresh_status": refresh_status,
+                "source": str(api_snapshot_after.get("source") or "api_connections_readonly"),
+            }
+        elif api_check_result["status"] != "ok":
+            api_component = {
+                "status": "failed",
+                "machine_error_code": str(api_check_result["machine_error_code"]),
+                "human_message": str(api_check_result["human_message"]),
+                "route_id": route_id,
+                "refresh_status": "complete" if api_snapshot_after.get("status") == "ok" else "failed",
+                "source": str(api_snapshot_after.get("source") or "api_connections_readonly"),
+            }
+        else:
+            api_component = {
+                "status": "failed",
+                "machine_error_code": "UI_CHECK_ALL_API_REFRESH_MISMATCH" if refresh_status == "mismatch" else str(api_snapshot_after.get("summary", {}).get("machine_error_code") or "UI_CHECK_ALL_API_REFRESH_FAILED"),
+                "human_message": "Пакет API check получен, но sandbox-owned refresh не подтвердил route truth.",
+                "route_id": route_id,
+                "refresh_status": refresh_status if api_snapshot_after.get("status") == "ok" else "failed",
+                "source": str(api_snapshot_after.get("source") or "api_connections_readonly"),
+            }
+
+    runtime_component = _runtime_check_all_component(runtime_snapshot)
+    component_statuses = (
+        accounts_component["status"],
+        api_component["status"],
+        runtime_component["status"],
+    )
+    if any(status == "failed" for status in component_statuses):
+        bundle_verdict = "failed"
+        bundle_status = "command_error"
+        machine_error_code = "UI_CHECK_ALL_FAILED"
+        human_message = "Одна или несколько bounded проверок завершились с blocking failure."
+        next_action = "inspect_bundle"
+    elif any(status == "partial" for status in component_statuses):
+        bundle_verdict = "partial"
+        bundle_status = "partial_success"
+        machine_error_code = "UI_CHECK_ALL_PARTIAL"
+        human_message = "Проверка завершилась частично: нужен следующий шаг по bounded truth surfaces."
+        next_action = "review_follow_up"
+    else:
+        bundle_verdict = "ready"
+        bundle_status = "ok"
+        machine_error_code = "OK"
+        human_message = "Все bounded truth surfaces подтверждены для Quick Start summary."
+        next_action = "none"
+
+    data = {
+        "bundle_verdict": bundle_verdict,
+        "hidden_mutation_absent": True,
+        "bundle": {
+            "accounts": accounts_component,
+            "api": api_component,
+            "runtime": runtime_component,
+        },
+        "bundle_refresh_sources": ["accounts-readonly", "api-connections-readonly", "runtime-owner-packet"],
+        "api_check_packet": {
+            "status": str(api_check_result["status"]) if api_check_result is not None else "not_run",
+            "machine_error_code": str(api_check_result["machine_error_code"]) if api_check_result is not None else "NOT_RUN",
+            "human_message": str(api_check_result["human_message"]) if api_check_result is not None else "API verify action was not run.",
+            "next_action": str(api_check_result["next_action"]) if api_check_result is not None else "none",
+        },
+    }
+    return {
+        "schema_version": 1,
+        "status": bundle_status,
+        "source": "ui_action",
+        "ui_action": "quick_start_check_all",
+        "action_role": "quick_start_verify_bundle",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "verify-only bundle over admitted truths; hidden mutations absent",
+        "result": {
+            "status": bundle_status,
+            "machine_error_code": machine_error_code,
+            "human_message": human_message,
+            "next_action": next_action,
+            "changed_files": [],
+            "data": data,
+        },
+    }
+
+
 def run_ui_action(
     runner: CommandRunner,
     payload: dict[str, Any],
@@ -1012,6 +1270,8 @@ def run_ui_action(
             return blocked
     if ui_action == "onboard_account_dry_run":
         return _run_account_connect_dry_run_action()
+    if ui_action == "quick_start_check_all":
+        return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_client_dispatch":
         if not launch_client_path:
             return _unavailable_action(

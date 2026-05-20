@@ -381,9 +381,12 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn(".quick-start-row-action", css)
         self.assertIn("grid-template-columns: 36px minmax(0, 1fr) minmax(132px, 156px)", css)
         self.assertIn(".quick-start-route-hint", css)
-        self.assertIn('id="quickStartCheckAllAction" class="button quick-start-only"', html)
+        self.assertIn('id="quickStartCheckAllAction" class="button quick-start-only check-all-action"', html)
+        self.assertIn('data-ui-action="quick_start_check_all"', html)
         self.assertNotIn('id="quickStartCheckAllAction" class="button primary', html)
         self.assertIn(".header-actions #quickStartCheckAllAction:disabled", css)
+        self.assertIn('document.getElementById("quickStartCheckAllAction")?.addEventListener("click"', js)
+        self.assertIn('maybeConfirmAndRun(button.dataset.uiAction || "quick_start_check_all")', js)
 
         for forbidden in (
             "<canvas",
@@ -1033,7 +1036,7 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn('maybeConfirmAndRun(uiAction, { account_id: button.dataset.accountId })', js)
         self.assertIn('maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run")', js)
         self.assertIn("Dry-run preview готов", js)
-        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
+        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action", js)
         self.assertIn("Сначала выполняется безопасный dry-run preview", html)
         self.assertIn("Web не принимает токены, файлы и локальные пути.", html)
         self.assertIn("После admitted preview можно вернуться и подтвердить live connect в sandbox.", html)
@@ -3362,6 +3365,83 @@ if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_check_all_refresh_uses_quick_start_composite_snapshots_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const payload = {
+  ui_action: "quick_start_check_all",
+  post_action_refresh_required: true,
+  result: {
+    status: "partial_success",
+    data: {
+      bundle_verdict: "partial"
+    }
+  }
+};
+const refreshed = {
+  accounts: {
+    status: "ok",
+    accounts: []
+  },
+  apiConnections: {
+    status: "ok",
+    routes: [{ route_id: "wbp-deepseek-v3", enabled: true }]
+  }
+};
+if (sandbox.actionRefreshSucceeded(payload, refreshed) !== true) {
+  throw new Error("check all refresh must require only quick-start accounts/api composite truth");
+}
+if (sandbox.canonicalActionRefreshState(payload, refreshed) !== "complete") {
+  throw new Error(`expected check-all refresh complete, got ${sandbox.canonicalActionRefreshState(payload, refreshed)}`);
+}
+const failedRefresh = {
+  accounts: {
+    status: "integration_failure",
+    accounts: []
+  },
+  apiConnections: {
+    status: "ok",
+    routes: [{ route_id: "wbp-deepseek-v3", enabled: true }]
+  }
+};
+if (sandbox.actionRefreshSucceeded(payload, failedRefresh) !== false) {
+  throw new Error("failed accounts refresh must block check-all refresh proof");
+}
+if (sandbox.canonicalActionRefreshState(payload, failedRefresh) !== "failed") {
+  throw new Error("failed composite refresh must render failed for check-all");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_action_ledger_rendering_executes_status_mapping(self) -> None:
         script = r"""
 const fs = require("fs");
@@ -3999,7 +4079,7 @@ const sandbox = {
       return null;
     },
     querySelectorAll(selector) {
-      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
+      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action") {
         return [onboardButton];
       }
       return [];
@@ -5210,7 +5290,7 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
         self.assertIn("unknown_disabled", js)
         self.assertIn("LIVE_SOURCE_REQUIRED", js)
         self.assertIn("ROUTE_STATE_REQUIREMENT_NOT_MET", js)
-        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action", js)
+        self.assertIn(".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action", js)
         self.assertIn(".diagnostics-only", js)
         self.assertIn(".settings-only", js)
 
@@ -5286,7 +5366,7 @@ const sandbox = {
     },
     addEventListener() {},
     querySelectorAll(selector) {
-      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action") {
+      if (selector === ".live-action, .account-action, .onboard-action, .api-route-action, .check-all-action") {
         return [
           enabledButton,
           disabledRouteButton,
