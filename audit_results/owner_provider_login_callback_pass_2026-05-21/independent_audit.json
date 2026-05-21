@@ -1,0 +1,46 @@
+{
+  "contour": "OWNER_PROVIDER_LOGIN_CALLBACK_PASS",
+  "status": "STOP_AND_DIAGNOSE_CONFIRMED",
+  "auditor": "subagent:019e4c43-70e0-7562-8e9b-1531c521a5b0 plus orchestrator factual scan",
+  "findings": [
+    {
+      "id": "OPA-001",
+      "severity": "blocker",
+      "claim": "Real provider login/callback cannot be closed because only sandbox provider is currently supported.",
+      "evidence": [
+        "wild_boar_proxy/runtime.py:10452",
+        "wild_boar_proxy/runtime.py:10453",
+        "wild_boar_proxy/runtime.py:10464",
+        "audit_results/owner_provider_login_callback_pass_2026-05-21/evidence/provider-codex-start-packet.json"
+      ],
+      "verified": true
+    },
+    {
+      "id": "OPA-002",
+      "severity": "blocker",
+      "claim": "No owner provider callback/status surface is specified in the current command API.",
+      "evidence": [
+        "COMMAND_API.md:186",
+        "COMMAND_API.md:188",
+        "COMMAND_API.md:191",
+        "COMMAND_API.md:204"
+      ],
+      "verified": true
+    }
+  ],
+  "recommendation": "Open OWNER_PROVIDER_AUTH_ADMISSION_PASS before reopening real provider login callback implementation.",
+  "subagent_summary": {
+    "status": "completed",
+    "conclusion": "accounts login path is sandbox-only; no real provider callback handling exists",
+    "key_refs": [
+      "COMMAND_API.md:41",
+      "COMMAND_API.md:188",
+      "wild_boar_proxy/cli.py:121",
+      "wild_boar_proxy/runtime.py:10452",
+      "wild_boar_proxy/web_design_command_adapter.py:83",
+      "wild_boar_proxy/runtime.py:3422",
+      "wild_boar_proxy/runtime.py:3434",
+      "wild_boar_proxy/runtime.py:10620"
+    ]
+  }
+}
