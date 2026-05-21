@@ -366,7 +366,10 @@ def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env["WBP_MANAGED_CONFIG_FILE"] = str(paths.managed_config_file)
     env["WBP_LAUNCHER_SCRIPT"] = str(paths.launcher_script)
     env["WBP_SYNC_SCRIPT"] = str(paths.sync_script)
+    env["WBP_ACCOUNTS_BIN"] = str(paths.accounts_bin)
+    env["WBP_ONBOARD_BIN"] = str(paths.onboard_bin)
     env["WBP_LOCK_FILE"] = str(paths.lock_file)
+    env["WBP_LAUNCHER_LOCK_FILE"] = str(paths.launcher_lock_file)
     return env
 
 
@@ -7289,7 +7292,7 @@ def run_sync(paths: RuntimePaths, model: str | None = None) -> dict[str, Any]:
             command,
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
         state = read_json(paths.state_file, required=False)
@@ -10324,7 +10327,7 @@ def run_accounts_command(
             [str(paths.accounts_bin), *arguments],
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
     if result.stderr:
@@ -10366,7 +10369,7 @@ def run_sync_for_owner_path_under_lock(paths: RuntimePaths) -> dict[str, Any]:
         [str(paths.sync_script), get_model(paths)],
         capture_output=True,
         text=True,
-        env=sanitized_env(),
+        env=build_launcher_subprocess_env(paths),
         check=False,
     )
     emit_subprocess_output(stdout=sync_result.stdout, stderr=sync_result.stderr)
@@ -12598,7 +12601,7 @@ def run_onboard(
             command,
             capture_output=True,
             text=True,
-            env=sanitized_env(),
+            env=build_launcher_subprocess_env(paths),
             check=False,
         )
     if result.stderr:

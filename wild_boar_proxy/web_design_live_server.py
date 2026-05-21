@@ -23,6 +23,7 @@ from wild_boar_proxy.ui_shell import (
     build_external_models_snapshot,
     build_runtime_snapshot,
 )
+from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 
 
@@ -1629,6 +1630,7 @@ def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> 
 def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     profile_dir = Path(contract.profile_dir or "").expanduser()
     data_dir = Path(contract.data_dir or "").expanduser()
+    bin_dir = data_dir / "bin"
     env = dict(os.environ)
     repo_root = str(ROOT)
     current_pythonpath = env.get("PYTHONPATH", "")
@@ -1638,6 +1640,22 @@ def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     env["WBP_PROFILE_DIR"] = str(profile_dir)
     env["WBP_MANAGED_DIR"] = str(data_dir)
+    env["WBP_STABLE_CONFIG"] = str(data_dir / "stable-runtime-config.yaml")
+    env["WBP_AUTH_FILE"] = str(profile_dir / "auth.json")
+    env["WBP_CONFIG_TOML"] = str(profile_dir / "config.toml")
+    env["WBP_RUNTIME_MODE_FILE"] = str(profile_dir / "runtime-mode.txt")
+    env["WBP_RUNTIME_EFFECTIVE_MODE_FILE"] = str(
+        profile_dir / "runtime-effective-mode.txt"
+    )
+    env["WBP_REGISTRY_FILE"] = str(data_dir / "backend-registry.json")
+    env["WBP_STATE_FILE"] = str(data_dir / ("supervisor-" + "state" + ".json"))
+    env["WBP_MANAGED_CONFIG_FILE"] = str(data_dir / "managed-config.yaml")
+    env["WBP_LAUNCHER_SCRIPT"] = str(profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME)
+    env["WBP_SYNC_SCRIPT"] = str(data_dir / "supervisor-sync.sh")
+    env["WBP_ACCOUNTS_BIN"] = str(bin_dir / "codex-accounts")
+    env["WBP_ONBOARD_BIN"] = str(bin_dir / "codex-account-onboard")
+    env["WBP_LOCK_FILE"] = str(data_dir / "wild-boar-proxy.lock")
+    env["WBP_LAUNCHER_LOCK_FILE"] = str(data_dir / "stable-runtime-launch.lock")
     env["WBP_EXTERNAL_MODELS_DIR"] = str(data_dir / "external-models")
     return env
 

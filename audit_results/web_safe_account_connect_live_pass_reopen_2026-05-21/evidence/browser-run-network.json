@@ -1,0 +1,685 @@
+{
+  "url": "http://127.0.0.1:55668/?screen=quick-start&source=live",
+  "title": "Wild Boar Proxy - \u043f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0441\u043a\u043e\u0433\u043e \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430",
+  "before": {
+    "accounts": [],
+    "commands": {
+      "accounts_list": {
+        "exit_code": 0,
+        "human_message": "Account registry snapshot is available.",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "role": "primary_truth",
+        "status": "ok",
+        "ui_state": "success"
+      }
+    },
+    "primary_truth_ok": true,
+    "privacy": {
+      "forbidden_fields_excluded": [
+        "secret_references",
+        "tokens",
+        "raw_paths",
+        "raw_logs"
+      ],
+      "raw_command_packet_included": false,
+      "redacted": true
+    },
+    "registry_identity": {
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "status": "clear"
+    },
+    "schema_version": 1,
+    "source": "accounts_readonly",
+    "status": "ok",
+    "summary": {
+      "active": 0,
+      "capacity_target": 25,
+      "degraded": 0,
+      "down": 0,
+      "healthy": 0,
+      "hold": 0,
+      "human_message": "Account registry snapshot is available.",
+      "last_error": "",
+      "machine_error_code": "OK",
+      "problem": 0,
+      "reserve": 0,
+      "retired": 0,
+      "visible_count": 0
+    }
+  },
+  "actions": {
+    "action_phase": "sandbox_actions",
+    "actions": {
+      "api_route_allow": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e lifecycle-\u0437\u0430\u043f\u0440\u043e\u0441 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0443 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u0430; \u044d\u0442\u043e \u043d\u0435 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 runtime readiness",
+        "action_role": "api_route_lifecycle_allow",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u0420\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044c \u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u0438\u0437 \u043a\u0430\u043d\u043e\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e JSON.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_lifecycle",
+        "post_action_refresh_required": true,
+        "ui_action": "api_route_allow",
+        "unavailable_reason": ""
+      },
+      "api_route_check": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u043e\u0447\u043d\u044b\u0439 \u0437\u0430\u043f\u0440\u043e\u0441 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0443 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u0430; \u044d\u0442\u043e \u043d\u0435 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 runtime readiness",
+        "action_role": "api_route_smoke_check",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u043c",
+        "human_meaning": "\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043e\u0447\u043d\u044b\u0439 \u0437\u0430\u043f\u0440\u043e\u0441 \u0447\u0435\u0440\u0435\u0437 \u043c\u0430\u0440\u0448\u0440\u0443\u0442 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u0438\u0437 \u043a\u0430\u043d\u043e\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e JSON.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_verification",
+        "post_action_refresh_required": true,
+        "ui_action": "api_route_check",
+        "unavailable_reason": ""
+      },
+      "api_route_disable": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e lifecycle-\u0437\u0430\u043f\u0440\u043e\u0441 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0443 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u0430; \u044d\u0442\u043e \u043d\u0435 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 runtime readiness",
+        "action_role": "api_route_lifecycle_disable",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041e\u0442\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u043e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u0438\u0437 \u043a\u0430\u043d\u043e\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e JSON.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_lifecycle",
+        "post_action_refresh_required": true,
+        "ui_action": "api_route_disable",
+        "unavailable_reason": ""
+      },
+      "api_route_evidence_capture": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 support artifact; \u044d\u0442\u043e \u043d\u0435 runtime proof \u0438 \u043d\u0435 \u0447\u0442\u0435\u043d\u0438\u0435 evidence file \u0438\u0437 UI",
+        "action_role": "api_route_local_evidence_capture",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u0421\u043e\u0431\u0440\u0430\u0442\u044c \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e\u0435 \u0441\u0432\u0438\u0434\u0435\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u043e",
+        "human_meaning": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 support artifact \u043f\u043e \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u043c\u0443 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0443 \u0438 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u043c\u0435\u0442\u0430\u0434\u0430\u043d\u043d\u044b\u0435 command packet.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_support_artifact",
+        "post_action_refresh_required": false,
+        "ui_action": "api_route_evidence_capture",
+        "unavailable_reason": ""
+      },
+      "api_route_profile": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u043e\u0444\u0438\u043b\u044c\u043d\u044b\u0439 \u043f\u0430\u043a\u0435\u0442 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438; \u044d\u0442\u043e \u043d\u0435 Codex config mutation, \u043d\u0435 listener readiness \u0438 \u043d\u0435 runtime readiness",
+        "action_role": "api_route_profile_packet",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u0430\u043a\u0435\u0442 \u043f\u0440\u043e\u0444\u0438\u043b\u044f",
+        "human_meaning": "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c non-mutating \u043f\u0440\u043e\u0444\u0438\u043b\u044c\u043d\u044b\u0439 \u043f\u0430\u043a\u0435\u0442 \u0434\u043b\u044f \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0431\u0435\u0437 \u0437\u0430\u043f\u0438\u0441\u0438 Codex config \u0438 \u0431\u0435\u0437 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u0433\u043e\u0442\u043e\u0432\u043d\u043e\u0441\u0442\u0438.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_support",
+        "post_action_refresh_required": false,
+        "ui_action": "api_route_profile",
+        "unavailable_reason": ""
+      },
+      "api_route_remove": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435 \u043e\u0442\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u043e\u0439 registry-\u0437\u0430\u043f\u0438\u0441\u0438; \u043e\u0431\u043b\u0430\u0441\u0442\u044c \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043d\u0435 \u0448\u0438\u0440\u0435 command packet",
+        "action_role": "api_route_registry_cleanup",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043e\u0442\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u044b\u0439 \u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+        "human_meaning": "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0443\u0436\u0435 \u043e\u0442\u043a\u043b\u044e\u0447\u0451\u043d\u043d\u0443\u044e registry-\u0437\u0430\u043f\u0438\u0441\u044c \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043f\u043e\u0441\u043b\u0435 server preflight \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u0438\u0437 \u043a\u0430\u043d\u043e\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e JSON.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_registry_cleanup",
+        "post_action_refresh_required": true,
+        "ui_action": "api_route_remove",
+        "unavailable_reason": ""
+      },
+      "api_route_validate": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0443 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u0430; \u044d\u0442\u043e \u043d\u0435 \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 runtime readiness",
+        "action_role": "api_route_validation",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043c\u0430\u0440\u0448\u0440\u0443\u0442",
+        "human_meaning": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e\u0441\u0442\u044c \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u043d\u0430 \u0441\u0442\u043e\u0440\u043e\u043d\u0435 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440\u0430 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u0438\u0437 \u043a\u0430\u043d\u043e\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e JSON.",
+        "mutates_runtime": false,
+        "mutation_class": "api_route_verification",
+        "post_action_refresh_required": true,
+        "ui_action": "api_route_validate",
+        "unavailable_reason": ""
+      },
+      "demote_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0430 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_lifecycle_demotion",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0432 reserve",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0432\u043e\u0434 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u0438\u0437 active \u0432 reserve, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "demote_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "export_diagnostics": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0434\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043f\u0430\u043a\u0435\u0442 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438",
+        "action_role": "support_artifact",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": false,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u043a\u0438",
+        "human_meaning": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0434\u0438\u0430\u0433\u043d\u043e\u0441\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043f\u0430\u043a\u0435\u0442 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0438, \u043d\u0435 \u043f\u0440\u0435\u0432\u0440\u0430\u0449\u0430\u044f \u0435\u0433\u043e \u0432 runtime truth.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": false,
+        "ui_action": "export_diagnostics",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "hold_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0440\u0443\u0447\u043d\u043e\u0439 \u043f\u0430\u0443\u0437\u044b; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_lifecycle_hold",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u041f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0430 \u043f\u0430\u0443\u0437\u0443",
+        "human_meaning": "\u041f\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0430 manual hold, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "hold_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "launch_client_dispatch": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e bounded OS dispatch request; \u044d\u0442\u043e \u043d\u0435 \u0443\u0441\u043f\u0435\u0445 \u0441\u0435\u0441\u0441\u0438\u0438 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430",
+        "action_role": "host_client_dispatch",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0417\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c \u0432\u043d\u0435\u0448\u043d\u0438\u0439 \u043a\u043b\u0438\u0435\u043d\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c bounded \u0437\u0430\u043f\u0443\u0441\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c live overview truth.",
+        "launch_preflight": {
+          "current_session_untouched": true,
+          "machine_error_code": "OK",
+          "process_confirmation_possible": true,
+          "reason": "Preflight \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043b \u0438\u0437\u043e\u043b\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u043a\u043e\u043f\u0438\u044e: \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0435 profile/data \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0438 \u0438 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u044b\u0439 port \u0437\u0430\u0434\u0430\u043d\u044b.",
+          "separate_data_dir": true,
+          "separate_port": true,
+          "separate_profile": true,
+          "status": "admitted",
+          "target_exists": true,
+          "target_kind": "executable"
+        },
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "launch_client_dispatch",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "launch_smoke": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e smoke-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 runtime; \u044d\u0442\u043e \u043d\u0435 \u0443\u0441\u043f\u0435\u0445 \u0437\u0430\u043f\u0443\u0441\u043a\u0430 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430",
+        "action_role": "runtime_smoke_check",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": false,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "Smoke-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0437\u0430\u043f\u0443\u0441\u043a\u0430",
+        "human_meaning": "\u0417\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c runtime smoke check \u0431\u0435\u0437 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043e\u0431 \u0443\u0441\u043f\u0435\u0448\u043d\u043e\u043c \u0437\u0430\u043f\u0443\u0441\u043a\u0435 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0430.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "launch_smoke",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "onboard_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0434\u043e\u043f\u0443\u0441\u043a\u0430 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f \u043f\u0430\u043a\u0435\u0442 \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u0438 \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_onboarding",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": true,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u0441\u043d\u0430\u0447\u0430\u043b\u0430 \u0432 \u0440\u0435\u0437\u0435\u0440\u0432 \u0431\u0435\u0437 browser paths \u0438\u043b\u0438 credentials, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "account_admission",
+        "post_action_refresh_required": true,
+        "ui_action": "onboard_account",
+        "unavailable_reason": ""
+      },
+      "onboard_account_dry_run": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e dry-run preview \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0439 import auth \u0438 registry mutation \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u044e\u0442\u0441\u044f",
+        "action_role": "account_onboarding_preview",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": false,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430",
+        "human_meaning": "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c server-owned dry-run preview \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u0431\u0435\u0437 browser secrets, file paths, auth import \u0438\u043b\u0438 registry mutation.",
+        "mutates_runtime": false,
+        "mutation_class": "account_admission_preview",
+        "post_action_refresh_required": false,
+        "ui_action": "onboard_account_dry_run",
+        "unavailable_reason": ""
+      },
+      "promote_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0430 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_lifecycle_promotion",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u041f\u0435\u0440\u0435\u0432\u0435\u0441\u0442\u0438 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0432 active",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0432\u043e\u0434 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u0438\u0437 reserve \u0432 active, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "promote_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "quick_start_check_all": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e server-owned verify bundle \u0438\u0437 admitted checks \u0438 sandbox-owned readonly refresh surfaces; hidden mutations \u0437\u0430\u043f\u0440\u0435\u0449\u0435\u043d\u044b",
+        "action_role": "quick_start_verify_bundle",
+        "affects_primary_truth": false,
+        "availability_state": "displayable_readonly",
+        "available": true,
+        "confirmation_required": false,
+        "disabled_reason_code": "",
+        "disabled_reasons": [],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0432\u0441\u0451",
+        "human_meaning": "\u041f\u043e\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u0442\u0435\u043b\u044c\u043d\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c bounded account truth, \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0439 API route \u0438 bounded runtime status \u0431\u0435\u0437 \u0441\u043a\u0440\u044b\u0442\u044b\u0445 \u043c\u0443\u0442\u0430\u0446\u0438\u0439, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0435 readonly \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438.",
+        "mutates_runtime": false,
+        "mutation_class": "quick_start_verify_bundle",
+        "post_action_refresh_required": true,
+        "ui_action": "quick_start_check_all",
+        "unavailable_reason": ""
+      },
+      "refresh_health_detail": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0434\u0435\u0442\u0430\u043b\u0435\u0439 runtime; \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 runtime \u043d\u0435 \u043c\u0435\u043d\u044f\u0435\u0442\u0441\u044f",
+        "action_role": "runtime_detail",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": false,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0437\u0434\u043e\u0440\u043e\u0432\u044c\u044f",
+        "human_meaning": "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0434\u0435\u0442\u0430\u043b\u0438 \u0437\u0434\u043e\u0440\u043e\u0432\u044c\u044f runtime \u0431\u0435\u0437 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f runtime state.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": false,
+        "ui_action": "refresh_health_detail",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "release_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0441\u043d\u044f\u0442\u0438\u044f \u0440\u0443\u0447\u043d\u043e\u0439 \u043f\u0430\u0443\u0437\u044b; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_lifecycle_release",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0421\u043d\u044f\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0441 \u043f\u0430\u0443\u0437\u044b",
+        "human_meaning": "\u0421\u043d\u044f\u0442\u044c \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0441 manual hold, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "release_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "retire_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 lifecycle-\u0437\u0430\u043f\u0440\u043e\u0441; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_lifecycle_retirement",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0412\u044b\u0432\u0435\u0441\u0442\u0438 \u0430\u043a\u043a\u0430\u0443\u043d\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u0442\u0435\u0440\u043c\u0438\u043d\u0430\u043b\u044c\u043d\u044b\u0439 \u0432\u044b\u0432\u043e\u0434 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u0438\u0437 lifecycle, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "retire_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "set_mode_managed": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0440\u0435\u0436\u0438\u043c\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 live overview",
+        "action_role": "controlled_mode_mutation",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c managed mode",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c managed mode, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c desired/effective mode \u0438\u0437 live JSON truth.",
+        "mutates_runtime": true,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "set_mode_managed",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "set_mode_stable": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0440\u0435\u0436\u0438\u043c\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 live overview",
+        "action_role": "controlled_mode_mutation",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c stable mode",
+        "human_meaning": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c stable mode, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c desired/effective mode \u0438\u0437 live JSON truth.",
+        "mutates_runtime": true,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "set_mode_stable",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "stable_repair_plan": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e dry-run \u043f\u043b\u0430\u043d \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+        "action_role": "recovery_planning",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": false,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u041f\u043b\u0430\u043d \u0440\u0435\u043c\u043e\u043d\u0442\u0430 stable",
+        "human_meaning": "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043f\u043b\u0430\u043d stable repair \u0431\u0435\u0437 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": false,
+        "ui_action": "stable_repair_plan",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "sync_runtime": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 sync; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 live overview",
+        "action_role": "controlled_runtime_mutation",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c runtime",
+        "human_meaning": "\u0417\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c managed sync, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c overview \u0438\u0437 live JSON truth.",
+        "mutates_runtime": true,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "sync_runtime",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      },
+      "validate_account": {
+        "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+        "action_role": "account_verification",
+        "affects_primary_truth": false,
+        "availability_state": "phase_not_admitted",
+        "available": false,
+        "confirmation_required": true,
+        "disabled_reason_code": "UI_ACTION_PHASE_NOT_ADMITTED",
+        "disabled_reasons": [
+          "sandbox_phase_limited"
+        ],
+        "display_name": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0430\u043a\u043a\u0430\u0443\u043d\u0442",
+        "human_meaning": "\u0417\u0430\u043f\u0443\u0441\u0442\u0438\u0442\u044c \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0433\u043e \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430, \u0437\u0430\u0442\u0435\u043c \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432.",
+        "mutates_runtime": false,
+        "mutation_class": "",
+        "post_action_refresh_required": true,
+        "ui_action": "validate_account",
+        "unavailable_reason": "Sandbox action phase \u0434\u043e\u043f\u0443\u0441\u043a\u0430\u0435\u0442 reserve-first onboarding lane \u0438 bounded API route actions. Runtime mutations \u0432\u043d\u0435 onboarding lane \u0438 lifecycle chains \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f parked \u0434\u043e \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043a\u043e\u043d\u0442\u0443\u0440\u043e\u0432."
+      }
+    },
+    "sandbox_preflight": {
+      "current_session_untouched": true,
+      "machine_error_code": "OK",
+      "reason": "Sandbox action target \u0434\u043e\u043a\u0430\u0437\u0430\u043d: profile/data \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0438 \u0438 port \u043e\u0442\u0434\u0435\u043b\u0435\u043d\u044b \u043e\u0442 \u0442\u0435\u043a\u0443\u0449\u0435\u0433\u043e Codex.",
+      "sandbox_target_proven": true,
+      "separate_data_dir": true,
+      "separate_port": true,
+      "separate_profile": true,
+      "status": "admitted"
+    },
+    "schema_version": 1,
+    "source": "ui_action_metadata",
+    "status": "ok"
+  },
+  "dryRun": {
+    "account_id": "",
+    "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e dry-run preview \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u0439 import auth \u0438 registry mutation \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u044e\u0442\u0441\u044f",
+    "action_role": "account_onboarding_preview",
+    "affects_primary_truth": false,
+    "confirmation_required": false,
+    "mutates_runtime": false,
+    "mutation_class": "account_admission_preview",
+    "post_action_refresh_required": false,
+    "result": {
+      "changed_files": [],
+      "data": {},
+      "human_message": "Dry-run preview \u043f\u043e\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d. \u0420\u0435\u0430\u043b\u044c\u043d\u043e\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430 \u043d\u0435 \u0432\u044b\u043f\u043e\u043b\u043d\u044f\u043b\u043e\u0441\u044c.",
+      "machine_error_code": "OK",
+      "next_action": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+      "onboarding": {
+        "blocked_reasons": [],
+        "candidate_source_kind": "server_owned_only",
+        "changed_files_count": 0,
+        "final_outcome": "dry_run_preview_ready",
+        "operator_action_required": true,
+        "preview_only": true,
+        "reason": "Preview \u043f\u043e\u0441\u0442\u0440\u043e\u0435\u043d \u0431\u0435\u0437 auth import, registry mutation \u0438 runtime mutation.",
+        "required_follow_up": "WEB_SAFE_ACCOUNT_CONNECT_LIVE_PASS",
+        "reserve_first_boundary": "required",
+        "reserve_first_proven": false,
+        "selected_backend_id": "",
+        "ui_state": "dry_run_ready",
+        "write_scope": "ui_session_only"
+      },
+      "status": "ok"
+    },
+    "route_id": "",
+    "schema_version": 1,
+    "source": "ui_action",
+    "status": "ok",
+    "ui_action": "onboard_account_dry_run"
+  },
+  "live": {
+    "account_id": "",
+    "action_claim_scope": "\u0442\u043e\u043b\u044c\u043a\u043e \u0437\u0430\u043f\u0440\u043e\u0441 \u0434\u043e\u043f\u0443\u0441\u043a\u0430 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430; \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u043e\u0441\u0442\u0430\u044e\u0442\u0441\u044f \u043f\u0430\u043a\u0435\u0442 \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u0438 \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u043e\u0432",
+    "action_role": "account_onboarding",
+    "affects_primary_truth": false,
+    "confirmation_required": true,
+    "mutates_runtime": false,
+    "mutation_class": "account_admission",
+    "post_action_refresh_required": true,
+    "result": {
+      "changed_files": [
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-reopen-proof-xt82q8q1/managed/backend-registry.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-reopen-proof-xt82q8q1/profile/config.toml",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-reopen-proof-xt82q8q1/managed/supervisor-state.json",
+        "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-reopen-proof-xt82q8q1/profile/runtime-effective-mode.txt"
+      ],
+      "data": {},
+      "human_message": "Account onboarding completed with reserve-first proof.",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "onboarding": {
+        "active_routing_changed": false,
+        "auth_snapshot_before_login_count": 0,
+        "auth_snapshot_before_login_source": "{'source': 'stable_config_parent', 'path': '/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-reopen-proof-xt82q8q1/managed', 'path_resolution': 'fallback', 'exists': True}",
+        "auth_snapshot_before_login_status": "ok",
+        "external_command_status": "ok",
+        "final_outcome": "reserve_only_success",
+        "input_mode": "detected_new_auth",
+        "operator_action_required": false,
+        "pool_after_onboarding": "reserve",
+        "reason": "\u0434\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u043e \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u044f \u0441\u043d\u0430\u0447\u0430\u043b\u0430 \u0432 \u0440\u0435\u0437\u0435\u0440\u0432 \u043f\u0440\u0438\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442",
+        "reserve_first_proven": true,
+        "selected_backend_id": "auth",
+        "selection_status": "selected_unique_backend",
+        "status_observed": {
+          "command_status": "error",
+          "effective_mode": "stable",
+          "endpoint": "http://127.0.0.1:8318/v1",
+          "exit_code": 1,
+          "liveness": "degraded",
+          "machine_error_code": "ATTESTATION_FAILED"
+        },
+        "sync_outcome": "ok",
+        "ui_state": "success",
+        "validate_outcome": "ok"
+      },
+      "status": "ok"
+    },
+    "route_id": "",
+    "schema_version": 1,
+    "source": "ui_action",
+    "status": "ok",
+    "ui_action": "onboard_account"
+  },
+  "after": {
+    "accounts": [
+      {
+        "cooldown_until": "",
+        "enabled": true,
+        "fail_count": 0,
+        "id": "auth",
+        "label": "auth.json",
+        "last_error_class": "",
+        "last_error_summary": "",
+        "last_success": "",
+        "manual_hold": false,
+        "notes_summary": "Onboarded automatically at 2026-05-21T13:18:59.724013+00:00",
+        "pool": "reserve",
+        "pool_label": "\u0420\u0435\u0437\u0435\u0440\u0432",
+        "status": "unknown",
+        "status_label": "\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u043e",
+        "success_count": 0,
+        "visual_state": "neutral"
+      }
+    ],
+    "commands": {
+      "accounts_list": {
+        "exit_code": 0,
+        "human_message": "Account registry snapshot is available.",
+        "machine_error_code": "OK",
+        "next_action": "none",
+        "role": "primary_truth",
+        "status": "ok",
+        "ui_state": "success"
+      }
+    },
+    "primary_truth_ok": true,
+    "privacy": {
+      "forbidden_fields_excluded": [
+        "secret_references",
+        "tokens",
+        "raw_paths",
+        "raw_logs"
+      ],
+      "raw_command_packet_included": false,
+      "redacted": true
+    },
+    "registry_identity": {
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "status": "clear"
+    },
+    "schema_version": 1,
+    "source": "accounts_readonly",
+    "status": "ok",
+    "summary": {
+      "active": 0,
+      "capacity_target": 25,
+      "degraded": 0,
+      "down": 0,
+      "healthy": 0,
+      "hold": 0,
+      "human_message": "Account registry snapshot is available.",
+      "last_error": "",
+      "machine_error_code": "OK",
+      "problem": 0,
+      "reserve": 1,
+      "retired": 0,
+      "visible_count": 1
+    }
+  },
+  "ledger": [
+    {
+      "ui_action": "onboard_account",
+      "final_outcome": "reserve_only_success",
+      "selected_backend_id": "auth",
+      "status": "ok"
+    }
+  ]
+}

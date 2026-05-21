@@ -7640,6 +7640,74 @@ class CliTests(unittest.TestCase):
         self.assertEqual(added[0]["pool"], "reserve")
         self.assertIn(str(self.managed_dir / "backend-registry.json"), payload["changed_files"])
 
+    def test_accounts_onboard_passes_derived_runtime_paths_to_owner_helpers(
+        self,
+    ) -> None:
+        auth_ref = "/tmp/codex-derived-env.json"
+        env = os.environ.copy()
+        env.update(
+            {
+                "PYTHONPATH": str(ROOT),
+                "WBP_PROFILE_DIR": str(self.profile_dir),
+                "WBP_MANAGED_DIR": str(self.managed_dir),
+                "WBP_STABLE_CONFIG": str(self.stable_dir / "config.yaml"),
+                "WBP_ACCOUNTS_BIN": str(self.accounts_bin),
+                "WBP_ONBOARD_BIN": str(self.onboard_bin),
+                "WBP_SYNC_SCRIPT": str(self.sync_script),
+                "WBP_LAUNCHER_SCRIPT": str(self.launcher_script),
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-derived-env",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                ),
+            }
+        )
+        for key in (
+            "WBP_AUTH_FILE",
+            "WBP_CONFIG_TOML",
+            "WBP_REGISTRY_FILE",
+            "WBP_STATE_FILE",
+            "WBP_MANAGED_CONFIG_FILE",
+            "WBP_RUNTIME_MODE_FILE",
+            "WBP_RUNTIME_EFFECTIVE_MODE_FILE",
+            "WBP_LOCK_FILE",
+            "WBP_LAUNCHER_LOCK_FILE",
+        ):
+            env.pop(key, None)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "wild_boar_proxy",
+                "accounts",
+                "onboard",
+                "--json",
+                "--auth-ref",
+                auth_ref,
+                "--no-sync",
+            ],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["selected_backend_id"], "backend-derived-env")
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        self.assertTrue(
+            any(item.get("id") == "backend-derived-env" for item in registry["backends"])
+        )
+
     def test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof(
         self,
     ) -> None:

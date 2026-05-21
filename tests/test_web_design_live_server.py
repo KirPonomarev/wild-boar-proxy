@@ -960,9 +960,31 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             from wild_boar_proxy.ui_shell import JsonCommandRunner
 
+            sandbox_env = _sandbox_action_runner_env(contract)
+            expected_sandbox_paths = {
+                "WBP_PROFILE_DIR": profile_dir,
+                "WBP_MANAGED_DIR": data_dir,
+                "WBP_STABLE_CONFIG": data_dir / "stable-runtime-config.yaml",
+                "WBP_AUTH_FILE": profile_dir / "auth.json",
+                "WBP_CONFIG_TOML": profile_dir / "config.toml",
+                "WBP_RUNTIME_MODE_FILE": profile_dir / "runtime-mode.txt",
+                "WBP_RUNTIME_EFFECTIVE_MODE_FILE": profile_dir / "runtime-effective-mode.txt",
+                "WBP_REGISTRY_FILE": data_dir / "backend-registry.json",
+                "WBP_STATE_FILE": data_dir / "supervisor-state.json",
+                "WBP_MANAGED_CONFIG_FILE": data_dir / "managed-config.yaml",
+                "WBP_SYNC_SCRIPT": data_dir / "supervisor-sync.sh",
+                "WBP_ACCOUNTS_BIN": data_dir / "bin" / "codex-accounts",
+                "WBP_ONBOARD_BIN": data_dir / "bin" / "codex-account-onboard",
+                "WBP_LOCK_FILE": data_dir / "wild-boar-proxy.lock",
+                "WBP_LAUNCHER_LOCK_FILE": data_dir / "stable-runtime-launch.lock",
+                "WBP_EXTERNAL_MODELS_DIR": data_dir / "external-models",
+            }
+            for key, expected in expected_sandbox_paths.items():
+                self.assertEqual(sandbox_env[key], str(expected), key)
+
             runner = JsonCommandRunner(
                 cwd=str(profile_dir),
-                env=_sandbox_action_runner_env(contract),
+                env=sandbox_env,
             )
 
             readonly_before = build_accounts_readonly_snapshot(runner)
