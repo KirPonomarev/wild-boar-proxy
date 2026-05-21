@@ -2020,14 +2020,6 @@ function onboardingResultModel(onboarding, payload = {}, refreshState = "none") 
 }
 
 function onboardingLiveReadyInSession() {
-  const payload = lastOnboardingActionPayload;
-  if (!payload || payload.ui_action !== "onboard_account_dry_run") {
-    return false;
-  }
-  const onboarding = payload.result?.onboarding || {};
-  if (onboarding.preview_only !== true || onboarding.ui_state === "dry_run_denied") {
-    return false;
-  }
   return metadataFor("onboard_account").available === true;
 }
 
@@ -2037,23 +2029,23 @@ function populateOnboardModal() {
   text(
     "onboardIntro",
     liveStep
-      ? "Preview уже admitted в текущей сессии. Следующий шаг выполнит live reserve-first connect только в sandbox."
+      ? "Preview уже admitted в текущей сессии. Следующий шаг откроет owner login bridge и добавит результат в reserve только в sandbox."
       : "Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется."
   );
-  text("onboardSourceValue", liveStep ? "server-owned live lane" : "server-owned preview");
+  text("onboardSourceValue", liveStep ? "owner login bridge" : "server-owned preview");
   text("onboardModeValue", liveStep ? "Live reserve-first" : "Dry-run");
   text("onboardAfterValue", liveStep ? "Нужен canonical accounts refresh" : "Live accounts не меняются");
-  text("onboardResultValue", liveStep ? "owner packet + refresh proof" : "packet preview only");
+  text("onboardResultValue", liveStep ? "login packet + onboard packet + refresh proof" : "packet preview only");
   text(
     "onboardTechnicalCommand",
     liveStep
-      ? "Команда запускается как onboard_account только после admitted preview и sandbox preflight."
+      ? "Команда запускается как onboard_account; browser не передаёт token, auth reference или path."
       : "Команда запускается только как onboard_account_dry_run."
   );
   text(
     "onboardTechnicalPreview",
     liveStep
-      ? "Preview и live-result не смешиваются: success признаётся только после packet + refresh."
+      ? "Owner layer создаёт login session, materializes sandbox auth и затем запускает onboarding."
       : "Preview не импортирует auth и не меняет registry."
   );
   text(

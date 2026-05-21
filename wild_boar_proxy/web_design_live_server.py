@@ -1271,6 +1271,8 @@ def run_ui_action(
             return blocked
     if ui_action == "onboard_account_dry_run":
         return _run_account_connect_dry_run_action()
+    if ui_action == "onboard_account":
+        return _run_account_login_bridge_action(runner)
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_client_dispatch":
@@ -2101,6 +2103,8 @@ def _action_result(
         }
         if isinstance(changed_files, list):
             changed_files = ["launch_dispatch_metadata"] * len(changed_files)
+    if ui_action == "onboard_account" and isinstance(changed_files, list):
+        changed_files = ["account_onboarding_artifact"] * len(changed_files)
     payload = {
         "status": result["status"],
         "machine_error_code": result["machine_error_code"],
@@ -2112,6 +2116,196 @@ def _action_result(
     if ui_action in {"onboard_account", "onboard_account_dry_run"}:
         payload["onboarding"] = _onboarding_summary(packet, command_status=str(result["status"]))
     return payload
+
+
+def _login_bridge_public_summary(
+    *,
+    start_result: dict[str, Any],
+    complete_result: dict[str, Any],
+    onboard_result: dict[str, Any],
+) -> dict[str, Any]:
+    start_packet = start_result.get("packet") if isinstance(start_result.get("packet"), dict) else {}
+    complete_packet = (
+        complete_result.get("packet") if isinstance(complete_result.get("packet"), dict) else {}
+    )
+    login_session_id = str(start_packet.get("login_session_id") or "")
+    return {
+        "status": (
+            "completed"
+            if start_result.get("status") == "ok"
+            and complete_result.get("status") == "ok"
+            and onboard_result.get("status") == "ok"
+            else "failed"
+        ),
+        "provider": "sandbox",
+        "login_session_id_present": bool(login_session_id),
+        "start_status": str(start_result.get("status") or ""),
+        "start_machine_error_code": str(start_result.get("machine_error_code") or ""),
+        "complete_status": str(complete_result.get("status") or ""),
+        "complete_machine_error_code": str(complete_result.get("machine_error_code") or ""),
+        "onboard_status": str(onboard_result.get("status") or ""),
+        "onboard_machine_error_code": str(onboard_result.get("machine_error_code") or ""),
+        "auth_materialized": complete_packet.get("login_result", {}).get("auth_materialized") is True
+        if isinstance(complete_packet.get("login_result"), dict)
+        else False,
+        "auth_ref_scope": str(complete_packet.get("auth_ref_scope") or ""),
+        "browser_secret_intake": False,
+        "browser_path_intake": False,
+        "next_action": str(onboard_result.get("next_action") or ""),
+    }
+
+
+def _login_bridge_failure_result(
+    *,
+    failed_result: dict[str, Any],
+    start_result: dict[str, Any] | None = None,
+    complete_result: dict[str, Any] | None = None,
+    onboard_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    bridge = _login_bridge_public_summary(
+        start_result=start_result or failed_result,
+        complete_result=complete_result or failed_result,
+        onboard_result=onboard_result or failed_result,
+    )
+    return {
+        "status": "command_error",
+        "machine_error_code": str(failed_result.get("machine_error_code") or "UI_LOGIN_BRIDGE_FAILED"),
+        "human_message": str(failed_result.get("human_message") or "Owner login bridge failed."),
+        "next_action": str(failed_result.get("next_action") or "retry"),
+        "changed_files": failed_result.get("changed_files")
+        if isinstance(failed_result.get("changed_files"), list)
+        else [],
+        "data": {"login_bridge": bridge},
+        "onboarding": {
+            "ui_state": "command_error",
+            "final_outcome": "login_bridge_failed",
+            "selected_backend_id": "",
+            "reserve_first_proven": False,
+            "operator_action_required": True,
+            "reason": "owner login bridge failed before reserve-first onboarding proof",
+        },
+    }
+
+
+def _run_account_login_bridge_action(runner: CommandRunner) -> dict[str, Any]:
+    start_result = execute_command(
+        runner,
+        "accounts_login_start_sandbox",
+        allow_disabled=True,
+    )
+    if start_result["status"] != "ok":
+        result = _login_bridge_failure_result(failed_result=start_result)
+        return _ui_action_response_from_result("onboard_account", result)
+
+    start_packet = start_result.get("packet") if isinstance(start_result.get("packet"), dict) else {}
+    login_session_id = str(start_packet.get("login_session_id") or "")
+    state = str(start_packet.get("state") or "")
+    if not login_session_id or not state:
+        failed_result = {
+            "status": "command_error",
+            "machine_error_code": "UI_LOGIN_START_PACKET_INVALID",
+            "human_message": "Owner login start packet did not include session and state.",
+            "next_action": "retry",
+            "changed_files": [],
+            "packet": start_packet,
+        }
+        result = _login_bridge_failure_result(
+            failed_result=failed_result,
+            start_result=start_result,
+        )
+        return _ui_action_response_from_result("onboard_account", result)
+
+    complete_result = execute_command(
+        runner,
+        "accounts_login_complete_sandbox",
+        structured_args={"login_session_id": login_session_id, "state": state},
+        allow_disabled=True,
+    )
+    if complete_result["status"] != "ok":
+        result = _login_bridge_failure_result(
+            failed_result=complete_result,
+            start_result=start_result,
+            complete_result=complete_result,
+        )
+        return _ui_action_response_from_result("onboard_account", result)
+
+    complete_packet = (
+        complete_result.get("packet") if isinstance(complete_result.get("packet"), dict) else {}
+    )
+    auth_ref = str(complete_packet.get("auth_ref") or "")
+    auth_ref_scope = str(complete_packet.get("auth_ref_scope") or "")
+    if not auth_ref or auth_ref_scope != "sandbox":
+        failed_result = {
+            "status": "command_error",
+            "machine_error_code": "UI_LOGIN_COMPLETE_PACKET_INVALID",
+            "human_message": "Owner login complete packet did not include sandbox auth_ref.",
+            "next_action": "retry",
+            "changed_files": [],
+            "packet": complete_packet,
+        }
+        result = _login_bridge_failure_result(
+            failed_result=failed_result,
+            start_result=start_result,
+            complete_result=complete_result,
+        )
+        return _ui_action_response_from_result("onboard_account", result)
+
+    onboard_result = execute_command(
+        runner,
+        "accounts_onboard_auth_ref",
+        structured_args={"auth_ref": auth_ref},
+        allow_disabled=True,
+    )
+    final_result = {
+        **onboard_result,
+        "changed_files": [
+            *(
+                start_result.get("changed_files")
+                if isinstance(start_result.get("changed_files"), list)
+                else []
+            ),
+            *(
+                complete_result.get("changed_files")
+                if isinstance(complete_result.get("changed_files"), list)
+                else []
+            ),
+            *(
+                onboard_result.get("changed_files")
+                if isinstance(onboard_result.get("changed_files"), list)
+                else []
+            ),
+        ],
+    }
+    packet = final_result.get("packet") if isinstance(final_result.get("packet"), dict) else {}
+    packet["data"] = {
+        "login_bridge": _login_bridge_public_summary(
+            start_result=start_result,
+            complete_result=complete_result,
+            onboard_result=onboard_result,
+        ),
+    }
+    final_result["packet"] = packet
+    return _ui_action_response_from_result("onboard_account", _action_result(final_result, ui_action="onboard_account"))
+
+
+def _ui_action_response_from_result(ui_action: str, result: dict[str, Any]) -> dict[str, Any]:
+    action_spec = UI_ACTION_ALLOWLIST[ui_action]
+    return {
+        "schema_version": 1,
+        "status": "ok" if result["status"] == "ok" else "command_error",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": action_spec["action_role"],
+        "mutates_runtime": action_spec["mutates_runtime"],
+        "affects_primary_truth": action_spec["affects_primary_truth"],
+        "confirmation_required": action_spec["confirmation_required"],
+        "post_action_refresh_required": action_spec["post_action_refresh_required"],
+        "action_claim_scope": action_spec["action_claim_scope"],
+        "mutation_class": action_spec.get("mutation_class", ""),
+        "account_id": "",
+        "route_id": "",
+        "result": result,
+    }
 
 
 def _diagnostics_redaction_status(packet: dict[str, Any], data: dict[str, Any]) -> str:

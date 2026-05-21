@@ -1,0 +1,40 @@
+{
+  "contour": "WEB_ACCOUNT_OWNER_LOGIN_BRIDGE_PASS_REOPEN",
+  "auditor": "subagent:019e4c1a-c940-7473-937d-1b908145c2d0 plus orchestrator verification",
+  "status": "pass_after_fixes",
+  "findings": [
+    {
+      "id": "IA-001",
+      "severity": "blocker_before_fix",
+      "claim": "Raw auth_ref could leak through action response passthrough.",
+      "resolution": "Fixed by replacing bridge packet data with public login_bridge summary only and redacting onboard changed_files to account_onboarding_artifact labels.",
+      "evidence": [
+        "wild_boar_proxy/web_design_live_server.py",
+        "tests/test_web_design_live_server.py",
+        "audit_results/web_account_owner_login_bridge_pass_reopen_2026-05-21/evidence/browser-run-summary.json"
+      ],
+      "verified": true
+    },
+    {
+      "id": "IA-002",
+      "severity": "blocker_before_fix",
+      "claim": "Owner sandbox login completion materialized an auth artifact but did not make sandbox WBP_AUTH_FILE usable for status proof.",
+      "resolution": "Fixed in owner layer by writing the same synthetic sandbox auth payload to the sandbox profile auth file and managed sandbox-auth artifact.",
+      "evidence": [
+        "wild_boar_proxy/runtime.py",
+        "tests/test_cli.py"
+      ],
+      "verified": true
+    }
+  ],
+  "verified_facts": {
+    "browser_payload_for_onboard_account_has_no_browser_secret_fields": true,
+    "bridge_runs_login_start": true,
+    "bridge_runs_login_complete": true,
+    "bridge_runs_onboard_with_server_owned_auth_ref": true,
+    "ui_response_raw_auth_ref_exposed": false,
+    "reserve_first_browser_proof": true,
+    "full_required_gate_passed": true
+  },
+  "residual_scope_note": "This contour proves sandbox owner login bridge. It is not real provider OAuth."
+}

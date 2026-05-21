@@ -7844,12 +7844,22 @@ class CliTests(unittest.TestCase):
             payload["changed_files"],
         )
         auth_payload = json.loads(auth_ref.read_text(encoding="utf-8"))
+        sandbox_auth_payload = json.loads(
+            (self.profile_dir / "auth.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(sandbox_auth_payload, auth_payload)
         self.assertEqual(auth_payload["provider"], "sandbox")
         self.assertTrue(auth_payload["synthetic"])
         self.assertEqual(auth_payload["synthetic_source"], "sandbox-login")
         self.assertEqual(auth_payload["sandbox_login_session_id"], session_id)
         self.assertTrue(str(auth_payload["OPENAI_API_KEY"]).startswith("sandbox-synthetic-"))
-        self.assertTrue(all(path.startswith(str(self.managed_dir)) for path in payload["changed_files"]))
+        self.assertIn(str(self.profile_dir / "auth.json"), payload["changed_files"])
+        self.assertTrue(
+            all(
+                path.startswith(str(self.managed_dir)) or path.startswith(str(self.profile_dir))
+                for path in payload["changed_files"]
+            )
+        )
         self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
         payload_text = json.dumps(payload, ensure_ascii=True)
         self.assertNotIn("sandbox-ok", payload_text)

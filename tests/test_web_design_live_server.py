@@ -42,6 +42,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 TEST_LAUNCH_CLIENT_PATH = "/bin/sh"
+TEST_SANDBOX_LOGIN_SESSION_ID = "sandbox-test-session"
+TEST_SANDBOX_LOGIN_STATE = "sandbox-state-test"
+TEST_SANDBOX_AUTH_REF = "/tmp/wbp-sandbox-auth.json"
 
 
 class StableProbeHandler(BaseHTTPRequestHandler):
@@ -254,12 +257,41 @@ class MappingRunner:
 class WebDesignLiveServerTests(unittest.TestCase):
     def test_onboard_adapter_spec_uses_exact_argv_template(self) -> None:
         onboard = ALLOWLIST["accounts_onboard"]
+        onboard_auth_ref = ALLOWLIST["accounts_onboard_auth_ref"]
+        login_start = ALLOWLIST["accounts_login_start_sandbox"]
+        login_complete = ALLOWLIST["accounts_login_complete_sandbox"]
 
         self.assertEqual(onboard.argv_template, ("accounts", "onboard", "--json"))
         self.assertEqual(onboard.category, "onboarding")
         self.assertTrue(onboard.confirmation_required)
         self.assertEqual(onboard.required_args, ())
         self.assertEqual(onboard.allowed_args, ())
+        self.assertFalse(onboard_auth_ref.ui_enabled)
+        self.assertEqual(
+            onboard_auth_ref.argv_template,
+            ("accounts", "onboard", "--json", "--auth-ref", "{auth_ref}"),
+        )
+        self.assertFalse(login_start.ui_enabled)
+        self.assertEqual(
+            login_start.argv_template,
+            ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+        )
+        self.assertFalse(login_complete.ui_enabled)
+        self.assertEqual(
+            login_complete.argv_template,
+            (
+                "accounts",
+                "login",
+                "complete",
+                "--session",
+                "{login_session_id}",
+                "--state",
+                "{state}",
+                "--proof",
+                "sandbox-ok",
+                "--json",
+            ),
+        )
 
     def test_promote_demote_adapter_specs_use_exact_argv_templates(self) -> None:
         promote = ALLOWLIST["accounts_promote"]
@@ -962,9 +994,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["onboarding"]["ui_state"], "success")
         self.assertEqual(
             result["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
         self.assertEqual(result["result"]["onboarding"]["input_mode"], "default")
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "completed")
+        self.assertTrue(result["result"]["data"]["login_bridge"]["auth_materialized"])
+        self.assertFalse(result["result"]["data"]["login_bridge"]["browser_secret_intake"])
+        self.assertFalse(result["result"]["data"]["login_bridge"]["browser_path_intake"])
+        serialized_result = json.dumps(result)
+        self.assertNotIn(TEST_SANDBOX_AUTH_REF, serialized_result)
+        self.assertNotIn("/tmp/wbp-sandbox-auth.json", serialized_result)
         self.assertEqual(
             result["result"]["onboarding"]["auth_snapshot_before_login_status"],
             "ok",
@@ -976,7 +1015,26 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner.calls,
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "--state",
+                    TEST_SANDBOX_LOGIN_STATE,
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ),
             ],
         )
 
@@ -1069,14 +1127,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(
                 result["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                "explicit_auth_imported_to_reserve",
             )
             self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
 
             readonly_after = build_accounts_readonly_snapshot(runner)
             self.assertEqual(readonly_after["status"], "ok")
             self.assertEqual(len(readonly_after["accounts"]), 1)
-            self.assertEqual(readonly_after["accounts"][0]["id"], "auth")
+            self.assertEqual(readonly_after["accounts"][0]["id"], "sandbox-synthetic")
             self.assertEqual(readonly_after["accounts"][0]["pool"], "reserve")
 
     def test_real_json_runner_supports_sandbox_api_route_allow_from_profile_cwd(self) -> None:
@@ -1248,11 +1306,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(live["status"], "ok")
             self.assertEqual(
                 live["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                "explicit_auth_imported_to_reserve",
             )
             self.assertEqual(after_accounts["status"], "ok")
             self.assertEqual(len(after_accounts["accounts"]), 1)
-            self.assertEqual(after_accounts["accounts"][0]["id"], "auth")
+            self.assertEqual(after_accounts["accounts"][0]["id"], "sandbox-synthetic")
             self.assertEqual(after_accounts["accounts"][0]["pool"], "reserve")
             self.assertEqual(after_api["status"], "ok")
             self.assertEqual(after_api["routes"], [])
@@ -1286,7 +1344,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(preflight["status"], "ok")
         self.assertEqual(
             preflight["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
 
     def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
@@ -1363,13 +1421,25 @@ class WebDesignLiveServerTests(unittest.TestCase):
         no_new_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("no_new_auth_detected"),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet("no_new_auth_detected"),
             }
         )
         ambiguous_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet(
                     "ambiguous_new_auth_detection",
                     selected_backend_id="",
                     pool_after_onboarding="",
@@ -1380,7 +1450,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         unknown_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): command_packet(
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): command_packet(
                     human_message="Onboarding packet had no structured result."
                 ),
             }
@@ -1388,13 +1464,25 @@ class WebDesignLiveServerTests(unittest.TestCase):
         validate_failed_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("validate_failed"),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet("validate_failed"),
             }
         )
         command_error_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet(
                     "reserve_only_success",
                     status="error",
                     machine_error_code="ONBOARDING_OWNER_FAILED",
@@ -2700,7 +2788,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(
             action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
         self.assertTrue(
             action_results["onboard_account"]["result"]["onboarding"]["reserve_first_proven"]
@@ -2793,7 +2881,26 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "--state",
+                    TEST_SANDBOX_LOGIN_STATE,
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ),
                 ("accounts", "list", "--json"),
             ],
             [
@@ -2877,6 +2984,26 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
         ("accounts", "onboard", "--json"): onboarding_packet("reserve_only_success"),
+        ("accounts", "login", "start", "--provider", "sandbox", "--json"): login_start_packet(),
+        (
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            TEST_SANDBOX_LOGIN_SESSION_ID,
+            "--state",
+            TEST_SANDBOX_LOGIN_STATE,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        ): login_complete_packet(),
+        (
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            TEST_SANDBOX_AUTH_REF,
+        ): onboarding_packet("explicit_auth_imported_to_reserve"),
         ("accounts", "validate", "acct-active", "--json"): command_packet(
             human_message="Account validation completed."
         ),
@@ -3127,6 +3254,59 @@ def onboarding_packet(
             "final_outcome": final_outcome,
         },
     )
+
+
+def login_start_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Sandbox login session started.",
+        next_action="login_complete",
+        login_session_id=TEST_SANDBOX_LOGIN_SESSION_ID,
+        state=TEST_SANDBOX_LOGIN_STATE,
+        nonce="sandbox-nonce-test",
+        expires_at="2026-05-21T12:00:00+00:00",
+        login_url=(
+            "http://127.0.0.1:8788/owner-login/sandbox?"
+            f"session={TEST_SANDBOX_LOGIN_SESSION_ID}&state={TEST_SANDBOX_LOGIN_STATE}"
+        ),
+        login_result={
+            "status": "started",
+            "provider": "sandbox",
+            "login_session_id": TEST_SANDBOX_LOGIN_SESSION_ID,
+            "state": TEST_SANDBOX_LOGIN_STATE,
+            "nonce": "sandbox-nonce-test",
+            "expires_at": "2026-05-21T12:00:00+00:00",
+            "login_url": (
+                "http://127.0.0.1:8788/owner-login/sandbox?"
+                f"session={TEST_SANDBOX_LOGIN_SESSION_ID}&state={TEST_SANDBOX_LOGIN_STATE}"
+            ),
+            "auth_materialized": False,
+            "used": False,
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
+def login_complete_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Sandbox login completed.",
+        next_action="accounts_onboard",
+        provider="sandbox",
+        login_session_id=TEST_SANDBOX_LOGIN_SESSION_ID,
+        auth_ref=TEST_SANDBOX_AUTH_REF,
+        auth_ref_scope="sandbox",
+        login_result={
+            "status": "completed",
+            "provider": "sandbox",
+            "login_session_id": TEST_SANDBOX_LOGIN_SESSION_ID,
+            "auth_materialized": True,
+            "auth_ref": TEST_SANDBOX_AUTH_REF,
+            "auth_ref_scope": "sandbox",
+            "used": True,
+        },
+    )
+    payload.update(overrides)
+    return payload
 
 
 def free_port() -> int:

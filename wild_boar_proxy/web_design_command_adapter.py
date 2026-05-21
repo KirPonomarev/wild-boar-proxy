@@ -71,6 +71,42 @@ ALLOWLIST: dict[str, CommandSpec] = {
         category="onboarding",
         confirmation_required=True,
     ),
+    "accounts_onboard_auth_ref": CommandSpec(
+        command_id="accounts_onboard_auth_ref",
+        argv_template=("accounts", "onboard", "--json", "--auth-ref", "{auth_ref}"),
+        category="onboarding",
+        ui_enabled=False,
+        confirmation_required=True,
+        required_args=("auth_ref",),
+        allowed_args=("auth_ref",),
+    ),
+    "accounts_login_start_sandbox": CommandSpec(
+        command_id="accounts_login_start_sandbox",
+        argv_template=("accounts", "login", "start", "--provider", "sandbox", "--json"),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=True,
+    ),
+    "accounts_login_complete_sandbox": CommandSpec(
+        command_id="accounts_login_complete_sandbox",
+        argv_template=(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "{login_session_id}",
+            "--state",
+            "{state}",
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        ),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=True,
+        required_args=("login_session_id", "state"),
+        allowed_args=("login_session_id", "state"),
+    ),
     "accounts_validate": CommandSpec(
         command_id="accounts_validate",
         argv_template=("accounts", "validate", "{account_id}", "--json"),
@@ -299,6 +335,10 @@ def _render_argv(spec: CommandSpec, structured_args: dict[str, str]) -> tuple[st
         client_path = structured_args["client_path"]
         if not os.path.isabs(client_path):
             raise UiShellError("launch_client client_path must be absolute")
+    if "auth_ref" in structured_args:
+        auth_ref = structured_args["auth_ref"]
+        if not os.path.isabs(auth_ref):
+            raise UiShellError("accounts_onboard_auth_ref auth_ref must be absolute")
 
     return tuple(part.format(**structured_args) for part in spec.argv_template)
 

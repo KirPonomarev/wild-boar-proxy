@@ -60,6 +60,9 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "mode_get",
             "accounts_list",
             "accounts_onboard",
+            "accounts_onboard_auth_ref",
+            "accounts_login_start_sandbox",
+            "accounts_login_complete_sandbox",
             "accounts_validate",
             "accounts_promote",
             "accounts_demote",
@@ -86,6 +89,9 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
 
         self.assertEqual(set(ALLOWLIST), expected)
         self.assertFalse(ALLOWLIST["launch_client"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_onboard_auth_ref"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_start_sandbox"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_complete_sandbox"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
         self.assertIn(
@@ -277,6 +283,54 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(runner.calls, [("accounts", "onboard", "--json")])
         self.assertEqual(result["status"], "ok")
 
+    def test_owner_login_bridge_commands_are_internal_only_and_exact(self) -> None:
+        runner = RecordingRunner()
+
+        blocked_start = execute_command(runner, "accounts_login_start_sandbox")
+        start = execute_command(runner, "accounts_login_start_sandbox", allow_disabled=True)
+        complete = execute_command(
+            runner,
+            "accounts_login_complete_sandbox",
+            structured_args={"login_session_id": "sandbox-abc", "state": "sandbox-state-abc"},
+            allow_disabled=True,
+        )
+        onboard = execute_command(
+            runner,
+            "accounts_onboard_auth_ref",
+            structured_args={"auth_ref": "/tmp/wbp-sandbox-auth.json"},
+            allow_disabled=True,
+        )
+
+        self.assertEqual(blocked_start["status"], "integration_failure")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    "sandbox-abc",
+                    "--state",
+                    "sandbox-state-abc",
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    "/tmp/wbp-sandbox-auth.json",
+                ),
+            ],
+        )
+        self.assertEqual(start["status"], "ok")
+        self.assertEqual(complete["status"], "ok")
+        self.assertEqual(onboard["status"], "ok")
+
     def test_account_lifecycle_commands_run_exact_argv_with_structured_account_id(self) -> None:
         runner = RecordingRunner()
 
@@ -465,10 +519,18 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "accounts_onboard",
             structured_args={"auth_ref": "/tmp/new-auth.json"},
         )
+        internal_relative = execute_command(
+            runner,
+            "accounts_onboard_auth_ref",
+            structured_args={"auth_ref": "relative-auth.json"},
+            allow_disabled=True,
+        )
 
         self.assertEqual(runner.calls, [])
         self.assertEqual(extra["status"], "integration_failure")
         self.assertIn("unsupported args", extra["human_message"])
+        self.assertEqual(internal_relative["status"], "integration_failure")
+        self.assertIn("auth_ref must be absolute", internal_relative["human_message"])
 
     def test_forbidden_command_is_rejected_without_runner_call(self) -> None:
         runner = RecordingRunner()

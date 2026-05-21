@@ -10552,7 +10552,7 @@ def run_accounts_login_complete(
     session_dir = sandbox_login_sessions_dir(paths)
     auth_dir = sandbox_login_auth_artifacts_dir(paths)
     auth_path = auth_dir / f"codex-sandbox-synthetic-{login_session_id}.json"
-    before = snapshot_path_states([session_dir, session_path, auth_dir, auth_path])
+    before = snapshot_path_states([session_dir, session_path, auth_dir, auth_path, paths.auth_file])
 
     with serialized_lock(paths):
         if not session_path.exists():
@@ -10618,7 +10618,9 @@ def run_accounts_login_complete(
             )
 
         auth_dir.mkdir(parents=True, exist_ok=True)
-        write_json_atomic(auth_path, build_sandbox_login_auth_payload(login_session_id))
+        auth_payload = build_sandbox_login_auth_payload(login_session_id)
+        write_json_atomic(auth_path, auth_payload)
+        write_json_atomic(paths.auth_file, auth_payload)
         _ = read_api_key(auth_path)
         session["used"] = True
         write_json_atomic(session_path, session)
@@ -10631,7 +10633,7 @@ def run_accounts_login_complete(
         severity="recoverable",
         operator_action="none",
         changed_files=detect_changed_files_by_state(
-            before, [session_dir, session_path, auth_dir, auth_path]
+            before, [session_dir, session_path, auth_dir, auth_path, paths.auth_file]
         ),
         extra={
             "next_action": "accounts_onboard",
