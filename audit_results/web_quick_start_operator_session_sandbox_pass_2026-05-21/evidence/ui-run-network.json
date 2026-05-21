@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "capture_mode": "direct_http_packet_mirror_plus_browser_ui",
+  "base_url": "http://127.0.0.1:58610",
+  "sequence": [
+    {
+      "step": 1,
+      "method": "GET",
+      "path": "/api/actions",
+      "artifact": "actions-metadata.json",
+      "status": "ok",
+      "key_fact": "sandbox_actions metadata remained admitted for Quick Start and bounded API actions"
+    },
+    {
+      "step": 2,
+      "method": "GET",
+      "path": "/api/accounts-readonly",
+      "artifact": "accounts-readonly.json",
+      "status": "ok",
+      "key_fact": "one account visible; auth remains in reserve"
+    },
+    {
+      "step": 3,
+      "method": "GET",
+      "path": "/api/api-connections-readonly",
+      "artifact": "api-connections-readonly.json",
+      "status": "ok",
+      "key_fact": "main route wbp-openrouter-primary remained enabled with secret_ref only"
+    },
+    {
+      "step": 4,
+      "method": "POST",
+      "path": "/api/action",
+      "request_body": {
+        "ui_action": "quick_start_check_all"
+      },
+      "artifact": "check-all-packet.json",
+      "status": "ok",
+      "key_fact": "verify-only bundle returned ready with hidden_mutation_absent=true"
+    },
+    {
+      "step": 5,
+      "method": "GET",
+      "path": "/api/live-readonly",
+      "artifact": "live-readonly.json",
+      "status": "ok",
+      "key_fact": "overview readonly snapshot remained healthy and sandbox-owned"
+    }
+  ],
+  "browser_path": [
+    "quick-start initial summary observed",
+    "accounts screen observed",
+    "api-connections screen observed",
+    "quick-start check-all triggered",
+    "overview action panel observed",
+    "action ledger observed after overview refresh"
+  ]
+}
