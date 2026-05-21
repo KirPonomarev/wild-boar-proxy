@@ -1,0 +1,34 @@
+{
+  "contour": "DESKTOP_APP_PACKAGE_PASS",
+  "status": "STOP_AND_DIAGNOSE",
+  "artifact_kind": "experimental-package.tar.gz",
+  "artifact_format": "tar.gz",
+  "canonical_packaging_path": {
+    "command_build": "package experimental build --output-dir <path> --json",
+    "command_verify": "package experimental verify --manifest <path> --json",
+    "build_dispatch_file": "wild_boar_proxy/cli.py:201-212,402-413",
+    "build_runtime_file": "wild_boar_proxy/runtime.py:3918-3993",
+    "verify_runtime_file": "wild_boar_proxy/runtime.py:3996-4088",
+    "command_api_file": "COMMAND_API.md:81-97"
+  },
+  "verification": {
+    "package_build": "passed",
+    "package_verify": "passed",
+    "archive_boundary_check": "passed",
+    "targeted_package_tests": "passed",
+    "git_diff_check": "passed",
+    "closeout_resilience_staged": "passed"
+  },
+  "launchability": {
+    "packaged_launch_surface_present": false,
+    "contains_app_bundle": false,
+    "contains_pkg": false,
+    "contains_root_executable_candidates": false,
+    "reason": "canonical artifact is an allowlisted source/docs archive only"
+  },
+  "scope": {
+    "private_runtime_residue_found": false,
+    "semantic_widening_attempted": false,
+    "new_truth_source_introduced": false
+  }
+}
