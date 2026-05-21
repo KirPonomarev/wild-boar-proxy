@@ -373,6 +373,7 @@ def build_launcher_subprocess_env(paths: RuntimePaths) -> dict[str, str]:
     env["WBP_ONBOARD_BIN"] = str(paths.onboard_bin)
     env["WBP_LOCK_FILE"] = str(paths.lock_file)
     env["WBP_LAUNCHER_LOCK_FILE"] = str(paths.launcher_lock_file)
+    env.setdefault("WBP_EXTERNAL_MODELS_DIR", str(paths.managed_dir / "external-models"))
     return env
 
 
@@ -3489,6 +3490,20 @@ def run_stable_runtime_launcher_attempt(
                 selected_config_file = str(paths.stable_runtime_generated_config_file)
                 selected_source_kind = "approved_repair_target"
                 selected_source_path = str(paths.repair_target_inventory_dir)
+        if not paths.launcher_script.exists():
+            return StableRuntimeLaunchAttempt(
+                desired_kind=desired_kind,
+                observed_path=observed_path,
+                activation_attempted=activation_attempted,
+                generated_config_regenerated=generated_config_regenerated,
+                activation_method=activation_method,
+                selected_config_file=selected_config_file,
+                selected_source_kind=selected_source_kind,
+                selected_source_path=selected_source_path,
+                launcher_exit_code=127,
+                stdout="",
+                stderr=f"Missing launcher script: {paths.launcher_script}\n",
+            )
         result = subprocess.run(
             [str(paths.launcher_script), "smoke"],
             capture_output=True,

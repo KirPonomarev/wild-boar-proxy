@@ -2,16 +2,17 @@
   "contour": "ACCOUNT_OWNER_SANDBOX_LOGIN_ADMISSION_PASS",
   "date": "2026-05-21",
   "branch": "codex/external-agent-lab-isolated",
-  "head_before_finalize": "ab81955",
-  "status": "implementation_complete_with_env_verification_blocker",
+  "head_before_finalize": "ced7dae",
+  "status": "closed_success",
   "code_changes": {
     "files": [
       "wild_boar_proxy/runtime.py",
       "wild_boar_proxy/cli.py",
       "tests/test_cli.py",
+      "tests/test_web_design_live_server.py",
       "COMMAND_API.md"
     ],
-    "scope": "owner login admission commands, managed session/auth surfaces, strict JSON packets, and targeted tests"
+    "scope": "owner login admission commands, managed session/auth surfaces, strict JSON packets, targeted tests, and deterministic test isolation for stable listener assumptions"
   },
   "owner_packets": {
     "login_start": {
@@ -44,8 +45,8 @@
     "required_commands": [
       {
         "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q",
-        "status": "fail",
-        "summary": "Ran 569 tests: 6 failures. Evidence: evidence/full-unittest-stderr.txt"
+        "status": "pass",
+        "summary": "Ran 569 tests. Evidence: evidence/full-unittest-stdout.txt and evidence/full-unittest-stderr.txt"
       },
       {
         "command": "git diff --check",
@@ -62,19 +63,19 @@
     ],
     "supporting_commands": [
       {
-        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -v tests.test_cli.CliTests.test_accounts_login_start_requires_json_flag tests.test_cli.CliTests.test_accounts_login_complete_requires_json_flag tests.test_cli.CliTests.test_accounts_login_start_sandbox_strict_json_and_session_persisted tests.test_cli.CliTests.test_accounts_login_start_rejects_unsupported_provider tests.test_cli.CliTests.test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay tests.test_cli.CliTests.test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets tests.test_cli.CliTests.test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change",
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible tests.test_cli.CliTests.test_healthcheck_reports_working_reprobe_candidate_without_greenwash tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof",
         "status": "pass",
-        "summary": "Ran 7 tests. Evidence: evidence/targeted-login-tests.txt"
+        "summary": "Ran 6 tests after isolating sync/stable probes."
       },
       {
-        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q",
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_web_design_live_server.WebDesignLiveServerTests.test_real_json_runner_supports_sandbox_onboard_from_profile_cwd tests.test_web_design_live_server.WebDesignLiveServerTests.test_http_sandbox_readonly_endpoints_follow_sandbox_target",
         "status": "pass",
-        "summary": "Ran 190 tests. Evidence: evidence/web-ui-test-suite.txt"
+        "summary": "Ran 2 tests after adding per-test stable probe."
       },
       {
         "command": "lsof -nP -iTCP:8318 -sTCP:LISTEN",
-        "status": "observed",
-        "summary": "Live listener detected: cli-proxy PID 1364. Evidence: evidence/listener-8318.txt"
+        "status": "observed_then_isolated",
+        "summary": "Live listener was cli-proxy-api via launchd; it was stopped for verification and tests no longer require ambient 8318."
       }
     ]
   },

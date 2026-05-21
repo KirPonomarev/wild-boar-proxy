@@ -3031,6 +3031,13 @@ class CliTests(unittest.TestCase):
             thread.start()
             server_thread_started = True
             env = self.env()
+            custom_sync_script = self.profile_dir / "reprobe-greenwash-sync.sh"
+            custom_sync_script.write_text(
+                self.sync_script.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            custom_sync_script.chmod(0o755)
+            env["WBP_SYNC_SCRIPT"] = str(custom_sync_script)
             env["WBP_PROXY_REPROBE_CANDIDATES"] = (
                 f"http://127.0.0.1:{candidate_port},http://127.0.0.1:10808"
             )
@@ -3190,7 +3197,8 @@ class CliTests(unittest.TestCase):
         (self.managed_dir / "supervisor-state.json").write_text(
             json.dumps(state) + "\n", encoding="utf-8"
         )
-        self.sync_script.write_text(
+        custom_sync_script = self.profile_dir / "healthcheck-candidate-sync.sh"
+        custom_sync_script.write_text(
             "#!/bin/sh\n"
             "python3 - \"$WBP_STATE_FILE\" \"$WBP_MANAGED_CONFIG_FILE\" "
             "\"$WBP_RUNTIME_EFFECTIVE_MODE_FILE\" \"$WBP_CONFIG_TOML\" <<'PY'\n"
@@ -3228,7 +3236,7 @@ class CliTests(unittest.TestCase):
             "PY\n",
             encoding="utf-8",
         )
-        self.sync_script.chmod(0o755)
+        custom_sync_script.chmod(0o755)
         server, thread = self.start_probe_server(port)
         candidate_socket = socket.socket()
         candidate_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -3237,6 +3245,7 @@ class CliTests(unittest.TestCase):
         try:
             result = self.run_cli_with_env(
                 {
+                    "WBP_SYNC_SCRIPT": str(custom_sync_script),
                     "WBP_PROXY_REPROBE_CANDIDATES": (
                         f"{expected_proxy_url},http://127.0.0.1:10808"
                     ),
@@ -8038,6 +8047,7 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof(
         self,
     ) -> None:
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(
@@ -8084,6 +8094,7 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof(
         self,
     ) -> None:
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(
@@ -8170,24 +8181,44 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_detected_new_auth_status_failure_does_not_claim_success(
         self,
     ) -> None:
-        (self.profile_dir / "auth.json").write_text("{}\n", encoding="utf-8")
-        result = self.run_cli_with_env(
-            {
-                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
-                    [
-                        self.build_backend(
-                            backend_id="backend-detected-status-fail",
-                            auth_ref="/tmp/codex-detected-status-fail.json",
-                        )
-                    ]
-                )
-            },
-            "accounts",
-            "onboard",
-            "--json",
-            "--non-interactive",
-            "--no-sync",
+        port = free_port()
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n", encoding="utf-8"
         )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+        state["managed_port"] = port
+        state["effective_mode"] = "managed"
+        (self.managed_dir / "supervisor-state.json").write_text(
+            json.dumps(state) + "\n", encoding="utf-8"
+        )
+        (self.profile_dir / "auth.json").write_text("{}\n", encoding="utf-8")
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {
+                    "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                        [
+                            self.build_backend(
+                                backend_id="backend-detected-status-fail",
+                                auth_ref="/tmp/codex-detected-status-fail.json",
+                            )
+                        ]
+                    )
+                },
+                "accounts",
+                "onboard",
+                "--json",
+                "--non-interactive",
+                "--no-sync",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
@@ -8210,6 +8241,7 @@ class CliTests(unittest.TestCase):
     ) -> None:
         auth_ref = "/tmp/codex-skip-login.json"
         argv_file = self.managed_dir / "onboard-argv.json"
+        self.configure_stable_runtime_probe(9999)
         server, thread = self.start_probe_server(9999)
         try:
             result = self.run_cli_with_env(

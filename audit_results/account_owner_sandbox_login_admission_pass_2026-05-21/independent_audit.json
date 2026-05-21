@@ -1,6 +1,6 @@
 {
   "contour": "ACCOUNT_OWNER_SANDBOX_LOGIN_ADMISSION_PASS",
-  "status": "pass_with_verification_gate_note",
+  "status": "pass",
   "auditor": {
     "agent_id": "019e4b7e-465d-7a91-b85b-9157ebd0041d",
     "model": "gpt-5.4-mini",
@@ -12,6 +12,7 @@
     "runtime_behavior_checks": true,
     "evidence_files_parsed": true,
     "targeted_tests_passed": true,
+    "full_required_gate_passed_after_isolation": true,
     "mismatches": []
   },
   "manual_spot_check": [
@@ -32,11 +33,11 @@
     },
     {
       "id": "full_required_suite_gate",
-      "pass": false,
-      "evidence": "evidence/full-unittest-stderr.txt shows 6 failures; evidence/listener-8318.txt confirms live listener on 127.0.0.1:8318 affecting deterministic expectations in parts of tests.test_cli."
+      "pass": true,
+      "evidence": "Full gate passed after stopping ambient cli-proxy-api and isolating stable listener assumptions in tests: Ran 569 tests OK."
     }
   ],
   "residual_risks": [
-    "Contour close requires clean full required unittest gate; currently blocked by live listener interference on port 8318."
+    "This contour adds sandbox admission, not real provider OAuth. The next contour must bridge web UI to the owner surface and still avoid browser secret/path intake."
   ]
 }

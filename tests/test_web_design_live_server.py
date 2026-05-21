@@ -10,7 +10,7 @@ import threading
 import tempfile
 import unittest
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -42,6 +42,35 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB_DESIGN_UI = ROOT / "wild_boar_proxy" / "web_design_ui"
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 TEST_LAUNCH_CLIENT_PATH = "/bin/sh"
+
+
+class StableProbeHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/v1/models":
+            body = json.dumps({"data": [{"id": "gpt-5.4"}]}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_error(404)
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/v1/responses":
+            length = int(self.headers.get("Content-Length", "0"))
+            _ = self.rfile.read(length)
+            body = json.dumps({"output_text": "OK"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_error(404)
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        return
 
 
 def launch_copy_contract(*, action_server_port: int | None = None) -> LaunchCopyContract:
@@ -965,6 +994,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 paths = RuntimePaths.from_env()
                 install_payload = run_installer_init(paths)
             self.assertEqual(install_payload["status"], "ok")
+            stable_port = free_port()
+            (data_dir / "stable-runtime-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {stable_port}\n", encoding="utf-8"
+            )
             (profile_dir / "auth.json").write_text(
                 json.dumps(
                     {
@@ -1016,12 +1049,22 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(readonly_before["accounts"], [])
             self.assertEqual(readonly_before["registry_identity"]["status"], "clear")
 
-            result = run_ui_action(
-                runner,
-                {"ui_action": "onboard_account"},
-                launch_copy_contract=contract,
-                action_phase=SANDBOX_ACTION_PHASE,
+            stable_server = ThreadingHTTPServer(
+                ("127.0.0.1", stable_port), StableProbeHandler
             )
+            stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
+            stable_thread.start()
+            try:
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "onboard_account"},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+            finally:
+                stable_server.shutdown()
+                stable_server.server_close()
+                stable_thread.join(timeout=5)
 
             self.assertEqual(result["status"], "ok")
             self.assertEqual(
@@ -1130,6 +1173,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 paths = RuntimePaths.from_env()
                 install_payload = run_installer_init(paths)
             self.assertEqual(install_payload["status"], "ok")
+            stable_port = free_port()
+            (data_dir / "stable-runtime-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {stable_port}\n", encoding="utf-8"
+            )
             (profile_dir / "auth.json").write_text(
                 json.dumps(
                     {
@@ -1140,6 +1187,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            stable_server = ThreadingHTTPServer(
+                ("127.0.0.1", stable_port), StableProbeHandler
+            )
+            stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
+            stable_thread.start()
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
                 build_handler(
@@ -1178,6 +1230,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=5)
+                stable_server.shutdown()
+                stable_server.server_close()
+                stable_thread.join(timeout=5)
 
             self.assertEqual(before_accounts["status"], "ok")
             self.assertEqual(before_accounts["source"], "accounts_readonly")
