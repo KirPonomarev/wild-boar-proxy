@@ -114,6 +114,12 @@ EXPERIMENTAL_PACKAGE_SCHEMA_VERSION = 1
 EXPERIMENTAL_PACKAGE_ARTIFACT_NAME = "experimental-package.tar.gz"
 EXPERIMENTAL_PACKAGE_MANIFEST_NAME = "experimental-package.manifest.json"
 EXPERIMENTAL_PACKAGE_METADATA_NAME = "experimental-package.metadata.json"
+LAUNCHABLE_PACKAGE_SCHEMA_VERSION = 1
+LAUNCHABLE_PACKAGE_APP_NAME = "WildBoarProxy.app"
+LAUNCHABLE_PACKAGE_MANIFEST_NAME = "launchable-package.manifest.json"
+LAUNCHABLE_PACKAGE_METADATA_NAME = "launchable-package.metadata.json"
+LAUNCHABLE_PACKAGE_EXECUTABLE_NAME = "WildBoarProxy"
+LAUNCHABLE_PACKAGE_ARTIFACT_KIND = "macos_app_bundle"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
 EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "MASTER_PLAN.md"
@@ -3867,6 +3873,8 @@ def list_experimental_package_files(source_root: Path, output_dir: Path) -> list
     for root_entry in sorted(source_root.iterdir(), key=lambda item: item.name):
         if root_entry.name.startswith("."):
             continue
+        if root_entry.is_symlink():
+            continue
         if root_entry.resolve() == output_dir:
             continue
         if root_entry.is_file():
@@ -3909,6 +3917,162 @@ def read_experimental_plan_metadata(source_root: Path) -> dict[str, str]:
     if plan_date:
         metadata["plan_date"] = plan_date
     return metadata
+
+
+def launchable_package_app_path(output_dir: Path) -> Path:
+    return output_dir / LAUNCHABLE_PACKAGE_APP_NAME
+
+
+def launchable_package_executable_path(output_dir: Path) -> Path:
+    return (
+        launchable_package_app_path(output_dir)
+        / "Contents"
+        / "MacOS"
+        / LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+    )
+
+
+def launchable_package_info_plist_path(output_dir: Path) -> Path:
+    return launchable_package_app_path(output_dir) / "Contents" / "Info.plist"
+
+
+def launchable_package_resources_root(output_dir: Path) -> Path:
+    return launchable_package_app_path(output_dir) / "Contents" / "Resources" / "app"
+
+
+def resolve_launchable_package_runtime_executable(
+    runtime_executable_raw: str | None,
+) -> Path:
+    candidate = (
+        Path(runtime_executable_raw).expanduser()
+        if runtime_executable_raw
+        else Path(sys.executable)
+    )
+    if not candidate.is_absolute():
+        candidate = candidate.resolve()
+    if not candidate.exists() or not candidate.is_file():
+        raise RuntimeErrorInfo(
+            f"Launchable package runtime executable is missing: {candidate}",
+            machine_error_code="PACKAGE_RUNTIME_EXECUTABLE_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    if not os.access(candidate, os.X_OK):
+        raise RuntimeErrorInfo(
+            f"Launchable package runtime executable is not executable: {candidate}",
+            machine_error_code="PACKAGE_RUNTIME_EXECUTABLE_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    return candidate
+
+
+def probe_runtime_tk_support(runtime_executable: Path) -> dict[str, Any]:
+    try:
+        result = subprocess.run(
+            [str(runtime_executable), "-c", "import tkinter"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=sanitized_env(),
+        )
+    except OSError as exc:
+        return {
+            "status": "probe_failed",
+            "runtime_executable": str(runtime_executable),
+            "tkinter_available": False,
+            "probe_exit_code": None,
+            "probe_stderr": str(exc),
+        }
+    return {
+        "status": "probed",
+        "runtime_executable": str(runtime_executable),
+        "tkinter_available": result.returncode == 0,
+        "probe_exit_code": result.returncode,
+        "probe_stderr": result.stderr.strip(),
+    }
+
+
+def render_launchable_package_info_plist() -> str:
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>Wild Boar Proxy</string>
+  <key>CFBundleExecutable</key>
+  <string>WildBoarProxy</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.kirponomarev.wildboarproxy.experimental</string>
+  <key>CFBundleName</key>
+  <string>Wild Boar Proxy</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.0-experimental</string>
+</dict>
+</plist>"""
+
+
+def render_launchable_package_launcher_script(runtime_executable: Path) -> str:
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            "set -eu",
+            f'PYTHON_EXE="{runtime_executable}"',
+            'APP_ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"',
+            'RESOURCE_APP="$APP_ROOT/Resources/app"',
+            'export PYTHONPATH="$RESOURCE_APP${PYTHONPATH:+:$PYTHONPATH}"',
+            'if [ "${1:-}" = "--smoke-installer-init-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy installer init --json "$@"',
+            "fi",
+            'if [ "${1:-}" = "--smoke-status-json" ]; then',
+            "  shift",
+            '  exec "$PYTHON_EXE" -m wild_boar_proxy status --json "$@"',
+            "fi",
+            'exec "$PYTHON_EXE" -m wild_boar_proxy.ui_shell "$@"',
+        ]
+    )
+
+
+def hash_directory_files(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(
+        (
+            candidate
+            for candidate in root.rglob("*")
+            if candidate.is_symlink() or candidate.is_file()
+        ),
+        key=lambda candidate: str(candidate.relative_to(root)),
+    ):
+        relative = str(path.relative_to(root)).replace(os.sep, "/")
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if path.is_symlink():
+            digest.update(b"symlink\0")
+            digest.update(os.readlink(path).encode("utf-8"))
+            digest.update(b"\0")
+            continue
+        with path.open("rb") as handle:
+            while True:
+                chunk = handle.read(65536)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def list_launchable_package_entries(artifact_root: Path) -> list[Path]:
+    return sorted(
+        (
+            candidate
+            for candidate in artifact_root.rglob("*")
+            if candidate.is_symlink() or candidate.is_file()
+        ),
+        key=lambda candidate: str(candidate.relative_to(artifact_root)),
+    )
 
 
 def run_package_experimental_build(
@@ -4129,6 +4293,337 @@ def run_package_experimental_verify(
                     "status": "passed",
                     "violating_entries": [],
                 },
+            }
+        },
+    )
+
+
+def is_launchable_package_bundle_entry_allowed(relative_path: Path) -> bool:
+    normalized = relative_path.as_posix()
+    if normalized == "Contents/Info.plist":
+        return True
+    if normalized == f"Contents/MacOS/{LAUNCHABLE_PACKAGE_EXECUTABLE_NAME}":
+        return True
+    if relative_path.parts[:3] == ("Contents", "Resources", "app"):
+        embedded_relative = Path(*relative_path.parts[3:])
+        if not embedded_relative.parts:
+            return False
+        return is_experimental_package_archive_entry_allowed(embedded_relative)
+    return False
+
+
+def run_package_launchable_build(
+    _paths: RuntimePaths, output_dir_raw: str, *, runtime_executable_raw: str | None
+) -> dict[str, Any]:
+    output_dir = Path(output_dir_raw).expanduser().resolve()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to prepare output directory: {output_dir} ({exc})",
+            machine_error_code="PACKAGE_OUTPUT_DIR_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+
+    source_root = get_experimental_package_source_root()
+    package_files = list_experimental_package_files(source_root, output_dir)
+    runtime_executable = resolve_launchable_package_runtime_executable(
+        runtime_executable_raw
+    )
+    runtime_probe = probe_runtime_tk_support(runtime_executable)
+    artifact_path = launchable_package_app_path(output_dir)
+    manifest_path = output_dir / LAUNCHABLE_PACKAGE_MANIFEST_NAME
+    metadata_path = output_dir / LAUNCHABLE_PACKAGE_METADATA_NAME
+    executable_path = launchable_package_executable_path(output_dir)
+    plist_path = launchable_package_info_plist_path(output_dir)
+    resources_root = launchable_package_resources_root(output_dir)
+    if artifact_path.exists():
+        shutil.rmtree(artifact_path)
+    try:
+        resources_root.mkdir(parents=True, exist_ok=True)
+        for file_path in package_files:
+            relative_path = file_path.relative_to(source_root)
+            destination = resources_root / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, destination)
+        write_text_atomic(plist_path, render_launchable_package_info_plist().rstrip("\n"))
+        write_executable_text_atomic(
+            executable_path,
+            render_launchable_package_launcher_script(runtime_executable),
+        )
+        artifact_digest = hash_directory_files(artifact_path)
+        metadata = {
+            "schema_version": LAUNCHABLE_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "source_root": str(source_root),
+            "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+            "runtime_executable": str(runtime_executable),
+            "runtime_probe": runtime_probe,
+            "allowlist": {
+                "top_level_dirs": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS),
+                "root_file_suffixes": sorted(EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES),
+            },
+            "included_file_count": len(package_files),
+            "included_files": [
+                str(path.relative_to(source_root)) for path in package_files
+            ],
+            **read_experimental_plan_metadata(source_root),
+        }
+        write_json_artifact(metadata_path, metadata)
+        metadata_sha256 = hash_file(metadata_path)
+        manifest = {
+            "schema_version": LAUNCHABLE_PACKAGE_SCHEMA_VERSION,
+            "created_at_utc": now_iso(),
+            "artifact_path": artifact_path.name,
+            "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+            "artifact_sha256": artifact_digest,
+            "metadata_path": metadata_path.name,
+            "metadata_sha256": metadata_sha256,
+        }
+        write_json_artifact(manifest_path, manifest)
+    except OSError as exc:
+        raise RuntimeErrorInfo(
+            f"Failed to build launchable desktop package: {exc}",
+            machine_error_code="PACKAGE_BUILD_FAILED",
+            severity="recoverable",
+            operator_action="retry",
+        ) from exc
+
+    changed_files = [str(artifact_path), str(manifest_path), str(metadata_path)]
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Launchable desktop package built with embedded allowlisted files."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "package_result": {
+                "status": "built",
+                "artifact_kind": LAUNCHABLE_PACKAGE_ARTIFACT_KIND,
+                "source_root": str(source_root),
+                "artifact_path": str(artifact_path),
+                "manifest_path": str(manifest_path),
+                "metadata_path": str(metadata_path),
+                "artifact_sha256": artifact_digest,
+                "metadata_sha256": metadata_sha256,
+                "embedded_file_count": len(package_files),
+                "runtime_executable": str(runtime_executable),
+                "runtime_tkinter_available": runtime_probe["tkinter_available"] is True,
+            }
+        },
+    )
+
+
+def run_package_launchable_verify(
+    _paths: RuntimePaths, manifest_raw: str
+) -> dict[str, Any]:
+    manifest_path = Path(manifest_raw).expanduser().resolve()
+    if not manifest_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package manifest: {manifest_path}",
+            machine_error_code="PACKAGE_MANIFEST_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid launchable package manifest JSON: {exc}",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeErrorInfo(
+            "Launchable package manifest must be a JSON object.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_raw = manifest.get("artifact_path")
+    expected_sha256 = manifest.get("artifact_sha256")
+    metadata_path_raw = manifest.get("metadata_path")
+    expected_metadata_sha256 = manifest.get("metadata_sha256")
+    if (
+        not artifact_path_raw
+        or not expected_sha256
+        or not metadata_path_raw
+        or not expected_metadata_sha256
+    ):
+        raise RuntimeErrorInfo(
+            "Launchable package manifest is missing required checksum fields.",
+            machine_error_code="PACKAGE_MANIFEST_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    artifact_path_candidate = Path(str(artifact_path_raw))
+    artifact_path = (
+        artifact_path_candidate
+        if artifact_path_candidate.is_absolute()
+        else (manifest_path.parent / artifact_path_candidate).resolve()
+    )
+    if not artifact_path.exists() or not artifact_path.is_dir():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package artifact directory: {artifact_path}",
+            machine_error_code="PACKAGE_ARTIFACT_MISSING",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_sha256 = hash_directory_files(artifact_path)
+    checksum_match = observed_sha256 == str(expected_sha256)
+    if not checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package checksum verification failed.",
+            machine_error_code="PACKAGE_CHECKSUM_MISMATCH",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "checksum_mismatch",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": False,
+                }
+            },
+        )
+    metadata_path = (manifest_path.parent / str(metadata_path_raw)).resolve()
+    if not metadata_path.is_file():
+        raise RuntimeErrorInfo(
+            f"Missing launchable package metadata: {metadata_path}",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    observed_metadata_sha256 = hash_file(metadata_path)
+    metadata_checksum_match = observed_metadata_sha256 == str(expected_metadata_sha256)
+    if not metadata_checksum_match:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package metadata verification failed.",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "metadata_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "metadata_path": str(metadata_path),
+                    "metadata_sha256_expected": str(expected_metadata_sha256),
+                    "metadata_sha256_observed": observed_metadata_sha256,
+                    "metadata_checksum_match": False,
+                }
+            },
+        )
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeErrorInfo(
+            f"Invalid launchable package metadata JSON: {exc}",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        ) from exc
+    if not isinstance(metadata, dict):
+        raise RuntimeErrorInfo(
+            "Launchable package metadata must be a JSON object.",
+            machine_error_code="PACKAGE_METADATA_INVALID",
+            severity="recoverable",
+            operator_action="user_action",
+        )
+    violating_entries: list[str] = []
+    for file_path in list_launchable_package_entries(artifact_path):
+        relative_path = file_path.relative_to(artifact_path)
+        if file_path.is_symlink():
+            violating_entries.append(relative_path.as_posix())
+            continue
+        if not is_launchable_package_bundle_entry_allowed(relative_path):
+            violating_entries.append(relative_path.as_posix())
+    executable_path = artifact_path / "Contents" / "MacOS" / LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+    plist_path = artifact_path / "Contents" / "Info.plist"
+    runtime_executable = ""
+    runtime_tkinter_available = False
+    runtime_executable = str(metadata.get("runtime_executable", ""))
+    runtime_probe = metadata.get("runtime_probe")
+    if isinstance(runtime_probe, dict):
+        runtime_tkinter_available = runtime_probe.get("tkinter_available") is True
+    runtime_path_exists = False
+    runtime_path_executable = False
+    if runtime_executable:
+        runtime_path = Path(runtime_executable)
+        runtime_path_exists = runtime_path.exists()
+        runtime_path_executable = runtime_path_exists and os.access(runtime_path, os.X_OK)
+    if not plist_path.is_file():
+        violating_entries.append("Contents/Info.plist")
+    if not executable_path.is_file() or not os.access(executable_path, os.X_OK):
+        violating_entries.append(f"Contents/MacOS/{LAUNCHABLE_PACKAGE_EXECUTABLE_NAME}")
+    if violating_entries:
+        return build_command_payload(
+            ok=False,
+            human_message="Launchable package boundary verification failed.",
+            machine_error_code="PACKAGE_BOUNDARY_INVALID",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "package_result": {
+                    "status": "boundary_invalid",
+                    "manifest_path": str(manifest_path),
+                    "artifact_path": str(artifact_path),
+                    "artifact_sha256_expected": str(expected_sha256),
+                    "artifact_sha256_observed": observed_sha256,
+                    "checksum_match": True,
+                    "metadata_path": str(metadata_path),
+                    "metadata_sha256_expected": str(expected_metadata_sha256),
+                    "metadata_sha256_observed": observed_metadata_sha256,
+                    "metadata_checksum_match": True,
+                    "violating_entries": violating_entries,
+                    "runtime_executable": runtime_executable,
+                    "runtime_path_exists": runtime_path_exists,
+                    "runtime_path_executable": runtime_path_executable,
+                    "runtime_tkinter_available": runtime_tkinter_available,
+                }
+            },
+        )
+    return build_command_payload(
+        ok=True,
+        human_message="Launchable package verification passed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "package_result": {
+                "status": "verified",
+                "manifest_path": str(manifest_path),
+                "artifact_path": str(artifact_path),
+                "artifact_sha256_expected": str(expected_sha256),
+                "artifact_sha256_observed": observed_sha256,
+                "checksum_match": True,
+                "metadata_path": str(metadata_path),
+                "metadata_sha256_expected": str(expected_metadata_sha256),
+                "metadata_sha256_observed": observed_metadata_sha256,
+                "metadata_checksum_match": True,
+                "boundary_check": {"status": "passed", "violating_entries": []},
+                "runtime_executable": runtime_executable,
+                "runtime_path_exists": runtime_path_exists,
+                "runtime_path_executable": runtime_path_executable,
+                "runtime_tkinter_available": runtime_tkinter_available,
             }
         },
     )

@@ -36,6 +36,8 @@ from .runtime import (
     run_rollout_stage_prove,
     run_package_experimental_build,
     run_package_experimental_verify,
+    run_package_launchable_build,
+    run_package_launchable_verify,
     run_retire,
     run_stable_repair_apply,
     run_stable_repair_dry_run,
@@ -210,6 +212,17 @@ def build_parser() -> argparse.ArgumentParser:
     package_experimental_verify = package_experimental_subparsers.add_parser("verify")
     package_experimental_verify.add_argument("--manifest", required=True)
     package_experimental_verify.add_argument("--json", action="store_true", required=True)
+    package_launchable = package_subparsers.add_parser("launchable")
+    package_launchable_subparsers = package_launchable.add_subparsers(
+        dest="package_launchable_command", required=True
+    )
+    package_launchable_build = package_launchable_subparsers.add_parser("build")
+    package_launchable_build.add_argument("--output-dir", required=True)
+    package_launchable_build.add_argument("--runtime-executable")
+    package_launchable_build.add_argument("--json", action="store_true", required=True)
+    package_launchable_verify = package_launchable_subparsers.add_parser("verify")
+    package_launchable_verify.add_argument("--manifest", required=True)
+    package_launchable_verify.add_argument("--json", action="store_true", required=True)
 
     external_models = subparsers.add_parser("external-models")
     external_models_subparsers = external_models.add_subparsers(
@@ -411,6 +424,24 @@ def main(argv: list[str] | None = None) -> int:
             and args.package_experimental_command == "verify"
         ):
             return emit_json(run_package_experimental_verify(paths, args.manifest))
+        if (
+            args.command == "package"
+            and args.package_command == "launchable"
+            and args.package_launchable_command == "build"
+        ):
+            return emit_json(
+                run_package_launchable_build(
+                    paths,
+                    args.output_dir,
+                    runtime_executable_raw=args.runtime_executable,
+                )
+            )
+        if (
+            args.command == "package"
+            and args.package_command == "launchable"
+            and args.package_launchable_command == "verify"
+        ):
+            return emit_json(run_package_launchable_verify(paths, args.manifest))
         if args.command == "external-models":
             return emit_json(run_external_models_command(args))
         raise RuntimeErrorInfo(

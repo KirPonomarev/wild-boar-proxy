@@ -45,6 +45,8 @@ All operator commands must support `--json`.
 - `companion uninstall --json`
 - `package experimental build --output-dir <path> --json`
 - `package experimental verify --manifest <path> --json`
+- `package launchable build --output-dir <path> [--runtime-executable <path>] --json`
+- `package launchable verify --manifest <path> --json`
 
 ## Required response fields
 
@@ -95,6 +97,28 @@ runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
 
 `package experimental verify --manifest <path> --json` is the owner surface for
 artifact existence + checksum verification from the manifest.
+
+## Additional launchable package owner surface
+
+`package launchable build --output-dir <path> [--runtime-executable <path>] --json`
+is the owner surface for local launchable desktop package materialization.
+
+It must emit:
+
+- one launchable desktop artifact path
+- a checksum manifest for the artifact
+- metadata with the selected runtime executable and runtime-capability probe
+- integrity binding for both the artifact and the companion metadata used for
+  launchability claims
+- only allowlisted repo source/docs material plus the minimal launcher/bundle
+  scaffolding required for packaged launch
+
+The launchable package surface must not include runtime/private data such as
+auth files, runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
+
+`package launchable verify --manifest <path> --json` is the owner surface for
+artifact existence + checksum verification + launchable bundle boundary +
+metadata-integrity verification from the manifest.
 
 ## Additional onboarding owner surface
 

@@ -574,6 +574,28 @@ class CliTests(unittest.TestCase):
             command_path="package experimental verify",
         )
 
+    def test_package_launchable_build_requires_json_flag(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-output-missing-json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            command_path="package launchable build",
+        )
+
+    def test_package_launchable_verify_requires_json_flag(self) -> None:
+        manifest_path = Path(self.temp_dir.name) / "missing-launchable.manifest.json"
+        self.assert_missing_json_parser_rejection(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            command_path="package launchable verify",
+        )
+
     def test_package_experimental_build_success_reports_changed_files(self) -> None:
         output_dir = Path(self.temp_dir.name) / "package-build-output"
         result = self.run_cli(
@@ -910,6 +932,319 @@ class CliTests(unittest.TestCase):
             "wild_boar_proxy/link",
             verify_payload["package_result"]["violating_entries"],
         )
+
+    def test_package_launchable_build_success_reports_changed_files(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-build-output"
+        result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        package_result = payload["package_result"]
+        artifact_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+        manifest_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_MANIFEST_NAME
+        metadata_path = output_dir.resolve() / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME
+        self.assertEqual(package_result["status"], "built")
+        self.assertEqual(package_result["artifact_kind"], "macos_app_bundle")
+        self.assertEqual(package_result["runtime_executable"], sys.executable)
+        self.assertTrue(artifact_path.is_dir())
+        self.assertTrue(manifest_path.is_file())
+        self.assertTrue(metadata_path.is_file())
+        self.assertCountEqual(
+            payload["changed_files"],
+            [str(artifact_path), str(manifest_path), str(metadata_path)],
+        )
+
+    def test_package_launchable_build_embeds_allowlisted_files_and_runtime_probe(self) -> None:
+        package_root = Path(self.temp_dir.name) / "launchable-package-source"
+        (package_root / "wild_boar_proxy").mkdir(parents=True)
+        (package_root / "docs").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "module.py").write_text(
+            "value = 1\n", encoding="utf-8"
+        )
+        (package_root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        outside_secret = Path(self.temp_dir.name) / "outside-secret.md"
+        outside_secret.write_text("# external secret\n", encoding="utf-8")
+        (package_root / "LEAK.md").symlink_to(outside_secret)
+        (package_root / "auth.json").write_text(
+            '{"OPENAI_API_KEY":"x"}\n', encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "session.dump").write_text(
+            "runtime dump\n", encoding="utf-8"
+        )
+        (package_root / "wild_boar_proxy" / "external_models").mkdir(parents=True)
+        (package_root / "wild_boar_proxy" / "external_models" / "secrets.env").write_text(
+            "OPENROUTER_API_KEY=x\n", encoding="utf-8"
+        )
+        output_dir = Path(self.temp_dir.name) / "launchable-package-allowlist-output"
+        result = self.run_cli_with_env(
+            {"WBP_PACKAGE_SOURCE_ROOT": str(package_root)},
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        artifact_path = Path(payload["package_result"]["artifact_path"])
+        entries = sorted(
+            str(path.relative_to(artifact_path))
+            for path in artifact_path.rglob("*")
+            if path.is_file()
+        )
+        self.assertIn("Contents/Info.plist", entries)
+        self.assertIn("Contents/MacOS/WildBoarProxy", entries)
+        self.assertIn("Contents/Resources/app/wild_boar_proxy/module.py", entries)
+        self.assertIn("Contents/Resources/app/docs/guide.md", entries)
+        self.assertNotIn("Contents/Resources/app/LEAK.md", entries)
+        self.assertNotIn("Contents/Resources/app/auth.json", entries)
+        self.assertNotIn("Contents/Resources/app/wild_boar_proxy/session.dump", entries)
+        self.assertNotIn(
+            "Contents/Resources/app/wild_boar_proxy/external_models/secrets.env",
+            entries,
+        )
+        metadata = json.loads(
+            (output_dir / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME).read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(metadata["runtime_executable"], sys.executable)
+        self.assertIn("runtime_probe", metadata)
+        self.assertIn("tkinter_available", metadata["runtime_probe"])
+
+    def test_package_launchable_verify_success(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-success"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 0, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "ok")
+        self.assertEqual(verify_payload["machine_error_code"], "OK")
+        self.assertTrue(verify_payload["package_result"]["checksum_match"])
+        self.assertTrue(verify_payload["package_result"]["metadata_checksum_match"])
+        self.assertEqual(
+            verify_payload["package_result"]["boundary_check"]["status"], "passed"
+        )
+        self.assertEqual(
+            verify_payload["package_result"]["runtime_executable"], sys.executable
+        )
+
+    def test_package_launchable_verify_rejects_boundary_violation(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-boundary"
+        artifact_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_APP_NAME
+        executable_path = (
+            artifact_path / "Contents" / "MacOS" / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+        plist_path = artifact_path / "Contents" / "Info.plist"
+        violating_path = (
+            artifact_path
+            / "Contents"
+            / "Resources"
+            / "app"
+            / "wild_boar_proxy"
+            / "external_models"
+            / "secrets.env"
+        )
+        violating_path.parent.mkdir(parents=True, exist_ok=True)
+        plist_path.parent.mkdir(parents=True, exist_ok=True)
+        executable_path.parent.mkdir(parents=True, exist_ok=True)
+        plist_path.write_text(
+            runtime_mod.render_launchable_package_info_plist() + "\n",
+            encoding="utf-8",
+        )
+        executable_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable_path.chmod(0o755)
+        violating_path.write_text("OPENROUTER_API_KEY=x\n", encoding="utf-8")
+        manifest_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_MANIFEST_NAME
+        metadata_path = output_dir / runtime_mod.LAUNCHABLE_PACKAGE_METADATA_NAME
+        output_dir.mkdir(parents=True, exist_ok=True)
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "runtime_executable": sys.executable,
+                    "runtime_probe": {"tkinter_available": False},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "created_at_utc": "2026-05-21T00:00:00Z",
+                    "artifact_path": artifact_path.name,
+                    "artifact_kind": "macos_app_bundle",
+                    "artifact_sha256": runtime_mod.hash_directory_files(artifact_path),
+                    "metadata_path": metadata_path.name,
+                    "metadata_sha256": runtime_mod.hash_file(metadata_path),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/external_models/secrets.env",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_launchable_verify_rejects_symlink_boundary_bypass(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-symlink"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        artifact_path = Path(build_payload["package_result"]["artifact_path"])
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        symlink_path = (
+            artifact_path / "Contents" / "Resources" / "app" / "wild_boar_proxy" / "symlink"
+        )
+        symlink_path.parent.mkdir(parents=True, exist_ok=True)
+        symlink_path.symlink_to("../docs")
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        manifest["artifact_sha256"] = runtime_mod.hash_directory_files(artifact_path)
+        Path(manifest_path).write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_BOUNDARY_INVALID"
+        )
+        self.assertIn(
+            "Contents/Resources/app/wild_boar_proxy/symlink",
+            verify_payload["package_result"]["violating_entries"],
+        )
+
+    def test_package_launchable_verify_rejects_metadata_checksum_mismatch(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-verify-metadata"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        metadata_path = Path(build_payload["package_result"]["metadata_path"])
+        manifest_path = build_payload["package_result"]["manifest_path"]
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["runtime_executable"] = "/tmp/evil-python"
+        metadata_path.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+        verify_result = self.run_cli(
+            "package",
+            "launchable",
+            "verify",
+            "--manifest",
+            str(manifest_path),
+            "--json",
+        )
+        self.assertEqual(verify_result.returncode, 1, verify_result.stderr)
+        verify_payload = json.loads(verify_result.stdout)
+        self.assertEqual(verify_payload["status"], "error")
+        self.assertEqual(
+            verify_payload["machine_error_code"], "PACKAGE_METADATA_INVALID"
+        )
+        self.assertFalse(verify_payload["package_result"]["metadata_checksum_match"])
+
+    def test_package_launchable_launcher_smoke_installer_init_json_works(self) -> None:
+        output_dir = Path(self.temp_dir.name) / "launchable-package-smoke"
+        build_result = self.run_cli(
+            "package",
+            "launchable",
+            "build",
+            "--output-dir",
+            str(output_dir),
+            "--runtime-executable",
+            sys.executable,
+            "--json",
+        )
+        self.assertEqual(build_result.returncode, 0, build_result.stderr)
+        build_payload = json.loads(build_result.stdout)
+        launcher_path = (
+            Path(build_payload["package_result"]["artifact_path"])
+            / "Contents"
+            / "MacOS"
+            / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+        )
+        result = subprocess.run(
+            [str(launcher_path), "--smoke-installer-init-json"],
+            cwd=ROOT,
+            env=self.env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
 
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
