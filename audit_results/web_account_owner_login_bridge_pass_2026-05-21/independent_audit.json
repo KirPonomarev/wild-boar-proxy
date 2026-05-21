@@ -1,0 +1,40 @@
+{
+  "contour": "WEB_ACCOUNT_OWNER_LOGIN_BRIDGE_PASS",
+  "status": "pass",
+  "auditor": {
+    "agent_id": "019e4b2a-943e-7150-998d-f7ce381781d2",
+    "model": "gpt-5.4-mini",
+    "role": "independent scanner/fact-checker"
+  },
+  "auditor_verdict": {
+    "owner_browser_login_surface_exists": false,
+    "recommendation": "stop_and_diagnose",
+    "critical_finding": "No explicit browser callback/session-handoff endpoint appears in canon, command API, runtime, CLI, live server, or UI shell."
+  },
+  "manual_spot_check": [
+    {
+      "id": "canon_boundary",
+      "pass": true,
+      "evidence": "CANON.md lines 24-32 put auth flows in the engine, not the Wild Boar Proxy managing layer."
+    },
+    {
+      "id": "owner_surface",
+      "pass": true,
+      "evidence": "COMMAND_API.md lines 123-182 define accounts onboard --json as reserve-first onboarding owner truth, but not as browser-login start/callback."
+    },
+    {
+      "id": "helper_behavior",
+      "pass": true,
+      "evidence": "sandbox_owner_helpers.py lines 393-426 uses explicit auth-ref or sandbox-local auth file and exits when no auth candidate exists."
+    },
+    {
+      "id": "web_forbidden_payload_guard",
+      "pass": true,
+      "evidence": "tests/test_web_design_live_server.py lines 1237-1262 reject auth_ref, source_dir, password, and backend_id for onboard_account."
+    }
+  ],
+  "mismatches": [],
+  "critical_risk": false,
+  "result": "STOP_AND_DIAGNOSE is justified; closed_success would require web-layer auth ownership or an owner surface that does not currently exist."
+}
+
