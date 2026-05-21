@@ -1,27 +1,17 @@
 {
   "status": "pass",
-  "verdict": "Independent audit agrees that STOP_AND_DIAGNOSE is required: the current canonical package surface is archive-only and does not provide the packaged-launch proof required to close DESKTOP_APP_PACKAGE_PASS honestly.",
-  "findings": [
-    {
-      "severity": "high",
-      "summary": "Canonical package path builds and verifies only an archive artifact, not a launchable desktop package.",
-      "evidence": [
-        "MASTER_PLAN.md:240-255",
-        "COMMAND_API.md:81-97",
-        "wild_boar_proxy/runtime.py:3918-3993",
-        "wild_boar_proxy/runtime.py:3996-4088",
-        "wild_boar_proxy/cli.py:201-212",
-        "wild_boar_proxy/cli.py:402-413",
-        "tests/test_cli.py:577-613",
-        "tests/test_cli.py:614-715",
-        "tests/test_cli.py:812-905"
-      ],
-      "impact": "Closing the contour as success would falsely treat archive hygiene as proof that a packaged desktop app launches."
-    }
-  ],
-  "residual_risks": [
-    "A future contour could add a launchable package artifact, but that surface is not currently admitted or implemented.",
-    "The archive build path remains useful for bounded source packaging and hygiene checks; it just does not satisfy packaged desktop launch proof."
-  ],
-  "confidence": 0.98
+  "findings": [],
+  "summary": "The two previous medium findings are no longer supported. The packaged continuity path in ui_shell.py no longer runs external-models check or writes route truth, and its success gate now requires explicit bundle/readiness conditions rather than merely populated fields. Fresh evidence shows the packaged smoke completed successfully with only the expected ledger entry and no additional chat requests during the packaged run.",
+  "evidence_used": [
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/ui_shell.py",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "/Volumes/Work/wild-boar-proxy/tests/test_ui_shell.py",
+    "/Volumes/Work/wild-boar-proxy/tests/test_cli.py",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/desktop_packaged_continuity_smoke.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package_build_result.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package_verify_result.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package_contents_scan.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package_archive_summary.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package_contract_scan.json"
+  ]
 }

@@ -1246,6 +1246,287 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["machine_error_code"], "OK")
 
+    def test_package_launchable_launcher_smoke_packaged_continuity_json_works(self) -> None:
+        def find_tk_runtime() -> str | None:
+            candidates = [
+                Path(sys.executable),
+                Path.home()
+                / ".cache"
+                / "codex-runtimes"
+                / "codex-primary-runtime"
+                / "dependencies"
+                / "python"
+                / "bin"
+                / "python3",
+            ]
+            seen: set[str] = set()
+            for candidate in candidates:
+                resolved = candidate.expanduser().resolve()
+                key = str(resolved)
+                if key in seen or not resolved.exists():
+                    continue
+                seen.add(key)
+                probe = subprocess.run(
+                    [key, "-c", "import tkinter"],
+                    cwd=ROOT,
+                    env=self.env(),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                if probe.returncode == 0:
+                    return key
+            return None
+
+        runtime_executable = find_tk_runtime()
+        if runtime_executable is None:
+            self.skipTest("no tkinter-capable runtime is available for packaged continuity smoke")
+
+        class PackagedHandler(BaseHTTPRequestHandler):
+            request_paths: list[str] = []
+
+            def do_GET(self) -> None:  # noqa: N802
+                PackagedHandler.request_paths.append(self.path)
+                if self.path == "/v1/models":
+                    body = json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_error(404)
+
+            def do_POST(self) -> None:  # noqa: N802
+                PackagedHandler.request_paths.append(self.path)
+                length = int(self.headers.get("Content-Length", "0"))
+                _ = self.rfile.read(length)
+                if self.path == "/v1/responses":
+                    body = json.dumps({"output_text": "OK"}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if self.path == "/v1/chat/completions":
+                    body = json.dumps(
+                        {
+                            "choices": [
+                                {"message": {"role": "assistant", "content": "pong"}}
+                            ]
+                        }
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_error(404)
+
+            def log_message(self, fmt: str, *args: object) -> None:
+                return
+
+        port = free_port()
+        server = ThreadingHTTPServer(("127.0.0.1", port), PackagedHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            registry = {
+                "schema_version": 2,
+                "version": 2,
+                "updated_at": "2026-05-21T00:00:00+00:00",
+                "stable_default_backend_id": "auth",
+                "pool_policy": {
+                    "active_min": 0,
+                    "active_target": 0,
+                    "reserve_target": 1,
+                },
+                "backends": [
+                    {
+                        "id": "auth",
+                        "label": "Sandbox Auth",
+                        "pool": "reserve",
+                        "status": "healthy",
+                        "manual_hold": False,
+                        "auth_ref": str(self.profile_dir / "auth.json"),
+                        "fail_count": 0,
+                        "success_count": 1,
+                        "last_success": "2026-05-21T00:00:00+00:00",
+                        "last_error": "",
+                        "cooldown_until": None,
+                        "notes": "",
+                    }
+                ],
+            }
+            (self.managed_dir / "backend-registry.json").write_text(
+                json.dumps(registry) + "\n",
+                encoding="utf-8",
+            )
+            state = json.loads((self.managed_dir / "supervisor-state.json").read_text())
+            state.update(
+                {
+                    "status": "healthy",
+                    "effective_mode": "managed",
+                    "last_error": "",
+                    "selected_backend_ids": [],
+                    "managed_port": port,
+                    "current_proxy_url": "",
+                    "stable_default_backend_id": "auth",
+                    "active_count": 0,
+                    "reserve_count": 1,
+                    "retired_count": 0,
+                    "healthy_count": 1,
+                    "degraded_count": 0,
+                    "down_count": 0,
+                }
+            )
+            (self.managed_dir / "supervisor-state.json").write_text(
+                json.dumps(state) + "\n",
+                encoding="utf-8",
+            )
+            (self.managed_dir / "managed-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {port}\n",
+                encoding="utf-8",
+            )
+            (self.profile_dir / "config.toml").write_text(
+                f'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+                encoding="utf-8",
+            )
+            (self.profile_dir / "runtime-mode.txt").write_text("managed\n", encoding="utf-8")
+            (self.profile_dir / "runtime-effective-mode.txt").write_text(
+                "managed\n",
+                encoding="utf-8",
+            )
+
+            route_payload = {
+                "schema_version": 1,
+                "route_id": "wbp-openrouter-primary",
+                "display_name": "Local Mock Route",
+                "provider": "openrouter",
+                "base_url": f"http://127.0.0.1:{port}/v1",
+                "endpoint_path": "/chat/completions",
+                "upstream_model": "deepseek/deepseek-chat",
+                "compatibility": "openai_chat_completions",
+                "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+                "cost_class": "paid_or_free_limited",
+                "lane_role": "candidate",
+                "fallback_eligible": False,
+                "enabled": True,
+            }
+            self.external_models_dir.mkdir(parents=True, exist_ok=True)
+            (self.external_models_dir / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "policy": {
+                            "paid_routes_enabled": False,
+                            "paid_route_allowlist": [],
+                            "paid_route_default": "blocked",
+                        },
+                        "adapter": {
+                            "lifecycle_mode": "synthetic",
+                            "state": "stopped",
+                            "host": "127.0.0.1",
+                            "port": None,
+                            "base_url": None,
+                            "listener_proven": False,
+                            "runtime_claim_blocked": True,
+                            "started_at_utc": None,
+                            "last_transition": "init",
+                        },
+                        "local_auth": {
+                            "token_ref": "managed_local_token",
+                            "token_present": True,
+                            "token_created_at_utc": "2026-05-21T00:00:00Z",
+                        },
+                        "routes": {},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            route_file = Path(self.temp_dir.name) / "packaged-route.json"
+            route_file.write_text(json.dumps(route_payload) + "\n", encoding="utf-8")
+            add_result = self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--file",
+                str(route_file),
+                "--json",
+            )
+            self.assertEqual(add_result.returncode, 0, add_result.stderr)
+            (self.external_models_dir / "secrets.env").write_text(
+                "OPENROUTER_API_KEY=test-key\n",
+                encoding="utf-8",
+            )
+            os.chmod(self.external_models_dir / "secrets.env", 0o600)
+            check_result = self.run_cli(
+                "external-models",
+                "check",
+                "--route",
+                "wbp-openrouter-primary",
+                "--json",
+            )
+            self.assertEqual(check_result.returncode, 0, check_result.stderr)
+            chat_requests_before_packaged = PackagedHandler.request_paths.count(
+                "/v1/chat/completions"
+            )
+
+            output_dir = Path(self.temp_dir.name) / "launchable-package-continuity"
+            build_result = self.run_cli(
+                "package",
+                "launchable",
+                "build",
+                "--output-dir",
+                str(output_dir),
+                "--runtime-executable",
+                runtime_executable,
+                "--json",
+            )
+            self.assertEqual(build_result.returncode, 0, build_result.stderr)
+            build_payload = json.loads(build_result.stdout)
+            launcher_path = (
+                Path(build_payload["package_result"]["artifact_path"])
+                / "Contents"
+                / "MacOS"
+                / runtime_mod.LAUNCHABLE_PACKAGE_EXECUTABLE_NAME
+            )
+            result = subprocess.run(
+                [str(launcher_path), "--smoke-packaged-continuity-json"],
+                cwd=ROOT,
+                env=self.env(include_launcher_override=False),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["quick_start_summary"]["source"], "live_sandbox")
+        self.assertEqual(payload["quick_start_summary"]["account_status"], "ok")
+        self.assertEqual(payload["quick_start_summary"]["api_status"], "enabled")
+        self.assertEqual(payload["quick_start_summary"]["bundle_verdict"], "ready")
+        self.assertEqual(payload["quick_start_summary"]["route_label"], "Local Mock Route")
+        self.assertEqual(payload["quick_start_summary"]["route_secret_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(payload["direct_packets"]["accounts"]["account_count"], 1)
+        self.assertEqual(payload["direct_packets"]["api"]["route_id"], "wbp-openrouter-primary")
+        self.assertEqual(payload["ledger"][0]["action_id"], "quick_start_check_all")
+        self.assertEqual(
+            PackagedHandler.request_paths.count("/v1/chat/completions"),
+            chat_requests_before_packaged,
+        )
+        self.assertIn("/v1/models", PackagedHandler.request_paths)
+        self.assertIn("/v1/responses", PackagedHandler.request_paths)
+        self.assertIn("/v1/chat/completions", PackagedHandler.request_paths)
+
     def test_sanitized_env_removes_ambient_proxy_variables(self) -> None:
         with mock.patch.dict(
             os.environ,

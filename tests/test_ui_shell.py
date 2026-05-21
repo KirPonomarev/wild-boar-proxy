@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import io
+import json
 import subprocess
 import unittest
 from unittest import mock
@@ -18,6 +20,7 @@ from wild_boar_proxy.ui_shell import (
     ExternalModelsSnapshot,
     JsonCommandRunner,
     MinimalCompanionShell,
+    QuickStartLedgerEntry,
     UiShellError,
     build_account_pool_snapshot,
     build_external_action_result,
@@ -43,6 +46,7 @@ from wild_boar_proxy.ui_shell import (
     mark_external_action_stale,
     parse_exact_json_object,
     select_primary_external_route,
+    run_packaged_continuity_smoke_json,
     run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
@@ -68,6 +72,17 @@ def command_payload(**overrides: object) -> dict[str, object]:
     }
     payload.update(overrides)
     return payload
+
+
+class FakeVar:
+    def __init__(self, value: str = "") -> None:
+        self.value = value
+
+    def get(self) -> str:
+        return self.value
+
+    def set(self, value: object) -> None:
+        self.value = str(value)
 
 
 def status_payload(**overrides: object) -> dict[str, object]:
@@ -2706,12 +2721,366 @@ class UiDispatchTests(unittest.TestCase):
 
 
 class MainTests(unittest.TestCase):
+    def test_run_packaged_continuity_smoke_json_collects_summary_and_ledger(self) -> None:
+        class FakeShell:
+            def __init__(self) -> None:
+                self.quick_start_source_var = FakeVar("")
+                self.quick_start_account_status_var = FakeVar("")
+                self.quick_start_account_note_var = FakeVar("")
+                self.quick_start_api_status_var = FakeVar("")
+                self.quick_start_api_note_var = FakeVar("")
+                self.quick_start_route_label_var = FakeVar("")
+                self.quick_start_route_provider_var = FakeVar("")
+                self.quick_start_route_secret_ref_var = FakeVar("")
+                self.quick_start_route_validation_var = FakeVar("")
+                self.quick_start_route_last_checked_var = FakeVar("")
+                self.quick_start_check_all_status_var = FakeVar("")
+                self.quick_start_check_all_verdict_var = FakeVar("")
+                self.quick_start_check_all_machine_error_var = FakeVar("")
+                self.quick_start_check_all_next_action_var = FakeVar("")
+                self.quick_start_check_all_message_var = FakeVar("")
+                self.liveness_var = FakeVar("")
+                self.quick_start_events: list[QuickStartLedgerEntry] = []
+                self.quick_start_ledger_tree = object()
+
+            def _apply_refresh_results(
+                self,
+                runtime_snapshot: object,
+                account_snapshot: object,
+                *,
+                banner: str | None = None,
+                external_snapshot: object | None = None,
+            ) -> None:
+                del banner
+                self.quick_start_source_var.set("live_sandbox")
+                self.liveness_var.set(getattr(runtime_snapshot, "liveness"))
+                self.quick_start_account_status_var.set("ok")
+                self.quick_start_account_note_var.set(
+                    getattr(account_snapshot, "human_message")
+                )
+                self.quick_start_api_status_var.set("enabled")
+                self.quick_start_api_note_var.set(
+                    "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth."
+                )
+                if external_snapshot is not None:
+                    route = external_snapshot.routes[0]
+                    observed = external_snapshot.observed_routes[route.route_id]
+                    self.quick_start_route_label_var.set(route.display_name)
+                    self.quick_start_route_provider_var.set(route.provider)
+                    self.quick_start_route_secret_ref_var.set(route.secret_ref)
+                    self.quick_start_route_validation_var.set("ok")
+                    self.quick_start_route_last_checked_var.set(
+                        str(observed.get("last_check", ""))
+                    )
+
+            def _apply_quick_start_check_all_results(
+                self,
+                action_payload: dict[str, object],
+                runtime_snapshot: object,
+                account_snapshot: object,
+                external_snapshot: object,
+                *,
+                banner: str,
+            ) -> None:
+                del banner
+                self._apply_refresh_results(
+                    runtime_snapshot,
+                    account_snapshot,
+                    external_snapshot=external_snapshot,
+                )
+                data = action_payload["data"]
+                assert isinstance(data, dict)
+                self.quick_start_check_all_status_var.set(action_payload["status"])
+                self.quick_start_check_all_machine_error_var.set(
+                    action_payload["machine_error_code"]
+                )
+                self.quick_start_check_all_next_action_var.set(
+                    action_payload["next_action"]
+                )
+                self.quick_start_check_all_verdict_var.set(data["bundle_verdict"])
+                self.quick_start_check_all_message_var.set(action_payload["human_message"])
+                self.quick_start_events.insert(
+                    0,
+                    QuickStartLedgerEntry(
+                        observed_at_utc="2026-05-12T00:00:03Z",
+                        action_id="quick_start_check_all",
+                        status=str(action_payload["status"]),
+                        machine_error_code=str(action_payload["machine_error_code"]),
+                        next_action=str(action_payload["next_action"]),
+                        human_message=str(action_payload["human_message"]),
+                    ),
+                )
+
+        runtime_snapshot = build_runtime_snapshot(status_payload=status_payload())
+        account_snapshot = build_account_pool_snapshot(accounts_payload())
+        external_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    "foundation_phase": "C3",
+                    "adapter_runtime_available": False,
+                    "lifecycle_mode": "synthetic",
+                    "adapter_state": "started",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "profile_ready": False,
+                    "routes_count": 1,
+                    "observed_routes_count": 1,
+                    "observed_routes": {
+                        "wbp-deepseek-v3": {
+                            "availability_state": "verified",
+                            "last_check": "2026-05-12T00:00:01Z",
+                        }
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "started",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "start",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": True,
+                        "token_created_at_utc": "2026-05-12T00:00:00Z",
+                    },
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+        bundle_payload = build_quick_start_check_all_payload(
+            runtime_snapshot=runtime_snapshot,
+            account_snapshot=account_snapshot,
+            external_snapshot=external_snapshot,
+            api_check_payload=None,
+        )
+        fake_root = mock.Mock()
+        fake_shell = FakeShell()
+
+        with (
+            mock.patch("wild_boar_proxy.ui_shell.Tk", return_value=fake_root),
+            mock.patch("wild_boar_proxy.ui_shell.JsonCommandRunner"),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.MinimalCompanionShell",
+                return_value=fake_shell,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_runtime_snapshot",
+                return_value=runtime_snapshot,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_account_pool_snapshot",
+                return_value=account_snapshot,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_external_models_snapshot",
+                return_value=external_snapshot,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.build_quick_start_check_all_payload",
+                return_value=bundle_payload,
+            ),
+        ):
+            payload, exit_code = run_packaged_continuity_smoke_json()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["quick_start_summary"]["source"], "live_sandbox")
+        self.assertEqual(payload["quick_start_summary"]["bundle_verdict"], "ready")
+        self.assertEqual(payload["quick_start_summary"]["route_label"], "DeepSeek V3")
+        self.assertEqual(payload["direct_packets"]["accounts"]["account_count"], 2)
+        self.assertEqual(payload["ledger"][0]["action_id"], "quick_start_check_all")
+        fake_root.withdraw.assert_called_once_with()
+        fake_root.destroy.assert_called_once_with()
+
+    def test_run_packaged_continuity_smoke_json_rejects_partial_bundle(self) -> None:
+        class FakeShell:
+            def __init__(self) -> None:
+                self.quick_start_source_var = FakeVar("")
+                self.quick_start_account_status_var = FakeVar("")
+                self.quick_start_account_note_var = FakeVar("")
+                self.quick_start_api_status_var = FakeVar("")
+                self.quick_start_api_note_var = FakeVar("")
+                self.quick_start_route_label_var = FakeVar("")
+                self.quick_start_route_provider_var = FakeVar("")
+                self.quick_start_route_secret_ref_var = FakeVar("")
+                self.quick_start_route_validation_var = FakeVar("")
+                self.quick_start_route_last_checked_var = FakeVar("")
+                self.quick_start_check_all_status_var = FakeVar("")
+                self.quick_start_check_all_verdict_var = FakeVar("")
+                self.quick_start_check_all_machine_error_var = FakeVar("")
+                self.quick_start_check_all_next_action_var = FakeVar("")
+                self.quick_start_check_all_message_var = FakeVar("")
+                self.liveness_var = FakeVar("")
+                self.quick_start_events: list[QuickStartLedgerEntry] = []
+                self.quick_start_ledger_tree = object()
+
+            def _apply_refresh_results(
+                self,
+                runtime_snapshot: object,
+                account_snapshot: object,
+                *,
+                banner: str | None = None,
+                external_snapshot: object | None = None,
+            ) -> None:
+                del banner
+                self.quick_start_source_var.set("live_sandbox")
+                self.liveness_var.set(getattr(runtime_snapshot, "liveness"))
+                self.quick_start_account_status_var.set("ok")
+                self.quick_start_account_note_var.set(
+                    getattr(account_snapshot, "human_message")
+                )
+                self.quick_start_api_status_var.set("enabled")
+                self.quick_start_api_note_var.set("Needs follow-up.")
+                if external_snapshot is not None:
+                    route = external_snapshot.routes[0]
+                    observed = external_snapshot.observed_routes[route.route_id]
+                    self.quick_start_route_label_var.set(route.display_name)
+                    self.quick_start_route_provider_var.set(route.provider)
+                    self.quick_start_route_secret_ref_var.set(route.secret_ref)
+                    self.quick_start_route_validation_var.set("check failed")
+                    self.quick_start_route_last_checked_var.set(
+                        str(observed.get("last_check", ""))
+                    )
+
+            def _apply_quick_start_check_all_results(
+                self,
+                action_payload: dict[str, object],
+                runtime_snapshot: object,
+                account_snapshot: object,
+                external_snapshot: object,
+                *,
+                banner: str,
+            ) -> None:
+                del banner
+                self._apply_refresh_results(
+                    runtime_snapshot,
+                    account_snapshot,
+                    external_snapshot=external_snapshot,
+                )
+                data = action_payload["data"]
+                assert isinstance(data, dict)
+                self.quick_start_check_all_status_var.set(action_payload["status"])
+                self.quick_start_check_all_machine_error_var.set(
+                    action_payload["machine_error_code"]
+                )
+                self.quick_start_check_all_next_action_var.set(
+                    action_payload["next_action"]
+                )
+                self.quick_start_check_all_verdict_var.set(data["bundle_verdict"])
+                self.quick_start_check_all_message_var.set(action_payload["human_message"])
+                self.quick_start_events.insert(
+                    0,
+                    QuickStartLedgerEntry(
+                        observed_at_utc="2026-05-12T00:00:03Z",
+                        action_id="quick_start_check_all",
+                        status=str(action_payload["status"]),
+                        machine_error_code=str(action_payload["machine_error_code"]),
+                        next_action=str(action_payload["next_action"]),
+                        human_message=str(action_payload["human_message"]),
+                    ),
+                )
+
+        runtime_snapshot = build_runtime_snapshot(status_payload=status_payload())
+        account_snapshot = build_account_pool_snapshot(accounts_payload())
+        external_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    "foundation_phase": "C3",
+                    "adapter_runtime_available": False,
+                    "lifecycle_mode": "synthetic",
+                    "adapter_state": "started",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "profile_ready": False,
+                    "routes_count": 1,
+                    "observed_routes_count": 1,
+                    "observed_routes": {
+                        "wbp-deepseek-v3": {
+                            "availability_state": "limited",
+                            "last_check": "2026-05-12T00:00:01Z",
+                        }
+                    },
+                    "adapter": {
+                        "lifecycle_mode": "synthetic",
+                        "state": "started",
+                        "host": "127.0.0.1",
+                        "port": None,
+                        "base_url": None,
+                        "listener_proven": False,
+                        "runtime_claim_blocked": True,
+                        "started_at_utc": None,
+                        "last_transition": "start",
+                    },
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": True,
+                        "token_created_at_utc": "2026-05-12T00:00:00Z",
+                    },
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+
+        fake_root = mock.Mock()
+        fake_shell = FakeShell()
+
+        with (
+            mock.patch("wild_boar_proxy.ui_shell.Tk", return_value=fake_root),
+            mock.patch("wild_boar_proxy.ui_shell.JsonCommandRunner"),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.MinimalCompanionShell",
+                return_value=fake_shell,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_runtime_snapshot",
+                return_value=runtime_snapshot,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_account_pool_snapshot",
+                return_value=account_snapshot,
+            ),
+            mock.patch(
+                "wild_boar_proxy.ui_shell.load_external_models_snapshot",
+                return_value=external_snapshot,
+            ),
+        ):
+            payload, exit_code = run_packaged_continuity_smoke_json()
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "PACKAGED_CONTINUITY_INCOMPLETE")
+        self.assertIn("bundle_ready", payload["failed_checks"])
+        fake_root.withdraw.assert_called_once_with()
+        fake_root.destroy.assert_called_once_with()
+
+    @mock.patch("wild_boar_proxy.ui_shell.run_packaged_continuity_smoke_json")
+    def test_main_emits_packaged_continuity_smoke_json(
+        self,
+        smoke_mock: mock.Mock,
+    ) -> None:
+        smoke_mock.return_value = (
+            {"status": "ok", "machine_error_code": "OK", "human_message": "done"},
+            0,
+        )
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            result = main(["--smoke-packaged-continuity-json"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(stdout.getvalue()), smoke_mock.return_value[0])
+
     @mock.patch("wild_boar_proxy.ui_shell.MinimalCompanionShell")
     @mock.patch("wild_boar_proxy.ui_shell.Tk")
     def test_main_bootstraps_shell(self, tk_mock: mock.Mock, shell_mock: mock.Mock) -> None:
         root = tk_mock.return_value
 
-        result = main()
+        result = main([])
 
         self.assertEqual(result, 0)
         tk_mock.assert_called_once_with()

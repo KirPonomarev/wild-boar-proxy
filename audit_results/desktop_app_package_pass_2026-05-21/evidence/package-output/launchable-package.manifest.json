@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "macos_app_bundle",
+  "artifact_path": "WildBoarProxy.app",
+  "artifact_sha256": "121f2ca3adae7ba9fca87e90014e1f76057a563001ea11e551d3af8ed163bddb",
+  "created_at_utc": "2026-05-21T02:19:32.259732+00:00",
+  "metadata_path": "launchable-package.metadata.json",
+  "metadata_sha256": "08b124030c1edbc9e7057227d7893bb33bff7b6c5bdbe2e14a4ae2f2016b767e",
+  "schema_version": 1
+}

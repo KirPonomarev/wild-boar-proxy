@@ -2,60 +2,79 @@
 
 ## Objective
 
-Determine whether the existing canonical desktop packaging path can satisfy the
-master-plan requirement for a safe packaged desktop app that actually launches
-and preserves the proven desktop continuity flow.
+Prove that the admitted launchable desktop package path can carry the already
+proven Quick Start continuity flow without widening semantics, leaking
+private/runtime residue, or inventing a new truth source.
 
 ## In Scope
 
-- localize the canonical packaging owner surface
-- build one real package artifact through the canonical path
-- verify package hygiene and archive boundaries
-- determine whether the canonical artifact provides a packaged launch surface
-- record evidence and stop honestly if the artifact contract is archive-only
+- build the canonical launchable package artifact through `package launchable build`
+- verify manifest, checksum, boundary, and runtime baseline through
+  `package launchable verify`
+- launch the packaged Tk shell with the bundled runtime baseline
+- prove baseline packaged continuity:
+  Quick Start opens, account truth loads, API truth loads, `Check All` reaches
+  `ready`, and the ledger records `quick_start_check_all`
+- capture machine evidence for hygiene, launch, continuity, and the residual
+  full-CLI red tail
 
 ## Out of Scope
 
-- new packaging systems or alternate artifact kinds
-- installer/notarization/distribution work
-- desktop feature work or parity changes
-- execution-core repair
+- installer, notarization, signing, auto-update, or distribution work
+- from-empty rebuild or repeated live onboarding
+- redesign or desktop polish
+- execution-core repair unrelated to packaged continuity
 
 ## Constraints
 
-- follow existing canonical packaging path only
-- do not widen artifact semantics beyond what code/tests/docs already define
-- do not infer packaged launch proof from local desktop continuity proof
-- no private/runtime residue inside the artifact
+- use the canonical launchable artifact path already admitted by
+  `DESKTOP_LAUNCHABLE_PACKAGE_ADMISSION_PASS`
+- use the bundled runtime when host `python3` does not provide `_tkinter`
+- do not infer packaged continuity from local desktop continuity
+- do not allow packaged smoke to mutate route-truth during proof
+- do not close on partial or degraded bundle states
 
 ## Assumptions
 
-- the current canonical package path is the only acceptable baseline for this
-  contour unless canon explicitly proves otherwise
-- archive hygiene alone is insufficient to close the contour if packaged launch
-  proof is absent
+- a preflight `external-models check --route ... --json` in the harness is an
+  allowed setup mutation because the contour baseline is continuity, not
+  from-empty rebuild
+- the six failing tests in the full `tests.test_cli` suite are pre-existing
+  unless evidence proves otherwise
 
 ## Acceptance Criteria
 
-- [x] canonical package build path localized
-- [x] canonical package verify path localized
-- [x] one real package artifact built and checksum/boundary-verified
-- [x] artifact contents inspected for runtime/private residue
-- [x] contour stopped honestly when packaged launch proof was found to be
-  unsupported by the canonical path
+- [x] canonical launchable artifact builds through `package launchable build`
+- [x] package verification passes through `package launchable verify`
+- [x] package contents scan shows no forbidden private/runtime residue
+- [x] packaged launcher starts the admitted Tk shell
+- [x] packaged Quick Start continuity reaches `source=live_sandbox`,
+      `account_status=ok`, `api_status=enabled`, `bundle_verdict=ready`
+- [x] packaged ledger records `quick_start_check_all`
+- [x] packaged run does not add a second `/v1/chat/completions` request during
+      the packaged smoke itself
+- [x] independent re-audit finds no medium+ issues after the packaged-smoke fix
+- [x] full `tests.test_cli` red tail is preserved as residual risk only, with
+      same six failures reproduced on clean `f11bcd1`
 
 ## Verification
 
 - tests:
-  - `python3 -m unittest -q tests.test_cli.CliTests.test_package_experimental_build_success_reports_changed_files tests.test_cli.CliTests.test_package_experimental_build_excludes_private_runtime_patterns_via_allowlist tests.test_cli.CliTests.test_package_experimental_verify_checksum_success tests.test_cli.CliTests.test_package_experimental_verify_rejects_checksum_mismatch tests.test_cli.CliTests.test_package_experimental_verify_rejects_boundary_violation tests.test_cli.CliTests.test_package_experimental_verify_rejects_symlink_boundary_bypass`
-- commands:
-  - `python3 -m wild_boar_proxy package experimental build --output-dir /private/tmp/wbp-package-proof --json`
-  - `python3 -m wild_boar_proxy package experimental verify --manifest /private/tmp/wbp-package-proof/experimental-package.manifest.json --json`
-  - `tar -tzf /private/tmp/wbp-package-proof/experimental-package.tar.gz`
+  - `python3 -m unittest tests.test_cli.CliTests.test_package_launchable_launcher_smoke_packaged_continuity_json_works -q`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_ui_shell -q`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui -q`
+  - `python3 -m unittest -q tests.test_cli` (fails with six pre-existing failures)
 - build:
-  - `git diff --check`
+  - `python3 -m wild_boar_proxy package launchable build --output-dir audit_results/desktop_app_package_pass_2026-05-21/evidence/package-output --runtime-executable /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 --json`
+  - `python3 -m wild_boar_proxy package launchable verify --manifest audit_results/desktop_app_package_pass_2026-05-21/evidence/package-output/launchable-package.manifest.json --json`
+- manual:
+  - packaged launcher `WildBoarProxy.app/Contents/MacOS/WildBoarProxy --smoke-packaged-continuity-json`
+- live evidence:
+  - `audit_results/desktop_app_package_pass_2026-05-21/evidence/desktop_packaged_continuity_smoke.json`
+  - `audit_results/desktop_app_package_pass_2026-05-21/evidence/full_test_cli_current.txt`
+  - `audit_results/desktop_app_package_pass_2026-05-21/evidence/head_comparison_regressions.json`
 
 ## Open Questions
 
-- which follow-up contour should introduce or admit a truly launchable packaged
-  desktop artifact without violating the current canon boundary
+- whether the six pre-existing `tests.test_cli` failures should be isolated into
+  a dedicated repair contour after this package pass is merged

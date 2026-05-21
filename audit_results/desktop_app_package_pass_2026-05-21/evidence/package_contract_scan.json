@@ -1,49 +1,12 @@
 {
-  "master_plan": {
-    "file": "MASTER_PLAN.md:240-255",
-    "desktop_package_goal": "собрать безопасный пакет настольного приложения",
-    "required_checks": [
-      "нет токенов",
-      "нет auth-файлов",
-      "нет runtime state",
-      "нет логов и дампов",
-      "приложение запускается",
-      "базовый сценарий проходит"
-    ]
-  },
-  "command_api": {
-    "file": "COMMAND_API.md:81-97",
-    "build_surface": "package experimental build --output-dir <path> --json",
-    "verify_surface": "package experimental verify --manifest <path> --json",
-    "artifact_contract": [
-      "package artifact (tar.gz or zip)",
-      "checksum manifest",
-      "metadata"
-    ]
-  },
-  "implementation": {
-    "cli": [
-      "wild_boar_proxy/cli.py:201-212",
-      "wild_boar_proxy/cli.py:402-413"
-    ],
-    "runtime_constants": [
-      "wild_boar_proxy/runtime.py:113-140"
-    ],
-    "runtime_build": [
-      "wild_boar_proxy/runtime.py:3918-3993"
-    ],
-    "runtime_verify": [
-      "wild_boar_proxy/runtime.py:3996-4088"
-    ],
-    "tests": [
-      "tests/test_cli.py:577-613",
-      "tests/test_cli.py:614-715",
-      "tests/test_cli.py:812-905"
-    ]
-  },
+  "artifact_command": "package launchable build/verify",
+  "artifact_path": "/Volumes/Work/wild-boar-proxy/audit_results/desktop_app_package_pass_2026-05-21/evidence/package-output/WildBoarProxy.app",
+  "artifact_kind": "macos_app_bundle",
+  "launchable_artifact_present": true,
+  "private_runtime_residue_found": false,
+  "runtime_baseline": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
   "verdict": {
-    "status": "stop_and_diagnose",
-    "reason": "canonical packaging path is archive-only and does not expose packaged-launch proof",
-    "launchable_artifact_present": false
+    "status": "ready_for_packaged_continuity",
+    "reason": "canonical launchable artifact path is operational and hygiene-clean"
   }
 }
