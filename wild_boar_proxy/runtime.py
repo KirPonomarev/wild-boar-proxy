@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -66,6 +67,8 @@ SCALE_GATE_STRICT_JSON_COMMAND_API = "STRICT_JSON_COMMAND_API_GATE"
 SCALE_GATE_STATE_SERIALIZATION = "STATE_SERIALIZATION_GATE"
 SCALE_GATE_FALLBACK_DRILL = "FALLBACK_DRILL_GATE"
 SCALE_GATE_EVIDENCE_PACKET = "SCALE_EVIDENCE_PACKET_GATE"
+SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT = 300
+SANDBOX_LOGIN_URL_BASE_DEFAULT = "http://127.0.0.1:8788"
 SCALE_GATE_ORDER = [
     SCALE_GATE_RUNTIME_ATTESTATION,
     SCALE_GATE_STRICT_JSON_COMMAND_API,
@@ -3367,6 +3370,80 @@ def emit_subprocess_output(*, stdout: str, stderr: str) -> None:
         sys.stderr.write(stdout)
 
 
+def sandbox_login_sessions_dir(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "login-sessions"
+
+
+def sandbox_login_auth_artifacts_dir(paths: RuntimePaths) -> Path:
+    return paths.managed_dir / "sandbox-auth"
+
+
+def sandbox_login_session_ttl_seconds() -> int:
+    raw = str(
+        os.environ.get(
+            "WBP_SANDBOX_LOGIN_SESSION_TTL_SECONDS",
+            SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT,
+        )
+    ).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
+    return value if value > 0 else SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
+
+
+def sandbox_login_session_id_valid(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{8,128}", value))
+
+
+def sandbox_login_session_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    if not sandbox_login_session_id_valid(login_session_id):
+        raise RuntimeErrorInfo(
+            f"Invalid login session id: {login_session_id}",
+            machine_error_code="LOGIN_SESSION_ID_INVALID",
+            operator_action="user_action",
+        )
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.json"
+
+
+def sandbox_login_session_expired(session: dict[str, Any]) -> bool:
+    expires_at = parse_utc_datetime(session.get("expires_at"))
+    if expires_at is None:
+        return True
+    return datetime.now(timezone.utc) >= expires_at
+
+
+def sandbox_login_url_base() -> str:
+    raw = str(os.environ.get("WBP_SANDBOX_LOGIN_URL_BASE", SANDBOX_LOGIN_URL_BASE_DEFAULT)).strip()
+    return raw.rstrip("/") if raw else SANDBOX_LOGIN_URL_BASE_DEFAULT
+
+
+def build_sandbox_login_url(*, login_session_id: str, state: str, nonce: str) -> str:
+    query = urllib.parse.urlencode(
+        {
+            "provider": "sandbox",
+            "session": login_session_id,
+            "state": state,
+            "nonce": nonce,
+        }
+    )
+    return f"{sandbox_login_url_base()}/owner-login/sandbox?{query}"
+
+
+def build_sandbox_login_auth_payload(login_session_id: str) -> dict[str, Any]:
+    synthetic_key = f"sandbox-synthetic-key-{uuid.uuid4().hex}"
+    return {
+        "type": "apikey",
+        "provider": "sandbox",
+        "auth_scope": "sandbox",
+        "synthetic": True,
+        "synthetic_source": "sandbox-login",
+        "sandbox_login_session_id": login_session_id,
+        "issued_at": now_iso(),
+        "OPENAI_API_KEY": synthetic_key,
+    }
+
+
 def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
     return [
         paths.registry_file,
@@ -3377,6 +3454,8 @@ def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
         managed_pid_path(paths),
+        sandbox_login_sessions_dir(paths),
+        sandbox_login_auth_artifacts_dir(paths),
     ]
 
 
@@ -6755,6 +6834,8 @@ def snapshot_known_files(paths: RuntimePaths) -> dict[Path, tuple[int, int]]:
         paths.stable_runtime_generated_config_file,
         paths.launcher_script,
         managed_pid_path(paths),
+        sandbox_login_sessions_dir(paths),
+        sandbox_login_auth_artifacts_dir(paths),
     ]
     result: dict[Path, tuple[int, int]] = {}
     for candidate in candidates:
@@ -10350,6 +10431,209 @@ def run_accounts_command(
         changed_files=changed_files,
         extra={"command": arguments},
         exit_code=result.returncode if not ok else 0,
+    )
+
+
+def run_accounts_login_start(paths: RuntimePaths, provider: str) -> dict[str, Any]:
+    if provider != "sandbox":
+        return build_command_payload(
+            ok=False,
+            human_message="Only sandbox provider is supported for owner-lane login start.",
+            machine_error_code="LOGIN_PROVIDER_UNSUPPORTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "provider": provider,
+                "supported_providers": ["sandbox"],
+            },
+        )
+
+    login_session_id = f"sandbox-{uuid.uuid4().hex}"
+    state = f"sandbox-state-{uuid.uuid4().hex}"
+    nonce = f"sandbox-nonce-{uuid.uuid4().hex}"
+    created_at = now_iso()
+    ttl_seconds = sandbox_login_session_ttl_seconds()
+    expires_at = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() + ttl_seconds,
+        tz=timezone.utc,
+    ).isoformat()
+    login_url = build_sandbox_login_url(
+        login_session_id=login_session_id,
+        state=state,
+        nonce=nonce,
+    )
+    session = {
+        "login_session_id": login_session_id,
+        "provider": provider,
+        "state": state,
+        "nonce": nonce,
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "used": False,
+    }
+    session_dir = sandbox_login_sessions_dir(paths)
+    session_path = sandbox_login_session_path(paths, login_session_id)
+    before = snapshot_path_states([session_dir, session_path])
+    with serialized_lock(paths):
+        session_dir.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(session_path, session)
+    return build_command_payload(
+        ok=True,
+        human_message="Sandbox login session started.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(before, [session_dir, session_path]),
+        extra={
+            "next_action": "login_complete",
+            "provider": provider,
+            "login_session_id": login_session_id,
+            "state": state,
+            "nonce": nonce,
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "session_ttl_seconds": ttl_seconds,
+            "login_url": login_url,
+            "login_result": {
+                "status": "started",
+                "provider": provider,
+                "login_session_id": login_session_id,
+                "state": state,
+                "nonce": nonce,
+                "created_at": created_at,
+                "expires_at": expires_at,
+                "login_url": login_url,
+                "auth_materialized": False,
+                "used": False,
+            },
+        },
+    )
+
+
+def run_accounts_login_complete(
+    paths: RuntimePaths,
+    *,
+    login_session_id: str,
+    state: str,
+    proof: str,
+) -> dict[str, Any]:
+    try:
+        session_path = sandbox_login_session_path(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    session_dir = sandbox_login_sessions_dir(paths)
+    auth_dir = sandbox_login_auth_artifacts_dir(paths)
+    auth_path = auth_dir / f"codex-sandbox-synthetic-{login_session_id}.json"
+    before = snapshot_path_states([session_dir, session_path, auth_dir, auth_path])
+
+    with serialized_lock(paths):
+        if not session_path.exists():
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session was not found.",
+                machine_error_code="LOGIN_SESSION_NOT_FOUND",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        session = read_json(session_path)
+        if str(session.get("provider", "")) != "sandbox":
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session provider is invalid.",
+                machine_error_code="LOGIN_SESSION_INVALID",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if sandbox_login_session_expired(session):
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session has expired.",
+                machine_error_code="LOGIN_SESSION_EXPIRED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if bool(session.get("used")):
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session has already been used.",
+                machine_error_code="LOGIN_SESSION_REPLAY_BLOCKED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if str(session.get("state", "")) != state:
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login session state did not match.",
+                machine_error_code="LOGIN_STATE_MISMATCH",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if proof != "sandbox-ok":
+            return build_command_payload(
+                ok=False,
+                human_message="Sandbox login proof is invalid.",
+                machine_error_code="LOGIN_PROOF_INVALID",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+
+        auth_dir.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(auth_path, build_sandbox_login_auth_payload(login_session_id))
+        _ = read_api_key(auth_path)
+        session["used"] = True
+        write_json_atomic(session_path, session)
+
+    return build_command_payload(
+        ok=True,
+        human_message="Sandbox login completed and synthetic auth was materialized.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=detect_changed_files_by_state(
+            before, [session_dir, session_path, auth_dir, auth_path]
+        ),
+        extra={
+            "next_action": "accounts_onboard",
+            "provider": "sandbox",
+            "login_session_id": login_session_id,
+            "auth_ref_scope": "sandbox",
+            "auth_ref": str(auth_path),
+            "login_result": {
+                "status": "completed",
+                "provider": "sandbox",
+                "login_session_id": login_session_id,
+                "auth_materialized": True,
+                "auth_ref": str(auth_path),
+                "auth_ref_scope": "sandbox",
+                "used": True,
+            },
+        },
     )
 
 

@@ -1,0 +1,87 @@
+{
+  "contour": "ACCOUNT_OWNER_SANDBOX_LOGIN_ADMISSION_PASS",
+  "date": "2026-05-21",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_finalize": "ab81955",
+  "status": "implementation_complete_with_env_verification_blocker",
+  "code_changes": {
+    "files": [
+      "wild_boar_proxy/runtime.py",
+      "wild_boar_proxy/cli.py",
+      "tests/test_cli.py",
+      "COMMAND_API.md"
+    ],
+    "scope": "owner login admission commands, managed session/auth surfaces, strict JSON packets, and targeted tests"
+  },
+  "owner_packets": {
+    "login_start": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "login_complete",
+      "provider": "sandbox"
+    },
+    "login_complete": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "accounts_onboard",
+      "provider": "sandbox",
+      "auth_ref_scope": "sandbox"
+    },
+    "onboard_after_complete": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "final_outcome": "explicit_auth_imported_to_reserve",
+      "reserve_first_enforced": true,
+      "active_routing_changed": false
+    },
+    "accounts_list_after": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "reserve_count": 1
+    }
+  },
+  "verification": {
+    "required_commands": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q",
+        "status": "fail",
+        "summary": "Ran 569 tests: 6 failures. Evidence: evidence/full-unittest-stderr.txt"
+      },
+      {
+        "command": "git diff --check",
+        "status": "pass"
+      },
+      {
+        "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+        "status": "pass"
+      },
+      {
+        "command": "python3 tools/check_closeout_resilience.py --staged-only",
+        "status": "pass"
+      }
+    ],
+    "supporting_commands": [
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -v tests.test_cli.CliTests.test_accounts_login_start_requires_json_flag tests.test_cli.CliTests.test_accounts_login_complete_requires_json_flag tests.test_cli.CliTests.test_accounts_login_start_sandbox_strict_json_and_session_persisted tests.test_cli.CliTests.test_accounts_login_start_rejects_unsupported_provider tests.test_cli.CliTests.test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay tests.test_cli.CliTests.test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets tests.test_cli.CliTests.test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change",
+        "status": "pass",
+        "summary": "Ran 7 tests. Evidence: evidence/targeted-login-tests.txt"
+      },
+      {
+        "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_command_adapter tests.test_ui_shell -q",
+        "status": "pass",
+        "summary": "Ran 190 tests. Evidence: evidence/web-ui-test-suite.txt"
+      },
+      {
+        "command": "lsof -nP -iTCP:8318 -sTCP:LISTEN",
+        "status": "observed",
+        "summary": "Live listener detected: cli-proxy PID 1364. Evidence: evidence/listener-8318.txt"
+      }
+    ]
+  },
+  "artifacts": {
+    "spec": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/spec.md",
+    "closeout": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/closeout.md",
+    "independent_audit": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/independent_audit.json",
+    "evidence_dir": "audit_results/account_owner_sandbox_login_admission_pass_2026-05-21/evidence"
+  }
+}

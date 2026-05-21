@@ -38,6 +38,8 @@ All operator commands must support `--json`.
 - `accounts release <id> --json`
 - `accounts retire <id> --json`
 - `accounts onboard --json`
+- `accounts login start --provider sandbox --json`
+- `accounts login complete --session <id> --state <state> --proof <proof> --json`
 - `diagnostics export --json`
 - `installer init --json`
 - `legacy import --source-dir <path> --json`
@@ -180,6 +182,54 @@ Reserve-first onboarding remains separate from promotion.
 `accounts onboard --json` must not place a newly admitted backend directly into
 `active`, and any ambiguous or missing identity proof must stop with
 `operator_action = user_action`.
+
+## Additional sandbox login owner surface
+
+`accounts login start --provider sandbox --json` is the owner surface for
+sandbox-only login admission session issuance.
+
+`accounts login complete --session <id> --state <state> --proof <proof> --json`
+is the owner surface for session-bound sandbox login completion.
+
+Sandbox login packets must remain strict JSON and use the command payload
+envelope. Session storage is control-layer managed only:
+
+- `<managed_dir>/login-sessions/<id>.json`
+- required session fields:
+  `login_session_id`, `provider`, `state`, `nonce`, `created_at`, `expires_at`,
+  `used`
+
+Completion must enforce machine-readably:
+
+- provider/session validation (`sandbox` only)
+- session existence
+- exact state match
+- proof equality `sandbox-ok`
+- TTL expiry rejection
+- replay rejection when `used=true`
+
+Start success should expose:
+
+- `next_action=login_complete`
+- `login_session_id`
+- `state`
+- `nonce`
+- `expires_at`
+- `login_url`
+- `login_result.status=started`
+- `login_result.auth_materialized=false`
+
+Completion success may materialize only sandbox-owned synthetic auth under
+managed storage and must return:
+
+- `next_action=accounts_onboard`
+- `auth_ref`
+- `auth_ref_scope=sandbox`
+- `login_result.status=completed`
+- `login_result.auth_materialized=true`
+- `login_result.used=true`
+
+Completion packets must not expose token/secret/password values.
 
 ## Additional launch-client owner surface
 

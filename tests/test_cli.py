@@ -349,6 +349,30 @@ class CliTests(unittest.TestCase):
             command_path="installer init",
         )
 
+    def test_accounts_login_start_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "sandbox",
+            command_path="accounts login start",
+        )
+
+    def test_accounts_login_complete_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "sandbox-session",
+            "--state",
+            "sandbox-state",
+            "--proof",
+            "sandbox-ok",
+            command_path="accounts login complete",
+        )
+
     def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
         status_bin = self.bin_dir / "codex-managed-status"
         for candidate in (
@@ -7579,6 +7603,309 @@ class CliTests(unittest.TestCase):
         self.assertEqual(identity["status"], "ambiguous")
         self.assertEqual(identity["machine_error_code"], "REGISTRY_IDENTITY_AMBIGUOUS")
         self.assertEqual(identity["invalid_backend_pools"], ["backend-a:hold"])
+
+    def test_accounts_login_start_sandbox_strict_json_and_session_persisted(self) -> None:
+        result = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertTrue(result.stdout.strip().startswith("{"))
+        self.assertTrue(result.stdout.strip().endswith("}"))
+        payload = json.loads(result.stdout)
+        for field in runtime_mod.COMMAND_PAYLOAD_REQUIRED_FIELDS:
+            self.assertIn(field, payload)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "login_complete")
+        self.assertEqual(payload["provider"], "sandbox")
+        login_session_id = payload["login_session_id"]
+        self.assertTrue(login_session_id.startswith("sandbox-"))
+        self.assertTrue(str(payload["state"]).startswith("sandbox-state-"))
+        self.assertTrue(str(payload["nonce"]).startswith("sandbox-nonce-"))
+        self.assertIn("/owner-login/sandbox?", str(payload["login_url"]))
+        login_result = payload["login_result"]
+        self.assertEqual(login_result["status"], "started")
+        self.assertEqual(login_result["provider"], "sandbox")
+        self.assertEqual(login_result["login_session_id"], login_session_id)
+        self.assertEqual(login_result["state"], payload["state"])
+        self.assertEqual(login_result["nonce"], payload["nonce"])
+        self.assertEqual(login_result["login_url"], payload["login_url"])
+        self.assertEqual(login_result["expires_at"], payload["expires_at"])
+        self.assertFalse(login_result["auth_materialized"])
+        self.assertFalse(login_result["used"])
+        self.assertIn(str(self.managed_dir / "login-sessions"), payload["changed_files"])
+        session_path = self.managed_dir / "login-sessions" / f"{login_session_id}.json"
+        self.assertIn(str(session_path), payload["changed_files"])
+        self.assertTrue(session_path.is_file())
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            sorted(session.keys()),
+            sorted(
+                [
+                    "login_session_id",
+                    "provider",
+                    "state",
+                    "nonce",
+                    "created_at",
+                    "expires_at",
+                    "used",
+                ]
+            ),
+        )
+        self.assertEqual(session["login_session_id"], login_session_id)
+        self.assertEqual(session["provider"], "sandbox")
+        self.assertEqual(session["state"], payload["state"])
+        self.assertFalse(session["used"])
+        self.assertTrue(str(session["nonce"]).startswith("sandbox-nonce-"))
+        self.assertTrue(all(path.startswith(str(self.managed_dir)) for path in payload["changed_files"]))
+        self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+
+    def test_accounts_login_start_rejects_unsupported_provider(self) -> None:
+        result = self.run_cli(
+            "accounts", "login", "start", "--provider", "codex", "--json"
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(result.stderr, "")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_PROVIDER_UNSUPPORTED")
+        self.assertEqual(payload["changed_files"], [])
+
+    def test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay(self) -> None:
+        missing = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "sandbox-missing-session",
+            "--state",
+            "sandbox-state-missing",
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(missing.returncode, 1, missing.stderr)
+        missing_payload = json.loads(missing.stdout)
+        self.assertEqual(missing_payload["machine_error_code"], "LOGIN_SESSION_NOT_FOUND")
+        self.assertEqual(missing_payload["changed_files"], [])
+
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+
+        wrong_state = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            "sandbox-state-wrong",
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(wrong_state.returncode, 1, wrong_state.stderr)
+        wrong_state_payload = json.loads(wrong_state.stdout)
+        self.assertEqual(wrong_state_payload["machine_error_code"], "LOGIN_STATE_MISMATCH")
+        self.assertEqual(wrong_state_payload["changed_files"], [])
+
+        wrong_proof = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "not-ok",
+            "--json",
+        )
+        self.assertEqual(wrong_proof.returncode, 1, wrong_proof.stderr)
+        wrong_proof_payload = json.loads(wrong_proof.stdout)
+        self.assertEqual(wrong_proof_payload["machine_error_code"], "LOGIN_PROOF_INVALID")
+        self.assertEqual(wrong_proof_payload["changed_files"], [])
+
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        session_payload = json.loads(session_path.read_text(encoding="utf-8"))
+        session_payload["expires_at"] = "2000-01-01T00:00:00+00:00"
+        session_path.write_text(json.dumps(session_payload) + "\n", encoding="utf-8")
+        expired = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(expired.returncode, 1, expired.stderr)
+        expired_payload = json.loads(expired.stdout)
+        self.assertEqual(expired_payload["machine_error_code"], "LOGIN_SESSION_EXPIRED")
+        self.assertEqual(expired_payload["changed_files"], [])
+
+        started_replay = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_replay_payload = json.loads(started_replay.stdout)
+        replay_session = started_replay_payload["login_session_id"]
+        replay_state = started_replay_payload["state"]
+        first_complete = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            replay_session,
+            "--state",
+            replay_state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(first_complete.returncode, 0, first_complete.stderr)
+        replay = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            replay_session,
+            "--state",
+            replay_state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(replay.returncode, 1, replay.stderr)
+        replay_payload = json.loads(replay.stdout)
+        self.assertEqual(replay_payload["machine_error_code"], "LOGIN_SESSION_REPLAY_BLOCKED")
+        self.assertEqual(replay_payload["changed_files"], [])
+
+    def test_accounts_login_complete_materializes_sandbox_auth_and_redacts_secrets(
+        self,
+    ) -> None:
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+
+        completed = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "accounts_onboard")
+        self.assertEqual(payload["provider"], "sandbox")
+        self.assertEqual(payload["login_session_id"], session_id)
+        self.assertEqual(payload["auth_ref_scope"], "sandbox")
+        login_result = payload["login_result"]
+        self.assertEqual(login_result["status"], "completed")
+        self.assertEqual(login_result["provider"], "sandbox")
+        self.assertEqual(login_result["login_session_id"], session_id)
+        self.assertTrue(login_result["auth_materialized"])
+        self.assertEqual(login_result["auth_ref_scope"], "sandbox")
+        self.assertTrue(login_result["used"])
+        auth_ref = Path(payload["auth_ref"])
+        self.assertTrue(auth_ref.is_file())
+        self.assertTrue(str(auth_ref).startswith(str(self.managed_dir / "sandbox-auth")))
+        self.assertIn(str(auth_ref), payload["changed_files"])
+        self.assertIn(
+            str(self.managed_dir / "login-sessions" / f"{session_id}.json"),
+            payload["changed_files"],
+        )
+        auth_payload = json.loads(auth_ref.read_text(encoding="utf-8"))
+        self.assertEqual(auth_payload["provider"], "sandbox")
+        self.assertTrue(auth_payload["synthetic"])
+        self.assertEqual(auth_payload["synthetic_source"], "sandbox-login")
+        self.assertEqual(auth_payload["sandbox_login_session_id"], session_id)
+        self.assertTrue(str(auth_payload["OPENAI_API_KEY"]).startswith("sandbox-synthetic-"))
+        self.assertTrue(all(path.startswith(str(self.managed_dir)) for path in payload["changed_files"]))
+        self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
+        payload_text = json.dumps(payload, ensure_ascii=True)
+        self.assertNotIn("sandbox-ok", payload_text)
+        self.assertNotIn(str(auth_payload["OPENAI_API_KEY"]), payload_text)
+        self.assertNotIn("proof", payload_text)
+
+    def test_accounts_login_complete_then_onboard_imports_to_reserve_with_no_active_routing_change(
+        self,
+    ) -> None:
+        started = self.run_cli(
+            "accounts", "login", "start", "--provider", "sandbox", "--json"
+        )
+        started_payload = json.loads(started.stdout)
+        session_id = started_payload["login_session_id"]
+        state = started_payload["state"]
+        completed = self.run_cli(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--state",
+            state,
+            "--proof",
+            "sandbox-ok",
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        complete_payload = json.loads(completed.stdout)
+        auth_ref = complete_payload["auth_ref"]
+        result = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-from-sandbox-login",
+                            auth_ref=auth_ref,
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "onboard",
+            "--json",
+            "--auth-ref",
+            auth_ref,
+            "--skip-login",
+            "--no-sync",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-from-sandbox-login")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        added = [
+            item for item in registry["backends"] if item["id"] == "backend-from-sandbox-login"
+        ]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["pool"], "reserve")
 
     def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
         self,

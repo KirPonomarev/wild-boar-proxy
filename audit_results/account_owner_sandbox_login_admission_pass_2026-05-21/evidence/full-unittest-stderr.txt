@@ -1,0 +1,83 @@
+validate-ok
+promote-ran
+sync-advance-inline-auth
+validate-ok
+promote-ran
+sync-advance-interleaving
+validate-ok
+promote-ran
+sync-advance-contradicted
+validate-ok
+promote-ran
+sync-advance-stage20-inline-auth
+validate-ok
+promote-ran
+sync-advance-stage20-contradicted
+validate-ok
+promote-ran
+sync-advance-stage20-stable-auth-failure
+======================================================================
+FAIL: test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof (tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 8125, in test_accounts_onboard_detected_new_auth_nonzero_exit_still_requires_full_proof
+    self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+AssertionError: 'error' != 'ok'
+- error
++ ok
+
+
+======================================================================
+FAIL: test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof (tests.test_cli.CliTests.test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 8075, in test_accounts_onboard_detected_new_auth_runs_validate_sync_and_status_proof
+    self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+AssertionError: 'error' != 'ok'
+- error
++ ok
+
+
+======================================================================
+FAIL: test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof (tests.test_cli.CliTests.test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 8262, in test_accounts_onboard_explicit_auth_skip_login_forwards_flag_and_runs_full_proof
+    self.assertEqual(onboarding["status_observed"]["command_status"], "ok")
+AssertionError: 'error' != 'ok'
+- error
++ ok
+
+
+======================================================================
+FAIL: test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success (tests.test_cli.CliTests.test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 8752, in test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 0 != 1 : validate-ok
+sync-stable:8318
+
+
+======================================================================
+FAIL: test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible (tests.test_cli.CliTests.test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 3252, in test_healthcheck_recovers_working_candidate_via_sync_when_launcher_lane_is_ineligible
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : sync-stable:8318
+
+
+======================================================================
+FAIL: test_sync_does_not_expose_deterministic_stable_recovery_result (tests.test_cli.CliTests.test_sync_does_not_expose_deterministic_stable_recovery_result)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Work/wild-boar-proxy/tests/test_cli.py", line 16180, in test_sync_does_not_expose_deterministic_stable_recovery_result
+    self.assertEqual(result.returncode, 1, result.stderr)
+AssertionError: 0 != 1 : sync-stable:8318
+
+
+----------------------------------------------------------------------
+Ran 569 tests in 189.887s
+
+FAILED (failures=6)

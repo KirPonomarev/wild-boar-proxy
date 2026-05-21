@@ -17,6 +17,8 @@ from .runtime import (
     mode_get,
     mode_set,
     run_accounts_command,
+    run_accounts_login_complete,
+    run_accounts_login_start,
     run_demote,
     run_healthcheck,
     run_installer_init,
@@ -116,6 +118,18 @@ def build_parser() -> argparse.ArgumentParser:
     accounts_onboard.add_argument("--skip-login", action="store_true")
     accounts_onboard.add_argument("--no-sync", action="store_true")
     accounts_onboard.add_argument("--non-interactive", action="store_true")
+    accounts_login = accounts_subparsers.add_parser("login")
+    accounts_login_subparsers = accounts_login.add_subparsers(
+        dest="accounts_login_command", required=True
+    )
+    accounts_login_start = accounts_login_subparsers.add_parser("start")
+    accounts_login_start.add_argument("--provider", required=True)
+    accounts_login_start.add_argument("--json", action="store_true", required=True)
+    accounts_login_complete = accounts_login_subparsers.add_parser("complete")
+    accounts_login_complete.add_argument("--session", required=True)
+    accounts_login_complete.add_argument("--state", required=True)
+    accounts_login_complete.add_argument("--proof", required=True)
+    accounts_login_complete.add_argument("--json", action="store_true", required=True)
 
     diagnostics = subparsers.add_parser("diagnostics")
     diagnostics_subparsers = diagnostics.add_subparsers(
@@ -360,6 +374,25 @@ def main(argv: list[str] | None = None) -> int:
                     skip_login=args.skip_login,
                     no_sync=args.no_sync,
                     non_interactive=args.non_interactive,
+                )
+            )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "start"
+        ):
+            return emit_json(run_accounts_login_start(paths, args.provider))
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "complete"
+        ):
+            return emit_json(
+                run_accounts_login_complete(
+                    paths,
+                    login_session_id=args.session,
+                    state=args.state,
+                    proof=args.proof,
                 )
             )
         if args.command == "diagnostics" and args.diagnostics_command == "export":

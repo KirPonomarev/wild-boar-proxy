@@ -1,0 +1,42 @@
+{
+  "contour": "ACCOUNT_OWNER_SANDBOX_LOGIN_ADMISSION_PASS",
+  "status": "pass_with_verification_gate_note",
+  "auditor": {
+    "agent_id": "019e4b7e-465d-7a91-b85b-9157ebd0041d",
+    "model": "gpt-5.4-mini",
+    "role": "independent scanner/fact-checker"
+  },
+  "auditor_verdict": {
+    "status": "pass",
+    "parser_dispatch_commands": true,
+    "runtime_behavior_checks": true,
+    "evidence_files_parsed": true,
+    "targeted_tests_passed": true,
+    "mismatches": []
+  },
+  "manual_spot_check": [
+    {
+      "id": "start_packet_fields",
+      "pass": true,
+      "evidence": "evidence/login-start-packet.json includes login_session_id, state, nonce, expires_at, login_url, and next_action=login_complete."
+    },
+    {
+      "id": "complete_packet_redaction",
+      "pass": true,
+      "evidence": "evidence/login-complete-packet.json includes auth_ref/auth_ref_scope and does not expose proof/token/secret/password."
+    },
+    {
+      "id": "reserve_first_after_onboard",
+      "pass": true,
+      "evidence": "evidence/onboard-packet.json shows final_outcome=explicit_auth_imported_to_reserve, reserve_first_enforced=true, active_routing_changed=false."
+    },
+    {
+      "id": "full_required_suite_gate",
+      "pass": false,
+      "evidence": "evidence/full-unittest-stderr.txt shows 6 failures; evidence/listener-8318.txt confirms live listener on 127.0.0.1:8318 affecting deterministic expectations in parts of tests.test_cli."
+    }
+  ],
+  "residual_risks": [
+    "Contour close requires clean full required unittest gate; currently blocked by live listener interference on port 8318."
+  ]
+}
