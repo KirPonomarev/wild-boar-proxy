@@ -104,6 +104,30 @@ def mode_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def external_route(
+    route_id: str,
+    *,
+    enabled: bool,
+    display_name: str = "Route",
+    upstream_model: str = "deepseek/deepseek-chat",
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "route_id": route_id,
+        "display_name": display_name,
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "endpoint_path": "/chat/completions",
+        "upstream_model": upstream_model,
+        "compatibility": "openai_chat_completions",
+        "auth": {"type": "bearer", "secret_ref": "OPENROUTER_API_KEY"},
+        "cost_class": "paid_or_free_limited",
+        "lane_role": "candidate",
+        "fallback_eligible": False,
+        "enabled": enabled,
+    }
+
+
 def accounts_packet(**overrides: object) -> dict[str, object]:
     payload = command_packet(
         human_message="Accounts loaded.",
@@ -1012,6 +1036,86 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(readonly_after["accounts"][0]["id"], "auth")
             self.assertEqual(readonly_after["accounts"][0]["pool"], "reserve")
 
+    def test_real_json_runner_supports_sandbox_api_route_allow_from_profile_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            external_dir = data_dir / "external-models"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(external_dir),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                paths = RuntimePaths.from_env()
+                install_payload = run_installer_init(paths)
+            self.assertEqual(install_payload["status"], "ok")
+
+            routes_path = external_dir / "routes.json"
+            routes_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "routes": [
+                            external_route("wbp-deepseek-v3", enabled=True, display_name="DeepSeek V3"),
+                            external_route("wbp-disabled", enabled=False, display_name="Disabled Route"),
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            secrets_path = external_dir / "secrets.env"
+            secrets_path.write_text("OPENROUTER_API_KEY=test-key\n", encoding="utf-8")
+            os.chmod(secrets_path, 0o600)
+
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9343,
+                action_server_port=9342,
+            )
+            from wild_boar_proxy.ui_shell import JsonCommandRunner
+
+            runner = JsonCommandRunner(
+                cwd=str(profile_dir),
+                env=_sandbox_action_runner_env(contract),
+            )
+
+            readonly_before = build_api_connections_readonly_snapshot(runner)
+            self.assertEqual(readonly_before["status"], "ok")
+            before_disabled = next(
+                route for route in readonly_before["routes"] if route["route_id"] == "wbp-disabled"
+            )
+            self.assertFalse(before_disabled["enabled"])
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_allow", "route_id": "wbp-disabled"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["action_role"], "api_route_lifecycle_allow")
+            self.assertEqual(result["route_id"], "wbp-disabled")
+            self.assertEqual(result["result"]["machine_error_code"], "OK")
+            self.assertIn(
+                str(routes_path.resolve()),
+                [str(Path(item).resolve()) for item in result["result"]["changed_files"]],
+            )
+
+            readonly_after = build_api_connections_readonly_snapshot(runner)
+            self.assertEqual(readonly_after["status"], "ok")
+            after_disabled = next(
+                route for route in readonly_after["routes"] if route["route_id"] == "wbp-disabled"
+            )
+            self.assertTrue(after_disabled["enabled"])
+            self.assertFalse(readonly_after["adapter"]["profile_ready"])
+            self.assertTrue(readonly_after["adapter"]["runtime_claim_blocked"])
+
     def test_http_sandbox_readonly_endpoints_follow_sandbox_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1631,6 +1735,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             allow_enabled_runner,
             {"ui_action": "api_route_allow", "route_id": "wbp-deepseek-v3"},
         )
+        allow_extra = run_ui_action(
+            extra_runner,
+            {
+                "ui_action": "api_route_allow",
+                "route_id": "wbp-disabled",
+                "secret_ref": "OPENROUTER_API_KEY",
+            },
+        )
         disable_disabled = run_ui_action(
             disabled_runner,
             {"ui_action": "api_route_disable", "route_id": "wbp-disabled"},
@@ -1683,6 +1795,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             allow_enabled["result"]["machine_error_code"],
             "UI_API_ROUTE_ALLOW_INELIGIBLE",
         )
+        self.assertEqual(allow_extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
         self.assertEqual(
             disable_disabled["result"]["machine_error_code"],
             "UI_API_ROUTE_DISABLED_INELIGIBLE",

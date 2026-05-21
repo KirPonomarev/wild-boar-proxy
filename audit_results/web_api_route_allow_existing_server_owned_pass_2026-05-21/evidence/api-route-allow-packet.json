@@ -1,0 +1,28 @@
+{
+  "account_id": null,
+  "action_claim_scope": "только lifecycle-запрос маршрута у провайдера; это не утверждение runtime readiness",
+  "action_role": "api_route_lifecycle_allow",
+  "affects_primary_truth": false,
+  "confirmation_required": true,
+  "mutates_runtime": false,
+  "mutation_class": "api_route_lifecycle",
+  "post_action_refresh_required": true,
+  "result": {
+    "changed_files": [
+      "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-api-allow-_5_wrpk2/managed/external-models/routes.json"
+    ],
+    "data": {
+      "enabled": true,
+      "route_id": "wbp-disabled"
+    },
+    "human_message": "External-models route enabled: wbp-disabled.",
+    "machine_error_code": "OK",
+    "next_action": "none",
+    "status": "ok"
+  },
+  "route_id": "wbp-disabled",
+  "schema_version": 1,
+  "source": "ui_action",
+  "status": "ok",
+  "ui_action": "api_route_allow"
+}
