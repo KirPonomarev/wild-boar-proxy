@@ -1,0 +1,1 @@
+{"route": "wbp-deepseek-v3", "route_provider": "openrouter", "secret_ref": "OPENROUTER_API_KEY", "command_status": "ok", "rendered_state": "profile_packet_only", "profile_kind": "codex_desktop_openai_compatible", "writes_external_config": "false", "runtime_claim_blocked": "true", "routes_count": "1", "integration": ""}

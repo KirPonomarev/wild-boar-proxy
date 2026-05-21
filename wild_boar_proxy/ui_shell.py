@@ -775,6 +775,21 @@ def load_external_models_snapshot(runner: JsonCommandRunner) -> ExternalModelsSn
     )
 
 
+def run_external_profile_and_refresh(
+    runner: JsonCommandRunner, route_id: str
+) -> tuple[dict[str, Any], ExternalModelsSnapshot]:
+    action_result = runner.run(
+        "external-models",
+        "profile",
+        "codex-desktop",
+        "--route",
+        route_id,
+        "--json",
+    )
+    snapshot = load_external_models_snapshot(runner)
+    return action_result.payload, snapshot
+
+
 def build_external_action_result(
     *, action: str, action_payload: dict[str, Any]
 ) -> ExternalActionResult:
@@ -1089,6 +1104,19 @@ def build_diagnostics_field_values(action_payload: dict[str, Any]) -> dict[str, 
     return result
 
 
+def build_external_profile_field_values(action_payload: dict[str, Any]) -> dict[str, str]:
+    result = {field: "" for field in EXTERNAL_PROFILE_FIELDS}
+    data = action_payload.get("data")
+    if data is None:
+        return result
+    if not isinstance(data, dict):
+        raise UiShellError("external profile data must be an object when present")
+    for field in EXTERNAL_PROFILE_FIELDS:
+        if field in data:
+            result[field] = format_onboarding_value(data[field])
+    return result
+
+
 def classify_smoke_rendered_state(
     action_payload: dict[str, Any], *, malformed: bool
 ) -> str:
@@ -1103,6 +1131,25 @@ def classify_smoke_rendered_state(
     if launch_mode != "smoke":
         return "unknown"
     return "bounded_runtime_smoke_only"
+
+
+def classify_external_profile_rendered_state(
+    action_payload: dict[str, Any], field_values: dict[str, str], *, malformed: bool
+) -> str:
+    if malformed:
+        return "integration_failure"
+    command_status = str(action_payload.get("status", ""))
+    if command_status == "integration_failure":
+        return "integration_failure"
+    if command_status != "ok":
+        return "failure"
+    if (
+        field_values.get("profile_kind", "") == "codex_desktop_openai_compatible"
+        and field_values.get("route_id", "")
+        and field_values.get("writes_external_config", "") == "false"
+    ):
+        return "profile_packet_only"
+    return "unknown"
 
 
 class MinimalCompanionShell:
@@ -1140,6 +1187,32 @@ class MinimalCompanionShell:
             )
         )
         self.account_integration_var = StringVar(value="")
+        self.external_foundation_phase_var = StringVar(value="unknown")
+        self.external_adapter_state_var = StringVar(value="unknown")
+        self.external_routes_count_var = StringVar(value="0")
+        self.external_listener_var = StringVar(value="false")
+        self.external_runtime_claim_var = StringVar(value="true")
+        self.external_profile_ready_var = StringVar(value="false")
+        self.external_integration_var = StringVar(value="")
+        self.external_route_var = StringVar(value="")
+        self.external_route_display_var = StringVar(value="")
+        self.external_route_provider_var = StringVar(value="")
+        self.external_route_secret_ref_var = StringVar(value="")
+        self.external_route_enabled_var = StringVar(value="")
+        self.external_profile_command_status_var = StringVar(value="")
+        self.external_profile_command_exit_code_var = StringVar(value="")
+        self.external_profile_command_human_message_var = StringVar(value="")
+        self.external_profile_command_machine_error_var = StringVar(value="")
+        self.external_profile_command_changed_files_var = StringVar(value="")
+        self.external_profile_command_next_action_var = StringVar(value="")
+        self.external_profile_rendered_state_var = StringVar(value="unknown")
+        self.external_profile_field_vars = {
+            field: StringVar(value="")
+            for field in EXTERNAL_PROFILE_FIELDS
+        }
+        self._external_models_snapshot = ExternalModelsSnapshot.integration_failure(
+            "Refresh required."
+        )
         self.onboarding_auth_ref_var = StringVar(value="")
         self.onboarding_command_status_var = StringVar(value="")
         self.onboarding_machine_error_var = StringVar(value="")
@@ -1462,6 +1535,90 @@ class MinimalCompanionShell:
             self.stable_repair_command_next_action_var,
         )
 
+        external_box = ttk.LabelFrame(container, text="Desktop Bridge Admission", padding=12)
+        external_box.pack(fill="x", pady=(16, 0))
+        external_summary = ttk.Frame(external_box)
+        external_summary.pack(fill="x")
+        self._add_status_row(
+            external_summary, "Foundation phase", self.external_foundation_phase_var
+        )
+        self._add_status_row(
+            external_summary, "Adapter state", self.external_adapter_state_var
+        )
+        self._add_status_row(
+            external_summary, "Routes count", self.external_routes_count_var
+        )
+        self._add_status_row(
+            external_summary, "Listener proven", self.external_listener_var
+        )
+        self._add_status_row(
+            external_summary, "Runtime claim blocked", self.external_runtime_claim_var
+        )
+        self._add_status_row(
+            external_summary, "Profile ready", self.external_profile_ready_var
+        )
+        self._add_status_row(
+            external_summary, "Integration", self.external_integration_var
+        )
+
+        external_route_row = ttk.Frame(external_box)
+        external_route_row.pack(fill="x", pady=(8, 0))
+        ttk.Label(external_route_row, text="Route:", width=16).pack(side="left")
+        self.external_route_combo = ttk.Combobox(
+            external_route_row,
+            textvariable=self.external_route_var,
+            state="readonly",
+        )
+        self.external_route_combo.pack(side="left", fill="x", expand=True)
+        self.external_route_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self._sync_external_route_summary(),
+        )
+        ttk.Button(
+            external_route_row,
+            text="Profile Codex Desktop",
+            command=self.run_external_profile_action,
+        ).pack(side="left", padx=(8, 0))
+        self._add_status_row(external_box, "Route label", self.external_route_display_var)
+        self._add_status_row(external_box, "Provider", self.external_route_provider_var)
+        self._add_status_row(external_box, "Secret ref", self.external_route_secret_ref_var)
+        self._add_status_row(external_box, "Enabled", self.external_route_enabled_var)
+        self._add_status_row(
+            external_box, "Rendered state", self.external_profile_rendered_state_var
+        )
+        self._add_status_row(
+            external_box, "Command status", self.external_profile_command_status_var
+        )
+        self._add_status_row(
+            external_box, "Exit code", self.external_profile_command_exit_code_var
+        )
+        self._add_status_row(
+            external_box, "Human message", self.external_profile_command_human_message_var
+        )
+        self._add_status_row(
+            external_box, "Machine error", self.external_profile_command_machine_error_var
+        )
+        self._add_status_row(
+            external_box, "Changed files", self.external_profile_command_changed_files_var
+        )
+        self._add_status_row(
+            external_box, "Next action", self.external_profile_command_next_action_var
+        )
+        for label, field in (
+            ("Profile kind", "profile_kind"),
+            ("Route ID", "route_id"),
+            ("Base URL", "base_url"),
+            ("Model", "model"),
+            ("API key source", "api_key_source"),
+            ("Writes config", "writes_external_config"),
+            ("Profile ready", "profile_ready"),
+            ("Listener proven", "listener_proven"),
+            ("Runtime claim blocked", "runtime_claim_blocked"),
+            ("Synthetic contract", "synthetic_endpoint_contract"),
+            ("Prerequisite", "prerequisite"),
+        ):
+            self._add_status_row(external_box, label, self.external_profile_field_vars[field])
+
         onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
         onboarding_box.pack(fill="x", pady=(16, 0))
 
@@ -1614,9 +1771,17 @@ class MinimalCompanionShell:
             except UiShellError as exc:
                 runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
                 account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+        try:
+            external_snapshot = load_external_models_snapshot(self.runner)
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
         self.root.after(
             0,
-            lambda: self._apply_refresh_results(runtime_snapshot, account_snapshot),
+            lambda: self._apply_refresh_results(
+                runtime_snapshot,
+                account_snapshot,
+                external_snapshot=external_snapshot,
+            ),
         )
 
     def _apply_runtime_snapshot(self, snapshot: RuntimeSnapshot) -> None:
@@ -1697,15 +1862,53 @@ class MinimalCompanionShell:
                 ),
             )
 
+    def _apply_external_models_snapshot(self, snapshot: ExternalModelsSnapshot) -> None:
+        self._external_models_snapshot = snapshot
+        self.external_foundation_phase_var.set(snapshot.foundation_phase)
+        self.external_adapter_state_var.set(snapshot.adapter_state)
+        self.external_routes_count_var.set(str(snapshot.routes_count))
+        self.external_listener_var.set("true" if snapshot.listener_proven else "false")
+        self.external_runtime_claim_var.set(
+            "true" if snapshot.runtime_claim_blocked else "false"
+        )
+        self.external_profile_ready_var.set("true" if snapshot.profile_ready else "false")
+        self.external_integration_var.set(snapshot.integration_error)
+        route_ids = [route.route_id for route in snapshot.routes]
+        self.external_route_combo["values"] = route_ids
+        selected_route = self.external_route_var.get().strip()
+        if selected_route not in route_ids:
+            self.external_route_var.set(route_ids[0] if route_ids else "")
+        self._sync_external_route_summary()
+
+    def _sync_external_route_summary(self) -> None:
+        selected_route = self.external_route_var.get().strip()
+        route = next(
+            (item for item in self._external_models_snapshot.routes if item.route_id == selected_route),
+            None,
+        )
+        if route is None:
+            self.external_route_display_var.set("")
+            self.external_route_provider_var.set("")
+            self.external_route_secret_ref_var.set("")
+            self.external_route_enabled_var.set("")
+            return
+        self.external_route_display_var.set(route.display_name)
+        self.external_route_provider_var.set(route.provider)
+        self.external_route_secret_ref_var.set(route.secret_ref)
+        self.external_route_enabled_var.set("true" if route.enabled else "false")
+
     def _apply_refresh_results(
         self,
         runtime_snapshot: RuntimeSnapshot,
         account_snapshot: AccountPoolSnapshot,
         *,
         banner: str | None = None,
+        external_snapshot: ExternalModelsSnapshot | None = None,
     ) -> None:
         self._apply_runtime_snapshot(runtime_snapshot)
         self._apply_account_snapshot(account_snapshot)
+        if external_snapshot is not None:
+            self._apply_external_models_snapshot(external_snapshot)
         self.banner_var.set(banner or runtime_snapshot.human_message)
         self.set_busy(False)
 
@@ -1730,6 +1933,38 @@ class MinimalCompanionShell:
         self.set_busy(True)
         self.banner_var.set("Running operator action...")
         threading.Thread(target=self._sync_worker, daemon=True).start()
+
+    def run_external_profile_action(self) -> None:
+        if self._busy:
+            return
+        route_id = self.external_route_var.get().strip()
+        if not route_id:
+            messagebox.showinfo(
+                "Route required",
+                "Refresh route truth and select a route before generating the desktop profile.",
+                parent=self.root,
+            )
+            return
+        if route_id not in {route.route_id for route in self._external_models_snapshot.routes}:
+            messagebox.showinfo(
+                "Route unavailable",
+                "Refresh route truth before generating the desktop profile packet.",
+                parent=self.root,
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Generate bounded Codex Desktop profile packet and refresh external-models truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Generating desktop profile packet...")
+        threading.Thread(
+            target=self._external_profile_worker,
+            args=(route_id,),
+            daemon=True,
+        ).start()
 
     def run_launch_client_action(self) -> None:
         if self._busy:
@@ -1979,6 +2214,34 @@ class MinimalCompanionShell:
             ),
         )
 
+    def _external_profile_worker(self, route_id: str) -> None:
+        try:
+            action_payload, external_snapshot = run_external_profile_and_refresh(
+                self.runner, route_id
+            )
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+                "data": {},
+            }
+            external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_external_profile_results(
+                action_payload,
+                external_snapshot,
+                banner=banner,
+            ),
+        )
+
     def _smoke_worker(self) -> None:
         action_payload: dict[str, Any] | None = None
         try:
@@ -2175,6 +2438,52 @@ class MinimalCompanionShell:
     ) -> None:
         self._apply_smoke_payload(action_payload)
         self._apply_runtime_snapshot(runtime_snapshot)
+        self.banner_var.set(banner)
+        self.set_busy(False)
+
+    def _apply_external_profile_payload(self, action_payload: dict[str, Any]) -> None:
+        self.external_profile_command_status_var.set(str(action_payload.get("status", "")))
+        self.external_profile_command_exit_code_var.set(str(action_payload.get("exit_code", "")))
+        self.external_profile_command_human_message_var.set(
+            str(action_payload.get("human_message", ""))
+        )
+        self.external_profile_command_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.external_profile_command_next_action_var.set(
+            str(action_payload.get("next_action", ""))
+        )
+        changed_files_value = action_payload.get("changed_files")
+        if changed_files_value is None:
+            self.external_profile_command_changed_files_var.set("")
+        else:
+            self.external_profile_command_changed_files_var.set(
+                format_onboarding_value(changed_files_value)
+            )
+        malformed_surface = False
+        try:
+            field_values = build_external_profile_field_values(action_payload)
+        except UiShellError:
+            field_values = {field: "" for field in EXTERNAL_PROFILE_FIELDS}
+            malformed_surface = True
+        for field, value in field_values.items():
+            self.external_profile_field_vars[field].set(value)
+        rendered_state = classify_external_profile_rendered_state(
+            action_payload,
+            field_values,
+            malformed=malformed_surface,
+        )
+        self.external_profile_rendered_state_var.set(rendered_state)
+
+    def _apply_external_profile_results(
+        self,
+        action_payload: dict[str, Any],
+        external_snapshot: ExternalModelsSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._apply_external_profile_payload(action_payload)
+        self._apply_external_models_snapshot(external_snapshot)
         self.banner_var.set(banner)
         self.set_busy(False)
 

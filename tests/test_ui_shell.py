@@ -10,6 +10,7 @@ from unittest import mock
 from wild_boar_proxy.ui_shell import (
     CLIENT_LAUNCH_RESULT_FIELDS,
     DIAGNOSTICS_RESULT_FIELDS,
+    EXTERNAL_PROFILE_FIELDS,
     ONBOARDING_RESULT_FIELDS,
     SMOKE_RESULT_FIELDS,
     AccountPoolSnapshot,
@@ -21,9 +22,11 @@ from wild_boar_proxy.ui_shell import (
     build_account_pool_snapshot,
     build_external_action_result,
     build_external_models_snapshot,
+    build_external_profile_field_values,
     build_client_launch_field_values,
     build_diagnostics_field_values,
     build_smoke_field_values,
+    classify_external_profile_rendered_state,
     classify_client_launch_rendered_state,
     classify_smoke_rendered_state,
     build_onboarding_field_values,
@@ -41,6 +44,7 @@ from wild_boar_proxy.ui_shell import (
     run_stable_repair_and_refresh,
     run_launch_client_and_refresh,
     run_mode_control_and_refresh,
+    run_external_profile_and_refresh,
     run_smoke_and_refresh,
     run_diagnostics_export_and_refresh,
     run_sync_and_refresh,
@@ -315,6 +319,27 @@ def external_validate_payload(**overrides: object) -> dict[str, object]:
             "latency_ms": 6,
         },
         timestamp_utc="2026-05-12T00:00:00Z",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_profile_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="Codex Desktop profile contract generated without mutating config.",
+        data={
+            "profile_kind": "codex_desktop_openai_compatible",
+            "route_id": "wbp-deepseek-v3",
+            "base_url": None,
+            "model": "deepseek/deepseek-chat",
+            "api_key_source": "OPENROUTER_API_KEY",
+            "writes_external_config": False,
+            "profile_ready": False,
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "synthetic_endpoint_contract": True,
+            "prerequisite": "live_listener_contour_required",
+        },
     )
     payload.update(overrides)
     return payload
@@ -645,6 +670,65 @@ class ExternalActionResultTests(unittest.TestCase):
         self.assertTrue(stale_result.is_stale)
         self.assertEqual(stale_result.stale_reason, "cached_history")
         self.assertEqual(stale_result.route_id, result.route_id)
+
+
+class ExternalProfileTests(unittest.TestCase):
+    def test_run_external_profile_and_refresh_reads_packet_then_external_truth(self) -> None:
+        runner = FakeRunner(
+            {
+                (
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--json",
+                ): external_profile_payload(),
+                ("external-models", "status", "--json"): external_status_payload(),
+                ("external-models", "models", "--json"): external_models_payload(),
+                ("external-models", "routes", "list", "--json"): external_routes_payload(),
+            }
+        )
+
+        action_payload, snapshot = run_external_profile_and_refresh(
+            runner, "wbp-deepseek-v3"
+        )
+
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(snapshot.routes[0].route_id, "wbp-deepseek-v3")
+        self.assertEqual(
+            runner.calls,
+            [
+                (
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--json",
+                ),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+
+    def test_build_external_profile_field_values_maps_profile_packet(self) -> None:
+        values = build_external_profile_field_values(external_profile_payload())
+
+        self.assertEqual(values["profile_kind"], "codex_desktop_openai_compatible")
+        self.assertEqual(values["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(values["writes_external_config"], "false")
+        self.assertEqual(values["synthetic_endpoint_contract"], "true")
+
+    def test_classify_external_profile_rendered_state_accepts_profile_packet_only(self) -> None:
+        rendered_state = classify_external_profile_rendered_state(
+            external_profile_payload(),
+            build_external_profile_field_values(external_profile_payload()),
+            malformed=False,
+        )
+
+        self.assertEqual(rendered_state, "profile_packet_only")
 
 
 class ModeControlTests(unittest.TestCase):
@@ -1680,6 +1764,82 @@ class UiDispatchTests(unittest.TestCase):
         )
         thread_instance.start.assert_called_once_with()
 
+    def test_run_external_profile_action_requires_route(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.external_route_var = mock.Mock()
+        shell.external_route_var.get.return_value = "   "
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_external_profile_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_external_profile_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.external_route_var = mock.Mock()
+        shell.external_route_var.get.return_value = "wbp-deepseek-v3"
+        shell._external_models_snapshot = mock.Mock(routes=[mock.Mock(route_id="wbp-deepseek-v3")])
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_external_profile_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_external_profile_action_wires_selected_route(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.external_route_var = mock.Mock()
+        shell.external_route_var.get.return_value = "wbp-deepseek-v3"
+        shell._external_models_snapshot = mock.Mock(routes=[mock.Mock(route_id="wbp-deepseek-v3")])
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_external_profile_action()
+
+        thread_mock.assert_called_once()
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._external_profile_worker)
+        self.assertEqual(kwargs["args"], ("wbp-deepseek-v3",))
+        thread_instance.start.assert_called_once_with()
+
+    def test_run_external_profile_action_rejects_route_outside_snapshot(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.external_route_var = mock.Mock()
+        shell.external_route_var.get.return_value = "wbp-deepseek-v3"
+        shell._external_models_snapshot = mock.Mock(routes=[mock.Mock(route_id="wbp-other")])
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_external_profile_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
     def test_run_smoke_action_requires_confirmation(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell._busy = False
@@ -1978,6 +2138,9 @@ class UiDispatchTests(unittest.TestCase):
                 ),
                 ("mode", "get", "--json"): mode_payload(),
                 ("accounts", "list", "--json"): accounts_payload(),
+                ("external-models", "status", "--json"): external_status_payload(),
+                ("external-models", "models", "--json"): external_models_payload(),
+                ("external-models", "routes", "list", "--json"): external_routes_payload(),
             }
         )
         shell.root = mock.Mock()
@@ -2054,6 +2217,33 @@ class UiDispatchTests(unittest.TestCase):
         shell.launch_command_status_var.set.assert_called_once_with("ok")
         for field in CLIENT_LAUNCH_RESULT_FIELDS:
             shell.launch_field_vars[field].set.assert_called_once_with("")
+
+    def test_apply_external_profile_payload_maps_command_and_profile_fields(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.external_profile_command_status_var = mock.Mock()
+        shell.external_profile_command_exit_code_var = mock.Mock()
+        shell.external_profile_command_human_message_var = mock.Mock()
+        shell.external_profile_command_machine_error_var = mock.Mock()
+        shell.external_profile_command_changed_files_var = mock.Mock()
+        shell.external_profile_command_next_action_var = mock.Mock()
+        shell.external_profile_rendered_state_var = mock.Mock()
+        shell.external_profile_field_vars = {
+            field: mock.Mock() for field in EXTERNAL_PROFILE_FIELDS
+        }
+
+        shell._apply_external_profile_payload(external_profile_payload())
+
+        shell.external_profile_command_status_var.set.assert_called_once_with("ok")
+        shell.external_profile_command_exit_code_var.set.assert_called_once_with("0")
+        shell.external_profile_field_vars["profile_kind"].set.assert_called_once_with(
+            "codex_desktop_openai_compatible"
+        )
+        shell.external_profile_field_vars["writes_external_config"].set.assert_called_once_with(
+            "false"
+        )
+        shell.external_profile_rendered_state_var.set.assert_called_once_with(
+            "profile_packet_only"
+        )
 
     def test_apply_onboarding_payload_blanks_fields_for_malformed_surface(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
@@ -2134,6 +2324,34 @@ class UiDispatchTests(unittest.TestCase):
         )
 
         shell.launch_rendered_state_var.set.assert_called_once_with("integration_failure")
+
+    def test_external_profile_worker_keeps_packet_and_refresh_truth(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.runner = FakeRunner(
+            {
+                (
+                    "external-models",
+                    "profile",
+                    "codex-desktop",
+                    "--route",
+                    "wbp-deepseek-v3",
+                    "--json",
+                ): external_profile_payload(),
+                ("external-models", "status", "--json"): external_status_payload(),
+                ("external-models", "models", "--json"): external_models_payload(),
+                ("external-models", "routes", "list", "--json"): external_routes_payload(),
+            }
+        )
+        shell.root = mock.Mock()
+        shell.root.after = mock.Mock(side_effect=lambda _delay, cb: cb())
+        shell._apply_external_profile_results = mock.Mock()
+
+        shell._external_profile_worker("wbp-deepseek-v3")
+
+        shell._apply_external_profile_results.assert_called_once()
+        action_payload, external_snapshot = shell._apply_external_profile_results.call_args.args
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(external_snapshot.routes[0].route_id, "wbp-deepseek-v3")
 
     def test_apply_onboarding_payload_keeps_reserve_first_and_skipped_sync_visible(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
