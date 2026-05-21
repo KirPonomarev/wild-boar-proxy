@@ -130,6 +130,12 @@ The onboarding owner lane supports external launcher invocation modes `--once`
 and `--loop`; the selected mode must remain visible in the emitted owner
 packet command surface.
 
+When no `--auth-ref` is provided and no sandbox-local auth candidate exists,
+the owner helper may start the engine-owned Codex login flow through
+`cli-proxy-api -codex-login`. In a web sandbox runner this flow must write only
+to a sandbox-scoped auth directory; the browser still never sends tokens,
+passwords, auth files, local paths, backend ids, or auth refs.
+
 Onboarding success must not be inferred from external onboarding process exit
 code alone.
 Successful owner packets must prove, machine-readably:

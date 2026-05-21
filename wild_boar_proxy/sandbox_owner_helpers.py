@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -157,6 +158,121 @@ def backend_by_auth_ref(
         if str(Path(backend.get("auth_ref", "")).expanduser()) == normalized:
             return backend
     return None
+
+
+def auth_source_dir(paths: RuntimePaths) -> Path:
+    override = os.environ.get("WBP_AUTH_SOURCE_DIR")
+    if override:
+        return Path(override).expanduser()
+    configured = read_yaml_value(paths.stable_config, "auth-dir")
+    if configured:
+        candidate = Path(str(configured)).expanduser()
+        if not candidate.is_absolute():
+            candidate = paths.stable_config.parent / candidate
+        return candidate
+    return paths.managed_dir / "auth-source"
+
+
+def auth_dir_is_sandbox_scoped(paths: RuntimePaths, auth_dir: Path) -> bool:
+    resolved = auth_dir.expanduser().resolve(strict=False)
+    allowed_roots = [
+        paths.profile_dir.expanduser().resolve(strict=False),
+        paths.managed_dir.expanduser().resolve(strict=False),
+    ]
+    return any(resolved == root or root in resolved.parents for root in allowed_roots)
+
+
+def inventory_auth_files(paths: RuntimePaths) -> dict[str, dict[str, int]]:
+    result: dict[str, dict[str, int]] = {}
+    root = auth_source_dir(paths)
+    if not root.exists():
+        return result
+    for path in sorted(root.glob("codex-*.json")):
+        if not path.is_file():
+            continue
+        stat = path.stat()
+        result[str(path)] = {"mtime_ns": stat.st_mtime_ns, "size": stat.st_size}
+    return result
+
+
+def collect_unregistered_candidates(
+    before: dict[str, dict[str, int]],
+    after: dict[str, dict[str, int]],
+    registry: dict[str, Any],
+) -> list[Path]:
+    existing_auth_refs = {
+        str(Path(item.get("auth_ref", "")).expanduser())
+        for item in registry.get("backends", [])
+        if item.get("auth_ref")
+    }
+    changed_paths = [
+        path
+        for path, meta in after.items()
+        if (path not in before or before[path] != meta) and path not in existing_auth_refs
+    ]
+    if changed_paths:
+        return sorted(
+            (Path(path) for path in changed_paths),
+            key=lambda item: after[str(item)]["mtime_ns"],
+            reverse=True,
+        )
+    fallback = [path for path in after if path not in existing_auth_refs]
+    return sorted(
+        (Path(path) for path in fallback),
+        key=lambda item: after[str(item)]["mtime_ns"],
+        reverse=True,
+    )
+
+
+def choose_auth_candidate(
+    paths: RuntimePaths,
+    registry: dict[str, Any],
+    before: dict[str, dict[str, int]],
+    *,
+    non_interactive: bool,
+) -> Path:
+    after = inventory_auth_files(paths)
+    candidates = collect_unregistered_candidates(before, after, registry)
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        raise SystemExit(
+            "Multiple candidate auth files detected. Re-run with --auth-ref PATH."
+        )
+    if non_interactive:
+        raise SystemExit(
+            "No new auth file detected. Re-run without --non-interactive or pass --auth-ref PATH."
+        )
+    raise SystemExit("No new auth file detected after login flow.")
+
+
+def run_login_flow(paths: RuntimePaths, args: argparse.Namespace) -> int:
+    auth_dir = auth_source_dir(paths)
+    if os.environ.get("WBP_REQUIRE_SANDBOX_AUTH_DIR") == "1" and not auth_dir_is_sandbox_scoped(paths, auth_dir):
+        raise SystemExit(
+            "Configured auth-dir is outside sandbox profile/managed paths; refusing account login."
+        )
+    auth_dir.mkdir(parents=True, exist_ok=True)
+
+    cli_proxy_bin = Path(
+        os.environ.get("WBP_CLIPROXY_BIN", "~/.local/bin/cli-proxy-api")
+    ).expanduser()
+    if not cli_proxy_bin.exists():
+        raise SystemExit(f"Missing cli-proxy-api binary: {cli_proxy_bin}")
+    if not paths.stable_config.exists():
+        raise SystemExit(f"Missing CLIProxyAPI config: {paths.stable_config}")
+
+    env = os.environ.copy()
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        env.pop(key, None)
+    env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
+    env.setdefault("no_proxy", env["NO_PROXY"])
+
+    use_device = bool(getattr(args, "device_login", False))
+    command = [str(cli_proxy_bin), "-config", str(paths.stable_config)]
+    command.append("-codex-device-login" if use_device else "-codex-login")
+    result = subprocess.run(command, env=env, check=False)
+    return int(result.returncode)
 
 
 def normalize_auth_type(payload: dict[str, Any]) -> str | None:
@@ -397,11 +513,15 @@ def cmd_onboard(paths: RuntimePaths, args: argparse.Namespace) -> int:
     else:
         auth_path = paths.auth_file
         if not auth_path.exists():
-            if args.non_interactive:
-                raise SystemExit(
-                    "No new auth file detected. Re-run without --non-interactive or pass --auth-ref PATH."
-                )
-            raise SystemExit("No sandbox-local auth candidate is available.")
+            before = inventory_auth_files(paths)
+            if not args.skip_login:
+                run_login_flow(paths, args)
+            auth_path = choose_auth_candidate(
+                paths,
+                registry,
+                before,
+                non_interactive=bool(args.non_interactive),
+            )
     validate_auth_payload(auth_path)
     auth_ref = str(auth_path)
     existing_backend = backend_by_auth_ref(registry, auth_ref)
@@ -495,6 +615,9 @@ def build_parser() -> argparse.ArgumentParser:
     onboard.add_argument("--skip-login", action="store_true")
     onboard.add_argument("--no-sync", action="store_true")
     onboard.add_argument("--non-interactive", action="store_true")
+    login_group = onboard.add_mutually_exclusive_group()
+    login_group.add_argument("--oauth-login", action="store_true")
+    login_group.add_argument("--device-login", action="store_true")
     onboard.add_argument("--id")
     onboard.add_argument("--label")
     onboard.add_argument("--pool", choices=["active", "reserve", "retired"], default="reserve")

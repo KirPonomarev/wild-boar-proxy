@@ -2029,13 +2029,13 @@ function populateOnboardModal() {
   text(
     "onboardIntro",
     liveStep
-      ? "Preview уже admitted в текущей сессии. Следующий шаг откроет owner login bridge и добавит результат в reserve только в sandbox."
+      ? "Следующий шаг запускает owner onboarding: CLIProxyAPI откроет допустимый login flow, а результат добавится в reserve только в sandbox."
       : "Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется."
   );
-  text("onboardSourceValue", liveStep ? "owner login bridge" : "server-owned preview");
+  text("onboardSourceValue", liveStep ? "owner onboard flow" : "server-owned preview");
   text("onboardModeValue", liveStep ? "Live reserve-first" : "Dry-run");
   text("onboardAfterValue", liveStep ? "Нужен canonical accounts refresh" : "Live accounts не меняются");
-  text("onboardResultValue", liveStep ? "login packet + onboard packet + refresh proof" : "packet preview only");
+  text("onboardResultValue", liveStep ? "onboard packet + refresh proof" : "packet preview only");
   text(
     "onboardTechnicalCommand",
     liveStep
@@ -2045,7 +2045,7 @@ function populateOnboardModal() {
   text(
     "onboardTechnicalPreview",
     liveStep
-      ? "Owner layer создаёт login session, materializes sandbox auth и затем запускает onboarding."
+      ? "Owner helper запускает CLIProxyAPI login, находит новый sandbox auth и затем выполняет reserve-first onboarding."
       : "Preview не импортирует auth и не меняет registry."
   );
   text(

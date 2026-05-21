@@ -463,6 +463,106 @@ class CliTests(unittest.TestCase):
         self.assertEqual(validate_result.returncode, 0, validate_result.stderr)
         self.assertIn("OK", validate_result.stdout)
 
+    def test_installer_materialized_owner_helper_runs_sandbox_scoped_codex_login(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        auth_dir = self.managed_dir / "auth-source"
+        (self.profile_dir / "auth.json").unlink(missing_ok=True)
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-cli-proxy-api"
+        fake_cli.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, re, sys\n"
+            "from pathlib import Path\n"
+            "config = sys.argv[sys.argv.index('-config') + 1]\n"
+            "text = Path(config).read_text(encoding='utf-8')\n"
+            "match = re.search(r'^auth-dir:\\s*[\"\\']?(.*?)[\"\\']?\\s*$', text, re.M)\n"
+            "auth_dir = Path(match.group(1))\n"
+            "auth_dir.mkdir(parents=True, exist_ok=True)\n"
+            "payload = {\n"
+            "    'type': 'codex',\n"
+            "    'email': 'web-login@example.com',\n"
+            "    'access_token': 'token-web-login',\n"
+            "    'account_id': 'acct-web-login',\n"
+            "}\n"
+            "(auth_dir / 'codex-web-login.json').write_text(json.dumps(payload) + '\\n', encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+        fake_cli.chmod(0o755)
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        env = self.env()
+        env["WBP_CLIPROXY_BIN"] = str(fake_cli)
+        env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(onboard_result.returncode, 0, onboard_result.stderr)
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        imported = [
+            item
+            for item in registry.get("backends", [])
+            if str(item.get("auth_ref", "")) == str(auth_dir / "codex-web-login.json")
+        ]
+        self.assertEqual(len(imported), 1)
+        self.assertEqual(imported[0]["pool"], "reserve")
+
+    def test_installer_materialized_owner_helper_rejects_non_sandbox_auth_dir(
+        self,
+    ) -> None:
+        status_bin = self.bin_dir / "codex-managed-status"
+        for candidate in (
+            self.accounts_bin,
+            self.onboard_bin,
+            self.sync_script,
+            status_bin,
+        ):
+            candidate.unlink(missing_ok=True)
+        outside_auth_dir = Path(self.temp_dir.name) / "outside-auth"
+        (self.profile_dir / "auth.json").unlink(missing_ok=True)
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{outside_auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-cli-proxy-api"
+        fake_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_cli.chmod(0o755)
+
+        init_result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(init_result.returncode, 0, init_result.stderr)
+
+        env = self.env()
+        env["WBP_CLIPROXY_BIN"] = str(fake_cli)
+        env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
+        onboard_result = subprocess.run(
+            [str(self.onboard_bin), "--once"],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertNotEqual(onboard_result.returncode, 0)
+        self.assertIn("outside sandbox", onboard_result.stderr + onboard_result.stdout)
+
     def test_installer_materialized_owner_helpers_support_auth_mode_apikey_payload(
         self,
     ) -> None:

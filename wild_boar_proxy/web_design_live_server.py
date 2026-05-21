@@ -1272,7 +1272,13 @@ def run_ui_action(
     if ui_action == "onboard_account_dry_run":
         return _run_account_connect_dry_run_action()
     if ui_action == "onboard_account":
-        return _run_account_login_bridge_action(runner)
+        return _ui_action_response_from_result(
+            ui_action,
+            _action_result(
+                execute_command(runner, "accounts_onboard"),
+                ui_action=ui_action,
+            ),
+        )
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_client_dispatch":
@@ -1659,6 +1665,7 @@ def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     env["WBP_LOCK_FILE"] = str(data_dir / "wild-boar-proxy.lock")
     env["WBP_LAUNCHER_LOCK_FILE"] = str(data_dir / "stable-runtime-launch.lock")
     env["WBP_EXTERNAL_MODELS_DIR"] = str(data_dir / "external-models")
+    env["WBP_REQUIRE_SANDBOX_AUTH_DIR"] = "1"
     return env
 
 

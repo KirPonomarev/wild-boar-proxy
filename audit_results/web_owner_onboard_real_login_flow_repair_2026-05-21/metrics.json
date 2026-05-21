@@ -1,0 +1,28 @@
+{
+  "contour": "WEB_OWNER_ONBOARD_REAL_LOGIN_FLOW_REPAIR",
+  "date": "2026-05-21",
+  "status": "closed_success_pending_commit",
+  "implementation": {
+    "web_onboard_action": "accounts onboard --json",
+    "owner_login_flow": "cli-proxy-api -codex-login",
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "sandbox_auth_dir_required_for_web": true,
+    "reserve_first_required": true
+  },
+  "evidence": {
+    "thread_export_scan": "real provider callback code not found; old working codex-account-onboard flow found",
+    "visual_modal_screenshot": "evidence/live-onboard-modal.png",
+    "modal_live_text_observed": true,
+    "modal_dry_run_text_for_live": false
+  },
+  "tests": {
+    "node_check_overview": "pass",
+    "targeted_cli_owner_login": "pass",
+    "targeted_web_live_action": "pass",
+    "web_ui_live_adapter_suite": "pass",
+    "full_required_unittest_gate": "pass: Ran 624 tests in 317.630s OK",
+    "git_diff_check": "pass",
+    "closeout_resilience": "pass"
+  }
+}
