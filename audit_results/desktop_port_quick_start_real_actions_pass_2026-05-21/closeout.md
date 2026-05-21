@@ -2,72 +2,69 @@
 
 ## Goal
 
-Port the already-proven Quick Start continuity flow into desktop only if the
-repository already exposed a real executable desktop shell/bridge path with the
-same admitted packet and refresh truth surfaces as web.
+Port the proven web Quick Start continuity flow onto the admitted Tk desktop
+shell while keeping sandbox-only packet + refresh semantics intact.
 
 ## Result
 
-- status: `stop_and_diagnose`
+- status: `closed_success`
 - final verdict:
-  `DESKTOP_REAL_EXECUTABLE_PATH_NOT_PRESENT_STOP_AND_DIAGNOSE`
+  `DESKTOP_QUICK_START_CONTINUITY_PARITY_PROVEN_ON_ADMITTED_TK_SHELL`
 - next action:
-  plan and admit a narrow desktop bridge foundation contour before attempting
-  desktop Quick Start parity again
+  `EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY` is still not earned, so stop this line here and only open a narrow follow-up contour if a new blocker appears
 
 ## Contour Capsule
 
 - goal:
-  verify whether desktop Quick Start parity can start on a real executable
-  desktop path and stop immediately if only preview/support surfaces exist
+  prove desktop continuity parity for account truth, API truth, bounded
+  `Check All`, and action ledger on the admitted Tk shell without widening
+  inputs or truth sources
 - branch: `codex/external-agent-lab-isolated`
-- head: `d5df53a`
+- head: `d94d6c50802d61ea0753fe79eaa9870fc1e49cee`
 - touched files:
+  - `wild_boar_proxy/ui_shell.py`
+  - `tests/test_ui_shell.py`
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/spec.md`
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/metrics.json`
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/closeout.md`
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/independent_audit.json`
-  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_surface_scan.json`
+  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json`
 - tests run:
-  - `rg -n "desktop|renderer|DESKTOP|native" MASTER_PLAN.md CANON.md UI_READINESS_SPEC.md`
-  - `rg -n "no desktop shell integration|fixture-backed|live-readonly" wild_boar_proxy/web_design_ui/README.md`
-  - `rg -n "DESKTOP_RENDERER_ADMISSION|no implementation|no command bridge|no desktop files touched" audit_results/desktop_renderer_admission_approval_gate_2026-05-14.md`
-  - `rg -n "app_bundle_admitted|client_path|app bundle" wild_boar_proxy/web_design_live_server.py audit_results/web_safe_app_copy_launch_pass_2026-05-16/decision_packet.json`
-  - `rg -n "future desktop/native flow|not activated from web|owner-gated|Desktop bridge|desktop/native" wild_boar_proxy/web_design_ui/index.html wild_boar_proxy/web_design_ui/scripts/overview.js tests/test_web_design_ui.py`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_ui_shell -q`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui -q`
   - `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`
-  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_ui -q`
   - `git diff --check`
 - blocked risks:
-  - no real executable desktop shell/bridge path found
-  - existing desktop evidence is preview-only, support-only, or owner-gated
-  - starting desktop parity now would fake operational readiness
+  - no medium-or-higher blocker remained after the desktop continuity parity
+    path was proved on the admitted Tk shell
 - next exact command:
   - `python3 tools/check_closeout_resilience.py --staged-only`
 
 ## Verification
 
 - tests:
-  - repo scan and prior-closeout scan agree that desktop parity lacks an
-    executable bridge path
-  - regression suite remained green while the contour was stopped on admission
-    evidence rather than product breakage
+  - desktop Quick Start helper tests cover API check refresh order, check-all
+    bundle verdict construction, and quick-start summary/bundle state mapping
+  - the broader regression suite remained green
 - build:
   - `node --check` passed
-  - UI regression suite passed
-  - `git diff --check`
+  - `git diff --check` passed
 - manual:
-  - verified that the strongest desktop references are preview README text,
-    owner-gated UI labels, support/profile packet surfaces, and older blocked
-    admission records
+  - real bundled-runtime Tk shell instantiated on a sandbox harness
+  - desktop layer applied refresh -> API check -> check-all and rendered ledger
+    entries from real command packets
 - live verification:
-  - not admitted; no real desktop executable path exists to verify
+  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json`
+    records `status --json=OK`, `external-models start --json=OK`,
+    `api_route_check=OK`, `quick_start_check_all=ready`, and ledger parity on
+    the admitted Tk shell
 
 ## Artifacts
 
 - spec:
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/spec.md`
 - packet:
-  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_surface_scan.json`
+  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json`
 - report:
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/metrics.json`
   - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/independent_audit.json`
@@ -75,25 +72,32 @@ same admitted packet and refresh truth surfaces as web.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `pending artifact-only stop commit`
-- pushed: `pending artifact-only stop push`
+- commit:
+  `closeout drafted before the desktop parity close commit; final commit is recorded after resilience passes`
+- pushed:
+  `closeout drafted before the desktop parity push; final push is recorded after the closing commit`
 
 ## Scope Check
 
 - unrelated work mixed in: `no`
 - private-data risk reviewed:
-  `yes; only repo-local docs, UI copy, tests, and prior bounded audit artifacts were inspected`
+  `yes; desktop Quick Start surfaces only route id/provider/secret_ref and bounded packet truth, with no raw token/secret/path/auth input`
 
 ## Notes
 
 - blockers encountered:
-  - `wild_boar_proxy/web_design_ui/README.md` still says `no desktop shell integration`
-  - previous desktop admission closeout still records `no command bridge`
-  - existing launch preflight admits bounded executable targets only and marks
-    `app_bundle_admitted=false`
-  - desktop/native UI remains future or owner-gated rather than operational
-  - independent audit agreed the stop is justified and evidence is sufficient
+  - initial smoke without `external-models start --json` left desktop API truth
+    in the same `missing_secret` lane used by the web flow when local token
+    readiness is absent; the parity proof therefore had to use a sandbox root
+    with the synthetic adapter started
+  - real Tk automation via the standard event loop was awkward inside this
+    harness, so the factual smoke uses the admitted Tk shell plus immediate
+    `after()` callbacks while still running real command packets
 - follow-up contour:
-  - `DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS`
+  - none required for this track; only open a narrow repair contour if later
+    desktop parity evidence regresses
 - resume from here:
-  `plan DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS before retrying DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS`
+  `CLOSED`
+
+> Fill all `Contour Capsule` fields with concrete values before commit.
+> Placeholder values are not accepted by resilience checks.

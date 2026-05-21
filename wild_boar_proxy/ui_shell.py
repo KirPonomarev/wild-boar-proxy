@@ -435,6 +435,16 @@ class ExternalActionResult:
 
 
 @dataclass(frozen=True)
+class QuickStartLedgerEntry:
+    observed_at_utc: str
+    action_id: str
+    status: str
+    machine_error_code: str
+    next_action: str
+    human_message: str
+
+
+@dataclass(frozen=True)
 class ExternalModelsSnapshot:
     foundation_phase: str
     adapter_runtime_available: bool
@@ -786,6 +796,14 @@ def run_external_profile_and_refresh(
         route_id,
         "--json",
     )
+    snapshot = load_external_models_snapshot(runner)
+    return action_result.payload, snapshot
+
+
+def run_external_check_and_refresh(
+    runner: JsonCommandRunner, route_id: str
+) -> tuple[dict[str, Any], ExternalModelsSnapshot]:
+    action_result = runner.run("external-models", "check", "--route", route_id, "--json")
     snapshot = load_external_models_snapshot(runner)
     return action_result.payload, snapshot
 
@@ -1152,6 +1170,334 @@ def classify_external_profile_rendered_state(
     return "unknown"
 
 
+def select_primary_external_route(
+    snapshot: ExternalModelsSnapshot,
+) -> ExternalRouteRecord | None:
+    enabled_routes = [route for route in snapshot.routes if route.enabled]
+    if len(enabled_routes) == 1:
+        return enabled_routes[0]
+    if len(snapshot.routes) == 1:
+        return snapshot.routes[0]
+    for route in snapshot.routes:
+        if route.enabled:
+            return route
+    return snapshot.routes[0] if snapshot.routes else None
+
+
+def describe_primary_external_route(
+    snapshot: ExternalModelsSnapshot,
+) -> dict[str, str | bool]:
+    route = select_primary_external_route(snapshot)
+    if route is None:
+        return {
+            "route_id": "",
+            "display_name": "",
+            "provider": "",
+            "secret_ref": "",
+            "enabled": False,
+            "role_label": "",
+            "secret_status_label": "unknown",
+            "validation_label": "not configured",
+            "validation_visual_state": "neutral",
+            "last_checked": "",
+            "status_code": "missing",
+            "note": "Основной API route не подтверждён bounded snapshot.",
+        }
+    secret_ref = route.secret_ref
+    if secret_ref and snapshot.local_token_present:
+        secret_status_label = "available"
+        secret_visual_state = "green"
+        status_code = "enabled" if route.enabled else "disabled"
+        status_label = "Разрешён" if route.enabled else "Отключён"
+        note = (
+            "Маршрут показан по registry-пакету. Отдельная проверка запроса ещё не выполнялась."
+            if route.enabled
+            else "Маршрут отключён в registry-пакете."
+        )
+        validation_label = "not checked"
+        validation_visual_state = "neutral"
+        observed = snapshot.observed_routes.get(route.route_id, {}) or {}
+        observed_state = str(observed.get("availability_state", "")).strip()
+        last_checked = format_onboarding_value(
+            observed.get("last_check")
+            or observed.get("last_validate")
+            or observed.get("last_verified_at")
+            or ""
+        )
+        if observed_state == "verified":
+            validation_label = "ok"
+            validation_visual_state = "green"
+            note = "Проверочный запрос маршрута зафиксирован bounded packet и refresh truth."
+        elif observed_state == "model_visible":
+            validation_label = "ok"
+            validation_visual_state = "blue"
+            note = "Проверка provider route завершилась без runtime claims."
+        elif observed_state in {"provider_auth_failed", "model_not_available"}:
+            validation_label = "validate failed"
+            validation_visual_state = "red"
+            note = "Последняя provider-проверка маршрута завершилась ошибкой."
+        elif observed_state in {"provider_network_failed", "limited"}:
+            validation_label = "check failed"
+            validation_visual_state = "amber"
+            note = "Последняя проверка маршрута требует внимания оператора."
+        elif observed_state == "blocked":
+            validation_label = "blocked"
+            validation_visual_state = "amber"
+            note = "Последняя проверка маршрута требует внимания оператора."
+        return {
+            "route_id": route.route_id,
+            "display_name": route.display_name,
+            "provider": route.provider,
+            "secret_ref": secret_ref,
+            "enabled": route.enabled,
+            "role_label": "main route" if route.enabled else "candidate",
+            "secret_status_label": secret_status_label,
+            "secret_visual_state": secret_visual_state,
+            "validation_label": validation_label,
+            "validation_visual_state": validation_visual_state,
+            "last_checked": last_checked,
+            "status_code": status_code,
+            "status_label": status_label,
+            "note": note,
+        }
+    if secret_ref:
+        return {
+            "route_id": route.route_id,
+            "display_name": route.display_name,
+            "provider": route.provider,
+            "secret_ref": secret_ref,
+            "enabled": route.enabled,
+            "role_label": "main route" if route.enabled else "candidate",
+            "secret_status_label": "missing",
+            "secret_visual_state": "amber",
+            "validation_label": "blocked by secret",
+            "validation_visual_state": "amber",
+            "last_checked": "",
+            "status_code": "missing_secret" if route.enabled else "disabled",
+            "status_label": "Требует ключ" if route.enabled else "Отключён",
+            "note": "Локальный ключ не подтверждён; маршрут нельзя считать готовым к проверочному запросу.",
+        }
+    return {
+        "route_id": route.route_id,
+        "display_name": route.display_name,
+        "provider": route.provider,
+        "secret_ref": "",
+        "enabled": route.enabled,
+        "role_label": "main route" if route.enabled else "candidate",
+        "secret_status_label": "unknown",
+        "secret_visual_state": "neutral",
+        "validation_label": "not checked",
+        "validation_visual_state": "neutral",
+        "last_checked": "",
+        "status_code": "enabled" if route.enabled else "disabled",
+        "status_label": "Разрешён" if route.enabled else "Отключён",
+        "note": "Маршрут не сообщает bounded secret_ref.",
+    }
+
+
+def build_quick_start_account_component(account_snapshot: AccountPoolSnapshot) -> dict[str, str]:
+    visible_count = len(account_snapshot.accounts)
+    problem_count = sum(
+        1
+        for account in account_snapshot.accounts
+        if account.status in {"down", "degraded"} or bool(account.last_error)
+    )
+    if account_snapshot.integration_error:
+        return {
+            "status": "failed",
+            "machine_error_code": "UI_CHECK_ALL_ACCOUNTS_UNAVAILABLE",
+            "human_message": account_snapshot.integration_error,
+        }
+    if visible_count <= 0:
+        return {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_NO_ACCOUNTS",
+            "human_message": "В sandbox пока нет подключённых аккаунтов; ready не подтверждается.",
+        }
+    if problem_count > 0:
+        return {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_ACCOUNTS_NEED_ATTENTION",
+            "human_message": "В accounts snapshot есть problem-аккаунты; нужен следующий шаг.",
+        }
+    return {
+        "status": "ok",
+        "machine_error_code": "OK",
+        "human_message": account_snapshot.human_message,
+    }
+
+
+def build_quick_start_runtime_component(runtime_snapshot: RuntimeSnapshot) -> dict[str, str]:
+    if runtime_snapshot.integration_error:
+        return {
+            "status": "failed",
+            "machine_error_code": runtime_snapshot.machine_error_code or "UI_CHECK_ALL_RUNTIME_UNAVAILABLE",
+            "human_message": runtime_snapshot.integration_error,
+            "visual_state": "integration_failure",
+        }
+    if runtime_snapshot.liveness == "healthy":
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": runtime_snapshot.human_message,
+            "visual_state": "healthy",
+        }
+    if runtime_snapshot.liveness in {"degraded", "stale", "unknown"}:
+        return {
+            "status": "partial",
+            "machine_error_code": runtime_snapshot.machine_error_code or "UI_CHECK_ALL_RUNTIME_DEGRADED",
+            "human_message": runtime_snapshot.human_message,
+            "visual_state": runtime_snapshot.liveness,
+        }
+    return {
+        "status": "failed",
+        "machine_error_code": runtime_snapshot.machine_error_code or "UI_CHECK_ALL_RUNTIME_FAILED",
+        "human_message": runtime_snapshot.human_message,
+        "visual_state": runtime_snapshot.liveness,
+    }
+
+
+def build_quick_start_api_component(
+    snapshot: ExternalModelsSnapshot,
+    *,
+    api_check_payload: dict[str, Any] | None = None,
+    route_id: str = "",
+) -> dict[str, str]:
+    route_summary = describe_primary_external_route(snapshot)
+    if snapshot.integration_error:
+        return {
+            "status": "failed",
+            "machine_error_code": "UI_CHECK_ALL_API_UNAVAILABLE",
+            "human_message": snapshot.integration_error,
+            "route_id": route_id,
+            "refresh_status": "failed",
+        }
+    if not str(route_summary["route_id"]):
+        return {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_ROUTE_MISSING",
+            "human_message": "Основной API route не подтверждён bounded snapshot.",
+            "route_id": "",
+            "refresh_status": "complete",
+        }
+    if route_summary["enabled"] is not True:
+        return {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_ROUTE_DISABLED",
+            "human_message": "Основной API route отключён; ready не подтверждается.",
+            "route_id": str(route_summary["route_id"]),
+            "refresh_status": "complete",
+        }
+    if str(route_summary["secret_status_label"]) == "missing":
+        return {
+            "status": "partial",
+            "machine_error_code": "UI_CHECK_ALL_API_SECRET_REF_MISSING",
+            "human_message": "Для основного API route отсутствует подтверждённый secret_ref.",
+            "route_id": str(route_summary["route_id"]),
+            "refresh_status": "complete",
+        }
+    if api_check_payload is None:
+        validation_visual = str(route_summary["validation_visual_state"])
+        if validation_visual == "green":
+            status = "ok"
+        elif validation_visual in {"blue", "amber", "neutral"}:
+            status = "partial"
+        else:
+            status = "failed"
+        return {
+            "status": status,
+            "machine_error_code": "OK" if status == "ok" else str(route_summary["status_code"]),
+            "human_message": str(route_summary["note"]),
+            "route_id": str(route_summary["route_id"]),
+            "refresh_status": "complete",
+        }
+    if str(api_check_payload.get("status", "")) != "ok":
+        return {
+            "status": "failed",
+            "machine_error_code": str(api_check_payload.get("machine_error_code", "UI_CHECK_ALL_API_CHECK_FAILED")),
+            "human_message": str(api_check_payload.get("human_message", "Проверка API route завершилась ошибкой.")),
+            "route_id": route_id,
+            "refresh_status": "complete",
+        }
+    validation_visual = str(route_summary["validation_visual_state"])
+    observed_status = "ok" if validation_visual in {"green", "blue"} else ("partial" if validation_visual == "amber" else "failed")
+    return {
+        "status": observed_status,
+        "machine_error_code": "OK" if observed_status == "ok" else str(route_summary["status_code"]),
+        "human_message": str(route_summary["note"]),
+        "route_id": str(route_summary["route_id"]),
+        "refresh_status": "complete",
+    }
+
+
+def build_quick_start_check_all_payload(
+    *,
+    runtime_snapshot: RuntimeSnapshot,
+    account_snapshot: AccountPoolSnapshot,
+    external_snapshot: ExternalModelsSnapshot,
+    api_check_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    accounts_component = build_quick_start_account_component(account_snapshot)
+    route_summary = describe_primary_external_route(external_snapshot)
+    api_component = build_quick_start_api_component(
+        external_snapshot,
+        api_check_payload=api_check_payload,
+        route_id=str(route_summary["route_id"]),
+    )
+    runtime_component = build_quick_start_runtime_component(runtime_snapshot)
+    component_statuses = (
+        accounts_component["status"],
+        api_component["status"],
+        runtime_component["status"],
+    )
+    if any(status == "failed" for status in component_statuses):
+        bundle_verdict = "failed"
+        bundle_status = "command_error"
+        machine_error_code = "UI_CHECK_ALL_FAILED"
+        human_message = "Одна или несколько bounded проверок завершились с blocking failure."
+        next_action = "inspect_bundle"
+    elif any(status == "partial" for status in component_statuses):
+        bundle_verdict = "partial"
+        bundle_status = "partial_success"
+        machine_error_code = "UI_CHECK_ALL_PARTIAL"
+        human_message = "Проверка завершилась частично: нужен следующий шаг по bounded truth surfaces."
+        next_action = "review_follow_up"
+    else:
+        bundle_verdict = "ready"
+        bundle_status = "ok"
+        machine_error_code = "OK"
+        human_message = "Все bounded truth surfaces подтверждены для Quick Start summary."
+        next_action = "none"
+    return {
+        "status": bundle_status,
+        "exit_code": 0 if bundle_status != "command_error" else 1,
+        "human_message": human_message,
+        "machine_error_code": machine_error_code,
+        "changed_files": [],
+        "next_action": next_action,
+        "data": {
+            "bundle_verdict": bundle_verdict,
+            "hidden_mutation_absent": True,
+            "bundle": {
+                "accounts": accounts_component,
+                "api": api_component,
+                "runtime": runtime_component,
+            },
+            "bundle_refresh_sources": [
+                "accounts-list",
+                "external-models-routes",
+                "runtime-status",
+            ],
+            "api_check_packet": {
+                "status": str(api_check_payload.get("status")) if api_check_payload is not None else "not_run",
+                "machine_error_code": str(api_check_payload.get("machine_error_code")) if api_check_payload is not None else "NOT_RUN",
+                "human_message": str(api_check_payload.get("human_message")) if api_check_payload is not None else "API verify action was not run.",
+                "next_action": str(api_check_payload.get("next_action")) if api_check_payload is not None else "none",
+            },
+        },
+    }
+
+
 class MinimalCompanionShell:
     def __init__(self, root: Tk, runner: JsonCommandRunner) -> None:
         self.root = root
@@ -1187,6 +1533,26 @@ class MinimalCompanionShell:
             )
         )
         self.account_integration_var = StringVar(value="")
+        self.quick_start_source_var = StringVar(value="unknown")
+        self.quick_start_account_status_var = StringVar(value="unknown")
+        self.quick_start_account_note_var = StringVar(value="")
+        self.quick_start_api_status_var = StringVar(value="unknown")
+        self.quick_start_api_note_var = StringVar(value="")
+        self.quick_start_route_label_var = StringVar(value="")
+        self.quick_start_route_provider_var = StringVar(value="")
+        self.quick_start_route_secret_ref_var = StringVar(value="")
+        self.quick_start_route_last_checked_var = StringVar(value="")
+        self.quick_start_route_validation_var = StringVar(value="")
+        self.quick_start_onboard_reason_var = StringVar(value="")
+        self.quick_start_api_reason_var = StringVar(value="")
+        self.quick_start_check_all_reason_var = StringVar(value="")
+        self.quick_start_check_all_status_var = StringVar(value="")
+        self.quick_start_check_all_machine_error_var = StringVar(value="")
+        self.quick_start_check_all_next_action_var = StringVar(value="")
+        self.quick_start_check_all_verdict_var = StringVar(value="")
+        self.quick_start_check_all_message_var = StringVar(value="")
+        self.quick_start_events: list[QuickStartLedgerEntry] = []
+        self._latest_external_action: ExternalActionResult | None = None
         self.external_foundation_phase_var = StringVar(value="unknown")
         self.external_adapter_state_var = StringVar(value="unknown")
         self.external_routes_count_var = StringVar(value="0")
@@ -1283,6 +1649,94 @@ class MinimalCompanionShell:
             fill="x"
         )
 
+        quick_start_box = ttk.LabelFrame(container, text="Quick Start", padding=12)
+        quick_start_box.pack(fill="x", pady=(0, 16))
+        self._add_status_row(quick_start_box, "Source", self.quick_start_source_var)
+        self._add_status_row(quick_start_box, "Account", self.quick_start_account_status_var)
+        self._add_status_row(quick_start_box, "Account note", self.quick_start_account_note_var)
+        self._add_status_row(quick_start_box, "API", self.quick_start_api_status_var)
+        self._add_status_row(quick_start_box, "API note", self.quick_start_api_note_var)
+        self._add_status_row(quick_start_box, "Route label", self.quick_start_route_label_var)
+        self._add_status_row(quick_start_box, "Provider", self.quick_start_route_provider_var)
+        self._add_status_row(quick_start_box, "Secret ref", self.quick_start_route_secret_ref_var)
+        self._add_status_row(quick_start_box, "Validation", self.quick_start_route_validation_var)
+        self._add_status_row(quick_start_box, "Last checked", self.quick_start_route_last_checked_var)
+
+        quick_start_actions = ttk.Frame(quick_start_box)
+        quick_start_actions.pack(fill="x", pady=(8, 0))
+        self.quick_start_onboard_button = ttk.Button(
+            quick_start_actions,
+            text="Connect Account",
+            command=self.run_onboard_action,
+        )
+        self.quick_start_onboard_button.pack(side="left")
+        self.quick_start_api_button = ttk.Button(
+            quick_start_actions,
+            text="Check API",
+            command=self.run_external_check_action,
+        )
+        self.quick_start_api_button.pack(side="left", padx=(8, 0))
+        self.quick_start_check_all_button = ttk.Button(
+            quick_start_actions,
+            text="Check All",
+            command=self.run_quick_start_check_all_action,
+        )
+        self.quick_start_check_all_button.pack(side="left", padx=(8, 0))
+        ttk.Button(
+            quick_start_actions,
+            text="Refresh Ledger",
+            command=self.refresh,
+        ).pack(side="left", padx=(8, 0))
+
+        self._add_status_row(quick_start_box, "Connect reason", self.quick_start_onboard_reason_var)
+        self._add_status_row(quick_start_box, "API reason", self.quick_start_api_reason_var)
+        self._add_status_row(quick_start_box, "Check-all reason", self.quick_start_check_all_reason_var)
+        self._add_status_row(
+            quick_start_box,
+            "Bundle status",
+            self.quick_start_check_all_status_var,
+        )
+        self._add_status_row(
+            quick_start_box,
+            "Bundle verdict",
+            self.quick_start_check_all_verdict_var,
+        )
+        self._add_status_row(
+            quick_start_box,
+            "Bundle machine error",
+            self.quick_start_check_all_machine_error_var,
+        )
+        self._add_status_row(
+            quick_start_box,
+            "Bundle next action",
+            self.quick_start_check_all_next_action_var,
+        )
+        self._add_status_row(
+            quick_start_box,
+            "Bundle message",
+            self.quick_start_check_all_message_var,
+        )
+
+        ledger_box = ttk.LabelFrame(container, text="Action Ledger", padding=12)
+        ledger_box.pack(fill="both", expand=False, pady=(0, 16))
+        ledger_columns = ("observed_at", "action", "status", "machine_error", "next_action")
+        self.quick_start_ledger_tree = ttk.Treeview(
+            ledger_box,
+            columns=ledger_columns,
+            show="headings",
+            height=5,
+        )
+        for column, heading, width in (
+            ("observed_at", "Observed", 180),
+            ("action", "Action", 180),
+            ("status", "Status", 120),
+            ("machine_error", "Machine error", 180),
+            ("next_action", "Next action", 180),
+        ):
+            self.quick_start_ledger_tree.heading(column, text=heading)
+            self.quick_start_ledger_tree.column(column, width=width, anchor="w")
+        self.quick_start_ledger_tree.pack(fill="x", expand=False)
+
         top = ttk.Frame(container)
         top.pack(fill="both", expand=False)
 
@@ -1343,76 +1797,6 @@ class MinimalCompanionShell:
             text="Export Diagnostics",
             command=self.run_diagnostics_action,
         ).pack(fill="x", pady=4)
-        launch_box = ttk.LabelFrame(controls_box, text="Launch Client", padding=8)
-        launch_box.pack(fill="x", pady=(8, 0))
-        launch_input = ttk.Frame(launch_box)
-        launch_input.pack(fill="x")
-        ttk.Label(launch_input, text="Client path:", width=10).pack(side="left")
-        ttk.Entry(launch_input, textvariable=self.launch_client_path_var).pack(
-            side="left",
-            fill="x",
-            expand=True,
-        )
-        ttk.Button(
-            launch_box,
-            text="Launch Client",
-            command=self.run_launch_client_action,
-        ).pack(fill="x", pady=(8, 0))
-        self._add_status_row(
-            launch_box,
-            "Rendered state",
-            self.launch_rendered_state_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Command status",
-            self.launch_command_status_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Exit code",
-            self.launch_command_exit_code_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Human message",
-            self.launch_command_human_message_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Machine error",
-            self.launch_command_machine_error_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Changed files",
-            self.launch_command_changed_files_var,
-        )
-        self._add_status_row(
-            launch_box,
-            "Next action",
-            self.launch_command_next_action_var,
-        )
-        for label, field in (
-            ("Launch status", "status"),
-            ("Attempted", "attempted"),
-            ("Client path", "client_path"),
-            ("Path kind", "client_path_kind"),
-            ("Precondition checked", "runtime_precondition_checked"),
-            ("Precondition status", "runtime_precondition_status"),
-            ("Effective mode", "effective_mode_observed"),
-            ("Endpoint", "endpoint_observed"),
-            ("Profile context", "profile_context"),
-            ("Env sanitized", "env_sanitized"),
-            ("Dispatch method", "dispatch_method"),
-            ("Dispatch attempted", "dispatch_attempted"),
-            ("Dispatch observed", "dispatch_observed"),
-            ("Dispatch exit code", "dispatch_exit_code"),
-            ("Claim scope", "launch_claim_scope"),
-            ("Final outcome", "final_outcome"),
-        ):
-            self._add_status_row(launch_box, label, self.launch_field_vars[field])
-
         smoke_box = ttk.LabelFrame(controls_box, text="Smoke Test", padding=8)
         smoke_box.pack(fill="x", pady=(8, 0))
         self._add_status_row(
@@ -1619,20 +2003,8 @@ class MinimalCompanionShell:
         ):
             self._add_status_row(external_box, label, self.external_profile_field_vars[field])
 
-        onboarding_box = ttk.LabelFrame(container, text="Onboarding", padding=12)
+        onboarding_box = ttk.LabelFrame(container, text="Account Connect Evidence", padding=12)
         onboarding_box.pack(fill="x", pady=(16, 0))
-
-        onboarding_input = ttk.Frame(onboarding_box)
-        onboarding_input.pack(fill="x")
-        ttk.Label(onboarding_input, text="Explicit auth ref:", width=16).pack(side="left")
-        ttk.Entry(onboarding_input, textvariable=self.onboarding_auth_ref_var).pack(
-            side="left", fill="x", expand=True
-        )
-        ttk.Button(
-            onboarding_input,
-            text="Onboard Explicit Auth",
-            command=self.run_onboard_action,
-        ).pack(side="left", padx=(8, 0))
 
         onboarding_summary = ttk.Frame(onboarding_box)
         onboarding_summary.pack(fill="x", pady=(8, 4))
@@ -1785,6 +2157,7 @@ class MinimalCompanionShell:
         )
 
     def _apply_runtime_snapshot(self, snapshot: RuntimeSnapshot) -> None:
+        self._last_runtime_snapshot = snapshot
         self.state_var.set(snapshot.overall_state)
         self.exit_code_var.set(str(snapshot.exit_code))
         self.next_action_var.set(snapshot.next_action)
@@ -1820,6 +2193,7 @@ class MinimalCompanionShell:
         self.integration_var.set(snapshot.integration_error)
 
     def _apply_account_snapshot(self, snapshot: AccountPoolSnapshot) -> None:
+        self._last_account_snapshot = snapshot
         self.account_registry_var.set(
             (
                 f"{snapshot.registry_identity_status} / "
@@ -1879,6 +2253,7 @@ class MinimalCompanionShell:
         if selected_route not in route_ids:
             self.external_route_var.set(route_ids[0] if route_ids else "")
         self._sync_external_route_summary()
+        self._apply_quick_start_summary()
 
     def _sync_external_route_summary(self) -> None:
         selected_route = self.external_route_var.get().strip()
@@ -1897,6 +2272,68 @@ class MinimalCompanionShell:
         self.external_route_secret_ref_var.set(route.secret_ref)
         self.external_route_enabled_var.set("true" if route.enabled else "false")
 
+    def _apply_quick_start_summary(self) -> None:
+        self.quick_start_source_var.set("live_sandbox")
+        account_snapshot = getattr(
+            self,
+            "_last_account_snapshot",
+            AccountPoolSnapshot.integration_failure("Refresh required."),
+        )
+        account_component = build_quick_start_account_component(account_snapshot)
+        self.quick_start_account_status_var.set(account_component["status"])
+        self.quick_start_account_note_var.set(account_component["human_message"])
+
+        route_summary = describe_primary_external_route(self._external_models_snapshot)
+        self.quick_start_api_status_var.set(str(route_summary["status_code"]))
+        self.quick_start_api_note_var.set(str(route_summary["note"]))
+        self.quick_start_route_label_var.set(str(route_summary["display_name"]))
+        self.quick_start_route_provider_var.set(str(route_summary["provider"]))
+        self.quick_start_route_secret_ref_var.set(str(route_summary["secret_ref"]))
+        self.quick_start_route_last_checked_var.set(str(route_summary["last_checked"]))
+        self.quick_start_route_validation_var.set(str(route_summary["validation_label"]))
+
+        self.quick_start_onboard_reason_var.set("" if not self._busy else "busy")
+        api_reason = ""
+        if not str(route_summary["route_id"]):
+            api_reason = "main route missing"
+        elif route_summary["enabled"] is not True:
+            api_reason = "route disabled"
+        elif str(route_summary["secret_status_label"]) == "missing":
+            api_reason = "secret_ref missing"
+        self.quick_start_api_reason_var.set(api_reason if not self._busy else "busy")
+        self.quick_start_check_all_reason_var.set("" if not self._busy else "busy")
+
+    def _record_quick_start_ledger_entry(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        entry = QuickStartLedgerEntry(
+            observed_at_utc=datetime.now(timezone.utc).isoformat(),
+            action_id=action_id,
+            status=str(payload.get("status", "")),
+            machine_error_code=str(payload.get("machine_error_code", "")),
+            next_action=str(payload.get("next_action", "")),
+            human_message=str(payload.get("human_message", "")),
+        )
+        self.quick_start_events.insert(0, entry)
+        self.quick_start_events = self.quick_start_events[:12]
+        for item in self.quick_start_ledger_tree.get_children():
+            self.quick_start_ledger_tree.delete(item)
+        for index, event in enumerate(self.quick_start_events):
+            self.quick_start_ledger_tree.insert(
+                "",
+                "end",
+                iid=f"quick-start-ledger-{index}",
+                values=(
+                    event.observed_at_utc,
+                    event.action_id,
+                    event.status,
+                    event.machine_error_code,
+                    event.next_action,
+                ),
+            )
+
     def _apply_refresh_results(
         self,
         runtime_snapshot: RuntimeSnapshot,
@@ -1911,6 +2348,7 @@ class MinimalCompanionShell:
             self._apply_external_models_snapshot(external_snapshot)
         self.banner_var.set(banner or runtime_snapshot.human_message)
         self.set_busy(False)
+        self._apply_quick_start_summary()
 
     def run_mode_action(self, prompt: str, command: tuple[str, ...]) -> None:
         if self._busy:
@@ -1962,6 +2400,46 @@ class MinimalCompanionShell:
         self.banner_var.set("Generating desktop profile packet...")
         threading.Thread(
             target=self._external_profile_worker,
+            args=(route_id,),
+            daemon=True,
+        ).start()
+
+    def run_external_check_action(self) -> None:
+        if self._busy:
+            return
+        route_summary = describe_primary_external_route(self._external_models_snapshot)
+        route_id = str(route_summary["route_id"])
+        if not route_id:
+            messagebox.showinfo(
+                "Route required",
+                "Refresh route truth before running the bounded API check.",
+                parent=self.root,
+            )
+            return
+        if route_summary["enabled"] is not True:
+            messagebox.showinfo(
+                "Route disabled",
+                "Основной API route отключён; bounded API check недоступен.",
+                parent=self.root,
+            )
+            return
+        if str(route_summary["secret_status_label"]) == "missing":
+            messagebox.showinfo(
+                "Secret missing",
+                "Для основного API route не подтверждён secret_ref.",
+                parent=self.root,
+            )
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run bounded API check and refresh external-models truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running API check...")
+        threading.Thread(
+            target=self._external_check_worker,
             args=(route_id,),
             daemon=True,
         ).start()
@@ -2040,26 +2518,34 @@ class MinimalCompanionShell:
     def run_onboard_action(self) -> None:
         if self._busy:
             return
-        auth_ref = self.onboarding_auth_ref_var.get().strip()
-        if not auth_ref:
-            messagebox.showinfo(
-                "Explicit auth required",
-                "Enter explicit auth ref before onboarding.",
-                parent=self.root,
-            )
-            return
         if not messagebox.askyesno(
             "Confirm action",
-            "Run reserve-first explicit-auth onboarding and refresh command truth?",
+            "Run reserve-first account onboarding and refresh command truth?",
             parent=self.root,
         ):
             return
-        command = ["accounts", "onboard", "--json", "--auth-ref", auth_ref, "--non-interactive"]
+        command = ["accounts", "onboard", "--json"]
         self.set_busy(True)
         self.banner_var.set("Running onboarding...")
         threading.Thread(
             target=self._onboard_worker,
             args=(tuple(command),),
+            daemon=True,
+        ).start()
+
+    def run_quick_start_check_all_action(self) -> None:
+        if self._busy:
+            return
+        if not messagebox.askyesno(
+            "Confirm action",
+            "Run bounded Quick Start check-all bundle and refresh command truth?",
+            parent=self.root,
+        ):
+            return
+        self.set_busy(True)
+        self.banner_var.set("Running Quick Start check-all...")
+        threading.Thread(
+            target=self._quick_start_check_all_worker,
             daemon=True,
         ).start()
 
@@ -2237,6 +2723,106 @@ class MinimalCompanionShell:
             0,
             lambda: self._apply_external_profile_results(
                 action_payload,
+                external_snapshot,
+                banner=banner,
+            ),
+        )
+
+    def _external_check_worker(self, route_id: str) -> None:
+        try:
+            action_payload, external_snapshot = run_external_check_and_refresh(
+                self.runner, route_id
+            )
+            runtime_snapshot = load_runtime_snapshot(self.runner)
+            account_snapshot = load_account_pool_snapshot(self.runner)
+            ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+            banner = str(action_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            action_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+                "data": {},
+            }
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_external_check_results(
+                action_payload,
+                runtime_snapshot,
+                account_snapshot,
+                external_snapshot,
+                banner=banner,
+            ),
+        )
+
+    def _quick_start_check_all_worker(self) -> None:
+        api_check_payload: dict[str, Any] | None = None
+        try:
+            runtime_snapshot = load_runtime_snapshot(self.runner)
+            account_snapshot = load_account_pool_snapshot(self.runner)
+            ensure_capacity_data_consistency(runtime_snapshot, account_snapshot)
+            external_snapshot = load_external_models_snapshot(self.runner)
+            route_summary = describe_primary_external_route(external_snapshot)
+            if (
+                str(route_summary["route_id"])
+                and route_summary["enabled"] is True
+                and str(route_summary["secret_status_label"]) != "missing"
+            ):
+                api_check_payload, external_snapshot = run_external_check_and_refresh(
+                    self.runner,
+                    str(route_summary["route_id"]),
+                )
+            bundle_payload = build_quick_start_check_all_payload(
+                runtime_snapshot=runtime_snapshot,
+                account_snapshot=account_snapshot,
+                external_snapshot=external_snapshot,
+                api_check_payload=api_check_payload,
+            )
+            banner = str(bundle_payload["human_message"])
+        except (UiShellError, subprocess.SubprocessError, OSError, json.JSONDecodeError) as exc:
+            runtime_snapshot = RuntimeSnapshot.integration_failure(str(exc))
+            account_snapshot = AccountPoolSnapshot.integration_failure(str(exc))
+            external_snapshot = ExternalModelsSnapshot.integration_failure(str(exc))
+            bundle_payload = {
+                "status": "integration_failure",
+                "exit_code": 1,
+                "human_message": "UI integration failure.",
+                "machine_error_code": "UI_INTEGRATION_FAILURE",
+                "changed_files": [],
+                "next_action": "retry",
+                "data": {
+                    "bundle_verdict": "failed",
+                    "hidden_mutation_absent": True,
+                    "bundle": {
+                        "accounts": {"status": "failed", "machine_error_code": "UI_INTEGRATION_FAILURE", "human_message": str(exc)},
+                        "api": {"status": "failed", "machine_error_code": "UI_INTEGRATION_FAILURE", "human_message": str(exc)},
+                        "runtime": {"status": "failed", "machine_error_code": "UI_INTEGRATION_FAILURE", "human_message": str(exc)},
+                    },
+                    "bundle_refresh_sources": [],
+                    "api_check_packet": {
+                        "status": "not_run",
+                        "machine_error_code": "NOT_RUN",
+                        "human_message": "API verify action was not run.",
+                        "next_action": "retry",
+                    },
+                },
+            }
+            banner = "Operator action failed."
+
+        self.root.after(
+            0,
+            lambda: self._apply_quick_start_check_all_results(
+                bundle_payload,
+                runtime_snapshot,
+                account_snapshot,
                 external_snapshot,
                 banner=banner,
             ),
@@ -2482,10 +3068,61 @@ class MinimalCompanionShell:
         *,
         banner: str,
     ) -> None:
+        self._record_quick_start_ledger_entry("external_profile", action_payload)
         self._apply_external_profile_payload(action_payload)
         self._apply_external_models_snapshot(external_snapshot)
         self.banner_var.set(banner)
         self.set_busy(False)
+
+    def _apply_external_check_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        account_snapshot: AccountPoolSnapshot,
+        external_snapshot: ExternalModelsSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        self._latest_external_action = build_external_action_result(
+            action="external_check",
+            action_payload=action_payload,
+        ) if action_payload.get("status") != "integration_failure" else None
+        self._record_quick_start_ledger_entry("api_route_check", action_payload)
+        self._apply_refresh_results(
+            runtime_snapshot,
+            account_snapshot,
+            banner=banner,
+            external_snapshot=external_snapshot,
+        )
+
+    def _apply_quick_start_check_all_results(
+        self,
+        action_payload: dict[str, Any],
+        runtime_snapshot: RuntimeSnapshot,
+        account_snapshot: AccountPoolSnapshot,
+        external_snapshot: ExternalModelsSnapshot,
+        *,
+        banner: str,
+    ) -> None:
+        data = action_payload.get("data")
+        if not isinstance(data, dict):
+            data = {}
+        self.quick_start_check_all_status_var.set(str(action_payload.get("status", "")))
+        self.quick_start_check_all_machine_error_var.set(
+            str(action_payload.get("machine_error_code", ""))
+        )
+        self.quick_start_check_all_next_action_var.set(
+            str(action_payload.get("next_action", ""))
+        )
+        self.quick_start_check_all_verdict_var.set(str(data.get("bundle_verdict", "")))
+        self.quick_start_check_all_message_var.set(str(action_payload.get("human_message", "")))
+        self._record_quick_start_ledger_entry("quick_start_check_all", action_payload)
+        self._apply_refresh_results(
+            runtime_snapshot,
+            account_snapshot,
+            banner=banner,
+            external_snapshot=external_snapshot,
+        )
 
     def _apply_diagnostics_payload(self, action_payload: dict[str, Any]) -> None:
         self.diagnostics_command_status_var.set(str(action_payload.get("status", "")))
@@ -2595,6 +3232,7 @@ class MinimalCompanionShell:
         *,
         banner: str,
     ) -> None:
+        self._record_quick_start_ledger_entry("onboard_account", action_payload)
         self._apply_onboarding_payload(action_payload)
         self._apply_refresh_results(runtime_snapshot, account_snapshot, banner=banner)
 

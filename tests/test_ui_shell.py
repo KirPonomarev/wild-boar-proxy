@@ -23,6 +23,10 @@ from wild_boar_proxy.ui_shell import (
     build_external_action_result,
     build_external_models_snapshot,
     build_external_profile_field_values,
+    build_quick_start_account_component,
+    build_quick_start_api_component,
+    build_quick_start_check_all_payload,
+    build_quick_start_runtime_component,
     build_client_launch_field_values,
     build_diagnostics_field_values,
     build_smoke_field_values,
@@ -38,10 +42,12 @@ from wild_boar_proxy.ui_shell import (
     main,
     mark_external_action_stale,
     parse_exact_json_object,
+    select_primary_external_route,
     run_account_onboard_and_refresh,
     run_account_mutation_and_refresh,
     run_account_validate_and_refresh,
     run_stable_repair_and_refresh,
+    run_external_check_and_refresh,
     run_launch_client_and_refresh,
     run_mode_control_and_refresh,
     run_external_profile_and_refresh,
@@ -317,6 +323,33 @@ def external_validate_payload(**overrides: object) -> dict[str, object]:
             "provider": "openrouter",
             "evidence_path": "/tmp/evidence-validate.json",
             "latency_ms": 6,
+        },
+        timestamp_utc="2026-05-12T00:00:00Z",
+    )
+    payload.update(overrides)
+    return payload
+
+
+def external_check_payload(**overrides: object) -> dict[str, object]:
+    payload = command_payload(
+        human_message="External-models route check captured bounded provider evidence.",
+        liveness="not_applicable",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=["/tmp/evidence-check.json"],
+        data={
+            "verification_kind": "provider_request_check",
+            "network_dependent": True,
+            "listener_proven": False,
+            "runtime_claim_blocked": True,
+            "profile_ready": False,
+            "verification_scope": "route_provider_only",
+            "route_state": "verified",
+            "route_id": "wbp-deepseek-v3",
+            "effective_model": "deepseek/deepseek-chat",
+            "provider": "openrouter",
+            "evidence_path": "/tmp/evidence-check.json",
+            "latency_ms": 8,
         },
         timestamp_utc="2026-05-12T00:00:00Z",
     )
@@ -729,6 +762,84 @@ class ExternalProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(rendered_state, "profile_packet_only")
+
+
+class QuickStartParityHelperTests(unittest.TestCase):
+    def test_run_external_check_and_refresh_reads_packet_then_truth(self) -> None:
+        runner = FakeRunner(
+            {
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"): external_check_payload(),
+                ("external-models", "status", "--json"): external_status_payload(),
+                ("external-models", "models", "--json"): external_models_payload(),
+                ("external-models", "routes", "list", "--json"): external_routes_payload(),
+            }
+        )
+
+        action_payload, snapshot = run_external_check_and_refresh(runner, "wbp-deepseek-v3")
+
+        self.assertEqual(action_payload["status"], "ok")
+        self.assertEqual(select_primary_external_route(snapshot).route_id, "wbp-deepseek-v3")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "check", "--route", "wbp-deepseek-v3", "--json"),
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+            ],
+        )
+
+    def test_build_quick_start_api_component_maps_missing_secret_to_partial(self) -> None:
+        snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    **external_status_payload()["data"],
+                    "local_auth": {"token_ref": "managed_local_token", "token_present": False, "token_created_at_utc": None},
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+
+        component = build_quick_start_api_component(snapshot)
+
+        self.assertEqual(component["status"], "partial")
+        self.assertEqual(component["machine_error_code"], "UI_CHECK_ALL_API_SECRET_REF_MISSING")
+
+    def test_build_quick_start_check_all_payload_marks_ready_when_truths_are_green(self) -> None:
+        runtime_snapshot = build_runtime_snapshot(
+            status_payload=status_payload(),
+            mode_payload=mode_payload(),
+        )
+        account_snapshot = build_account_pool_snapshot(accounts_payload())
+        external_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    **external_status_payload()["data"],
+                    "local_auth": {"token_ref": "managed_local_token", "token_present": True, "token_created_at_utc": None},
+                    "observed_routes": {
+                        "wbp-deepseek-v3": {
+                            "availability_state": "verified",
+                            "last_check": "2026-05-21T09:45:00Z",
+                        }
+                    },
+                    "observed_routes_count": 1,
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+
+        payload = build_quick_start_check_all_payload(
+            runtime_snapshot=runtime_snapshot,
+            account_snapshot=account_snapshot,
+            external_snapshot=external_snapshot,
+            api_check_payload=external_check_payload(),
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["bundle_verdict"], "ready")
+        self.assertTrue(payload["data"]["hidden_mutation_absent"])
 
 
 class ModeControlTests(unittest.TestCase):
@@ -1616,29 +1727,10 @@ class UiDispatchTests(unittest.TestCase):
         self.assertFalse(hasattr(MinimalCompanionShell, "run_restore_action"))
         self.assertFalse(hasattr(MinimalCompanionShell, "run_reactivate_action"))
 
-    def test_run_onboard_action_requires_explicit_auth_ref(self) -> None:
-        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
-        shell._busy = False
-        shell.root = object()
-        shell.onboarding_auth_ref_var = mock.Mock()
-        shell.onboarding_auth_ref_var.get.return_value = "   "
-        shell.set_busy = mock.Mock()
-        shell.banner_var = mock.Mock()
-
-        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
-            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
-                shell.run_onboard_action()
-
-        showinfo_mock.assert_called_once()
-        thread_mock.assert_not_called()
-        shell.set_busy.assert_not_called()
-
     def test_run_onboard_action_requires_confirmation(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell._busy = False
         shell.root = object()
-        shell.onboarding_auth_ref_var = mock.Mock()
-        shell.onboarding_auth_ref_var.get.return_value = "/tmp/new-auth.json"
         shell.set_busy = mock.Mock()
         shell.banner_var = mock.Mock()
 
@@ -1649,12 +1741,10 @@ class UiDispatchTests(unittest.TestCase):
         thread_mock.assert_not_called()
         shell.set_busy.assert_not_called()
 
-    def test_run_onboard_action_wires_explicit_auth_command(self) -> None:
+    def test_run_onboard_action_wires_bounded_command(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
         shell._busy = False
         shell.root = object()
-        shell.onboarding_auth_ref_var = mock.Mock()
-        shell.onboarding_auth_ref_var.get.return_value = "/tmp/new-auth.json"
         shell.set_busy = mock.Mock()
         shell.banner_var = mock.Mock()
 
@@ -1671,14 +1761,7 @@ class UiDispatchTests(unittest.TestCase):
         self.assertEqual(kwargs["target"], shell._onboard_worker)
         self.assertEqual(
             kwargs["args"][0],
-            (
-                "accounts",
-                "onboard",
-                "--json",
-                "--auth-ref",
-                "/tmp/new-auth.json",
-                "--non-interactive",
-            ),
+            ("accounts", "onboard", "--json"),
         )
         thread_instance.start.assert_called_once_with()
 
@@ -1839,6 +1922,216 @@ class UiDispatchTests(unittest.TestCase):
         showinfo_mock.assert_called_once()
         thread_mock.assert_not_called()
         shell.set_busy.assert_not_called()
+
+    def test_run_external_check_action_requires_secret_ready_route(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell._external_models_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.showinfo") as showinfo_mock:
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_external_check_action()
+
+        showinfo_mock.assert_called_once()
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_run_external_check_action_wires_selected_route(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell._external_models_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    **external_status_payload()["data"],
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": True,
+                        "token_created_at_utc": None,
+                    },
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        thread_instance = mock.Mock()
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=True):
+            with mock.patch(
+                "wild_boar_proxy.ui_shell.threading.Thread",
+                return_value=thread_instance,
+            ) as thread_mock:
+                shell.run_external_check_action()
+
+        kwargs = thread_mock.call_args.kwargs
+        self.assertEqual(kwargs["target"], shell._external_check_worker)
+        self.assertEqual(kwargs["args"], ("wbp-deepseek-v3",))
+        thread_instance.start.assert_called_once_with()
+
+    def test_run_quick_start_check_all_action_requires_confirmation(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.root = object()
+        shell.set_busy = mock.Mock()
+        shell.banner_var = mock.Mock()
+
+        with mock.patch("wild_boar_proxy.ui_shell.messagebox.askyesno", return_value=False):
+            with mock.patch("wild_boar_proxy.ui_shell.threading.Thread") as thread_mock:
+                shell.run_quick_start_check_all_action()
+
+        thread_mock.assert_not_called()
+        shell.set_busy.assert_not_called()
+
+    def test_apply_quick_start_summary_reflects_ready_continuity_truth(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell._busy = False
+        shell.quick_start_source_var = mock.Mock()
+        shell.quick_start_account_status_var = mock.Mock()
+        shell.quick_start_account_note_var = mock.Mock()
+        shell.quick_start_api_status_var = mock.Mock()
+        shell.quick_start_api_note_var = mock.Mock()
+        shell.quick_start_route_label_var = mock.Mock()
+        shell.quick_start_route_provider_var = mock.Mock()
+        shell.quick_start_route_secret_ref_var = mock.Mock()
+        shell.quick_start_route_last_checked_var = mock.Mock()
+        shell.quick_start_route_validation_var = mock.Mock()
+        shell.quick_start_onboard_reason_var = mock.Mock()
+        shell.quick_start_api_reason_var = mock.Mock()
+        shell.quick_start_check_all_reason_var = mock.Mock()
+        shell._last_account_snapshot = build_account_pool_snapshot(
+            accounts_payload(
+                accounts=[
+                    {
+                        "id": "backend-1",
+                        "label": "backend-1",
+                        "pool": "active",
+                        "status": "healthy",
+                        "manual_hold": False,
+                        "auth_ref": "/tmp/backend-1.json",
+                        "fail_count": 0,
+                        "success_count": 1,
+                        "last_success": "2026-05-21T00:00:00Z",
+                        "last_error": "",
+                        "cooldown_until": None,
+                        "notes": "",
+                    }
+                ],
+                pool_policy={"active_min": 1, "active_target": 1, "reserve_target": 0},
+                stable_default_backend_id="backend-1",
+            )
+        )
+        shell._external_models_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    **external_status_payload()["data"],
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": True,
+                        "token_created_at_utc": None,
+                    },
+                    "observed_routes": {
+                        "wbp-deepseek-v3": {
+                            "availability_state": "verified",
+                            "last_check": "2026-05-21T00:00:00Z",
+                        }
+                    },
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+
+        shell._apply_quick_start_summary()
+
+        shell.quick_start_source_var.set.assert_called_once_with("live_sandbox")
+        shell.quick_start_account_status_var.set.assert_called_once_with("ok")
+        shell.quick_start_api_status_var.set.assert_called_once_with("enabled")
+        shell.quick_start_route_label_var.set.assert_called_once_with("DeepSeek V3")
+        shell.quick_start_route_provider_var.set.assert_called_once_with("openrouter")
+        shell.quick_start_route_secret_ref_var.set.assert_called_once_with(
+            "OPENROUTER_API_KEY"
+        )
+        shell.quick_start_route_validation_var.set.assert_called_once_with("ok")
+        shell.quick_start_api_reason_var.set.assert_called_once_with("")
+        shell.quick_start_check_all_reason_var.set.assert_called_once_with("")
+
+    def test_apply_quick_start_check_all_results_records_ledger_and_bundle_surface(self) -> None:
+        shell = MinimalCompanionShell.__new__(MinimalCompanionShell)
+        shell.quick_start_check_all_status_var = mock.Mock()
+        shell.quick_start_check_all_machine_error_var = mock.Mock()
+        shell.quick_start_check_all_next_action_var = mock.Mock()
+        shell.quick_start_check_all_verdict_var = mock.Mock()
+        shell.quick_start_check_all_message_var = mock.Mock()
+        shell._record_quick_start_ledger_entry = mock.Mock()
+        shell._apply_refresh_results = mock.Mock()
+        runtime_snapshot = build_runtime_snapshot(
+            status_payload=status_payload(),
+            mode_payload=mode_payload(),
+        )
+        account_snapshot = build_account_pool_snapshot(accounts_payload())
+        external_snapshot = build_external_models_snapshot(
+            status_payload=external_status_payload(
+                data={
+                    **external_status_payload()["data"],
+                    "local_auth": {
+                        "token_ref": "managed_local_token",
+                        "token_present": True,
+                        "token_created_at_utc": None,
+                    },
+                }
+            ),
+            models_payload=external_models_payload(),
+            routes_payload=external_routes_payload(),
+        )
+        payload = build_quick_start_check_all_payload(
+            runtime_snapshot=runtime_snapshot,
+            account_snapshot=account_snapshot,
+            external_snapshot=external_snapshot,
+            api_check_payload=external_check_payload(),
+        )
+
+        shell._apply_quick_start_check_all_results(
+            payload,
+            runtime_snapshot,
+            account_snapshot,
+            external_snapshot,
+            banner="Quick Start check-all completed.",
+        )
+
+        shell.quick_start_check_all_status_var.set.assert_called_once_with(
+            payload["status"]
+        )
+        shell.quick_start_check_all_machine_error_var.set.assert_called_once_with(
+            payload["machine_error_code"]
+        )
+        shell.quick_start_check_all_next_action_var.set.assert_called_once_with(
+            payload["next_action"]
+        )
+        shell.quick_start_check_all_verdict_var.set.assert_called_once_with(
+            payload["data"]["bundle_verdict"]
+        )
+        shell.quick_start_check_all_message_var.set.assert_called_once_with(
+            payload["human_message"]
+        )
+        shell._record_quick_start_ledger_entry.assert_called_once_with(
+            "quick_start_check_all",
+            payload,
+        )
+        shell._apply_refresh_results.assert_called_once_with(
+            runtime_snapshot,
+            account_snapshot,
+            banner="Quick Start check-all completed.",
+            external_snapshot=external_snapshot,
+        )
 
     def test_run_smoke_action_requires_confirmation(self) -> None:
         shell = MinimalCompanionShell.__new__(MinimalCompanionShell)

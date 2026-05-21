@@ -1,35 +1,10 @@
 {
-  "schema_version": 1,
-  "contour": "DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS",
-  "date": "2026-05-21",
-  "auditor": "independent_repo_scan",
-  "verdict": "stop_and_diagnose_justified",
-  "evidence_sufficient": true,
-  "recommended_status": "stop_and_diagnose",
-  "findings": [
-    {
-      "status": "supports_stop",
-      "fact": "STOP packet is internally consistent: the contour requires a real executable desktop shell/bridge path and the current repo evidence does not provide one."
-    },
-    {
-      "status": "supports_stop",
-      "fact": "wild_boar_proxy/web_design_ui/README.md says there is no desktop shell integration and the preview remains fixture-backed/live-readonly."
-    },
-    {
-      "status": "supports_stop",
-      "fact": "audit_results/desktop_renderer_admission_approval_gate_2026-05-14.md records no implementation, no desktop files touched, and no command bridge."
-    },
-    {
-      "status": "supports_stop",
-      "fact": "web_safe_app_copy_launch preflight only admits a bounded executable target and explicitly rejects app-bundle proof as sufficient."
-    },
-    {
-      "status": "supports_stop",
-      "fact": "Desktop/native UI copy remains owner-gated, future, or desktop/native-only deferred behavior rather than an operational bridge."
-    }
+  "status": "pass",
+  "verdict": "No medium+ issues found; the current contour is consistent with canon on the admitted Tk shell, has no evident forbidden-input regression, introduces no new truth source, and preserves packet+refresh semantics in the inspected paths.",
+  "findings": [],
+  "residual_risks": [
+    "Static audit only: I did not execute the Tk shell or the CLI, so runtime-only regressions outside the inspected paths remain possible.",
+    "The shell still depends on the exact JSON contract shape from upstream commands; a future packet schema drift could break continuity even though current tests cover the known shapes."
   ],
-  "missed_risks": [
-    "The evidence is documentary and structural rather than a live desktop execution proof; that is acceptable because the stop criterion is the absence of a real executable path.",
-    "No hidden executable path was discovered in the inspected surfaces, but the audit cannot prove the absolute absence of files beyond the inspected repo evidence."
-  ]
+  "confidence": 0.91
 }

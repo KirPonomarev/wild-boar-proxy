@@ -2,63 +2,66 @@
 
 ## Objective
 
-Attempt the desktop parity port only if the repository already contains a real
-executable desktop shell/bridge path that can run the proven Quick Start flow
-against the same admitted sandbox truth surfaces as web.
+Port the already-proven web Quick Start continuity flow onto the admitted Tk
+desktop shell without widening semantics, inputs, or truth sources.
 
 ## In Scope
 
-- verify whether a real desktop executable path exists
-- verify whether desktop can reuse the proven account/API/check-all/ledger
-  packet and refresh surfaces
-- preserve blocker evidence if the path is missing or preview-only
+- wire desktop Quick Start summary to the same account truth surface
+- wire desktop Quick Start API summary to the same external-models truth surface
+- wire desktop `Check All` to the same bounded verify bundle semantics
+- carry action ledger parity into the desktop shell
+- prove one desktop continuity scenario on a sandbox-owned harness
 
 ## Out of Scope
 
-- inventing a new desktop shell
-- desktop-native secret/path/auth input
+- from-empty rebuild
+- packaging or distribution work
 - redesign or desktop polish
-- lifecycle expansion
-- execution-core changes
+- new desktop-only commands
+- lifecycle expansion beyond already admitted sandbox actions
 
 ## Constraints
 
-- canon order from `AGENTS.md` must hold
-- `DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS` may close only on a real
-  executable desktop path
-- preview-only, support-only, or owner-gated future placeholders do not satisfy
-  desktop parity
-- no broadening beyond proven web semantics
+- sandbox only
+- no raw `token`, `secret`, `path`, `auth`, or `backend_id` input in desktop UI
+- success only by packet + refresh proof
+- desktop shell state is not a truth source
+- use admitted Tk shell path from `DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS`
 
 ## Assumptions
 
-- the proven web continuity flow remains the only admitted semantic baseline
-- a missing desktop bridge is a contour blocker, not a partial success
+- the admitted Tk shell remains operational on the bundled runtime
+- external-models synthetic adapter may be started inside the sandbox harness so
+  desktop continuity can observe the same bounded secret/token readiness used by
+  the proven web API lane
+- direct worker-path automation is acceptable for desktop smoke evidence because
+  public dispatch/confirmation wiring is covered by unit tests and the smoke is
+  only proving real packet + refresh flow through the desktop layer
 
 ## Acceptance Criteria
 
-- [ ] a real executable desktop shell/bridge path exists
-- [ ] desktop can run the same Quick Start account/API/check-all/ledger flow
-- [ ] desktop uses the same packet + refresh truth model as web
-- [ ] desktop does not widen admitted actions or input surfaces
-- [ ] desktop contour can proceed without inventing a new subsystem
+- [x] desktop Quick Start renders account truth from real command snapshots
+- [x] desktop Quick Start renders API truth from real external-models snapshots
+- [x] desktop `Check All` reaches `ready` only from bounded packet + refresh proof
+- [x] action ledger records desktop API check and desktop check-all actions
+- [x] desktop continuity smoke stays within sandbox and avoids forbidden inputs
 
 ## Verification
 
 - tests:
-  - evidence scan over desktop-related docs, UI copy, live server, and prior
-    closeouts
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_ui_shell -q`
+  - `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_ui_shell tests.test_web_ui -q`
 - build:
+  - `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`
   - `git diff --check`
 - manual:
-  - confirm the repository exposes a real executable desktop path rather than a
-    preview/support surface
+  - bundled-runtime Tk shell instantiated on a sandbox harness and drove
+    refresh -> API check -> check-all -> ledger capture
 - live evidence:
-  - stop immediately if the only desktop evidence is preview-only or
-    support-only
+  - `audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json`
 
 ## Open Questions
 
-- should the blocker-resolving follow-up contour align to the older
-  `DESKTOP_RENDERER_ADMISSION` language or a new, narrower
-  `DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS` name?
+- none within the contour boundary once the admitted Tk shell is treated as the
+  baseline desktop surface

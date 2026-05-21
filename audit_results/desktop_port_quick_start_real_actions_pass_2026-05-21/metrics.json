@@ -1,30 +1,40 @@
 {
-  "schema_version": 1,
   "contour": "DESKTOP_PORT_QUICK_START_REAL_ACTIONS_PASS",
-  "date": "2026-05-21",
-  "status": "stop_and_diagnose",
-  "final_verdict": "DESKTOP_REAL_EXECUTABLE_PATH_NOT_PRESENT",
-  "branch": "codex/external-agent-lab-isolated",
-  "head_at_stop": "d5df53a",
-  "evidence_counts": {
-    "repo_docs": 5,
-    "runtime_files": 3,
-    "ui_files": 2,
-    "test_files": 2,
-    "prior_closeout_files": 2
-  },
-  "blocking_findings": [
-    "preview README says no desktop shell integration",
-    "desktop renderer admission closeout records no command bridge",
-    "safe app copy launch only admits bounded executable target and rejects app bundle proof",
-    "desktop/native UI copy remains future or owner-gated rather than operational"
+  "status": "closed_success",
+  "desktop_surface": "admitted_tk_shell",
+  "baseline_kind": "desktop_continuity_parity",
+  "touched_files": [
+    "wild_boar_proxy/ui_shell.py",
+    "tests/test_ui_shell.py",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/spec.md",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/metrics.json",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/closeout.md",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/independent_audit.json",
+    "audit_results/desktop_port_quick_start_real_actions_pass_2026-05-21/evidence/desktop_continuity_smoke.json"
   ],
   "verification": {
-    "node_check_passed": true,
-    "ui_regression_suite_passed": true,
-    "git_diff_check_passed": true,
-    "independent_audit": "stop_and_diagnose_justified"
+    "ui_shell_tests": "passed",
+    "full_regression_suite": "passed",
+    "node_check": "passed",
+    "git_diff_check": "passed",
+    "closeout_resilience_staged": "pending_final_stage"
   },
-  "proceed_allowed": false,
-  "next_contour": "DESKTOP_EXECUTABLE_BRIDGE_ADMISSION_PASS"
+  "smoke_summary": {
+    "source": "live_sandbox",
+    "account_status": "ok",
+    "api_status": "enabled",
+    "route_validation": "ok",
+    "runtime_liveness": "healthy",
+    "bundle_status": "ok",
+    "bundle_verdict": "ready",
+    "ledger_actions": [
+      "quick_start_check_all",
+      "api_route_check"
+    ]
+  },
+  "scope": {
+    "forbidden_inputs_widened": false,
+    "new_truth_source_introduced": false,
+    "desktop_only_command_surface_added": false
+  }
 }
