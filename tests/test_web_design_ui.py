@@ -3388,6 +3388,8 @@ const fs = require("fs");
 const vm = require("vm");
 
 const opened = { href: "", closed: false };
+const openCalls = [];
+const writes = [];
 const sandbox = {
   console,
   document: {
@@ -3400,8 +3402,14 @@ const sandbox = {
   window: {
     location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
     history: { replaceState() {} },
-    open() {
+    open(url, target, features) {
+      openCalls.push({ url, target, features });
       return {
+        document: {
+          open() {},
+          write(value) { writes.push(value); },
+          close() {}
+        },
         location: {
           set href(value) { opened.href = value; },
           get href() { return opened.href; }
@@ -3459,11 +3467,105 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 
 (async () => {
   await sandbox.runUiAction("onboard_account");
+  if (openCalls.length !== 1 || openCalls[0].features) {
+    throw new Error(`owner login pre-open must stay controllable, got ${JSON.stringify(openCalls)}`);
+  }
+  if (!writes.join("\n").includes("Owner login is starting")) {
+    throw new Error("owner login window did not receive a visible waiting page");
+  }
   if (!opened.href.includes("/owner-login/sandbox?session=test&state=state")) {
     throw new Error(`owner login window did not navigate to owner-provided URL: ${opened.href}`);
   }
   if (opened.closed) {
     throw new Error("owner login window should stay open when login_url is present");
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_onboard_account_owner_login_window_shows_error_when_url_missing(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const opened = { href: "", closed: false };
+const writes = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} },
+    open() {
+      return {
+        document: {
+          open() {},
+          write(value) { writes.push(value); },
+          close() {}
+        },
+        location: {
+          set href(value) { opened.href = value; },
+          get href() { return opened.href; }
+        },
+        close() { opened.closed = true; }
+      };
+    }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url === "api/action") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          status: "command_error",
+          ui_action: "onboard_account",
+          action_role: "account_onboarding",
+          post_action_refresh_required: false,
+          result: {
+            status: "command_error",
+            machine_error_code: "UI_LOGIN_START_PACKET_INVALID",
+            human_message: "login url missing",
+            next_action: "retry",
+            changed_files: [],
+            data: { login_bridge: { login_url_present: false, login_url_kind: "missing" } }
+          }
+        })
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  await sandbox.runUiAction("onboard_account");
+  const html = writes.join("\n");
+  if (!html.includes("Owner login is starting")) {
+    throw new Error("owner login window did not show initial waiting state");
+  }
+  if (!html.includes("Owner login URL missing")) {
+    throw new Error(`owner login window did not show missing URL error: ${html}`);
+  }
+  if (opened.closed) {
+    throw new Error("owner login window should stay visible with a diagnostic instead of closing blank");
   }
 })().catch((error) => {
   console.error(error.stack || error.message);

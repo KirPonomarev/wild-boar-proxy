@@ -924,11 +924,13 @@ async function runUiAction(uiAction, extraPayload = {}) {
     }
   } catch (error) {
     const timeoutFailure = error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout");
-    if (onboardLoginWindow && typeof onboardLoginWindow.close === "function") {
-      try {
-        onboardLoginWindow.close();
-      } catch (_closeError) {
-      }
+    if (onboardLoginWindow) {
+      writeOnboardLoginWindowStatus(
+        onboardLoginWindow,
+        "Owner login failed",
+        "Web could not receive the owner login packet. Return to Wild Boar Proxy and retry.",
+        "error"
+      );
     }
     const failureStatus = error instanceof SyntaxError ? "invalid_json" : (timeoutFailure ? "timeout" : "integration_failure");
     const machineCode = error instanceof SyntaxError
@@ -963,10 +965,84 @@ function openOnboardLoginWindow() {
     return null;
   }
   try {
-    return openFn.call(window, "about:blank", "_blank", "noopener");
+    const loginWindow = openFn.call(window, "about:blank", "_blank");
+    if (loginWindow) {
+      try {
+        loginWindow.opener = null;
+      } catch (_openerError) {
+      }
+      writeOnboardLoginWindowStatus(
+        loginWindow,
+        "Owner login is starting",
+        "Waiting for the owner-controlled login URL from the server.",
+        "pending"
+      );
+    }
+    return loginWindow;
   } catch (_error) {
     return null;
   }
+}
+
+function onboardLoginWindowEscape(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function onboardLoginWindowHtml(title, message, tone = "pending") {
+  const safeTitle = onboardLoginWindowEscape(title);
+  const safeMessage = onboardLoginWindowEscape(message);
+  const borderColor = tone === "error" ? "#9f2f2f" : "#2f5f9f";
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>${safeTitle}</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f7f3eb; color: #2b2925; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    main { max-width: 560px; padding: 28px; border: 1px solid #d8cfc0; border-left: 6px solid ${borderColor}; background: #fffaf2; box-shadow: 0 20px 60px rgba(30, 24, 16, 0.14); }
+    h1 { margin: 0 0 12px; font-size: 20px; line-height: 1.3; }
+    p { margin: 0; font-size: 15px; line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${safeTitle}</h1>
+    <p>${safeMessage}</p>
+  </main>
+</body>
+</html>`;
+}
+
+function writeOnboardLoginWindowStatus(loginWindow, title, message, tone = "pending") {
+  if (!loginWindow) {
+    return false;
+  }
+  const html = onboardLoginWindowHtml(title, message, tone);
+  try {
+    if (loginWindow.document && typeof loginWindow.document.write === "function") {
+      if (typeof loginWindow.document.open === "function") {
+        loginWindow.document.open();
+      }
+      loginWindow.document.write(html);
+      if (typeof loginWindow.document.close === "function") {
+        loginWindow.document.close();
+      }
+      return true;
+    }
+  } catch (_documentError) {
+  }
+  try {
+    if (loginWindow.location && typeof loginWindow.location === "object") {
+      loginWindow.location.href = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+      return true;
+    }
+  } catch (_locationError) {
+  }
+  return false;
 }
 
 function onboardLoginUrlFromPayload(payload) {
@@ -980,12 +1056,12 @@ function maybeNavigateOnboardLoginWindow(loginWindow, payload) {
   }
   const loginUrl = onboardLoginUrlFromPayload(payload);
   if (!loginUrl) {
-    if (typeof loginWindow.close === "function") {
-      try {
-        loginWindow.close();
-      } catch (_closeError) {
-      }
-    }
+    writeOnboardLoginWindowStatus(
+      loginWindow,
+      "Owner login URL missing",
+      "The server did not return an owner login URL. Return to Wild Boar Proxy and inspect the action result.",
+      "error"
+    );
     return;
   }
   try {
