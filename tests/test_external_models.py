@@ -95,6 +95,23 @@ class ExternalModelContractTests(unittest.TestCase):
             self.assertEqual(paths.routes_lock, (root / "custom-routes.lock").resolve())
             self.assertEqual(paths.state_lock, (root / "custom-state.lock").resolve())
 
+    def test_paths_from_env_falls_back_to_managed_dir_external_models(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_dir = Path(temp_dir) / "managed"
+            expected_root = (managed_dir / "external-models").resolve()
+            old = dict(os.environ)
+            try:
+                os.environ.pop("WBP_EXTERNAL_MODELS_DIR", None)
+                os.environ["WBP_MANAGED_DIR"] = str(managed_dir)
+                paths = ExternalModelsPaths.from_env()
+            finally:
+                os.environ.clear()
+                os.environ.update(old)
+            self.assertEqual(paths.root_dir, expected_root)
+            self.assertEqual(paths.routes_file, (expected_root / "routes.json").resolve())
+            self.assertEqual(paths.state_file, (expected_root / "state.json").resolve())
+            self.assertEqual(paths.secrets_file, (expected_root / "secrets.env").resolve())
+
     def test_ensure_installed_layout_creates_neutral_files_and_secrets_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = ExternalModelsPaths.from_root(Path(temp_dir) / "external-models")

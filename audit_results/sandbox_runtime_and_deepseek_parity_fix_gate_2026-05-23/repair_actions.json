@@ -1,0 +1,44 @@
+{
+  "contour": "SANDBOX_RUNTIME_AND_DEEPSEEK_PARITY_FIX_GATE",
+  "declared_write_surfaces": [
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/auth.json",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence/"
+  ],
+  "rollback_surface": {
+    "backup_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/auth.json.pre-parity-backup",
+    "restorable": true
+  },
+  "runtime_state_repairs": [
+    {
+      "action": "backup_sandbox_auth",
+      "target": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/auth.json",
+      "status": "done"
+    },
+    {
+      "action": "replace_sandbox_auth_with_openai_key_style_auth_surface",
+      "source_path": "/Users/kirillponomarev/.codex-custom-cli/auth.json",
+      "target_path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/auth.json",
+      "status": "done",
+      "secret_values_copied_into_artifacts": false
+    }
+  ],
+  "repo_repairs": [
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/external_models/paths.py",
+      "change": "derive external-models root from WBP_MANAGED_DIR/external-models when WBP_EXTERNAL_MODELS_DIR is unset"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py",
+      "change": "downgrade API connection row state for provider validation failure and count those degraded states in readonly summary attention_count"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_external_models.py",
+      "change": "add regression test for managed-dir fallback"
+    },
+    {
+      "file": "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py",
+      "change": "add regression test for validation_failed row and readonly summary attention_count"
+    }
+  ]
+}

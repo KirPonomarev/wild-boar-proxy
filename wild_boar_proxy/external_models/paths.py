@@ -11,6 +11,16 @@ def _resolve_path(raw: str) -> Path:
     return Path(os.path.expanduser(raw)).resolve()
 
 
+def _default_root_dir() -> Path:
+    explicit_root = os.environ.get("WBP_EXTERNAL_MODELS_DIR")
+    if explicit_root:
+        return _resolve_path(explicit_root)
+    managed_dir = os.environ.get("WBP_MANAGED_DIR")
+    if managed_dir:
+        return _resolve_path(str(Path(managed_dir) / "external-models"))
+    return _resolve_path("~/.wild-boar-proxy/external-models")
+
+
 @dataclass(frozen=True)
 class ExternalModelsPaths:
     root_dir: Path
@@ -36,11 +46,7 @@ class ExternalModelsPaths:
 
     @classmethod
     def from_env(cls) -> "ExternalModelsPaths":
-        root_dir = _resolve_path(
-            os.environ.get(
-                "WBP_EXTERNAL_MODELS_DIR", "~/.wild-boar-proxy/external-models"
-            )
-        )
+        root_dir = _default_root_dir()
         return cls(
             root_dir=root_dir,
             routes_file=_resolve_path(

@@ -1083,7 +1083,14 @@ def build_api_connections_readonly_snapshot(runner: CommandRunner) -> dict[str, 
     attention_count = sum(
         1
         for row in rows
-        if row["status_code"] in {"missing_secret", "integration_failure"}
+        if row["status_code"]
+        in {
+            "missing_secret",
+            "integration_failure",
+            "validation_failed",
+            "check_attention",
+            "blocked",
+        }
     )
     return {
         "schema_version": 1,
@@ -3429,14 +3436,23 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
             elif observed_state in {"provider_auth_failed", "model_not_available"}:
                 validation_label = "validate failed"
                 validation_visual_state = "red"
+                visual_state = "red"
+                status_code = "validation_failed"
+                status_label = "Требует проверки"
                 note = "Последняя provider-проверка маршрута завершилась ошибкой."
             elif observed_state in {"provider_network_failed", "limited"}:
                 validation_label = "check failed"
                 validation_visual_state = "amber"
+                visual_state = "amber"
+                status_code = "check_attention"
+                status_label = "Требует внимания"
                 note = "Последняя проверка маршрута требует внимания оператора."
             elif observed_state == "blocked":
                 validation_label = "blocked"
                 validation_visual_state = "amber"
+                visual_state = "amber"
+                status_code = "blocked"
+                status_label = "Проверка заблокирована"
         is_primary = model.route_id in primary_route_ids
         rows.append(
             {

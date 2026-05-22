@@ -689,6 +689,62 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(snapshot["routes"][0]["last_checked"], "2026-05-21T09:45:00Z")
         self.assertIn("bounded packet", snapshot["routes"][0]["note"])
 
+    def test_api_connections_readonly_downgrades_route_when_provider_validation_failed(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "status", "--json")] = command_packet(
+            human_message="External-models synthetic lifecycle status collected without live runtime claims.",
+            liveness="not_applicable",
+            severity="recoverable",
+            operator_action="none",
+            data={
+                "foundation_phase": "C3",
+                "adapter_runtime_available": False,
+                "lifecycle_mode": "synthetic",
+                "adapter_state": "started",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "routes_count": 1,
+                "observed_routes_count": 1,
+                "observed_routes": {
+                    "wbp-deepseek-v3": {
+                        "availability_state": "provider_auth_failed",
+                        "last_check": "2026-05-21T09:45:00Z",
+                        "last_verified_at": "2026-05-21T09:45:00Z",
+                        "effective_model": "deepseek/deepseek-chat",
+                    }
+                },
+                "adapter": {
+                    "state": "started",
+                    "lifecycle_mode": "synthetic",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "base_url": "http://127.0.0.1:54321/v1",
+                    "host": "127.0.0.1",
+                    "port": 54321,
+                    "started_at_utc": "2026-05-21T09:40:00Z",
+                    "last_transition": "start",
+                },
+                "local_auth": {
+                    "token_ref": "managed_local_token",
+                    "token_present": True,
+                    "token_created_at_utc": "2026-05-21T09:40:00Z",
+                },
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        snapshot = build_api_connections_readonly_snapshot(runner)
+
+        self.assertEqual(snapshot["status"], "ok")
+        self.assertEqual(snapshot["summary"]["attention_count"], 1)
+        self.assertEqual(snapshot["routes"][0]["status_code"], "validation_failed")
+        self.assertEqual(snapshot["routes"][0]["status_label"], "Требует проверки")
+        self.assertEqual(snapshot["routes"][0]["visual_state"], "red")
+        self.assertEqual(snapshot["routes"][0]["validation_label"], "validate failed")
+        self.assertEqual(snapshot["routes"][0]["validation_visual_state"], "red")
+        self.assertIn("ошибкой", snapshot["routes"][0]["note"])
+
     def test_api_connections_readonly_invalid_packet_becomes_integration_failure(self) -> None:
         payloads = live_payloads()
         payloads[("external-models", "models", "--json")] = command_packet(

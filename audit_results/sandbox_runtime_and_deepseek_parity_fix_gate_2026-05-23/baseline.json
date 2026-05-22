@@ -1,0 +1,52 @@
+{
+  "contour": "SANDBOX_RUNTIME_AND_DEEPSEEK_PARITY_FIX_GATE",
+  "observed_at_local_date": "2026-05-23",
+  "sandbox_target": {
+    "profile_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile",
+    "managed_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+    "web_port": 8788,
+    "launch_copy_port": 9347,
+    "action_phase": "sandbox_actions"
+  },
+  "pre_repair_observations": [
+    {
+      "surface": "default_runtime_cli",
+      "command": "python3 -m wild_boar_proxy status --json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "surface": "default_runtime_cli",
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    },
+    {
+      "surface": "web_live_readonly",
+      "command": "curl http://127.0.0.1:8788/api/live-readonly",
+      "status": "integration_failure",
+      "machine_error_code": "ATTESTATION_FAILED",
+      "last_error_summary": "HTTP 401 Invalid API key"
+    },
+    {
+      "surface": "web_api_connections_readonly",
+      "command": "curl http://127.0.0.1:8788/api/api-connections-readonly",
+      "status": "ok",
+      "routes_count": 1,
+      "reported_route_id": "wbp-deepseek-v3"
+    },
+    {
+      "surface": "sandbox_cli_without_external_models_dir",
+      "command": "WBP_PROFILE_DIR=... WBP_MANAGED_DIR=... python3 -m wild_boar_proxy external-models check --route wbp-deepseek-v3 --json",
+      "status": "command_error",
+      "machine_error_code": "route_not_found"
+    },
+    {
+      "surface": "sandbox_cli_with_external_models_dir",
+      "command": "WBP_PROFILE_DIR=... WBP_MANAGED_DIR=... WBP_EXTERNAL_MODELS_DIR=.../external-models python3 -m wild_boar_proxy external-models check --route wbp-deepseek-v3 --json",
+      "status": "ok",
+      "machine_error_code": "OK"
+    }
+  ],
+  "starting_blocker": "SANDBOX_RUNTIME_API_TRUTH_SPLIT"
+}
