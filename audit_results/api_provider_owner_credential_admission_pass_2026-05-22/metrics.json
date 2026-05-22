@@ -1,0 +1,67 @@
+{
+  "contour": "API_PROVIDER_OWNER_CREDENTIAL_ADMISSION_PASS",
+  "date": "2026-05-22",
+  "status": "closed_success",
+  "owner_proof": {
+    "credential_admit": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "api_route_connect",
+      "credential_status": "admitted",
+      "credential_ref": "OPENROUTER_API_KEY",
+      "secret_value_exposed": false,
+      "browser_secret_intake": false,
+      "browser_path_intake": false
+    },
+    "credential_status": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "next_action": "none",
+      "credential_status": "present",
+      "credential_present": true,
+      "secret_value_exposed": false
+    },
+    "route_validation_after_admit": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "verification_scope": "route_provider_only"
+    },
+    "redaction_check": {
+      "token_in_admit_stdout": false,
+      "token_in_status_stdout": false,
+      "token_in_routes_add_stdout": false,
+      "token_in_routes_validate_stdout": false,
+      "token_in_evidence_packets": false,
+      "token_in_changed_files": false,
+      "secrets_file_mode": "0o600",
+      "external_under_managed": true
+    }
+  },
+  "changed_files": [
+    "COMMAND_API.md",
+    "wild_boar_proxy/cli.py",
+    "wild_boar_proxy/external_models/__init__.py",
+    "wild_boar_proxy/external_models/errors.py",
+    "wild_boar_proxy/external_models/credentials.py",
+    "tests/test_cli_external_models.py"
+  ],
+  "tests": [
+    {
+      "command": "python3 -B -m unittest tests.test_cli_external_models tests.test_external_models -q",
+      "result": "pass",
+      "count": 36
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_cli_external_models tests.test_external_models tests.test_web_design_live_server tests.test_web_design_command_adapter -q",
+      "result": "pass",
+      "count": 118
+    }
+  ],
+  "evidence": [
+    "audit_results/api_provider_owner_credential_admission_pass_2026-05-22/evidence/credential-admit-packet.json",
+    "audit_results/api_provider_owner_credential_admission_pass_2026-05-22/evidence/credential-status-packet.json",
+    "audit_results/api_provider_owner_credential_admission_pass_2026-05-22/evidence/routes-add-packet.json",
+    "audit_results/api_provider_owner_credential_admission_pass_2026-05-22/evidence/routes-validate-packet.json",
+    "audit_results/api_provider_owner_credential_admission_pass_2026-05-22/evidence/redaction-check.json"
+  ]
+}

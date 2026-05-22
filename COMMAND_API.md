@@ -41,6 +41,8 @@ All operator commands must support `--json`.
 - `accounts onboard --json`
 - `accounts login start --provider sandbox --json`
 - `accounts login complete --session <id> --state <state> --proof <proof> --json`
+- `external-models credentials admit --provider <provider> --source owner-env --json`
+- `external-models credentials status --provider <provider> --json`
 - `diagnostics export --json`
 - `installer init --json`
 - `legacy import --source-dir <path> --json`
@@ -280,6 +282,50 @@ managed storage and must return:
 - `login_result.used=true`
 
 Completion packets must not expose token/secret/password values.
+
+## Additional external-models credential admission owner surface
+
+`external-models credentials admit --provider <provider> --source owner-env --json`
+is the owner surface for sandbox-only provider credential admission used by API
+route connect flows.
+
+`external-models credentials status --provider <provider> --json` is the
+read-only owner surface for credential presence proof.
+
+Admission and status packets must remain strict JSON and use the command
+payload envelope. The owner surface must enforce machine-readably:
+
+- provider allowlist validation
+- source validation (`owner-env` only for this contour)
+- sandbox write-target proof before write
+- sandbox-only secrets materialization
+- secret redaction in packet payloads
+
+Admission success should expose:
+
+- `next_action=api_route_connect`
+- `credential_result.status=admitted`
+- `credential_result.provider`
+- `credential_result.source=owner-env`
+- `credential_result.credential_ref`
+- `credential_result.credential_present=true`
+- `credential_result.secret_value_exposed=false`
+- `credential_result.browser_secret_intake=false`
+- `credential_result.browser_path_intake=false`
+- `credential_result.scope=sandbox`
+
+Status success should expose:
+
+- `next_action=none`
+- `credential_result.status` (`present` or `missing`)
+- `credential_result.provider`
+- `credential_result.credential_ref`
+- `credential_result.credential_present`
+- `credential_result.secret_value_exposed=false`
+- `credential_result.scope=sandbox`
+
+Admission and status packets must not expose token/secret/password values or
+raw owner-env dumps.
 
 ## Additional launch-client owner surface
 

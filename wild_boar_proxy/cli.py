@@ -257,6 +257,25 @@ def build_parser() -> argparse.ArgumentParser:
     external_models_check = external_models_subparsers.add_parser("check")
     external_models_check.add_argument("--route", required=True)
     external_models_check.add_argument("--json", action="store_true", required=True)
+    external_models_credentials = external_models_subparsers.add_parser("credentials")
+    external_models_credentials_subparsers = external_models_credentials.add_subparsers(
+        dest="credentials_command", required=True
+    )
+    external_models_credentials_admit = external_models_credentials_subparsers.add_parser(
+        "admit"
+    )
+    external_models_credentials_admit.add_argument("--provider", required=True)
+    external_models_credentials_admit.add_argument("--source", required=True)
+    external_models_credentials_admit.add_argument(
+        "--json", action="store_true", required=True
+    )
+    external_models_credentials_status = external_models_credentials_subparsers.add_parser(
+        "status"
+    )
+    external_models_credentials_status.add_argument("--provider", required=True)
+    external_models_credentials_status.add_argument(
+        "--json", action="store_true", required=True
+    )
 
     external_models_routes = external_models_subparsers.add_parser("routes")
     external_models_routes_subparsers = external_models_routes.add_subparsers(

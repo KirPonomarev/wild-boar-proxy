@@ -137,7 +137,7 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.profile_dir = self.root / "profile"
         self.managed_dir = self.root / "managed"
         self.stable_dir = self.root / "stable"
-        self.external_dir = self.root / "external-models"
+        self.external_dir = self.managed_dir / "external-models"
         self.profile_dir.mkdir(parents=True)
         self.managed_dir.mkdir(parents=True)
         self.stable_dir.mkdir(parents=True)
@@ -262,6 +262,208 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(remove_payload["status"], "ok")
         routes_payload = json.loads((self.external_dir / "routes.json").read_text())
         self.assertEqual(routes_payload["routes"], [])
+
+    def test_credentials_admit_and_status_owner_env_without_secret_leak(self) -> None:
+        with mocked_provider(expected_token="admit-owner-env-key") as (base_url, _server):
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(sample_route(base_url=base_url)),
+            )
+            admit_result = self.run_cli(
+                "external-models",
+                "credentials",
+                "admit",
+                "--provider",
+                "openrouter",
+                "--source",
+                "owner-env",
+                "--json",
+                extra_env={"OPENROUTER_API_KEY": "admit-owner-env-key"},
+            )
+            admit_payload = self.parse_payload(admit_result)
+            self.assertEqual(admit_payload["status"], "ok")
+            self.assertEqual(admit_payload["machine_error_code"], "OK")
+            self.assertEqual(admit_payload["next_action"], "api_route_connect")
+            credential_result = admit_payload["data"]["credential_result"]
+            self.assertEqual(credential_result["status"], "admitted")
+            self.assertEqual(credential_result["provider"], "openrouter")
+            self.assertEqual(credential_result["source"], "owner-env")
+            self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
+            self.assertTrue(credential_result["credential_present"])
+            self.assertFalse(credential_result["secret_value_exposed"])
+            self.assertFalse(credential_result["browser_secret_intake"])
+            self.assertFalse(credential_result["browser_path_intake"])
+            self.assertEqual(credential_result["scope"], "sandbox")
+            self.assertNotIn("admit-owner-env-key", admit_result.stdout)
+            self.assertEqual(
+                stat.S_IMODE((self.external_dir / "secrets.env").stat().st_mode),
+                0o600,
+            )
+            secrets_text = (self.external_dir / "secrets.env").read_text(encoding="utf-8")
+            self.assertIn("OPENROUTER_API_KEY=admit-owner-env-key", secrets_text)
+
+            status_result = self.run_cli(
+                "external-models",
+                "credentials",
+                "status",
+                "--provider",
+                "openrouter",
+                "--json",
+            )
+            status_payload = self.parse_payload(status_result)
+            self.assertEqual(status_payload["status"], "ok")
+            self.assertEqual(status_payload["next_action"], "none")
+            status_credential = status_payload["data"]["credential_result"]
+            self.assertEqual(status_credential["status"], "present")
+            self.assertTrue(status_credential["credential_present"])
+            self.assertEqual(status_credential["credential_ref"], "OPENROUTER_API_KEY")
+            self.assertFalse(status_credential["secret_value_exposed"])
+            self.assertNotIn("admit-owner-env-key", status_result.stdout)
+
+            validate_result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            validate_payload = self.parse_payload(validate_result)
+            self.assertEqual(validate_payload["status"], "ok")
+            self.assertEqual(validate_payload["machine_error_code"], "OK")
+
+    def test_credentials_admit_rejects_unsupported_provider(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "unknown-provider",
+            "--source",
+            "owner-env",
+            "--json",
+            extra_env={"OPENROUTER_API_KEY": "owner-key"},
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"], "EXTERNAL_MODELS_PROVIDER_UNSUPPORTED"
+        )
+
+    def test_credentials_admit_rejects_unsupported_source(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "browser-input",
+            "--json",
+            extra_env={"OPENROUTER_API_KEY": "owner-key"},
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            "EXTERNAL_MODELS_CREDENTIAL_SOURCE_UNSUPPORTED",
+        )
+
+    def test_credentials_admit_rejects_missing_owner_env(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "owner-env",
+            "--json",
+            extra_env={
+                "OPENROUTER_API_KEY": "",
+                "WBP_OPENROUTER_API_KEY": "",
+                "WBP_PROVIDER_OPENROUTER_API_KEY": "",
+            },
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+        )
+
+    def test_credentials_status_reports_missing_without_secret_exposure(self) -> None:
+        (self.external_dir / "secrets.env").write_text("", encoding="utf-8")
+        os.chmod(self.external_dir / "secrets.env", 0o600)
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "status",
+            "--provider",
+            "openrouter",
+            "--json",
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "ok")
+        credential_result = payload["data"]["credential_result"]
+        self.assertEqual(credential_result["status"], "missing")
+        self.assertFalse(credential_result["credential_present"])
+        self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
+        self.assertFalse(credential_result["secret_value_exposed"])
+
+    def test_credentials_admit_blocks_unproven_sandbox_target(self) -> None:
+        outside_external = self.root / "outside-external-models"
+        outside_external.mkdir(parents=True, exist_ok=True)
+        (outside_external / "secrets.env").write_text("", encoding="utf-8")
+        os.chmod(outside_external / "secrets.env", 0o600)
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "owner-env",
+            "--json",
+            extra_env={
+                "OPENROUTER_API_KEY": "owner-key",
+                "WBP_EXTERNAL_MODELS_DIR": str(outside_external),
+            },
+        )
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(
+            payload["machine_error_code"],
+            "EXTERNAL_MODELS_CREDENTIAL_SANDBOX_UNPROVEN",
+        )
+
+    def test_credentials_admit_requires_json_flag(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "owner-env",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--json", result.stderr)
+
+    def test_credentials_status_requires_json_flag(self) -> None:
+        result = self.run_cli(
+            "external-models",
+            "credentials",
+            "status",
+            "--provider",
+            "openrouter",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--json", result.stderr)
 
     def test_routes_add_from_stdin_and_models_projection(self) -> None:
         add_result = self.run_cli(

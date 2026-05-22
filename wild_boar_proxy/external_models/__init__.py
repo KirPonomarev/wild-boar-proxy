@@ -7,6 +7,7 @@ from typing import Any
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
+from .credentials import admit_owner_credential, credential_status
 from .lifecycle import start_synthetic_adapter, stop_synthetic_adapter, synthetic_status_payload
 from .paths import ExternalModelsPaths
 from .state import capture_local_evidence, ensure_secrets_permissions
@@ -98,6 +99,8 @@ def run_external_models_command(args: Any) -> dict[str, Any]:
             )
         if args.external_models_command == "routes":
             return _run_routes_command(paths, args)
+        if args.external_models_command == "credentials":
+            return _run_credentials_command(paths, args)
         if args.external_models_command == "profile" and args.profile_command == "codex-desktop":
             data = routes.profile_packet(paths, args.route)
             return contracts.build_external_models_payload(
@@ -210,6 +213,36 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
         )
     raise RuntimeErrorInfo(
         "Unsupported external-models routes command.",
+        machine_error_code=errors.INVALID_REQUEST,
+        operator_action="user_action",
+    )
+
+
+def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]:
+    action = args.credentials_command
+    if action == "admit":
+        credential_result, changed_files = admit_owner_credential(
+            paths,
+            provider=args.provider,
+            source=args.source,
+        )
+        return contracts.build_external_models_payload(
+            ok=True,
+            human_message="External-models credential admitted from owner source.",
+            machine_error_code=errors.OK,
+            changed_files=changed_files,
+            next_action="api_route_connect",
+            data={"credential_result": credential_result},
+        )
+    if action == "status":
+        return contracts.build_external_models_payload(
+            ok=True,
+            human_message="External-models credential status collected from sandbox owner paths.",
+            machine_error_code=errors.OK,
+            data={"credential_result": credential_status(paths, provider=args.provider)},
+        )
+    raise RuntimeErrorInfo(
+        "Unsupported external-models credentials command.",
         machine_error_code=errors.INVALID_REQUEST,
         operator_action="user_action",
     )
