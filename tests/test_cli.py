@@ -8313,7 +8313,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(all(path.startswith(str(self.managed_dir)) for path in payload["changed_files"]))
         self.assertNotIn(str(self.stable_dir / "config.yaml"), payload["changed_files"])
 
-    def test_accounts_login_start_rejects_unsupported_provider(self) -> None:
+    def test_accounts_login_start_codex_requires_device_mode(self) -> None:
         result = self.run_cli(
             "accounts", "login", "start", "--provider", "codex", "--json"
         )
@@ -8321,8 +8321,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         payload = json.loads(result.stdout)
         self.assertEqual(payload["status"], "error")
-        self.assertEqual(payload["machine_error_code"], "LOGIN_PROVIDER_UNSUPPORTED")
+        self.assertEqual(payload["machine_error_code"], "LOGIN_MODE_UNSUPPORTED")
         self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["mode"], "")
+        self.assertEqual(payload["supported_modes"], ["device"])
 
     def test_accounts_login_complete_rejects_missing_state_proof_expired_and_replay(self) -> None:
         missing = self.run_cli(

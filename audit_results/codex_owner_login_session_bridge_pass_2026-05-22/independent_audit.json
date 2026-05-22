@@ -2,7 +2,7 @@
   "contour": "CODEX_OWNER_LOGIN_SESSION_BRIDGE_PASS",
   "date": "2026-05-22",
   "audit_mode": "independent_fact_check_from_saved_packets_and_browser_evidence",
-  "verdict": "implementation_verified_but_formal_closure_blocked",
+  "verdict": "closed_success",
   "checks": [
     {
       "id": "login_start_packet",
@@ -67,18 +67,32 @@
       ]
     },
     {
-      "id": "full_composite_gate",
-      "status": "blocked",
-      "evidence": "local command timeout",
+      "id": "sandbox_isolation",
+      "status": "pass",
+      "evidence": "evidence/sandbox-isolation-proof.json",
       "facts": [
-        "90-second composite unittest wrapper exited with TIMEOUT_EXPIRED",
-        "no failing test name was emitted before timeout"
+        "sandbox_preflight.current_session_untouched=true",
+        "sandbox_preflight.separate_profile=true",
+        "sandbox_preflight.separate_data_dir=true",
+        "sandbox_preflight.separate_port=true",
+        "installer baseline writes stayed inside the sandbox proof root"
+      ]
+    },
+    {
+      "id": "full_composite_gate",
+      "status": "pass",
+      "evidence": "evidence/composite-gate-result.txt",
+      "facts": [
+        "553 tests completed successfully",
+        "duration_seconds=194.179",
+        "the earlier 90-second wrapper was shorter than the real suite duration",
+        "no login-bridge deadlock remained after aligning the stale test expectation"
       ]
     }
   ],
   "overall_assessment": {
     "implementation_truth": "pass",
     "browser_truth": "pass",
-    "formal_closeout_truth": "blocked_by_full_gate_timeout"
+    "formal_closeout_truth": "pass"
   }
 }

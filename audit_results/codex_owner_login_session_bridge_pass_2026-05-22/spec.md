@@ -37,7 +37,6 @@ Implement a real Codex owner login session bridge for `Подключить ак
 
 - `cli-proxy-api -codex-device-login -no-browser` remains stable enough to emit device URL and code
 - sandbox stable probe on the configured stable port is available during proof
-- inherited full `tests.test_cli` composite timeout is separate from this contour logic unless localized otherwise
 
 ## Acceptance Criteria
 
@@ -47,7 +46,7 @@ Implement a real Codex owner login session bridge for `Подключить ак
 - [x] Owner-side complete runs onboarding and returns reserve-first proof.
 - [x] Browser proof shows a new reserve account after refresh.
 - [x] Ledger evidence shows real `onboard_account` and `account_login_complete` actions.
-- [ ] Full composite unittest gate completes without timeout.
+- [x] Full composite unittest gate completes successfully.
 
 ## Verification
 
@@ -56,7 +55,7 @@ Implement a real Codex owner login session bridge for `Подключить ак
   - targeted CLI session tests: 9 tests, pass
   - targeted web suites: 146 tests, pass
   - focused CLI/web regression trio: 3 tests, pass
-  - full composite gate with `tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q`: timed out after 90 seconds
+  - full composite gate with `tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q`: `Ran 553 tests in 194.179s`, pass
 - build:
   - `git diff --check`
 - manual:
@@ -68,8 +67,8 @@ Implement a real Codex owner login session bridge for `Подключить ак
   - `evidence/accounts-readonly-after.json`
   - `evidence/browser-ui-success.png`
   - `evidence/browser-run-summary.json`
+  - `evidence/sandbox-isolation-proof.json`
 
 ## Open Questions
 
-- Which test inside the inherited composite `tests.test_cli` gate still causes the 90-second timeout?
 - Should the UI hide the completed owner overlay automatically after a successful refresh, or keep it visible as explicit completion proof?
