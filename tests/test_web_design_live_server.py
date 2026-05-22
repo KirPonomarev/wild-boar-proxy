@@ -2438,7 +2438,28 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["action_role"], "account_verification")
         self.assertFalse(result["mutates_runtime"])
         self.assertFalse(result["affects_primary_truth"])
-        self.assertTrue(result["confirmation_required"])
+        self.assertFalse(result["confirmation_required"])
+        self.assertTrue(result["post_action_refresh_required"])
+        self.assertEqual(result["account_id"], "acct-active")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("accounts", "list", "--json"),
+                ("accounts", "validate", "acct-active", "--json"),
+            ],
+        )
+
+    def test_recheck_account_alias_uses_validate_command_without_confirmation(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "recheck_account", "account_id": "acct-active"},
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "account_verification")
+        self.assertFalse(result["confirmation_required"])
         self.assertTrue(result["post_action_refresh_required"])
         self.assertEqual(result["account_id"], "acct-active")
         self.assertEqual(
@@ -3571,6 +3592,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ("launch_smoke", {}, "overview"),
                 ("launch_client_dispatch", {}, "overview"),
                 ("validate_account", {"account_id": "acct-active"}, "accounts"),
+                ("recheck_account", {"account_id": "acct-active"}, "accounts"),
                 ("hold_account", {"account_id": "acct-active"}, "accounts"),
                 ("release_account", {"account_id": "acct-hold"}, "accounts"),
                 ("promote_account", {"account_id": "acct-reserve"}, "accounts"),
@@ -3634,6 +3656,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "launch_smoke",
             "launch_client_dispatch",
             "validate_account",
+            "recheck_account",
             "hold_account",
             "release_account",
             "promote_account",

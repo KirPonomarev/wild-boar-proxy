@@ -1,0 +1,122 @@
+[
+  {
+    "action": "validate_account",
+    "accountId": "acct-active",
+    "panel": {
+      "uiAction": "validate_account",
+      "machine": "OK",
+      "message": "Account validation completed.",
+      "display": ""
+    },
+    "accounts": [
+      {
+        "id": "acct-active",
+        "text": "acct-activeActive AРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-reserve",
+        "text": "acct-reserveReserve BРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-hold",
+        "text": "acct-holdHold CНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      }
+    ]
+  },
+  {
+    "action": "promote_account",
+    "accountId": "acct-active",
+    "panel": {
+      "uiAction": "promote_account",
+      "machine": "PROMOTION_STATUS_FAILED",
+      "message": "Promotion did not preserve staged reserve/active pool policy after status proof.",
+      "display": ""
+    },
+    "accounts": [
+      {
+        "id": "acct-active",
+        "text": "acct-activeActive AРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-reserve",
+        "text": "acct-reserveReserve BРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-hold",
+        "text": "acct-holdHold CНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      }
+    ]
+  },
+  {
+    "action": "hold_account",
+    "accountId": "acct-reserve",
+    "panel": {
+      "uiAction": "hold_account",
+      "machine": "OK",
+      "message": "Protective hold completed.",
+      "display": ""
+    },
+    "accounts": [
+      {
+        "id": "acct-active",
+        "text": "acct-activeActive AРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-reserve",
+        "text": "acct-reserveReserve BНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      },
+      {
+        "id": "acct-hold",
+        "text": "acct-holdHold CНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      }
+    ]
+  },
+  {
+    "action": "release_account",
+    "accountId": "acct-hold",
+    "panel": {
+      "uiAction": "release_account",
+      "machine": "OK",
+      "message": "Release completed and backend remains reserve-only.",
+      "display": ""
+    },
+    "accounts": [
+      {
+        "id": "acct-active",
+        "text": "acct-activeActive AРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-reserve",
+        "text": "acct-reserveReserve BНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      },
+      {
+        "id": "acct-hold",
+        "text": "acct-holdHold CРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      }
+    ]
+  },
+  {
+    "action": "retire_account",
+    "accountId": "acct-reserve",
+    "panel": {
+      "uiAction": "retire_account",
+      "machine": "RETIRE_COMMAND_FAILED",
+      "message": "Retirement command did not leave the backend in terminal retired state.",
+      "display": ""
+    },
+    "accounts": [
+      {
+        "id": "acct-active",
+        "text": "acct-activeActive AРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      },
+      {
+        "id": "acct-reserve",
+        "text": "acct-reserveReserve BНа удержанииУдержан——Открыть деталиПроверитьПерепроверитьСнять удержаниеВывести из пула"
+      },
+      {
+        "id": "acct-hold",
+        "text": "acct-holdHold CРезервРаботает——Открыть деталиПроверитьПерепроверитьУдержатьПеревести в активныеВывести из пула"
+      }
+    ]
+  }
+]

@@ -327,6 +327,7 @@ const DATA_LAYOUT_FIXTURES = {
 };
 const ACCOUNT_UI_ACTIONS = new Set([
   "validate_account",
+  "recheck_account",
   "promote_account",
   "demote_account",
   "hold_account",
@@ -370,25 +371,30 @@ const CONFIRMATION_POLICY = {
     policy: "account-verification",
     warning: "Это проверяет один аккаунт. Подтверждением пула остаётся обновлённый accounts JSON."
   },
+  recheck_account: {
+    severity: "medium",
+    policy: "account-verification",
+    warning: "Это повторно проверяет один аккаунт. Подтверждением пула остаётся обновлённый accounts JSON."
+  },
   promote_account: {
     severity: "high",
     policy: "account-placement",
-    warning: "Это запрашивает перевод в active. Это не доказательство ёмкости и не evidence готовности."
+    warning: "Это запрашивает перевод в active. Это не доказательство ёмкости и не evidence готовности; подтверждением остаются обновлённый accounts JSON и status truth."
   },
   demote_account: {
     severity: "medium",
     policy: "account-placement",
-    warning: "Это запрашивает перевод в reserve. Подтверждением остаётся обновлённый accounts JSON."
+    warning: "Это запрашивает перевод в reserve. Подтверждением остаются обновлённый accounts JSON и status truth."
   },
   hold_account: {
     severity: "medium",
     policy: "account-hold",
-    warning: "Это запрашивает ручную паузу. Подтверждением остаётся обновлённый accounts JSON."
+    warning: "Это запрашивает ручную паузу. Подтверждением остаются обновлённый accounts JSON и status truth."
   },
   release_account: {
     severity: "medium",
     policy: "account-hold",
-    warning: "Это запрашивает снятие ручной паузы. Подтверждением остаётся обновлённый accounts JSON."
+    warning: "Это запрашивает снятие ручной паузы. Подтверждением остаются обновлённый accounts JSON и status truth."
   },
   retire_account: {
     severity: "critical",
@@ -1385,9 +1391,9 @@ async function handleActionPayload(payload, loginWindow = null) {
         currentScreen() === "api-connections"
           ? "api-connections"
           : (currentScreen() === "settings" ? "settings" : (currentScreen() === "quick-start" ? "quick-start" : "overview"))
-      );
+    );
     text("actionRefreshStatus", `обновление live ${refreshTarget}`);
-    const refreshed = await setLiveReadonly(false);
+    const refreshed = await refreshLiveReadonlyForActionPayload(payload, false);
     if (actionRefreshSucceeded(payload, refreshed)) {
       const refreshState = canonicalActionRefreshState(payload, refreshed);
       setActionPanel(payload, refreshState);
@@ -1449,6 +1455,58 @@ function accountsSnapshotFromRefreshPayload(refreshed) {
   return null;
 }
 
+function runtimeSnapshotFromRefreshPayload(refreshed) {
+  if (refreshed && refreshed.runtime && typeof refreshed.runtime === "object") {
+    return refreshed.runtime;
+  }
+  return null;
+}
+
+function accountRefreshRequiresRuntimeStatus(uiAction) {
+  return [
+    "promote_account",
+    "demote_account",
+    "hold_account",
+    "release_account",
+    "retire_account"
+  ].includes(uiAction);
+}
+
+function accountByIdFromSnapshot(snapshot, accountId) {
+  if (!snapshot || !Array.isArray(snapshot.accounts) || !accountId) {
+    return null;
+  }
+  return snapshot.accounts.find((account) => account?.id === accountId) || null;
+}
+
+function accountActionRefreshState(payload, refreshed) {
+  const accountsSnapshot = accountsSnapshotFromRefreshPayload(refreshed);
+  const accountId = payload?.account_id || "";
+  const account = accountByIdFromSnapshot(accountsSnapshot, accountId);
+  if (!accountsSnapshot || accountsSnapshot.status !== "ok" || !account) {
+    return "mismatch";
+  }
+  if (["validate_account", "recheck_account"].includes(payload.ui_action)) {
+    return "complete";
+  }
+  if (payload.ui_action === "promote_account") {
+    return account.pool === "active" && account.manual_hold !== true ? "complete" : "mismatch";
+  }
+  if (payload.ui_action === "demote_account") {
+    return account.pool === "reserve" && account.manual_hold !== true ? "complete" : "mismatch";
+  }
+  if (payload.ui_action === "hold_account") {
+    return account.manual_hold === true ? "complete" : "mismatch";
+  }
+  if (payload.ui_action === "release_account") {
+    return account.pool === "reserve" && account.manual_hold !== true ? "complete" : "mismatch";
+  }
+  if (payload.ui_action === "retire_account") {
+    return account.pool === "retired" && account.manual_hold !== true ? "complete" : "mismatch";
+  }
+  return "complete";
+}
+
 function onboardingRefreshState(payload, refreshed) {
   if (!["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return "complete";
@@ -1485,6 +1543,14 @@ function actionRefreshSurfaceSnapshot(payload, refreshed) {
   if (["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return accountsSnapshotFromRefreshPayload(refreshed);
   }
+  if (ACCOUNT_UI_ACTIONS.has(payload.ui_action) && accountRefreshRequiresRuntimeStatus(payload.ui_action)) {
+    const accounts = accountsSnapshotFromRefreshPayload(refreshed);
+    const runtime = runtimeSnapshotFromRefreshPayload(refreshed);
+    return accounts && runtime ? { accounts, runtime } : null;
+  }
+  if (ACCOUNT_UI_ACTIONS.has(payload.ui_action)) {
+    return accountsSnapshotFromRefreshPayload(refreshed);
+  }
   if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
     if (refreshed && Array.isArray(refreshed.routes)) {
       return refreshed;
@@ -1501,6 +1567,9 @@ function actionRefreshSucceeded(payload, refreshed) {
   if (payload.ui_action === "quick_start_check_all") {
     return snapshot?.accounts?.status === "ok" && snapshot?.apiConnections?.status === "ok";
   }
+  if (ACCOUNT_UI_ACTIONS.has(payload.ui_action) && accountRefreshRequiresRuntimeStatus(payload.ui_action)) {
+    return snapshot?.accounts?.status === "ok" && snapshot?.runtime?.status === "ok";
+  }
   return snapshot?.status === "ok";
 }
 
@@ -1516,6 +1585,9 @@ function canonicalActionRefreshState(payload, refreshed) {
   }
   if (["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return onboardingRefreshState(payload, refreshed);
+  }
+  if (ACCOUNT_UI_ACTIONS.has(payload.ui_action)) {
+    return accountActionRefreshState(payload, refreshed);
   }
   return "complete";
 }
@@ -5514,6 +5586,7 @@ function accountActionMenu(account) {
 function compactAccountActionLabel(spec) {
   return {
     validate_account: "Проверить",
+    recheck_account: "Перепроверить",
     release_account: "Снять паузу",
     hold_account: "Удержать",
     promote_account: "В актив",
@@ -5881,6 +5954,7 @@ function accountActionEligibility(account) {
   const held = account.manual_hold === true;
   return [
     { uiAction: "validate_account", label: "Проверить", enabled: !retired, reason: retired ? "аккаунт выведен из пула" : "", icon: "assets/icons/phosphor/shield-check.png" },
+    { uiAction: "recheck_account", label: "Перепроверить", enabled: !retired, reason: retired ? "аккаунт выведен из пула" : "", icon: "assets/icons/phosphor/arrows-clockwise.png" },
     { uiAction: "release_account", label: "Снять удержание", enabled: held && !retired, reason: held ? "" : "аккаунт не на удержании", icon: "assets/icons/phosphor/play.png" },
     { uiAction: "hold_account", label: "Удержать", enabled: !held && !retired, reason: held ? "аккаунт уже удержан" : (retired ? "аккаунт выведен из пула" : ""), icon: "assets/icons/phosphor/pause-circle.png" },
     { uiAction: "promote_account", label: "Перевести в активные", enabled: account.pool === "reserve" && !held, reason: account.pool === "active" ? "аккаунт уже активен" : (held ? "сначала снимите удержание" : "доступно только из резерва"), icon: "assets/icons/phosphor/play.png" },
@@ -6117,6 +6191,25 @@ async function setLiveReadonly(updateUrl = false) {
   }
   setSourceCopy("live");
   return snapshot;
+}
+
+async function refreshLiveReadonlyForActionPayload(payload, updateUrl = false) {
+  if (!accountRefreshRequiresRuntimeStatus(payload?.ui_action) || currentScreen() !== "accounts") {
+    return setLiveReadonly(updateUrl);
+  }
+  setLiveReadonlyPendingUi();
+  await loadActionMetadata();
+  applyActionAvailability();
+  const accounts = await loadAccountsReadonly();
+  const runtime = await loadLiveReadonly();
+  if (updateUrl) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("source", "live");
+    window.history.replaceState({}, "", url);
+  }
+  renderAccountsSnapshot(accounts);
+  setSourceCopy("live");
+  return { accounts, runtime };
 }
 
 function refreshCurrentSource() {

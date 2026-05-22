@@ -587,6 +587,7 @@ if (descendants(control).some((item) => String(item.className || "").split(/\s+/
         self.assertIn("accountsFixtureFromOverview", js)
         self.assertIn("Массовые lifecycle-действия отложены", js)
         self.assertIn("validate_account", js)
+        self.assertIn("recheck_account", js)
         self.assertIn("promote_account", js)
         self.assertIn("demote_account", js)
         self.assertIn("retire_account", js)
@@ -2035,6 +2036,7 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
             "auto_promote",
             "auto-promote action",
             "validate_account",
+            "recheck_account",
             "promote_account",
             "demote_account",
             "hold_account",
@@ -3866,6 +3868,121 @@ const mismatch = {
 };
 if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
   throw new Error("active pool after live onboarding must yield refresh mismatch");
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_account_lifecycle_refresh_requires_accounts_and_runtime_truth(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "accounts", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=accounts" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const promotePayload = {
+  ui_action: "promote_account",
+  account_id: "acct-reserve",
+  result: { status: "ok" }
+};
+const promoted = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-reserve", pool: "active", manual_hold: false }]
+  },
+  runtime: {
+    status: "ok",
+    source: "live_readonly"
+  }
+};
+if (sandbox.actionRefreshSucceeded(promotePayload, promoted) !== true) {
+  throw new Error("account lifecycle refresh should require both accounts and runtime ok");
+}
+if (sandbox.canonicalActionRefreshState(promotePayload, promoted) !== "complete") {
+  throw new Error(`expected promote refresh complete, got ${sandbox.canonicalActionRefreshState(promotePayload, promoted)}`);
+}
+const promoteMismatch = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-reserve", pool: "reserve", manual_hold: false }]
+  },
+  runtime: {
+    status: "ok",
+    source: "live_readonly"
+  }
+};
+if (sandbox.canonicalActionRefreshState(promotePayload, promoteMismatch) !== "mismatch") {
+  throw new Error("unchanged pool after promote must yield refresh mismatch");
+}
+const releasePayload = {
+  ui_action: "release_account",
+  account_id: "acct-hold",
+  result: { status: "ok" }
+};
+const released = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-hold", pool: "reserve", manual_hold: false }]
+  },
+  runtime: {
+    status: "ok",
+    source: "live_readonly"
+  }
+};
+if (sandbox.canonicalActionRefreshState(releasePayload, released) !== "complete") {
+  throw new Error(`expected release refresh complete, got ${sandbox.canonicalActionRefreshState(releasePayload, released)}`);
+}
+const failedRuntime = {
+  accounts: {
+    status: "ok",
+    accounts: [{ id: "acct-hold", pool: "reserve", manual_hold: false }]
+  },
+  runtime: {
+    status: "integration_failure",
+    source: "live_readonly"
+  }
+};
+if (sandbox.actionRefreshSucceeded(releasePayload, failedRuntime) !== false) {
+  throw new Error("account lifecycle refresh must fail without runtime status truth");
+}
+const recheckPayload = {
+  ui_action: "recheck_account",
+  account_id: "acct-active",
+  result: { status: "ok" }
+};
+const rechecked = {
+  status: "ok",
+  accounts: [{ id: "acct-active", pool: "active", manual_hold: false }]
+};
+if (sandbox.actionRefreshSucceeded(recheckPayload, rechecked) !== true) {
+  throw new Error("recheck should rely on accounts readonly refresh only");
+}
+if (sandbox.canonicalActionRefreshState(recheckPayload, rechecked) !== "complete") {
+  throw new Error(`expected recheck refresh complete, got ${sandbox.canonicalActionRefreshState(recheckPayload, rechecked)}`);
 }
 """
         result = subprocess.run(
@@ -5829,6 +5946,7 @@ if (blockedText.includes("data-ui-action") || forbiddenText.includes("data-ui-ac
             "launch_client_dispatch",
             "onboard_account",
             "validate_account",
+            "recheck_account",
             "promote_account",
             "demote_account",
             "hold_account",

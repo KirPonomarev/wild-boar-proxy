@@ -175,7 +175,7 @@ ALLOWLIST: dict[str, CommandSpec] = {
         command_id="accounts_validate",
         argv_template=("accounts", "validate", "{account_id}", "--json"),
         category="verification",
-        confirmation_required=True,
+        confirmation_required=False,
         required_args=("account_id",),
         allowed_args=("account_id",),
     ),

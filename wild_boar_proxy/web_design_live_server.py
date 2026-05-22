@@ -74,6 +74,7 @@ SESSION_ID_SAFE_CHARS = frozenset(
 ACCOUNT_ID_UI_ACTIONS = frozenset(
     {
         "validate_account",
+        "recheck_account",
         "promote_account",
         "demote_account",
         "retire_account",
@@ -198,11 +199,22 @@ UI_ACTION_ALLOWLIST = {
         "action_role": "account_verification",
         "mutates_runtime": False,
         "affects_primary_truth": False,
-        "confirmation_required": True,
+        "confirmation_required": False,
         "post_action_refresh_required": True,
         "action_claim_scope": "только запрос проверки аккаунта; подтверждением остаётся обновлённый список аккаунтов",
         "display_name": "Проверить аккаунт",
         "human_meaning": "Запустить проверку выбранного аккаунта, затем обновить подтверждённый список аккаунтов.",
+    },
+    "recheck_account": {
+        "adapter_command_id": "accounts_validate",
+        "action_role": "account_verification",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "alias для account validate; подтверждением остаётся обновлённый список аккаунтов",
+        "display_name": "Перепроверить аккаунт",
+        "human_meaning": "Повторно запустить проверку выбранного аккаунта и обновить подтверждённый список аккаунтов.",
     },
     "promote_account": {
         "adapter_command_id": "accounts_promote",
@@ -211,9 +223,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаются обновлённый список аккаунтов и status truth",
         "display_name": "Перевести аккаунт в active",
-        "human_meaning": "Запросить перевод выбранного аккаунта из reserve в active, затем обновить подтверждённый список аккаунтов.",
+        "human_meaning": "Запросить перевод выбранного аккаунта из reserve в active, затем обновить подтверждённый список аккаунтов и status truth.",
     },
     "demote_account": {
         "adapter_command_id": "accounts_demote",
@@ -222,9 +234,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаётся обновлённый список аккаунтов",
+        "action_claim_scope": "только запрос перевода аккаунта; подтверждением остаются обновлённый список аккаунтов и status truth",
         "display_name": "Вернуть аккаунт в reserve",
-        "human_meaning": "Запросить перевод выбранного аккаунта из active в reserve, затем обновить подтверждённый список аккаунтов.",
+        "human_meaning": "Запросить перевод выбранного аккаунта из active в reserve, затем обновить подтверждённый список аккаунтов и status truth.",
     },
     "retire_account": {
         "adapter_command_id": "accounts_retire",
@@ -244,9 +256,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "только запрос ручной паузы; подтверждением остаётся обновлённый список аккаунтов",
+        "action_claim_scope": "только запрос ручной паузы; подтверждением остаются обновлённый список аккаунтов и status truth",
         "display_name": "Поставить аккаунт на паузу",
-        "human_meaning": "Поставить выбранный аккаунт на manual hold, затем обновить подтверждённый список аккаунтов.",
+        "human_meaning": "Поставить выбранный аккаунт на manual hold, затем обновить подтверждённый список аккаунтов и status truth.",
     },
     "release_account": {
         "adapter_command_id": "accounts_release",
@@ -255,9 +267,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "только запрос снятия ручной паузы; подтверждением остаётся обновлённый список аккаунтов",
+        "action_claim_scope": "только запрос снятия ручной паузы; подтверждением остаются обновлённый список аккаунтов и status truth",
         "display_name": "Снять аккаунт с паузы",
-        "human_meaning": "Снять выбранный аккаунт с manual hold, затем обновить подтверждённый список аккаунтов.",
+        "human_meaning": "Снять выбранный аккаунт с manual hold, затем обновить подтверждённый список аккаунтов и status truth.",
     },
     "api_route_validate": {
         "adapter_command_id": "external_models_routes_validate",
@@ -451,6 +463,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "onboard_account",
         "api_route_connect",
         "validate_account",
+        "recheck_account",
         "promote_account",
         "demote_account",
         "retire_account",
@@ -2072,13 +2085,13 @@ def _account_action_args(
 
 
 def _account_list_unavailable_code(ui_action: str) -> str:
-    if ui_action == "validate_account":
+    if ui_action in {"validate_account", "recheck_account"}:
         return "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_UNAVAILABLE"
     return "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_UNAVAILABLE"
 
 
 def _account_list_invalid_code(ui_action: str) -> str:
-    if ui_action == "validate_account":
+    if ui_action in {"validate_account", "recheck_account"}:
         return "UI_ACCOUNT_VALIDATE_ACCOUNT_LIST_INVALID"
     return "UI_ACCOUNT_LIFECYCLE_ACCOUNT_LIST_INVALID"
 

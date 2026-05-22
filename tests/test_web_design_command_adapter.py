@@ -149,7 +149,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                 "command_id": "accounts_validate",
                 "category": "verification",
                 "ui_enabled": True,
-                "confirmation_required": True,
+                "confirmation_required": False,
                 "required_args": ["account_id"],
                 "allowed_args": ["account_id"],
                 "argv": ["accounts", "validate", "{account_id}", "--json"],
