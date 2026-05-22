@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contour": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_PASS",
-  "status": "verified_pending_git_close",
+  "status": "closed_success",
   "decision": "SHARED_LOCK_WINDOW_NARROWED_WITH_SEPARATE_LAUNCHER_PROCEDURE_LOCK",
   "lock_window_change": {
     "before": "run_stable_runtime_launcher_attempt held serialized_lock across generated-config preparation and the full launcher subprocess",
@@ -14,6 +14,16 @@
   ],
   "retry_safe_without_live_proof": "not_run_in_this_contour",
   "requires_live_retry_now": false,
+  "closure_verification": {
+    "verified_on": "2026-05-23",
+    "implementation_commit": "70600534ab60f5b75c0252e0d0479c9f8816b038",
+    "implementation_commit_subject": "Narrow launcher procedure lock window",
+    "implementation_commit_present_in_head": true,
+    "implementation_commit_present_in_origin_branch": true,
+    "verification_head": "63d101e2dc7448b031fd7b26bc745fd196c83199",
+    "verification_branch": "codex/external-agent-lab-isolated",
+    "targeted_regressions_rechecked": true
+  },
   "next_admitted_contour": "WEB_SAFE_APP_COPY_LAUNCH_PASS",
   "forbidden_next_moves": [
     "claim live selector success from unit tests alone",

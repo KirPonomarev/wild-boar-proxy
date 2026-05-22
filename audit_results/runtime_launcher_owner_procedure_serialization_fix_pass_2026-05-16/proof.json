@@ -1,0 +1,64 @@
+{
+  "contour": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_PASS",
+  "verified_on": "2026-05-23",
+  "implementation_commit": {
+    "hash": "70600534ab60f5b75c0252e0d0479c9f8816b038",
+    "subject": "Narrow launcher procedure lock window",
+    "present_in_head": true,
+    "present_in_origin_branch": true
+  },
+  "code_evidence": [
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "claim": "run_stable_runtime_launcher_attempt holds launcher_procedure_lock across the launcher subprocess and uses serialized_lock only for the short generated-config mutation section"
+    },
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "claim": "launcher_procedure_lock is separate from serialized_lock and uses the dedicated stable-runtime-launch lock file"
+    },
+    {
+      "file": "wild_boar_proxy/runtime.py",
+      "claim": "run_sync continues to use serialized_lock as the shared mutation lock"
+    }
+  ],
+  "runtime_baseline": [
+    {
+      "command": "python3 -m wild_boar_proxy status --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    },
+    {
+      "command": "python3 -m wild_boar_proxy healthcheck --json",
+      "status": "ok",
+      "machine_error_code": "OK",
+      "desired_mode": "stable",
+      "effective_mode": "stable"
+    }
+  ],
+  "tests": [
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_cli.CliTests.test_stable_runtime_launcher_attempt_does_not_hold_shared_sync_lock tests.test_cli.CliTests.test_stable_runtime_launcher_attempt_serializes_concurrent_launcher_runs tests.test_cli.CliTests.test_sync_blocks_held_lock_without_mutation tests.test_cli.CliTests.test_sync_clears_stale_lock_and_proceeds_past_lock_gate tests.test_cli.CliTests.test_sync_failure_does_not_mutate_selected_backend_snapshot",
+      "status": "ok",
+      "result": "Ran 5 tests in 1.726s"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_cli.CliTests.test_status_reports_stable_policy_drift_without_greenwash tests.test_cli.CliTests.test_status_uses_approved_target_policy_drift_surface_when_live_activation_evidence_is_valid tests.test_cli.CliTests.test_rollout_rotation_inspect_reports_stale_selected_snapshot tests.test_cli.CliTests.test_launch_smoke_reports_stable_runtime_consumer_contract tests.test_cli.CliTests.test_launch_smoke_activates_approved_target_via_generated_config_and_status_reports_effective_target tests.test_cli.CliTests.test_launch_smoke_records_conservative_observed_source_fallback_when_launcher_exits_nonzero_during_approved_target_attempt tests.test_cli.CliTests.test_launch_smoke_requires_managed_stability_window tests.test_cli.CliTests.test_launch_smoke_uses_bounded_default_stabilization_window",
+      "status": "ok",
+      "result": "Ran 8 tests in 7.475s"
+    },
+    {
+      "command": "python3 -m json.tool audit_results/runtime_launcher_owner_procedure_serialization_fix_pass_2026-05-16/decision_packet.json",
+      "status": "ok"
+    },
+    {
+      "command": "git diff --check",
+      "status": "ok"
+    }
+  ],
+  "scope_limitations": [
+    "This contour does not prove product-level web launch behavior.",
+    "This contour does not consume live retry proof and does not claim selector success from unit tests alone."
+  ]
+}
