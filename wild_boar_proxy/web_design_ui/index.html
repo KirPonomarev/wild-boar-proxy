@@ -532,29 +532,31 @@
               </div>
               <div id="accountsVisibleCount" class="secondary">Показано 0 из 0</div>
             </div>
-            <table class="table accounts-table">
-              <colgroup>
-                <col style="width:42px">
-                <col style="width:260px">
-                <col style="width:120px">
-                <col style="width:140px">
-                <col>
-                <col style="width:140px">
-                <col style="width:74px">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Аккаунт</th>
-                  <th>Пул</th>
-                  <th>Статус</th>
-                  <th>Последняя ошибка</th>
-                  <th class="right">Проверка</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody id="accountsTableBody"></tbody>
-            </table>
+            <div class="table-scroll" data-table-scroll="accounts">
+              <table class="table accounts-table">
+                <colgroup>
+                  <col style="width:42px">
+                  <col style="width:260px">
+                  <col style="width:120px">
+                  <col style="width:140px">
+                  <col>
+                  <col style="width:140px">
+                  <col style="width:74px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Аккаунт</th>
+                    <th>Пул</th>
+                    <th>Статус</th>
+                    <th>Последняя ошибка</th>
+                    <th class="right">Проверка</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTableBody"></tbody>
+              </table>
+            </div>
             <div class="pagination">
               <span id="accountsPagination">Строки 0-0 из 0</span>
               <span>канонический JSON · lifecycle через gate</span>
@@ -710,31 +712,33 @@
               </div>
               <div id="apiConnectionsVisibleCount" class="secondary">Показано 0 из 0</div>
             </div>
-            <table class="table api-connections-table">
-              <colgroup>
-                <col style="width:190px">
-                <col style="width:86px">
-                <col style="width:156px">
-                <col style="width:108px">
-                <col style="width:116px">
-                <col style="width:142px">
-                <col style="width:104px">
-                <col style="width:54px">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>Маршрут</th>
-                  <th>Провайдер</th>
-                  <th>Модель</th>
-                  <th>Состояние</th>
-                  <th>Проверка</th>
-                  <th>Секрет</th>
-                  <th class="right">Проверено</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody id="apiConnectionsTableBody"></tbody>
-            </table>
+            <div class="table-scroll" data-table-scroll="api-connections">
+              <table class="table api-connections-table">
+                <colgroup>
+                  <col style="width:190px">
+                  <col style="width:86px">
+                  <col style="width:156px">
+                  <col style="width:108px">
+                  <col style="width:116px">
+                  <col style="width:142px">
+                  <col style="width:104px">
+                  <col style="width:54px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Маршрут</th>
+                    <th>Провайдер</th>
+                    <th>Модель</th>
+                    <th>Состояние</th>
+                    <th>Проверка</th>
+                    <th>Секрет</th>
+                    <th class="right">Проверено</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody id="apiConnectionsTableBody"></tbody>
+              </table>
+            </div>
             <div class="pagination">
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
               <span>удаление только для disabled route · подключение только server-owned</span>

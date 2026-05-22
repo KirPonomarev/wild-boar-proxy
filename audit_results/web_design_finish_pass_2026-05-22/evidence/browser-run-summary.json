@@ -1,0 +1,425 @@
+{
+  "status": "ok",
+  "cases": [
+    {
+      "url": "http://127.0.0.1:54178/?screen=quick-start&state=healthy&source=fixture",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1100,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "quick-start",
+      "sidebarHeight": 942,
+      "mainTop": 79,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 0
+        },
+        {
+          "text": "Обновить",
+          "width": 138
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 0
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 160
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=accounts&state=healthy&source=fixture",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1200,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "accounts",
+      "sidebarHeight": 942,
+      "mainTop": 129,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 207
+        },
+        {
+          "text": "Обновить",
+          "width": 138
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 199
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 0
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 968,
+          "clientWidth": 968,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=api-connections&state=healthy&source=fixture",
+      "viewport": "desktop",
+      "width": 1440,
+      "height": 1100,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "api-connections",
+      "sidebarHeight": 942,
+      "mainTop": 79,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 0
+        },
+        {
+          "text": "Обновить",
+          "width": 138
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 0
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 0
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 972,
+          "clientWidth": 956,
+          "overflowX": true
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=quick-start&state=healthy&source=fixture",
+      "viewport": "narrow",
+      "width": 430,
+      "height": 1400,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "quick-start",
+      "sidebarHeight": 653,
+      "mainTop": 666,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 0
+        },
+        {
+          "text": "Обновить",
+          "width": 332
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 0
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 332
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=accounts&state=healthy&source=fixture",
+      "viewport": "narrow",
+      "width": 430,
+      "height": 1500,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "accounts",
+      "sidebarHeight": 671,
+      "mainTop": 684,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 332
+        },
+        {
+          "text": "Обновить",
+          "width": 332
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 332
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 0
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 940,
+          "clientWidth": 302,
+          "overflowX": true
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=api-connections&state=healthy&source=fixture",
+      "viewport": "narrow",
+      "width": 430,
+      "height": 1500,
+      "state": "healthy",
+      "bodyOverflowX": false,
+      "screen": "api-connections",
+      "sidebarHeight": 655,
+      "mainTop": 668,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 0
+        },
+        {
+          "text": "Обновить",
+          "width": 368
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 0
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 0
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 972,
+          "clientWidth": 338,
+          "overflowX": true
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    },
+    {
+      "url": "http://127.0.0.1:54178/?screen=quick-start&state=integration_failure&source=fixture",
+      "viewport": "narrow",
+      "width": 430,
+      "height": 1400,
+      "state": "integration_failure",
+      "bodyOverflowX": false,
+      "screen": "quick-start",
+      "sidebarHeight": 653,
+      "mainTop": 666,
+      "headerActions": [
+        {
+          "text": "Проверить выбранные",
+          "width": 0
+        },
+        {
+          "text": "Обновить",
+          "width": 332
+        },
+        {
+          "text": "Запустить клиент",
+          "width": 0
+        },
+        {
+          "text": "Подключить аккаунт",
+          "width": 0
+        },
+        {
+          "text": "Экспорт",
+          "width": 0
+        },
+        {
+          "text": "Полная проверка",
+          "width": 0
+        },
+        {
+          "text": "Проверить всё",
+          "width": 332
+        },
+        {
+          "text": "Показать в Finder",
+          "width": 0
+        }
+      ],
+      "tableScrolls": [
+        {
+          "kind": "accounts",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        },
+        {
+          "kind": "api-connections",
+          "scrollWidth": 0,
+          "clientWidth": 0,
+          "overflowX": false
+        }
+      ],
+      "bannerText": "Упрощённый режим показывает только итоговые статусы и безопасные действия."
+    }
+  ]
+}

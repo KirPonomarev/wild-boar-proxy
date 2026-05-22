@@ -216,6 +216,20 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("--preview-scale", css)
         self.assertNotIn("fitPreviewToViewport", js)
 
+    def test_design_finish_adds_narrow_responsive_stack_and_table_scroll_guards(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
+
+        self.assertIn('data-table-scroll="accounts"', html)
+        self.assertIn('data-table-scroll="api-connections"', html)
+        self.assertIn(".table-scroll", css)
+        self.assertIn("@media (max-width: 980px)", css)
+        self.assertIn(".sidebar,\n  .main {\n    position: static;", css)
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", css)
+        self.assertIn(".header-actions > .button", css)
+        self.assertIn(".quick-start-account-row {\n    gap: 10px;\n    grid-template-columns: 32px minmax(0, 1fr);", css)
+        self.assertIn(".api-route-builder-card {\n    grid-template-columns: 36px minmax(0, 1fr);", css)
+
     def test_visual_stabilization_keeps_layout_guards_css_only(self) -> None:
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
