@@ -1,0 +1,7 @@
+{
+  "api_blocker_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "full_runtime_green_claimed": false,
+  "healthcheck_machine_error_code": "ATTESTATION_FAILED",
+  "status": "blocked_api_credential_missing",
+  "status_machine_error_code": "ATTESTATION_FAILED"
+}

@@ -1,0 +1,27 @@
+{
+  "external_models_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models",
+  "files": {
+    "routes": {
+      "exists": true,
+      "mode": "0o644",
+      "path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/routes.json",
+      "size_bytes": 42
+    },
+    "secrets": {
+      "content_captured": false,
+      "exists": true,
+      "mode": "0o600",
+      "path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/secrets.env",
+      "sha256_captured": false,
+      "size_bytes": 0
+    },
+    "state": {
+      "exists": true,
+      "mode": "0o644",
+      "path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json",
+      "size_bytes": 554
+    }
+  },
+  "managed_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+  "profile_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile"
+}

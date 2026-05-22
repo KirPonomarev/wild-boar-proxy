@@ -1,0 +1,6 @@
+{
+  "credential_machine_error_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "provider": "openrouter",
+  "reason": "provider check requires admitted credential and route; credential admission returned EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "status": "not_run"
+}
