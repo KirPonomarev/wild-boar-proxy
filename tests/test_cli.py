@@ -10213,6 +10213,82 @@ class CliTests(unittest.TestCase):
         self.assertFalse(promotion["validate_attempted"])
         self.assertEqual(promotion["final_outcome"], "precondition_failed")
 
+    def test_accounts_promote_accepts_single_promotion_when_reserve_stays_above_floor(
+        self,
+    ) -> None:
+        port = free_port()
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["pool_policy"] = {
+            "active_min": 1,
+            "active_target": 2,
+            "reserve_target": 0,
+        }
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-target",
+                auth_ref="/tmp/codex-reserve-target.json",
+                pool="reserve",
+            )
+        )
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-reserve-extra",
+                auth_ref="/tmp/codex-reserve-extra.json",
+                pool="reserve",
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        (self.managed_dir / "managed-config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "config.toml").write_text(
+            f'model = "gpt-5.4"\nbase_url = "http://127.0.0.1:{port}/v1"\n',
+            encoding="utf-8",
+        )
+        sync_script = self.write_state_patch_sync_script(
+            self.profile_dir / "sync-promote-reserve-floor-ok.sh",
+            state_patch={
+                "selected_backend_ids": ["backend-a", "backend-reserve-target"],
+                "active_count": 2,
+                "reserve_count": 1,
+                "retired_count": 0,
+                "healthy_count": 2,
+                "degraded_count": 0,
+                "down_count": 0,
+                "effective_mode": "managed",
+                "managed_port": port,
+                "last_error": "",
+            },
+            stderr_text="sync-promote-reserve-floor-ok",
+            exit_code=0,
+        )
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli_with_env(
+                {"WBP_SYNC_SCRIPT": str(sync_script)},
+                "accounts",
+                "promote",
+                "backend-reserve-target",
+                "--json",
+            )
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        promotion = payload["promotion_result"]
+        self.assertEqual(promotion["policy_verification_status"], "passed")
+        self.assertEqual(promotion["active_pool_count_before"], 1)
+        self.assertEqual(promotion["active_pool_count_after"], 2)
+        self.assertEqual(promotion["reserve_count_before"], 2)
+        self.assertEqual(promotion["reserve_count_after"], 1)
+        self.assertTrue(promotion["routing_change_observed"])
+        self.assertEqual(promotion["final_outcome"], "promoted_to_active")
+
     def test_accounts_promote_rejects_invalid_pool_policy(self) -> None:
         registry_path = self.managed_dir / "backend-registry.json"
         registry = json.loads(registry_path.read_text())
@@ -15969,6 +16045,41 @@ class CliTests(unittest.TestCase):
             0,
         )
         self.assertNotIn(str(generated_config_path), payload["changed_files"])
+
+    def test_accounts_retire_held_reserve_backend_clears_hold_and_confirms_terminal_state(
+        self,
+    ) -> None:
+        registry_path = self.managed_dir / "backend-registry.json"
+        registry = json.loads(registry_path.read_text())
+        registry["backends"].append(
+            self.build_backend(
+                backend_id="backend-held-reserve-retire",
+                auth_ref="/tmp/codex-held-reserve-retire.json",
+                pool="reserve",
+                manual_hold=True,
+            )
+        )
+        registry_path.write_text(json.dumps(registry) + "\n", encoding="utf-8")
+        result = self.run_cli(
+            "accounts", "retire", "backend-held-reserve-retire", "--json"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["machine_error_code"], "OK")
+        retire = payload["retire_result"]
+        self.assertEqual(
+            retire["precondition_status"], "eligible_reserve_backend_for_retire"
+        )
+        self.assertTrue(retire["terminal_no_return_confirmed"])
+        self.assertEqual(retire["final_outcome"], "backend_retired")
+        registry = json.loads(registry_path.read_text())
+        retired = [
+            item
+            for item in registry["backends"]
+            if item["id"] == "backend-held-reserve-retire"
+        ][0]
+        self.assertEqual(retired["pool"], "retired")
+        self.assertFalse(retired["manual_hold"])
 
     def test_accounts_retire_reserve_backend_keeps_status_lifecycle_counts_consistent(
         self,

@@ -13987,7 +13987,8 @@ def run_promote(
                 promotion_policy_verified = bool(
                     active_pool_count_after == active_pool_count_before + 1
                     and active_pool_count_after <= active_target
-                    and reserve_count_after == reserve_target
+                    and reserve_count_after == reserve_count_before - 1
+                    and reserve_count_after >= reserve_target
                 )
                 promotion_result["policy_verification_status"] = (
                     "passed" if promotion_policy_verified else "failed"
