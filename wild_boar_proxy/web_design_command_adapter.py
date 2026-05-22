@@ -217,6 +217,28 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("route_spec_ref",),
         allowed_args=("route_spec_ref",),
     ),
+    "external_models_credentials_status_openrouter": CommandSpec(
+        command_id="external_models_credentials_status_openrouter",
+        argv_template=("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+        category="external_models_credential_admission",
+        ui_enabled=False,
+    ),
+    "external_models_credentials_admit_openrouter_owner_env": CommandSpec(
+        command_id="external_models_credentials_admit_openrouter_owner_env",
+        argv_template=(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "owner-env",
+            "--json",
+        ),
+        category="external_models_credential_admission",
+        ui_enabled=False,
+        confirmation_required=True,
+    ),
     "external_models_routes_enable": CommandSpec(
         command_id="external_models_routes_enable",
         argv_template=("external-models", "routes", "enable", "--route", "{route_id}", "--json"),

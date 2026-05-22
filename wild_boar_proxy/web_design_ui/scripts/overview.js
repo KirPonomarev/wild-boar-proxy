@@ -408,7 +408,7 @@ const CONFIRMATION_POLICY = {
   api_route_connect: {
     severity: "high",
     policy: "api-route-connect",
-    warning: "Это запускает server-owned подключение API route. Browser не передаёт route_id, secret, token или path; подтверждением остаётся packet плюс api-connections refresh."
+    warning: "Это запускает owner credential bridge и server-owned подключение API route. Browser не передаёт api_key, route_id, auth, secret, token или path; подтверждением остаётся packet плюс api-connections refresh."
   },
   api_route_allow: {
     severity: "high",
@@ -2755,6 +2755,16 @@ function actionSupportDetails(payload) {
   }
   if (payload.ui_action === "api_route_evidence_capture") {
     return `локальный artifact · ${artifactReference(data.evidence_path)}`;
+  }
+  if (payload.ui_action === "api_route_connect") {
+    return [
+      `credential_phase=${data.credential_phase || "unknown"}`,
+      `credential_present=${data.credential_present === true ? "true" : "false"}`,
+      `credential_admitted=${data.credential_admitted === true ? "true" : "false"}`,
+      `credential_ref=${data.credential_ref || "-"}`,
+      `browser_api_key_intake=${data.browser_api_key_intake === false ? "false" : "unknown"}`,
+      `secret_exposed=${data.secret_value_exposed === false ? "false" : "unknown"}`
+    ].join(" · ");
   }
   if (payload.ui_action === "export_diagnostics") {
     const exportModel = diagnosticsExportResultModel(payload);

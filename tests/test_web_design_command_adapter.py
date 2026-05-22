@@ -79,6 +79,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "diagnostics_export",
             "external_models_routes_validate",
             "external_models_routes_add_server_owned",
+            "external_models_credentials_status_openrouter",
+            "external_models_credentials_admit_openrouter_owner_env",
             "external_models_routes_enable",
             "external_models_routes_disable",
             "external_models_routes_remove",
@@ -94,6 +96,8 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["accounts_login_start_sandbox"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_complete_sandbox"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_routes_add_server_owned"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_status_openrouter"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_admit_openrouter_owner_env"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
         self.assertIn(
@@ -237,6 +241,39 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
                     "capture",
                     "--route",
                     "{route_id}",
+                    "--json",
+                ],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_credentials_status_openrouter",
+                "category": "external_models_credential_admission",
+                "ui_enabled": False,
+                "confirmation_required": False,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": ["external-models", "credentials", "status", "--provider", "openrouter", "--json"],
+            },
+            allowlist_metadata(),
+        )
+        self.assertIn(
+            {
+                "command_id": "external_models_credentials_admit_openrouter_owner_env",
+                "category": "external_models_credential_admission",
+                "ui_enabled": False,
+                "confirmation_required": True,
+                "required_args": [],
+                "allowed_args": [],
+                "argv": [
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "openrouter",
+                    "--source",
+                    "owner-env",
                     "--json",
                 ],
             },
@@ -461,6 +498,41 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertEqual(remove["status"], "ok")
         self.assertEqual(profile["status"], "ok")
         self.assertEqual(evidence["status"], "ok")
+
+    def test_external_models_credential_bridge_commands_are_internal_only_and_exact(self) -> None:
+        runner = RecordingRunner()
+
+        blocked_status = execute_command(runner, "external_models_credentials_status_openrouter")
+        status = execute_command(
+            runner,
+            "external_models_credentials_status_openrouter",
+            allow_disabled=True,
+        )
+        admit = execute_command(
+            runner,
+            "external_models_credentials_admit_openrouter_owner_env",
+            allow_disabled=True,
+        )
+
+        self.assertEqual(blocked_status["status"], "integration_failure")
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                (
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "openrouter",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ),
+            ],
+        )
+        self.assertEqual(status["status"], "ok")
+        self.assertEqual(admit["status"], "ok")
 
     def test_external_models_route_checks_require_only_route_id(self) -> None:
         runner = RecordingRunner()

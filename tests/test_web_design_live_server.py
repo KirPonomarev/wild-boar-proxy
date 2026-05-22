@@ -100,6 +100,46 @@ def command_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def credential_status_packet(*, present: bool = True) -> dict[str, object]:
+    return command_packet(
+        human_message="External-models credential status collected from sandbox owner paths.",
+        data={
+            "credential_result": {
+                "status": "present" if present else "missing",
+                "provider": "openrouter",
+                "source": "sandbox-managed",
+                "credential_ref": "OPENROUTER_API_KEY",
+                "credential_present": present,
+                "secret_value_exposed": False,
+                "browser_secret_intake": False,
+                "browser_path_intake": False,
+                "scope": "sandbox",
+            }
+        },
+    )
+
+
+def credential_admit_packet() -> dict[str, object]:
+    return command_packet(
+        human_message="External-models credential admitted from owner source.",
+        next_action="api_route_connect",
+        changed_files=["/tmp/wbp-sandbox/external-models/secrets.env"],
+        data={
+            "credential_result": {
+                "status": "admitted",
+                "provider": "openrouter",
+                "source": "owner-env",
+                "credential_ref": "OPENROUTER_API_KEY",
+                "credential_present": True,
+                "secret_value_exposed": False,
+                "browser_secret_intake": False,
+                "browser_path_intake": False,
+                "scope": "sandbox",
+            }
+        },
+    )
+
+
 def status_packet(**overrides: object) -> dict[str, object]:
     payload = command_packet(
         human_message="Runtime is healthy.",
@@ -337,6 +377,8 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
     def test_api_route_connect_adapter_spec_uses_server_owned_file_arg(self) -> None:
         add = ALLOWLIST["external_models_routes_add_server_owned"]
+        status = ALLOWLIST["external_models_credentials_status_openrouter"]
+        admit = ALLOWLIST["external_models_credentials_admit_openrouter_owner_env"]
 
         self.assertEqual(
             add.argv_template,
@@ -347,6 +389,29 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertTrue(add.confirmation_required)
         self.assertEqual(add.required_args, ("route_spec_ref",))
         self.assertEqual(add.allowed_args, ("route_spec_ref",))
+        self.assertEqual(
+            status.argv_template,
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+        )
+        self.assertEqual(status.category, "external_models_credential_admission")
+        self.assertFalse(status.ui_enabled)
+        self.assertFalse(status.confirmation_required)
+        self.assertEqual(
+            admit.argv_template,
+            (
+                "external-models",
+                "credentials",
+                "admit",
+                "--provider",
+                "openrouter",
+                "--source",
+                "owner-env",
+                "--json",
+            ),
+        )
+        self.assertEqual(admit.category, "external_models_credential_admission")
+        self.assertFalse(admit.ui_enabled)
+        self.assertTrue(admit.confirmation_required)
 
     def test_live_snapshot_calls_only_readonly_commands_and_maps_shape(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -1402,14 +1467,21 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
             self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
             self.assertEqual(result["result"]["data"]["admission_mode"], "create")
+            self.assertEqual(result["result"]["data"]["credential_phase"], "credential_present")
+            self.assertTrue(result["result"]["data"]["credential_present"])
+            self.assertFalse(result["result"]["data"]["credential_admitted"])
+            self.assertEqual(result["result"]["data"]["credential_ref"], "OPENROUTER_API_KEY")
             self.assertFalse(result["result"]["data"]["browser_secret_intake"])
             self.assertFalse(result["result"]["data"]["browser_path_intake"])
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
+            self.assertFalse(result["result"]["data"]["secret_value_exposed"])
             self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
             self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
             serialized = json.dumps(result)
             self.assertNotIn(str(route_spec_path), serialized)
             self.assertNotIn(str(data_dir), serialized)
+            self.assertNotIn("admit-owner-env-key", serialized)
             self.assertTrue(route_spec_path.exists())
             route_spec = json.loads(route_spec_path.read_text(encoding="utf-8"))
             self.assertEqual(route_spec["route_id"], "wbp-web-primary-openrouter")
@@ -1420,6 +1492,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     ("external-models", "status", "--json"),
                     ("external-models", "models", "--json"),
                     ("external-models", "routes", "list", "--json"),
+                    ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
                     (
                         "external-models",
                         "routes",
@@ -1439,12 +1512,219 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_api_route_connect_missing_credential_triggers_owner_admit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_path = (
+                data_dir
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-openrouter.json"
+            )
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            payloads[
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json")
+            ] = credential_status_packet(present=False)
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(route_spec_path),
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route added: wbp-web-primary-openrouter.",
+                changed_files=[str(data_dir / "external-models" / "routes.json")],
+                data={"route_id": "wbp-web-primary-openrouter"},
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "validate",
+                    "--route",
+                    "wbp-web-primary-openrouter",
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+                data={
+                    "route_id": "wbp-web-primary-openrouter",
+                    "route_state": "model_visible",
+                    "verification_scope": "route_provider_only",
+                },
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admitted")
+            self.assertTrue(result["result"]["data"]["credential_present"])
+            self.assertTrue(result["result"]["data"]["credential_admitted"])
+            self.assertEqual(result["result"]["data"]["credential_admit_status"], "admitted")
+            self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+            self.assertIn(
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                runner.calls,
+            )
+            self.assertIn(
+                (
+                    "external-models",
+                    "credentials",
+                    "admit",
+                    "--provider",
+                    "openrouter",
+                    "--source",
+                    "owner-env",
+                    "--json",
+                ),
+                runner.calls,
+            )
+            self.assertLess(
+                runner.calls.index(
+                    (
+                        "external-models",
+                        "credentials",
+                        "admit",
+                        "--provider",
+                        "openrouter",
+                        "--source",
+                        "owner-env",
+                        "--json",
+                    )
+                ),
+                runner.calls.index(
+                    (
+                        "external-models",
+                        "routes",
+                        "add",
+                        "--file",
+                        str(route_spec_path),
+                        "--json",
+                    )
+                ),
+            )
+
+    def test_api_route_connect_admit_failure_blocks_route_add(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={"count": 0, "routes": []},
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 0,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json")
+        ] = credential_status_packet(present=False)
+        payloads[
+            (
+                "external-models",
+                "credentials",
+                "admit",
+                "--provider",
+                "openrouter",
+                "--source",
+                "owner-env",
+                "--json",
+            )
+        ] = command_packet(
+            status="error",
+            exit_code=1,
+            human_message="Owner credential source is missing for provider: openrouter",
+            machine_error_code="EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+            next_action="user_action",
+            data={
+                "credential_result": {
+                    "status": "missing",
+                    "provider": "openrouter",
+                    "source": "owner-env",
+                    "credential_ref": "OPENROUTER_API_KEY",
+                    "credential_present": False,
+                    "secret_value_exposed": False,
+                    "browser_secret_intake": False,
+                    "browser_path_intake": False,
+                    "scope": "sandbox",
+                }
+            },
+        )
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_connect"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "command_error")
+        self.assertEqual(
+            result["result"]["machine_error_code"],
+            "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+        )
+        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admit_failed")
+        self.assertEqual(result["result"]["data"]["add_status"], "not_run")
+        self.assertEqual(result["result"]["data"]["validate_status"], "not_run")
+        self.assertFalse(result["result"]["data"]["credential_present"])
+        self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+        self.assertNotIn(
+            (
+                "external-models",
+                "routes",
+                "validate",
+                "--route",
+                "wbp-web-primary-openrouter",
+                "--json",
+            ),
+            runner.calls,
+        )
+
     def test_api_route_connect_rejects_forbidden_browser_fields(self) -> None:
         runner = MappingRunner(live_payloads())
         forbidden_payloads = [
             {"ui_action": "api_route_connect", "route_id": "wbp-user-chosen"},
             {"ui_action": "api_route_connect", "token": "secret"},
             {"ui_action": "api_route_connect", "secret": "secret"},
+            {"ui_action": "api_route_connect", "api_key": "secret"},
+            {"ui_action": "api_route_connect", "auth": "secret"},
             {"ui_action": "api_route_connect", "path": "/tmp/route.json"},
             {"ui_action": "api_route_connect", "backend_id": "route"},
         ]
@@ -1476,9 +1756,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 paths = RuntimePaths.from_env()
                 install_payload = run_installer_init(paths)
             self.assertEqual(install_payload["status"], "ok")
-            secrets_path = external_dir / "secrets.env"
-            secrets_path.write_text("OPENROUTER_API_KEY=test-key\n", encoding="utf-8")
-            os.chmod(secrets_path, 0o600)
 
             provider = ThreadingHTTPServer(("127.0.0.1", free_port()), StableProbeHandler)
             provider_thread = threading.Thread(target=provider.serve_forever, daemon=True)
@@ -1497,6 +1774,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 f"http://127.0.0.1:{provider.server_port}/v1"
             )
             sandbox_env["WBP_SERVER_OWNED_API_ROUTE_MODEL"] = "gpt-5.4"
+            sandbox_env["OPENROUTER_API_KEY"] = "test-key"
             runner = JsonCommandRunner(cwd=str(profile_dir), env=sandbox_env)
             try:
                 start_payload = runner.run("external-models", "start", "--json").payload
@@ -1522,10 +1800,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(result["action_role"], "api_route_admission")
             self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
+            self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admitted")
+            self.assertTrue(result["result"]["data"]["credential_admitted"])
+            self.assertFalse(result["result"]["data"]["secret_value_exposed"])
             self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
             self.assertFalse(result["result"]["data"]["browser_secret_intake"])
             self.assertFalse(result["result"]["data"]["browser_path_intake"])
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
+            self.assertNotIn("test-key", json.dumps(result))
             self.assertEqual(readonly_after["status"], "ok")
             self.assertEqual(len(readonly_after["routes"]), 1)
             self.assertEqual(readonly_after["routes"][0]["route_id"], "wbp-web-primary-openrouter")
@@ -3393,6 +3676,17 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("rollout", "rotation", "inspect", "--json"): command_packet(
             human_message="Rotation inspect passed."
         ),
+        ("external-models", "credentials", "status", "--provider", "openrouter", "--json"): credential_status_packet(),
+        (
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "openrouter",
+            "--source",
+            "owner-env",
+            "--json",
+        ): credential_admit_packet(),
         ("external-models", "status", "--json"): command_packet(
             human_message="External-models synthetic lifecycle status collected without live runtime claims.",
             liveness="not_applicable",

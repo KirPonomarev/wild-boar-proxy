@@ -229,9 +229,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser route_id/secret/path запрещены",
+        "action_claim_scope": "owner credential status/admit -> owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser api_key/route_id/secret/path запрещены",
         "display_name": "Подключить API",
-        "human_meaning": "Добавить или принять server-owned API route без browser secrets, paths или route_id, затем обновить подтверждённый список API-подключений.",
+        "human_meaning": "Проверить или принять owner credential, затем добавить или принять server-owned API route без browser api_key, secrets, paths или route_id и обновить подтверждённый список API-подключений.",
     },
     "api_route_check": {
         "adapter_command_id": "external_models_check",
@@ -2410,9 +2410,41 @@ def _api_route_connect_result(
     connect_phase: str,
     admission_mode: str,
     preflight: dict[str, Any],
+    credential_status_result: dict[str, Any] | None,
+    credential_admit_result: dict[str, Any] | None,
+    credential_phase: str,
     add_result: dict[str, Any] | None,
     validate_result: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    credential_status_packet = (
+        credential_status_result.get("packet")
+        if isinstance(credential_status_result, dict) and isinstance(credential_status_result.get("packet"), dict)
+        else {}
+    )
+    credential_admit_packet = (
+        credential_admit_result.get("packet")
+        if isinstance(credential_admit_result, dict) and isinstance(credential_admit_result.get("packet"), dict)
+        else {}
+    )
+    credential_status_data = credential_status_packet.get("data", {})
+    credential_admit_data = credential_admit_packet.get("data", {})
+    credential_status = (
+        credential_status_data.get("credential_result")
+        if isinstance(credential_status_data, dict)
+        else None
+    )
+    credential_admit = (
+        credential_admit_data.get("credential_result")
+        if isinstance(credential_admit_data, dict)
+        else None
+    )
+    credential_status = credential_status if isinstance(credential_status, dict) else {}
+    credential_admit = credential_admit if isinstance(credential_admit, dict) else {}
+    credential_present = (
+        credential_status.get("credential_present") is True
+        or credential_admit.get("credential_present") is True
+    )
+    credential_admitted = credential_admit.get("status") == "admitted"
     return {
         "status": status,
         "machine_error_code": machine_error_code,
@@ -2423,12 +2455,29 @@ def _api_route_connect_result(
             "route_id": route_id,
             "api_route_connect_phase": connect_phase,
             "admission_mode": admission_mode,
+            "credential_phase": credential_phase,
+            "credential_status": str(credential_status.get("status") or "not_run"),
+            "credential_admit_status": str(credential_admit.get("status") or "not_run"),
+            "credential_ref": str(
+                credential_status.get("credential_ref")
+                or credential_admit.get("credential_ref")
+                or ""
+            ),
+            "credential_present": credential_present,
+            "credential_admitted": credential_admitted,
             "api_route_connect_preflight": _public_api_route_connect_preflight_summary(preflight),
             "owner_source_kind": "server_owned_route_spec",
+            "credential_owner_source_kind": "owner_env",
             "browser_secret_intake": False,
             "browser_path_intake": False,
             "browser_route_id_intake": False,
+            "browser_api_key_intake": False,
+            "secret_value_exposed": False,
             "route_spec_path_exposed": False,
+            "credential_status_command_status": str(credential_status_result.get("status") or "") if credential_status_result else "not_run",
+            "credential_status_machine_error_code": str(credential_status_result.get("machine_error_code") or "") if credential_status_result else "NOT_RUN",
+            "credential_admit_command_status": str(credential_admit_result.get("status") or "") if credential_admit_result else "not_run",
+            "credential_admit_machine_error_code": str(credential_admit_result.get("machine_error_code") or "") if credential_admit_result else "NOT_RUN",
             "add_status": str(add_result.get("status") or "") if add_result else "not_run",
             "add_machine_error_code": str(add_result.get("machine_error_code") or "") if add_result else "NOT_RUN",
             "validate_status": str(validate_result.get("status") or "") if validate_result else "not_run",
@@ -2436,6 +2485,51 @@ def _api_route_connect_result(
             "refresh_surface": "api-connections-readonly",
         },
     }
+
+
+def _api_route_credential_result_status(result: dict[str, Any] | None) -> dict[str, Any]:
+    packet = result.get("packet") if isinstance(result, dict) else None
+    data = packet.get("data", {}) if isinstance(packet, dict) else {}
+    credential_result = data.get("credential_result") if isinstance(data, dict) else {}
+    return credential_result if isinstance(credential_result, dict) else {}
+
+
+def _run_api_route_credential_bridge(
+    runner: CommandRunner,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str, dict[str, Any] | None]:
+    credential_status_result = execute_command(
+        runner,
+        "external_models_credentials_status_openrouter",
+        allow_disabled=True,
+    )
+    if credential_status_result["status"] != "ok":
+        return credential_status_result, None, "credential_status_failed", credential_status_result
+
+    status_credential = _api_route_credential_result_status(credential_status_result)
+    if status_credential.get("credential_present") is True:
+        return credential_status_result, None, "credential_present", None
+
+    credential_admit_result = execute_command(
+        runner,
+        "external_models_credentials_admit_openrouter_owner_env",
+        allow_disabled=True,
+    )
+    if credential_admit_result["status"] != "ok":
+        return credential_status_result, credential_admit_result, "credential_admit_failed", credential_admit_result
+
+    admit_credential = _api_route_credential_result_status(credential_admit_result)
+    if admit_credential.get("credential_present") is not True:
+        failed_result = {
+            "status": "command_error",
+            "machine_error_code": "UI_API_CREDENTIAL_ADMIT_PACKET_INVALID",
+            "human_message": "Owner credential admit packet did not prove credential presence.",
+            "next_action": "retry",
+            "changed_files": [],
+            "packet": credential_admit_result.get("packet", {}),
+        }
+        return credential_status_result, credential_admit_result, "credential_admit_packet_invalid", failed_result
+
+    return credential_status_result, credential_admit_result, "credential_admitted", None
 
 
 def _run_api_route_connect_action(
@@ -2446,6 +2540,30 @@ def _run_api_route_connect_action(
     preflight = _api_route_connect_preflight(api_snapshot_before)
     if preflight["status"] != "admitted":
         return _api_route_connect_preflight_denied("api_route_connect", preflight)
+
+    (
+        credential_status_result,
+        credential_admit_result,
+        credential_phase,
+        credential_failure_result,
+    ) = _run_api_route_credential_bridge(runner)
+    if credential_failure_result is not None:
+        result = _api_route_connect_result(
+            status="command_error",
+            machine_error_code=str(credential_failure_result["machine_error_code"]),
+            human_message=str(credential_failure_result["human_message"]),
+            next_action=str(credential_failure_result["next_action"]),
+            route_id="",
+            connect_phase=credential_phase,
+            admission_mode="credential_bridge",
+            preflight=preflight,
+            credential_status_result=credential_status_result,
+            credential_admit_result=credential_admit_result,
+            credential_phase=credential_phase,
+            add_result=None,
+            validate_result=None,
+        )
+        return _ui_action_response_from_result("api_route_connect", result)
 
     existing_route = _primary_api_route_from_snapshot(api_snapshot_before)
     if existing_route is not None:
@@ -2465,6 +2583,9 @@ def _run_api_route_connect_action(
             connect_phase="adopted_existing_route",
             admission_mode="adopt",
             preflight=preflight,
+            credential_status_result=credential_status_result,
+            credential_admit_result=credential_admit_result,
+            credential_phase=credential_phase,
             add_result=None,
             validate_result=validate_result,
         )
@@ -2489,6 +2610,9 @@ def _run_api_route_connect_action(
             connect_phase="spec_write_failed",
             admission_mode="create",
             preflight=preflight,
+            credential_status_result=credential_status_result,
+            credential_admit_result=credential_admit_result,
+            credential_phase=credential_phase,
             add_result=None,
             validate_result=None,
         )
@@ -2510,6 +2634,9 @@ def _run_api_route_connect_action(
             connect_phase="add_failed",
             admission_mode="create",
             preflight=preflight,
+            credential_status_result=credential_status_result,
+            credential_admit_result=credential_admit_result,
+            credential_phase=credential_phase,
             add_result=add_result,
             validate_result=None,
         )
@@ -2530,6 +2657,9 @@ def _run_api_route_connect_action(
         connect_phase="created_and_validated" if status == "ok" else "created_validate_failed",
         admission_mode="create",
         preflight=preflight,
+        credential_status_result=credential_status_result,
+        credential_admit_result=credential_admit_result,
+        credential_phase=credential_phase,
         add_result=add_result,
         validate_result=validate_result,
     )
