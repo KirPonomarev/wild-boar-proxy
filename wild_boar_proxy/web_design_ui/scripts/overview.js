@@ -405,6 +405,11 @@ const CONFIRMATION_POLICY = {
     policy: "api-route-check",
     warning: "Это отправляет проверочный запрос через маршрут. Это не утверждение состояния runtime."
   },
+  api_route_connect: {
+    severity: "high",
+    policy: "api-route-connect",
+    warning: "Это запускает server-owned подключение API route. Browser не передаёт route_id, secret, token или path; подтверждением остаётся packet плюс api-connections refresh."
+  },
   api_route_allow: {
     severity: "high",
     policy: "api-route-allow",
@@ -1010,10 +1015,15 @@ function apiRouteRemoveRefreshState(payload, refreshed) {
     return "complete";
   }
   const snapshot = actionRefreshSurfaceSnapshot(payload, refreshed);
-  if (payload.ui_action === "api_route_remove") {
-    return apiRoutePresentInSnapshot(snapshot, payload.route_id) ? "mismatch" : "complete";
+  const actionRouteId = apiRouteIdFromActionPayload(payload);
+  if (payload.ui_action === "api_route_connect") {
+    const route = apiRouteByIdFromSnapshot(snapshot, actionRouteId);
+    return route && route.enabled === true ? "complete" : "mismatch";
   }
-  const route = apiRouteByIdFromSnapshot(snapshot, payload.route_id);
+  if (payload.ui_action === "api_route_remove") {
+    return apiRoutePresentInSnapshot(snapshot, actionRouteId) ? "mismatch" : "complete";
+  }
+  const route = apiRouteByIdFromSnapshot(snapshot, actionRouteId);
   if (!route) {
     return "mismatch";
   }
@@ -1117,6 +1127,10 @@ function apiRouteByIdFromSnapshot(snapshot, routeId) {
 
 function apiRoutePresentInSnapshot(snapshot, routeId) {
   return apiRouteByIdFromSnapshot(snapshot, routeId) !== null;
+}
+
+function apiRouteIdFromActionPayload(payload) {
+  return payload?.route_id || payload?.result?.data?.route_id || "";
 }
 
 function boundedUiActionPayload(uiAction, extraPayload = {}) {
@@ -3583,6 +3597,9 @@ function confirmationReadyLabel(uiAction) {
   if (uiAction === "onboard_account") {
     return "Подключить в резерв";
   }
+  if (uiAction === "api_route_connect") {
+    return "Подключить API";
+  }
   if (uiAction === "retire_account") {
     return "Вывести из пула";
   }
@@ -5744,6 +5761,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartCheckApiAction")?.addEventListener("click", () => {
     const button = document.getElementById("quickStartCheckApiAction");
     maybeConfirmAndRun(button.dataset.uiAction || "api_route_check", { route_id: button.dataset.routeId || "" });
+  });
+  document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_connect");
+  });
+  document.getElementById("apiRouteConnectAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_connect");
   });
   document.getElementById("quickStartCheckAllAction")?.addEventListener("click", () => {
     const button = document.getElementById("quickStartCheckAllAction");

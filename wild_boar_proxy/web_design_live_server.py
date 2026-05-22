@@ -42,6 +42,8 @@ LAUNCH_COPY_PREFLIGHT_REQUIRED_CODE = "UI_LAUNCH_COPY_PREFLIGHT_REQUIRED"
 LAUNCH_COPY_PREFLIGHT_UNSAFE_CODE = "UI_LAUNCH_COPY_ISOLATION_UNPROVEN"
 ACCOUNT_CONNECT_PREFLIGHT_REQUIRED_CODE = "UI_ACCOUNT_CONNECT_PREFLIGHT_REQUIRED"
 ACCOUNT_CONNECT_PREFLIGHT_UNSAFE_CODE = "UI_ACCOUNT_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN"
+API_ROUTE_CONNECT_PREFLIGHT_REQUIRED_CODE = "UI_API_ROUTE_CONNECT_PREFLIGHT_REQUIRED"
+API_ROUTE_CONNECT_PREFLIGHT_UNSAFE_CODE = "UI_API_ROUTE_CONNECT_SERVER_OWNED_SOURCE_UNPROVEN"
 SANDBOX_ACTION_PREFLIGHT_REQUIRED_CODE = "UI_SANDBOX_ACTION_PREFLIGHT_REQUIRED"
 SANDBOX_ACTION_PREFLIGHT_UNSAFE_CODE = "UI_SANDBOX_ACTION_TARGET_UNPROVEN"
 ACCOUNTS_READONLY_COMMAND_IDS = ("accounts_list",)
@@ -219,6 +221,18 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Проверить маршрут",
         "human_meaning": "Проверить доступность маршрута на стороне провайдера и обновить список маршрутов из канонического JSON.",
     },
+    "api_route_connect": {
+        "adapter_command_id": "external_models_routes_add_server_owned",
+        "action_role": "api_route_admission",
+        "mutation_class": "api_route_registry_admission",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": True,
+        "action_claim_scope": "owner-owned route source -> external-models routes add/adopt -> validate -> api-connections refresh; browser route_id/secret/path запрещены",
+        "display_name": "Подключить API",
+        "human_meaning": "Добавить или принять server-owned API route без browser secrets, paths или route_id, затем обновить подтверждённый список API-подключений.",
+    },
     "api_route_check": {
         "adapter_command_id": "external_models_check",
         "action_role": "api_route_smoke_check",
@@ -385,6 +399,7 @@ PARKED_IN_LIVE_READONLY_ACTIONS = frozenset(
         "stable_repair_plan",
         "onboard_account_dry_run",
         "onboard_account",
+        "api_route_connect",
         "validate_account",
         "promote_account",
         "demote_account",
@@ -411,6 +426,7 @@ SANDBOX_ACTION_PHASE_ADMITTED_ACTIONS = frozenset(
     {
         "onboard_account_dry_run",
         "onboard_account",
+        "api_route_connect",
         "api_route_validate",
         "api_route_check",
         "api_route_allow",
@@ -659,6 +675,108 @@ def _account_connect_live_preflight(accounts_snapshot: dict[str, Any] | None) ->
         "reserve_first_required": True,
         "current_session_untouched": True,
     }
+
+
+def _api_route_connect_preflight(api_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(api_snapshot, dict):
+        return {
+            "status": "denied",
+            "machine_error_code": API_ROUTE_CONNECT_PREFLIGHT_REQUIRED_CODE,
+            "reason": "Server-owned api-connections-readonly preflight отсутствует.",
+            "source_kind": "unknown",
+            "write_surface": "unknown",
+            "refresh_surface": "api-connections-readonly",
+            "browser_secret_intake": False,
+            "browser_path_intake": False,
+            "browser_route_id_intake": False,
+            "current_session_untouched": False,
+        }
+    if (
+        str(api_snapshot.get("status") or "") != "ok"
+        or str(api_snapshot.get("source") or "") != "api_connections_readonly"
+        or api_snapshot.get("primary_truth_ok") is not True
+    ):
+        summary = api_snapshot.get("summary") if isinstance(api_snapshot.get("summary"), dict) else {}
+        return {
+            "status": "denied",
+            "machine_error_code": API_ROUTE_CONNECT_PREFLIGHT_UNSAFE_CODE,
+            "reason": str(summary.get("human_message") or "API readonly snapshot не подтвердил server-owned source."),
+            "source_kind": str(api_snapshot.get("source") or "unknown"),
+            "write_surface": "external_models_route_registry_mutation_only",
+            "refresh_surface": "api-connections-readonly",
+            "browser_secret_intake": False,
+            "browser_path_intake": False,
+            "browser_route_id_intake": False,
+            "current_session_untouched": False,
+        }
+    return {
+        "status": "admitted",
+        "machine_error_code": "OK",
+        "reason": "Server-owned api-connections-readonly gate admitted API route connect path.",
+        "source_kind": "server_owned_api_connections_readonly",
+        "write_surface": "external_models_route_registry_mutation_only",
+        "refresh_surface": "api-connections-readonly",
+        "browser_secret_intake": False,
+        "browser_path_intake": False,
+        "browser_route_id_intake": False,
+        "current_session_untouched": True,
+    }
+
+
+def _route_id_from_route(route: dict[str, Any] | None) -> str:
+    return str(route.get("route_id") or "") if isinstance(route, dict) else ""
+
+
+def _server_owned_api_route_spec(runner: CommandRunner) -> dict[str, Any]:
+    env = getattr(runner, "_env", None)
+    source = env if isinstance(env, dict) else os.environ
+    route_id = str(source.get("WBP_SERVER_OWNED_API_ROUTE_ID") or "wbp-web-primary-openrouter")
+    provider = str(source.get("WBP_SERVER_OWNED_API_ROUTE_PROVIDER") or "openrouter")
+    display_name = str(source.get("WBP_SERVER_OWNED_API_ROUTE_DISPLAY_NAME") or "OpenRouter primary")
+    base_url = str(source.get("WBP_SERVER_OWNED_API_ROUTE_BASE_URL") or "https://openrouter.ai/api/v1")
+    endpoint_path = str(source.get("WBP_SERVER_OWNED_API_ROUTE_ENDPOINT_PATH") or "/chat/completions")
+    upstream_model = str(source.get("WBP_SERVER_OWNED_API_ROUTE_MODEL") or "deepseek/deepseek-chat")
+    secret_ref = str(source.get("WBP_SERVER_OWNED_API_ROUTE_SECRET_REF") or "OPENROUTER_API_KEY")
+    cost_class = str(source.get("WBP_SERVER_OWNED_API_ROUTE_COST_CLASS") or "paid_or_free_limited")
+    return {
+        "schema_version": 1,
+        "route_id": route_id,
+        "display_name": display_name,
+        "provider": provider,
+        "base_url": base_url,
+        "endpoint_path": endpoint_path,
+        "upstream_model": upstream_model,
+        "compatibility": "openai_chat_completions",
+        "auth": {"type": "bearer", "secret_ref": secret_ref},
+        "cost_class": cost_class,
+        "lane_role": "candidate",
+        "fallback_eligible": False,
+        "enabled": True,
+    }
+
+
+def _server_owned_api_route_spec_path(
+    runner: CommandRunner,
+    launch_copy_contract: LaunchCopyContract | None,
+    route_id: str,
+) -> Path:
+    if launch_copy_contract is not None and launch_copy_contract.data_dir:
+        external_dir = Path(launch_copy_contract.data_dir).expanduser() / "external-models"
+    else:
+        env = getattr(runner, "_env", None)
+        source = env if isinstance(env, dict) else os.environ
+        external_dir = Path(
+            source.get("WBP_EXTERNAL_MODELS_DIR", "~/.wild-boar-proxy/external-models")
+        ).expanduser()
+    safe_route_id = "".join(char if char in ROUTE_ID_SAFE_CHARS else "-" for char in route_id)
+    return external_dir / "server-owned-route-specs" / f"{safe_route_id}.json"
+
+
+def _write_server_owned_api_route_spec(path: Path, route: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(route, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def build_live_readonly_snapshot(runner: CommandRunner) -> dict[str, Any]:
@@ -1273,6 +1391,8 @@ def run_ui_action(
         return _run_account_connect_dry_run_action()
     if ui_action == "onboard_account":
         return _run_account_login_bridge_action(runner)
+    if ui_action == "api_route_connect":
+        return _run_api_route_connect_action(runner, launch_copy_contract)
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_client_dispatch":
@@ -1644,6 +1764,21 @@ def _public_account_connect_preflight_summary(preflight: dict[str, Any]) -> dict
     }
 
 
+def _public_api_route_connect_preflight_summary(preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(preflight.get("status", "denied")),
+        "machine_error_code": str(preflight.get("machine_error_code", "unknown")),
+        "reason": str(preflight.get("reason", "")),
+        "source_kind": str(preflight.get("source_kind", "unknown")),
+        "write_surface": str(preflight.get("write_surface", "unknown")),
+        "refresh_surface": str(preflight.get("refresh_surface", "api-connections-readonly")),
+        "browser_secret_intake": preflight.get("browser_secret_intake") is True,
+        "browser_path_intake": preflight.get("browser_path_intake") is True,
+        "browser_route_id_intake": preflight.get("browser_route_id_intake") is True,
+        "current_session_untouched": preflight.get("current_session_untouched") is True,
+    }
+
+
 def _launch_copy_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -1731,6 +1866,35 @@ def _account_connect_preflight_denied(ui_action: str, preflight: dict[str, Any])
             "data": {
                 "account_connect_preflight": _public_account_connect_preflight_summary(preflight),
                 "onboarding_phase": "preflight_denied",
+            },
+        },
+    }
+
+
+def _api_route_connect_preflight_denied(ui_action: str, preflight: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "integration_failure",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": "blocked",
+        "availability_state": "preflight_blocked",
+        "disabled_reason_code": str(preflight.get("machine_error_code", API_ROUTE_CONNECT_PREFLIGHT_UNSAFE_CODE)),
+        "disabled_reasons": ["api_route_connect_preflight_blocked"],
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "preflight_only",
+        "result": {
+            "status": "integration_failure",
+            "machine_error_code": str(preflight.get("machine_error_code", API_ROUTE_CONNECT_PREFLIGHT_UNSAFE_CODE)),
+            "human_message": str(preflight.get("reason", "API route connect не admitted.")),
+            "next_action": "user_action",
+            "changed_files": [],
+            "data": {
+                "api_route_connect_preflight": _public_api_route_connect_preflight_summary(preflight),
+                "api_route_connect_phase": "preflight_denied",
             },
         },
     }
@@ -2234,6 +2398,142 @@ def _login_bridge_failure_result(
             "reason": "owner login bridge failed before reserve-first onboarding proof",
         },
     }
+
+
+def _api_route_connect_result(
+    *,
+    status: str,
+    machine_error_code: str,
+    human_message: str,
+    next_action: str,
+    route_id: str,
+    connect_phase: str,
+    admission_mode: str,
+    preflight: dict[str, Any],
+    add_result: dict[str, Any] | None,
+    validate_result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "human_message": human_message,
+        "next_action": next_action,
+        "changed_files": ["api_route_connect_artifact"] if status == "ok" else [],
+        "data": {
+            "route_id": route_id,
+            "api_route_connect_phase": connect_phase,
+            "admission_mode": admission_mode,
+            "api_route_connect_preflight": _public_api_route_connect_preflight_summary(preflight),
+            "owner_source_kind": "server_owned_route_spec",
+            "browser_secret_intake": False,
+            "browser_path_intake": False,
+            "browser_route_id_intake": False,
+            "route_spec_path_exposed": False,
+            "add_status": str(add_result.get("status") or "") if add_result else "not_run",
+            "add_machine_error_code": str(add_result.get("machine_error_code") or "") if add_result else "NOT_RUN",
+            "validate_status": str(validate_result.get("status") or "") if validate_result else "not_run",
+            "validate_machine_error_code": str(validate_result.get("machine_error_code") or "") if validate_result else "NOT_RUN",
+            "refresh_surface": "api-connections-readonly",
+        },
+    }
+
+
+def _run_api_route_connect_action(
+    runner: CommandRunner,
+    launch_copy_contract: LaunchCopyContract | None,
+) -> dict[str, Any]:
+    api_snapshot_before = build_api_connections_readonly_snapshot(runner)
+    preflight = _api_route_connect_preflight(api_snapshot_before)
+    if preflight["status"] != "admitted":
+        return _api_route_connect_preflight_denied("api_route_connect", preflight)
+
+    existing_route = _primary_api_route_from_snapshot(api_snapshot_before)
+    if existing_route is not None:
+        route_id = _route_id_from_route(existing_route)
+        validate_result = execute_command(
+            runner,
+            "external_models_routes_validate",
+            structured_args={"route_id": route_id},
+        )
+        status = "ok" if validate_result["status"] == "ok" else "command_error"
+        result = _api_route_connect_result(
+            status=status,
+            machine_error_code=str(validate_result["machine_error_code"]),
+            human_message=str(validate_result["human_message"]),
+            next_action=str(validate_result["next_action"]),
+            route_id=route_id,
+            connect_phase="adopted_existing_route",
+            admission_mode="adopt",
+            preflight=preflight,
+            add_result=None,
+            validate_result=validate_result,
+        )
+        return _ui_action_response_from_result("api_route_connect", result)
+
+    route_spec = _server_owned_api_route_spec(runner)
+    route_id = str(route_spec["route_id"])
+    route_spec_path = _server_owned_api_route_spec_path(
+        runner,
+        launch_copy_contract,
+        route_id,
+    )
+    try:
+        _write_server_owned_api_route_spec(route_spec_path, route_spec)
+    except OSError as exc:
+        result = _api_route_connect_result(
+            status="integration_failure",
+            machine_error_code="UI_API_ROUTE_CONNECT_SPEC_WRITE_FAILED",
+            human_message=str(exc),
+            next_action="retry",
+            route_id=route_id,
+            connect_phase="spec_write_failed",
+            admission_mode="create",
+            preflight=preflight,
+            add_result=None,
+            validate_result=None,
+        )
+        return _ui_action_response_from_result("api_route_connect", result)
+
+    add_result = execute_command(
+        runner,
+        "external_models_routes_add_server_owned",
+        structured_args={"route_spec_ref": str(route_spec_path)},
+        allow_disabled=True,
+    )
+    if add_result["status"] != "ok":
+        result = _api_route_connect_result(
+            status="command_error",
+            machine_error_code=str(add_result["machine_error_code"]),
+            human_message=str(add_result["human_message"]),
+            next_action=str(add_result["next_action"]),
+            route_id=route_id,
+            connect_phase="add_failed",
+            admission_mode="create",
+            preflight=preflight,
+            add_result=add_result,
+            validate_result=None,
+        )
+        return _ui_action_response_from_result("api_route_connect", result)
+
+    validate_result = execute_command(
+        runner,
+        "external_models_routes_validate",
+        structured_args={"route_id": route_id},
+    )
+    status = "ok" if validate_result["status"] == "ok" else "command_error"
+    result = _api_route_connect_result(
+        status=status,
+        machine_error_code=str(validate_result["machine_error_code"]),
+        human_message=str(validate_result["human_message"]),
+        next_action=str(validate_result["next_action"]),
+        route_id=route_id,
+        connect_phase="created_and_validated" if status == "ok" else "created_validate_failed",
+        admission_mode="create",
+        preflight=preflight,
+        add_result=add_result,
+        validate_result=validate_result,
+    )
+    return _ui_action_response_from_result("api_route_connect", result)
 
 
 def _run_account_login_bridge_action(runner: CommandRunner) -> dict[str, Any]:

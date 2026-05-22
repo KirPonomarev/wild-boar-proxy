@@ -335,6 +335,19 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(remove.required_args, ("route_id",))
         self.assertEqual(remove.allowed_args, ("route_id",))
 
+    def test_api_route_connect_adapter_spec_uses_server_owned_file_arg(self) -> None:
+        add = ALLOWLIST["external_models_routes_add_server_owned"]
+
+        self.assertEqual(
+            add.argv_template,
+            ("external-models", "routes", "add", "--file", "{route_spec_ref}", "--json"),
+        )
+        self.assertEqual(add.category, "external_models_registry_admission")
+        self.assertFalse(add.ui_enabled)
+        self.assertTrue(add.confirmation_required)
+        self.assertEqual(add.required_args, ("route_spec_ref",))
+        self.assertEqual(add.allowed_args, ("route_spec_ref",))
+
     def test_live_snapshot_calls_only_readonly_commands_and_maps_shape(self) -> None:
         runner = MappingRunner(live_payloads())
 
@@ -679,6 +692,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["validate_account"]["available"])
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertFalse(metadata["actions"]["api_route_validate"]["available"])
+        self.assertFalse(metadata["actions"]["api_route_connect"]["available"])
         self.assertFalse(metadata["actions"]["quick_start_check_all"]["available"])
         self.assertFalse(metadata["actions"]["launch_client_dispatch"]["available"])
         for ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -722,6 +736,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
         self.assertEqual(sandbox_metadata["sandbox_preflight"]["status"], "admitted")
         self.assertTrue(sandbox_metadata["actions"]["onboard_account_dry_run"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["api_route_connect"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["api_route_validate"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["onboard_account"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["quick_start_check_all"]["available"])
@@ -749,6 +764,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(full_metadata["actions"]["onboard_account"]["action_role"], "account_onboarding")
         self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
+        self.assertEqual(full_metadata["actions"]["api_route_connect"]["action_role"], "api_route_admission")
         self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
         self.assertEqual(
             full_metadata["actions"]["quick_start_check_all"]["action_role"],
@@ -1305,6 +1321,217 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertTrue(after_disabled["enabled"])
             self.assertFalse(readonly_after["adapter"]["profile_ready"])
             self.assertTrue(readonly_after["adapter"]["runtime_claim_blocked"])
+
+    def test_api_route_connect_creates_server_owned_route_without_browser_args(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            route_spec_path = (
+                data_dir
+                / "external-models"
+                / "server-owned-route-specs"
+                / "wbp-web-primary-openrouter.json"
+            )
+            payloads = live_payloads()
+            payloads[("external-models", "routes", "list", "--json")] = command_packet(
+                human_message="External-models routes listed from local registry.",
+                data={"count": 0, "routes": []},
+            )
+            payloads[("external-models", "models", "--json")] = command_packet(
+                human_message="External-models route models listed from local registry.",
+                data={
+                    "count": 0,
+                    "source": "local_routes_registry",
+                    "listener_proven": False,
+                    "runtime_claim_blocked": True,
+                    "models": [],
+                },
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "add",
+                    "--file",
+                    str(route_spec_path),
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route added: wbp-web-primary-openrouter.",
+                changed_files=[str(data_dir / "external-models" / "routes.json")],
+                data={"route_id": "wbp-web-primary-openrouter"},
+            )
+            payloads[
+                (
+                    "external-models",
+                    "routes",
+                    "validate",
+                    "--route",
+                    "wbp-web-primary-openrouter",
+                    "--json",
+                )
+            ] = command_packet(
+                human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+                data={
+                    "route_id": "wbp-web-primary-openrouter",
+                    "route_state": "model_visible",
+                    "verification_scope": "route_provider_only",
+                },
+            )
+            runner = MappingRunner(payloads)
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9345,
+                action_server_port=9344,
+            )
+
+            result = run_ui_action(
+                runner,
+                {"ui_action": "api_route_connect"},
+                launch_copy_contract=contract,
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["action_role"], "api_route_admission")
+            self.assertEqual(result["mutation_class"], "api_route_registry_admission")
+            self.assertEqual(result["route_id"], "")
+            self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
+            self.assertEqual(result["result"]["data"]["admission_mode"], "create")
+            self.assertFalse(result["result"]["data"]["browser_secret_intake"])
+            self.assertFalse(result["result"]["data"]["browser_path_intake"])
+            self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+            self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
+            serialized = json.dumps(result)
+            self.assertNotIn(str(route_spec_path), serialized)
+            self.assertNotIn(str(data_dir), serialized)
+            self.assertTrue(route_spec_path.exists())
+            route_spec = json.loads(route_spec_path.read_text(encoding="utf-8"))
+            self.assertEqual(route_spec["route_id"], "wbp-web-primary-openrouter")
+            self.assertEqual(route_spec["auth"]["secret_ref"], "OPENROUTER_API_KEY")
+            self.assertEqual(
+                runner.calls,
+                [
+                    ("external-models", "status", "--json"),
+                    ("external-models", "models", "--json"),
+                    ("external-models", "routes", "list", "--json"),
+                    (
+                        "external-models",
+                        "routes",
+                        "add",
+                        "--file",
+                        str(route_spec_path),
+                        "--json",
+                    ),
+                    (
+                        "external-models",
+                        "routes",
+                        "validate",
+                        "--route",
+                        "wbp-web-primary-openrouter",
+                        "--json",
+                    ),
+                ],
+            )
+
+    def test_api_route_connect_rejects_forbidden_browser_fields(self) -> None:
+        runner = MappingRunner(live_payloads())
+        forbidden_payloads = [
+            {"ui_action": "api_route_connect", "route_id": "wbp-user-chosen"},
+            {"ui_action": "api_route_connect", "token": "secret"},
+            {"ui_action": "api_route_connect", "secret": "secret"},
+            {"ui_action": "api_route_connect", "path": "/tmp/route.json"},
+            {"ui_action": "api_route_connect", "backend_id": "route"},
+        ]
+
+        for payload in forbidden_payloads:
+            result = run_ui_action(
+                runner,
+                payload,
+                launch_copy_contract=launch_copy_contract(),
+                action_phase=SANDBOX_ACTION_PHASE,
+            )
+            self.assertEqual(result["status"], "integration_failure", payload)
+            self.assertEqual(result["action_role"], "blocked", payload)
+            self.assertEqual(result["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED", payload)
+        self.assertEqual(runner.calls, [])
+
+    def test_real_json_runner_supports_sandbox_api_route_connect_from_profile_cwd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            external_dir = data_dir / "external-models"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(external_dir),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                paths = RuntimePaths.from_env()
+                install_payload = run_installer_init(paths)
+            self.assertEqual(install_payload["status"], "ok")
+            secrets_path = external_dir / "secrets.env"
+            secrets_path.write_text("OPENROUTER_API_KEY=test-key\n", encoding="utf-8")
+            os.chmod(secrets_path, 0o600)
+
+            provider = ThreadingHTTPServer(("127.0.0.1", free_port()), StableProbeHandler)
+            provider_thread = threading.Thread(target=provider.serve_forever, daemon=True)
+            provider_thread.start()
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9347,
+                action_server_port=9346,
+            )
+            from wild_boar_proxy.ui_shell import JsonCommandRunner
+
+            sandbox_env = _sandbox_action_runner_env(contract)
+            sandbox_env["WBP_SERVER_OWNED_API_ROUTE_BASE_URL"] = (
+                f"http://127.0.0.1:{provider.server_port}/v1"
+            )
+            sandbox_env["WBP_SERVER_OWNED_API_ROUTE_MODEL"] = "gpt-5.4"
+            runner = JsonCommandRunner(cwd=str(profile_dir), env=sandbox_env)
+            try:
+                start_payload = runner.run("external-models", "start", "--json").payload
+                self.assertIn(start_payload["status"], {"ok"})
+
+                readonly_before = build_api_connections_readonly_snapshot(runner)
+                self.assertEqual(readonly_before["status"], "ok")
+                self.assertEqual(readonly_before["routes"], [])
+
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "api_route_connect"},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+
+                readonly_after = build_api_connections_readonly_snapshot(runner)
+            finally:
+                provider.shutdown()
+                provider.server_close()
+                provider_thread.join(timeout=5)
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["action_role"], "api_route_admission")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
+            self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
+            self.assertFalse(result["result"]["data"]["browser_secret_intake"])
+            self.assertFalse(result["result"]["data"]["browser_path_intake"])
+            self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+            self.assertEqual(readonly_after["status"], "ok")
+            self.assertEqual(len(readonly_after["routes"]), 1)
+            self.assertEqual(readonly_after["routes"][0]["route_id"], "wbp-web-primary-openrouter")
+            self.assertTrue(readonly_after["routes"][0]["enabled"])
+            self.assertEqual(readonly_after["routes"][0]["secret_status_label"], "available")
+            self.assertEqual(readonly_after["routes"][0]["validation_label"], "ok")
 
     def test_http_sandbox_readonly_endpoints_follow_sandbox_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

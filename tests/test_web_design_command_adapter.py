@@ -78,6 +78,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "stable_repair_apply",
             "diagnostics_export",
             "external_models_routes_validate",
+            "external_models_routes_add_server_owned",
             "external_models_routes_enable",
             "external_models_routes_disable",
             "external_models_routes_remove",
@@ -92,6 +93,7 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["accounts_onboard_auth_ref"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_start_sandbox"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_complete_sandbox"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_routes_add_server_owned"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)
         self.assertIn(

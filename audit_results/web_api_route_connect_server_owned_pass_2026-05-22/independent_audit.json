@@ -1,0 +1,65 @@
+{
+  "contour": "WEB_API_ROUTE_CONNECT_SERVER_OWNED_PASS",
+  "status": "pass",
+  "agent_audit_status": "timeout_after_240s",
+  "manual_independent_fact_check": "completed_from_packets_and_diff_after_agent_timeout",
+  "checks": [
+    {
+      "id": "browser_payload_bounded",
+      "status": "pass",
+      "evidence": "evidence/browser-action-packet.json",
+      "note": "Action packet is for api_route_connect; top-level browser route_id is absent."
+    },
+    {
+      "id": "no_browser_secret_path_route_id_intake",
+      "status": "pass",
+      "evidence": "evidence/browser-action-packet.json",
+      "note": "Action data explicitly records false for browser secret/path/route id intake."
+    },
+    {
+      "id": "server_owned_source",
+      "status": "pass",
+      "evidence": "evidence/browser-action-packet.json",
+      "note": "Owner source kind is server_owned_route_spec."
+    },
+    {
+      "id": "owner_add_validate_packets",
+      "status": "pass",
+      "evidence": "evidence/browser-action-packet.json",
+      "note": "Add and validate statuses are ok."
+    },
+    {
+      "id": "refresh_proof",
+      "status": "pass",
+      "evidence": "evidence/browser-run-summary.json",
+      "note": "Browser proof shows route count 0 -> 1 and route visible after refresh."
+    },
+    {
+      "id": "readonly_route_shape",
+      "status": "pass",
+      "evidence": "evidence/browser-api-connections-after.json",
+      "note": "Readonly API snapshot shows enabled validated route."
+    },
+    {
+      "id": "route_spec_path_not_in_action_packet",
+      "status": "pass",
+      "evidence": "evidence/browser-action-packet.json",
+      "note": "Action packet redacts route spec path."
+    },
+    {
+      "id": "ledger_action_recorded",
+      "status": "pass",
+      "evidence": "evidence/browser-ledger-summary.json",
+      "note": "Ledger summary contains api_route_connect action row."
+    }
+  ],
+  "scope_findings": [
+    "No browser token/secret/path/auth/backend_id/route_id intake was added for api_route_connect.",
+    "No desktop, packaging, CI, or broad external-models redesign was mixed into this contour.",
+    "Evidence includes sandbox audit paths in installer/start packets, but the browser action packet does not expose route spec paths or secret values."
+  ],
+  "residual_risks": [
+    "This contour proves server-owned sandbox route admission, not provider-specific OAuth/login.",
+    "A separate provider owner-source contour is still needed for production provider-specific login/admission UX."
+  ]
+}

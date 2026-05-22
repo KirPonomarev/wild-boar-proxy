@@ -208,6 +208,15 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("route_id",),
         allowed_args=("route_id",),
     ),
+    "external_models_routes_add_server_owned": CommandSpec(
+        command_id="external_models_routes_add_server_owned",
+        argv_template=("external-models", "routes", "add", "--file", "{route_spec_ref}", "--json"),
+        category="external_models_registry_admission",
+        ui_enabled=False,
+        confirmation_required=True,
+        required_args=("route_spec_ref",),
+        allowed_args=("route_spec_ref",),
+    ),
     "external_models_routes_enable": CommandSpec(
         command_id="external_models_routes_enable",
         argv_template=("external-models", "routes", "enable", "--route", "{route_id}", "--json"),

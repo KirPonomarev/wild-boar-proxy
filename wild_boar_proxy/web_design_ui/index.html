@@ -223,6 +223,10 @@
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/gear.png" alt="" aria-hidden="true">
                   <span>Настроить API</span>
                 </a>
+                <button id="quickStartConnectApiAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect" data-route-state-requirement="any" title="Подключить server-owned API route без browser secrets, paths или route_id.">
+                  <img class="ui-icon button-icon" src="assets/icons/phosphor/plus.png" alt="" aria-hidden="true">
+                  <span>Подключить API</span>
+                </button>
                 <button id="quickStartCheckApiAction" class="button small api-route-action" type="button" data-ui-action="api_route_check" data-route-id="" data-route-enabled="false" data-route-state-proven="false" data-route-state-requirement="enabled" disabled title="Нужен confirmed main route из bounded snapshot.">
                   <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                   <span>Проверить API</span>
@@ -733,7 +737,7 @@
             </table>
             <div class="pagination">
               <span id="apiConnectionsPagination">Строки 0-0 из 0</span>
-              <span>удаление только для disabled route · создание и изменение отложены</span>
+              <span>удаление только для disabled route · подключение только server-owned</span>
             </div>
           </section>
 
@@ -743,10 +747,10 @@
             </div>
             <div>
               <div class="card-title">Новый маршрут</div>
-              <div class="secondary">Создание и изменение маршрутов только через отдельный server-side builder.</div>
+              <div class="secondary">Подключение идёт только через server-owned route source; browser не передаёт секреты или route id.</div>
             </div>
-            <span class="chip amber"><span class="dot"></span>отложено</span>
-            <button class="button small disabled" type="button" disabled title="Route builder needs a separate admitted command surface.">Черновик недоступен</button>
+            <span class="chip blue"><span class="dot"></span>server-owned</span>
+            <button id="apiRouteConnectAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect" data-route-state-requirement="any" title="Подключить server-owned API route без browser secrets, paths или route_id.">Подключить API</button>
           </section>
         </section>
 
