@@ -1,0 +1,29 @@
+{
+  "quickStartState": {
+    "actionMachineCode": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+    "actionUiAction": "api_route_connect",
+    "dashboard": "https://openrouter.ai/settings/keys",
+    "laneVisible": true,
+    "refs": "OPENROUTER_API_KEY, WBP_OPENROUTER_API_KEY, WBP_PROVIDER_OPENROUTER_API_KEY",
+    "screen": "quick-start",
+    "summary": "OpenRouter key не найден в owner env. Добавьте env вне браузера и потом повторите проверку или подключение.",
+    "title": "Нужен owner credential"
+  },
+  "checkState": {
+    "actionDisplayState": "command_error",
+    "actionMachineCode": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+    "actionUiAction": "api_route_credential_check",
+    "laneTitle": "Нужен owner credential",
+    "screen": "quick-start"
+  },
+  "apiConnectionsState": {
+    "actionMachineCode": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+    "checkDisabled": false,
+    "dashboard": "https://openrouter.ai/settings/keys",
+    "laneVisible": true,
+    "refs": "OPENROUTER_API_KEY, WBP_OPENROUTER_API_KEY, WBP_PROVIDER_OPENROUTER_API_KEY",
+    "retryDisabled": false,
+    "screen": "api-connections",
+    "title": "Нужен owner credential"
+  }
+}

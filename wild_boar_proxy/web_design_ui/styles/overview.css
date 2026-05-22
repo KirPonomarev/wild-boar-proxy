@@ -2664,6 +2664,131 @@ button:disabled {
   width: 36px;
 }
 
+.api-credential-lane {
+  border: 1px solid rgba(217, 208, 195, .82);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.api-credential-lane[hidden] {
+  display: none;
+}
+
+.api-credential-lane.green {
+  background: rgba(242, 249, 243, .96);
+  border-color: rgba(45, 122, 75, .22);
+}
+
+.api-credential-lane.blue {
+  background: rgba(241, 246, 255, .96);
+  border-color: rgba(54, 92, 171, .20);
+}
+
+.api-credential-lane.amber {
+  background: rgba(255, 249, 240, .98);
+  border-color: rgba(168, 106, 16, .24);
+}
+
+.api-credential-lane.red {
+  background: rgba(252, 244, 242, .98);
+  border-color: rgba(182, 64, 44, .20);
+}
+
+.api-credential-head {
+  align-items: flex-start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+}
+
+.api-credential-icon {
+  align-items: center;
+  background: var(--blue-bg);
+  border-radius: 12px;
+  display: inline-flex;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.api-credential-icon .ui-icon {
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
+.api-credential-head h3 {
+  color: var(--text);
+  font-size: 17px;
+  line-height: 23px;
+  margin: 4px 0 4px;
+}
+
+.api-credential-head p,
+.api-credential-note {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 18px;
+  margin: 0;
+}
+
+.api-credential-banner {
+  border: 1px solid rgba(217, 208, 195, .76);
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  padding: 13px 14px;
+}
+
+.api-credential-banner.green {
+  background: var(--success-bg);
+  border-color: rgba(45, 122, 75, .24);
+  color: var(--green);
+}
+
+.api-credential-banner.blue {
+  background: rgba(241, 246, 255, .96);
+  border-color: rgba(54, 92, 171, .20);
+  color: var(--blue);
+}
+
+.api-credential-banner.amber {
+  background: var(--amber-bg);
+  border-color: rgba(168, 106, 16, .24);
+  color: var(--amber);
+}
+
+.api-credential-banner.red {
+  background: var(--red-bg);
+  border-color: rgba(182, 64, 44, .22);
+  color: var(--red);
+}
+
+.api-credential-banner.neutral {
+  background: var(--neutral-bg);
+  color: var(--secondary);
+}
+
+.api-credential-grid {
+  display: grid;
+  gap: 8px 14px;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.api-credential-grid > div:nth-child(odd) {
+  color: var(--secondary);
+}
+
+.api-credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .account-detail-trigger {
   flex: 1 1 calc(50% - 4px);
   font-size: 11px;

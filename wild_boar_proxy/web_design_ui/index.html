@@ -233,6 +233,34 @@
                 </button>
                 <a class="quick-start-link" href="?screen=api-connections" data-screen-link="api-connections">Открыть детали</a>
               </div>
+
+              <section id="quickStartApiCredentialLane" class="api-credential-lane neutral" aria-label="Owner credential setup для API" hidden>
+                <div class="api-credential-head">
+                  <div class="api-credential-icon">
+                    <img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">
+                  </div>
+                  <div>
+                    <h3 id="quickStartApiCredentialTitle">Нужен owner credential</h3>
+                    <p id="quickStartApiCredentialSummary">Browser не принимает API key. Продолжение идёт только через owner env и повторную проверку.</p>
+                  </div>
+                  <span id="quickStartApiCredentialChip" class="chip neutral"><span class="dot"></span><span>ожидание</span></span>
+                </div>
+                <div id="quickStartApiCredentialBanner" class="api-credential-banner neutral">
+                  Owner credential для provider не подтверждён packet-ом.
+                </div>
+                <div class="api-credential-grid">
+                  <div>provider</div><div id="quickStartApiCredentialProvider">openrouter</div>
+                  <div>expected ref</div><div id="quickStartApiCredentialRef" class="mono-value">OPENROUTER_API_KEY</div>
+                  <div>supported refs</div><div id="quickStartApiCredentialRefs" class="mono-value">OPENROUTER_API_KEY</div>
+                  <div>source</div><div id="quickStartApiCredentialSource">owner-env</div>
+                </div>
+                <p id="quickStartApiCredentialRestart" class="api-credential-note">Если env добавлен после старта owner server process, может потребоваться restart перед повторной проверкой.</p>
+                <div class="api-credential-actions">
+                  <button id="quickStartApiCredentialCheckAction" class="button small api-route-action" type="button" data-ui-action="api_route_credential_check" data-route-state-requirement="any">Проверить credential</button>
+                  <button id="quickStartApiCredentialRetryAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect">Повторить подключение</button>
+                  <a id="quickStartApiCredentialDashboardAction" class="button small ghost" href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">Открыть dashboard</a>
+                </div>
+              </section>
             </section>
           </div>
 
@@ -390,7 +418,7 @@
           <div id="uiLaneExitForbiddenList" class="action-ledger-list" aria-label="Запрещённые действия"></div>
         </section>
 
-          <section id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite">
+          <section id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite" tabindex="-1">
           <div class="action-summary-head">
             <div>
               <div class="eyebrow">Последнее действие</div>
@@ -755,6 +783,34 @@
             </div>
             <span class="chip blue"><span class="dot"></span>server-owned</span>
             <button id="apiRouteConnectAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect" data-route-state-requirement="any" title="Подключить server-owned API route без browser secrets, paths или route_id.">Подключить API</button>
+          </section>
+
+          <section id="apiConnectionsCredentialLane" class="card api-credential-lane neutral" aria-label="Owner credential setup для API" hidden>
+            <div class="api-credential-head">
+              <div class="api-credential-icon">
+                <img class="ui-icon" src="assets/icons/phosphor/key.png" alt="" aria-hidden="true">
+              </div>
+              <div>
+                <h3 id="apiConnectionsCredentialTitle">Нужен owner credential</h3>
+                <p id="apiConnectionsCredentialSummary">Server-owned route не может считаться connected, пока owner credential не подтверждён.</p>
+              </div>
+              <span id="apiConnectionsCredentialChip" class="chip neutral"><span class="dot"></span><span>ожидание</span></span>
+            </div>
+            <div id="apiConnectionsCredentialBanner" class="api-credential-banner neutral">
+              Owner credential для provider не подтверждён packet-ом.
+            </div>
+            <div class="api-credential-grid">
+              <div>provider</div><div id="apiConnectionsCredentialProvider">openrouter</div>
+              <div>expected ref</div><div id="apiConnectionsCredentialRef" class="mono-value">OPENROUTER_API_KEY</div>
+              <div>supported refs</div><div id="apiConnectionsCredentialRefs" class="mono-value">OPENROUTER_API_KEY</div>
+              <div>source</div><div id="apiConnectionsCredentialSource">owner-env</div>
+            </div>
+            <p id="apiConnectionsCredentialRestart" class="api-credential-note">Если env добавлен после старта owner server process, может потребоваться restart перед повторной проверкой.</p>
+            <div class="api-credential-actions">
+              <button id="apiConnectionsCredentialCheckAction" class="button small api-route-action" type="button" data-ui-action="api_route_credential_check" data-route-state-requirement="any">Проверить credential</button>
+              <button id="apiConnectionsCredentialRetryAction" class="button small api-route-action api-route-connect-action" type="button" data-ui-action="api_route_connect">Повторить подключение</button>
+              <a id="apiConnectionsCredentialDashboardAction" class="button small ghost" href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">Открыть dashboard</a>
+            </div>
           </section>
         </section>
 

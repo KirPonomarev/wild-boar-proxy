@@ -1871,6 +1871,87 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner.calls,
         )
 
+    def test_api_route_credential_check_surfaces_missing_owner_env_without_route_mutation(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={"count": 0, "routes": []},
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 0,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json")
+        ] = credential_status_packet(present=False)
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_credential_check"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "command_error")
+        self.assertEqual(
+            result["result"]["machine_error_code"],
+            "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+        )
+        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_missing")
+        self.assertEqual(result["result"]["data"]["credential_provider"], "openrouter")
+        self.assertEqual(result["result"]["data"]["credential_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(result["result"]["data"]["add_status"], "not_run")
+        self.assertEqual(result["result"]["data"]["validate_status"], "not_run")
+        self.assertFalse(result["result"]["data"]["credential_present"])
+        self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
+        self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+        self.assertFalse(
+            any(call[:3] == ("external-models", "routes", "add") for call in runner.calls)
+        )
+
+    def test_api_route_credential_check_reports_present_owner_env(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={"count": 0, "routes": []},
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 0,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json")
+        ] = credential_status_packet(present=True)
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_credential_check"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_present")
+        self.assertTrue(result["result"]["data"]["credential_present"])
+        self.assertEqual(result["result"]["data"]["credential_provider"], "openrouter")
+        self.assertEqual(result["result"]["data"]["credential_status"], "present")
+        self.assertEqual(result["result"]["data"]["add_status"], "not_run")
+        self.assertEqual(result["result"]["data"]["validate_status"], "not_run")
+
     def test_api_route_connect_rejects_forbidden_browser_fields(self) -> None:
         runner = MappingRunner(live_payloads())
         forbidden_payloads = [
@@ -1948,13 +2029,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 provider.server_close()
                 provider_thread.join(timeout=5)
 
-            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["status"], "command_error")
             self.assertEqual(result["action_role"], "api_route_admission")
-            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_validate_failed")
             self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admitted")
             self.assertTrue(result["result"]["data"]["credential_admitted"])
             self.assertFalse(result["result"]["data"]["secret_value_exposed"])
             self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
+            self.assertEqual(result["result"]["machine_error_code"], "invalid_upstream_response")
             self.assertFalse(result["result"]["data"]["browser_secret_intake"])
             self.assertFalse(result["result"]["data"]["browser_path_intake"])
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
@@ -1965,7 +2047,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(readonly_after["routes"][0]["route_id"], "wbp-web-primary-openrouter")
             self.assertTrue(readonly_after["routes"][0]["enabled"])
             self.assertEqual(readonly_after["routes"][0]["secret_status_label"], "available")
-            self.assertEqual(readonly_after["routes"][0]["validation_label"], "ok")
+            self.assertEqual(readonly_after["routes"][0]["validation_label"], "check failed")
 
     def test_api_connections_readonly_requires_matching_secret_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

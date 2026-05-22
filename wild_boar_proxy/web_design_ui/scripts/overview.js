@@ -72,6 +72,7 @@ const ACTION_STATUS_VISUAL_CLASS = {
   integration_failure: "red",
   invalid_json: "red",
   timeout: "amber",
+  cancelled: "amber",
   partial_success: "amber",
   unsupported: "neutral",
   missing_surface: "neutral",
@@ -457,14 +458,19 @@ let confirmationInFlight = false;
 let currentAccountsSnapshot = null;
 let currentApiConnectionsSnapshot = null;
 let lastOnboardingActionPayload = null;
+let lastApiCredentialActionPayload = null;
+let lastApiCredentialActionRefreshState = "none";
 let selectedAccountId = "";
 let selectedAccountIds = new Set();
 let actionLedger = [];
 let actionLedgerFilter = "all";
 let activeActionRequestKey = "";
+let activeActionAbortController = null;
+let activeActionAbortReason = "";
 let activeOnboardLoginSession = null;
 let onboardLoginWindowRef = null;
 let onboardLoginOverlayOpenUrl = "";
+let onboardLoginWindowBlobUrl = "";
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -801,10 +807,19 @@ function actionTruthNote(payload, displayState, refreshState) {
   if (displayState === "timeout") {
     return "Запрос истёк по времени. Это recoverable ошибка интеграции, а не успех.";
   }
+  if (displayState === "cancelled") {
+    return "Ожидание ответа отменено в браузере. Это не подтверждает ни успех, ни откат server-side команды.";
+  }
   if (displayState === "invalid_json") {
     return "Endpoint вернул invalid JSON. Это жёсткая ошибка интеграции, а не успех.";
   }
   if (displayState === "command_error") {
+    if (
+      payload.ui_action === "api_route_credential_check"
+      && payload.result?.machine_error_code === "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+    ) {
+      return "Owner credential не найден в server process. Browser не принимает secret; следующий шаг остаётся owner-side.";
+    }
     return "Строгий JSON-пакет сообщил command_error. UI не должен показывать это как успех.";
   }
   if (displayState === "partial_success") {
@@ -830,6 +845,7 @@ function actionDisplayLabel(displayState) {
     command_error: "ошибка команды",
     invalid_json: "invalid JSON",
     timeout: "timeout",
+    cancelled: "ожидание отменено",
     integration_failure: "ошибка интеграции",
     created: "артефакт создан",
     redaction_unreported: "redaction не подтверждена",
@@ -881,6 +897,8 @@ async function runUiAction(uiAction, extraPayload = {}) {
     return;
   }
   activeActionRequestKey = requestKey;
+  activeActionAbortReason = "";
+  activeActionAbortController = typeof AbortController === "function" ? new AbortController() : null;
   setActionsBusy(true);
   setActionPanel({
     ui_action: uiAction,
@@ -901,7 +919,8 @@ async function runUiAction(uiAction, extraPayload = {}) {
       method: "POST",
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestPayload)
+      body: JSON.stringify(requestPayload),
+      signal: activeActionAbortController?.signal
     });
     if (!response.ok) {
       throw new Error(`action http ${response.status}`);
@@ -909,35 +928,48 @@ async function runUiAction(uiAction, extraPayload = {}) {
     const payload = await response.json();
     await handleActionPayload(payload, onboardLoginWindow);
   } catch (error) {
-    const timeoutFailure = error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout");
+    const abortedByUser = error?.name === "AbortError" && activeActionAbortReason === "user_cancelled";
+    const timeoutFailure = !abortedByUser && (
+      error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout")
+    );
     if (onboardLoginWindow) {
       writeOnboardLoginWindowStatus(
         onboardLoginWindow,
-        "Owner login failed",
-        "Web could not receive the owner login packet. Return to Wild Boar Proxy and retry.",
-        "error"
+        abortedByUser ? "Owner login wait cancelled" : "Owner login failed",
+        abortedByUser
+          ? "Waiting for the owner login packet was cancelled in the browser. Refresh Wild Boar Proxy before retrying."
+          : "Web could not receive the owner login packet. Return to Wild Boar Proxy and retry.",
+        abortedByUser ? "warning" : "error"
       );
     }
-    const failureStatus = error instanceof SyntaxError ? "invalid_json" : (timeoutFailure ? "timeout" : "integration_failure");
-    const machineCode = error instanceof SyntaxError
-      ? "UI_ACTION_INVALID_JSON"
-      : (timeoutFailure ? "UI_ACTION_TIMEOUT" : "UI_ACTION_FETCH_FAILED");
+    const failureStatus = abortedByUser
+      ? "cancelled"
+      : (error instanceof SyntaxError ? "invalid_json" : (timeoutFailure ? "timeout" : "integration_failure"));
+    const machineCode = abortedByUser
+      ? "UI_ACTION_WAIT_CANCELLED"
+      : (error instanceof SyntaxError
+        ? "UI_ACTION_INVALID_JSON"
+        : (timeoutFailure ? "UI_ACTION_TIMEOUT" : "UI_ACTION_FETCH_FAILED"));
     setActionPanel({
       ui_action: uiAction,
-      action_role: "integration_failure",
+      action_role: abortedByUser ? "user_cancelled" : "integration_failure",
       account_id: requestPayload.account_id || "",
       route_id: requestPayload.route_id || "",
       post_action_refresh_required: false,
       result: {
         status: failureStatus,
         machine_error_code: machineCode,
-        human_message: error.message,
-        next_action: "retry",
+        human_message: abortedByUser
+          ? "Ожидание результата отменено в браузере. Если команда уже стартовала на сервере, выполните refresh перед повтором."
+          : error.message,
+        next_action: abortedByUser ? "refresh" : "retry",
         changed_files: []
       }
     });
   } finally {
     activeActionRequestKey = "";
+    activeActionAbortController = null;
+    activeActionAbortReason = "";
     setActionsBusy(false);
   }
 }
@@ -1099,6 +1131,13 @@ function openDeviceLoginWindowIfNeeded(loginWindow, payload) {
     return;
   }
   try {
+    if (onboardLoginWindowBlobUrl && typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+      try {
+        URL.revokeObjectURL(onboardLoginWindowBlobUrl);
+      } catch (_revokeError) {
+      }
+      onboardLoginWindowBlobUrl = "";
+    }
     loginWindow.location.href = model.deviceUrl;
   } catch (_navigateError) {
   }
@@ -1121,12 +1160,16 @@ function onboardLoginWindowHtml(model) {
   const safeDeviceUrl = onboardLoginWindowEscape(model?.deviceUrl || "");
   const safeDeviceCode = onboardLoginWindowEscape(model?.deviceCode || "");
   const safeSessionId = onboardLoginWindowEscape(model?.sessionId || "");
+  const checkHidden = model?.canCheck === false ? " hidden" : "";
+  const completeHidden = model?.canComplete === true ? "" : " hidden";
+  const cancelHidden = model?.canCancel === false ? " hidden" : "";
   const borderColor = tone === "error" ? "#9f2f2f" : (tone === "success" ? "#2f7a46" : "#2f5f9f");
   const encodedModel = JSON.stringify({
     sessionId: model?.sessionId || "",
     title,
     message,
     tone,
+    serverOrigin: (typeof window !== "undefined" && window.location && typeof window.location.origin === "string") ? window.location.origin : "",
     deviceUrl: model?.deviceUrl || "",
     deviceCode: model?.deviceCode || "",
     status: model?.status || "",
@@ -1168,13 +1211,15 @@ function onboardLoginWindowHtml(model) {
     <p id="message">${safeMessage}</p>
     ${deviceSection}
     <div class="actions">
-      <button id="checkButton" class="primary" type="button">Проверить</button>
-      <button id="completeButton" type="button" hidden>Завершить</button>
-      <button id="cancelButton" type="button">Отменить</button>
+      <button id="checkButton" class="primary" type="button"${checkHidden}>Проверить</button>
+      <button id="completeButton" type="button"${completeHidden}>Завершить</button>
+      <button id="cancelButton" type="button"${cancelHidden}>Отменить</button>
     </div>
   </main>
   <script>
     const MODEL = ${encodedModel};
+    const ACTION_URL = MODEL.serverOrigin ? MODEL.serverOrigin + "/api/action" : "api/action";
+    let requestInFlight = false;
     const safeText = (value, fallback = "-") => {
       if (typeof value !== "string") return fallback;
       const trimmed = value.trim();
@@ -1188,15 +1233,55 @@ function onboardLoginWindowHtml(model) {
       } catch (_openerError) {
       }
     };
-    const requestActionFromOpener = (uiAction) => {
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage(
-            { type: "wbp-onboard-login-command", uiAction, sessionId: MODEL.sessionId },
-            "*"
-          );
+    const setActionButtonsBusy = (isBusy) => {
+      for (const id of ["checkButton", "completeButton", "cancelButton"]) {
+        const node = document.getElementById(id);
+        if (node && !node.hidden) {
+          node.disabled = isBusy;
         }
-      } catch (_openerError) {
+      }
+    };
+    const requestAction = async (uiAction) => {
+      if (!MODEL.sessionId || requestInFlight) {
+        return;
+      }
+      requestInFlight = true;
+      setActionButtonsBusy(true);
+      try {
+        const response = await fetch(ACTION_URL, {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ui_action: uiAction, session_id: MODEL.sessionId })
+        });
+        if (!response.ok) {
+          throw new Error("action http " + response.status);
+        }
+        const payload = await response.json();
+        renderPayload(payload);
+      } catch (error) {
+        renderPayload({
+          status: "integration_failure",
+          ui_action: uiAction,
+          result: {
+            status: "integration_failure",
+            machine_error_code: "UI_ACTION_FETCH_FAILED",
+            human_message: error && error.message ? String(error.message) : "Popup could not reach the owner action endpoint.",
+            next_action: "retry",
+            changed_files: [],
+            data: {
+              login_bridge: {
+                status: MODEL.status || "unknown",
+                session_id: MODEL.sessionId,
+                device_url: MODEL.deviceUrl || "",
+                device_code: MODEL.deviceCode || ""
+              }
+            }
+          }
+        });
+      } finally {
+        requestInFlight = false;
+        setActionButtonsBusy(false);
       }
     };
     const setButtonState = (id, visible) => {
@@ -1235,9 +1320,9 @@ function onboardLoginWindowHtml(model) {
       setButtonState("cancelButton", !terminal);
       postToOpener(payload);
     };
-    document.getElementById("checkButton")?.addEventListener("click", () => requestActionFromOpener("account_login_status"));
-    document.getElementById("completeButton")?.addEventListener("click", () => requestActionFromOpener("account_login_complete"));
-    document.getElementById("cancelButton")?.addEventListener("click", () => requestActionFromOpener("account_login_cancel"));
+    document.getElementById("checkButton")?.addEventListener("click", () => requestAction("account_login_status"));
+    document.getElementById("completeButton")?.addEventListener("click", () => requestAction("account_login_complete"));
+    document.getElementById("cancelButton")?.addEventListener("click", () => requestAction("account_login_cancel"));
     setButtonState("checkButton", MODEL.canCheck !== false);
     setButtonState("completeButton", MODEL.canComplete === true);
     setButtonState("cancelButton", MODEL.canCancel !== false);
@@ -1265,8 +1350,21 @@ function writeOnboardLoginWindowStatus(loginWindow, title, message, tone = "pend
   } catch (_documentError) {
   }
   try {
-    if (loginWindow.location && typeof loginWindow.location === "object") {
-      loginWindow.location.href = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    if (
+      typeof URL !== "undefined"
+      && typeof URL.createObjectURL === "function"
+      && typeof Blob !== "undefined"
+      && loginWindow.location
+      && typeof loginWindow.location === "object"
+    ) {
+      if (onboardLoginWindowBlobUrl && typeof URL.revokeObjectURL === "function") {
+        try {
+          URL.revokeObjectURL(onboardLoginWindowBlobUrl);
+        } catch (_revokeError) {
+        }
+      }
+      onboardLoginWindowBlobUrl = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      loginWindow.location.href = onboardLoginWindowBlobUrl;
       return true;
     }
   } catch (_locationError) {
@@ -2327,6 +2425,10 @@ function setActionPanel(payload, refreshState = "none") {
   lastOnboardingActionPayload = ["onboard_account_dry_run", "account_login_complete"].includes(payload.ui_action)
     ? payload
     : lastOnboardingActionPayload;
+  if (isApiCredentialUiAction(payload.ui_action)) {
+    lastApiCredentialActionPayload = payload;
+    lastApiCredentialActionRefreshState = refreshState;
+  }
   const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
   const changedFiles = Array.isArray(result.changed_files) ? result.changed_files : [];
   const display = actionDisplayState(payload, refreshState);
@@ -2401,11 +2503,37 @@ function setActionPanel(payload, refreshState = "none") {
   text("actionSummaryTarget", safeTarget);
   text("actionSummaryRefresh", refreshLabel);
   renderOnboardingResultFlow(payload, onboarding, refreshState);
+  renderApiCredentialSetupLane(lastApiCredentialActionPayload, lastApiCredentialActionRefreshState);
+  revealActionPanel(display.displayState);
   recordActionLedgerEntry(payload, refreshState, display, changedFiles);
   if (payload.ui_action === "export_diagnostics") {
     renderDiagnosticsAction(payload);
   }
   renderAccountDetailDrawer();
+}
+
+function revealActionPanel(displayState) {
+  if (displayState === "running") {
+    return;
+  }
+  const panel = document.getElementById("actionPanel");
+  if (!panel) {
+    return;
+  }
+  if (typeof panel.scrollIntoView === "function") {
+    try {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (_scrollError) {
+      panel.scrollIntoView();
+    }
+  }
+  if (typeof panel.focus === "function") {
+    try {
+      panel.focus({ preventScroll: true });
+    } catch (_focusError) {
+      panel.focus();
+    }
+  }
 }
 
 function actionPanelVisualForOnboarding(onboardingModel, display) {
@@ -3189,6 +3317,26 @@ function renderUiReadonlyLaneExitList(containerId, entries, visual) {
   }
 }
 
+function apiCredentialSupportDetails(data = {}) {
+  const expectedRefs = Array.isArray(data.credential_expected_refs)
+    ? data.credential_expected_refs.join(",")
+    : "";
+  const supportedSources = Array.isArray(data.credential_supported_sources)
+    ? data.credential_supported_sources.join(",")
+    : "";
+  return [
+    `credential_phase=${data.credential_phase || "unknown"}`,
+    `credential_present=${data.credential_present === true ? "true" : "false"}`,
+    `credential_admitted=${data.credential_admitted === true ? "true" : "false"}`,
+    `credential_ref=${data.credential_ref || "-"}`,
+    `supported_sources=${supportedSources || "-"}`,
+    `expected_refs=${expectedRefs || "-"}`,
+    `provider_dashboard=${data.credential_provider_dashboard_url || "-"}`,
+    `browser_api_key_intake=${data.browser_api_key_intake === false ? "false" : "unknown"}`,
+    `secret_exposed=${data.secret_value_exposed === false ? "false" : "unknown"}`
+  ].join(" · ");
+}
+
 function actionSupportDetails(payload) {
   const result = payload.result || {};
   const data = result.data || {};
@@ -3234,30 +3382,195 @@ function actionSupportDetails(payload) {
   if (payload.ui_action === "api_route_evidence_capture") {
     return `локальный artifact · ${artifactReference(data.evidence_path)}`;
   }
-  if (payload.ui_action === "api_route_connect") {
-    const expectedRefs = Array.isArray(data.credential_expected_refs)
-      ? data.credential_expected_refs.join(",")
-      : "";
-    const supportedSources = Array.isArray(data.credential_supported_sources)
-      ? data.credential_supported_sources.join(",")
-      : "";
-    return [
-      `credential_phase=${data.credential_phase || "unknown"}`,
-      `credential_present=${data.credential_present === true ? "true" : "false"}`,
-      `credential_admitted=${data.credential_admitted === true ? "true" : "false"}`,
-      `credential_ref=${data.credential_ref || "-"}`,
-      `supported_sources=${supportedSources || "-"}`,
-      `expected_refs=${expectedRefs || "-"}`,
-      `provider_dashboard=${data.credential_provider_dashboard_url || "-"}`,
-      `browser_api_key_intake=${data.browser_api_key_intake === false ? "false" : "unknown"}`,
-      `secret_exposed=${data.secret_value_exposed === false ? "false" : "unknown"}`
-    ].join(" · ");
+  if (payload.ui_action === "api_route_connect" || payload.ui_action === "api_route_credential_check") {
+    return apiCredentialSupportDetails(data);
   }
   if (payload.ui_action === "export_diagnostics") {
     const exportModel = diagnosticsExportResultModel(payload);
     return `support artifact · ${artifactReference(data.bundle_path)} · redaction=${exportModel.redactionStatus}`;
   }
   return "-";
+}
+
+function isApiCredentialUiAction(uiAction) {
+  return uiAction === "api_route_connect" || uiAction === "api_route_credential_check";
+}
+
+function apiCredentialActionModel(payload = null, refreshState = "none") {
+  if (!payload || !isApiCredentialUiAction(payload.ui_action)) {
+    return { visible: false };
+  }
+  const result = payload.result || {};
+  const data = result.data || {};
+  const provider = data.credential_provider || "openrouter";
+  const expectedRefs = Array.isArray(data.credential_expected_refs) && data.credential_expected_refs.length
+    ? data.credential_expected_refs
+    : ["OPENROUTER_API_KEY", "WBP_OPENROUTER_API_KEY", "WBP_PROVIDER_OPENROUTER_API_KEY"];
+  const supportedSources = Array.isArray(data.credential_supported_sources) && data.credential_supported_sources.length
+    ? data.credential_supported_sources
+    : ["owner-env"];
+  const dashboardUrl = data.credential_provider_dashboard_url || "https://openrouter.ai/settings/keys";
+  const phase = data.credential_phase
+    || (data.credential_present === true ? "credential_present" : "credential_missing");
+  const credentialPresent = data.credential_present === true;
+  const credentialAdmitted = data.credential_admitted === true;
+  const validateOk = data.validate_status === "ok";
+  const routeConnected = payload.ui_action === "api_route_connect"
+    && result.status === "ok"
+    && validateOk
+    && refreshState === "complete";
+  const routePendingRefresh = payload.ui_action === "api_route_connect"
+    && result.status === "ok"
+    && validateOk
+    && refreshState !== "complete";
+  const missingCredential = phase === "credential_missing"
+    || result.machine_error_code === "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+    || (!credentialPresent && !credentialAdmitted && payload.ui_action === "api_route_credential_check");
+  const routeValidateFailed = payload.ui_action === "api_route_connect"
+    && result.status !== "ok"
+    && phase !== "credential_missing"
+    && data.validate_status === "command_error";
+
+  let visual = "neutral";
+  let title = "Owner credential status";
+  let chip = "ожидание";
+  let summary = "Browser не передаёт секреты; решение принимается только по owner packet.";
+  let banner = "Ожидается явный packet owner credential/status.";
+
+  if (routeConnected) {
+    visual = "green";
+    title = "API route подключён";
+    chip = "connected";
+    summary = "Credential подтверждён, route прошёл validate и отображён после canonical refresh.";
+    banner = "Connected state подтверждён packet-ом validate плюс обновлённым списком маршрутов.";
+  } else if (routePendingRefresh) {
+    visual = "blue";
+    title = "Credential подтверждён";
+    chip = "refresh";
+    summary = "Route создан и validate прошёл, но connected признаётся только после обновлённого API snapshot.";
+    banner = "Команда завершилась без секрета в браузере; дождитесь refresh proof или повторите обновление.";
+  } else if (missingCredential) {
+    visual = "amber";
+    title = "Нужен owner credential";
+    chip = "missing";
+    summary = "OpenRouter key не найден в owner env. Добавьте env вне браузера и потом повторите проверку или подключение.";
+    banner = "Credential missing не является connected state. Browser не принимает API key и не хранит secret.";
+  } else if (routeValidateFailed) {
+    visual = "red";
+    title = "Route не подтверждён";
+    chip = "validate failed";
+    summary = "Credential найден, но provider validate не дал зелёного подтверждения. Connected state не заявляется.";
+    banner = result.human_message || "Provider validate вернул non-green packet.";
+  } else if (credentialPresent || credentialAdmitted) {
+    visual = "blue";
+    title = "Credential подтверждён";
+    chip = credentialAdmitted ? "admitted" : "present";
+    summary = "Owner credential уже виден server process и можно повторить подключение API без ввода секрета в браузере.";
+    banner = credentialAdmitted
+      ? "Credential materialized owner-side. Следующий шаг — повторить подключение server-owned route."
+      : "Credential status packet подтвердил owner-side secret reference.";
+  } else if (result.status === "command_error") {
+    visual = "red";
+    title = "Подключение API не подтверждено";
+    chip = "blocked";
+    summary = result.human_message || "API route не получил подтверждения по bounded packet.";
+    banner = "UI не заявляет connected state, пока owner credential и route truth не подтверждены packet-ом.";
+  }
+
+  return {
+    visible: true,
+    visual,
+    title,
+    chip,
+    summary,
+    banner,
+    provider,
+    credentialRef: data.credential_ref || expectedRefs[0] || "OPENROUTER_API_KEY",
+    expectedRefs,
+    supportedSources,
+    dashboardUrl,
+    restartNote: "Если env добавлен после старта owner server process, может потребоваться restart перед повторной проверкой.",
+    showCheck: !routeConnected,
+    showRetry: !routeConnected,
+    showDashboard: Boolean(dashboardUrl)
+  };
+}
+
+function renderApiCredentialSetupLane(payload = lastApiCredentialActionPayload, refreshState = lastApiCredentialActionRefreshState) {
+  const model = apiCredentialActionModel(payload, refreshState);
+  const laneIds = [
+    {
+      lane: "quickStartApiCredentialLane",
+      title: "quickStartApiCredentialTitle",
+      summary: "quickStartApiCredentialSummary",
+      chip: "quickStartApiCredentialChip",
+      banner: "quickStartApiCredentialBanner",
+      provider: "quickStartApiCredentialProvider",
+      ref: "quickStartApiCredentialRef",
+      refs: "quickStartApiCredentialRefs",
+      source: "quickStartApiCredentialSource",
+      restart: "quickStartApiCredentialRestart",
+      check: "quickStartApiCredentialCheckAction",
+      retry: "quickStartApiCredentialRetryAction",
+      dashboard: "quickStartApiCredentialDashboardAction"
+    },
+    {
+      lane: "apiConnectionsCredentialLane",
+      title: "apiConnectionsCredentialTitle",
+      summary: "apiConnectionsCredentialSummary",
+      chip: "apiConnectionsCredentialChip",
+      banner: "apiConnectionsCredentialBanner",
+      provider: "apiConnectionsCredentialProvider",
+      ref: "apiConnectionsCredentialRef",
+      refs: "apiConnectionsCredentialRefs",
+      source: "apiConnectionsCredentialSource",
+      restart: "apiConnectionsCredentialRestart",
+      check: "apiConnectionsCredentialCheckAction",
+      retry: "apiConnectionsCredentialRetryAction",
+      dashboard: "apiConnectionsCredentialDashboardAction"
+    }
+  ];
+  for (const ids of laneIds) {
+    const lane = document.getElementById(ids.lane);
+    if (!lane) {
+      continue;
+    }
+    lane.hidden = !model.visible;
+    if (!model.visible) {
+      continue;
+    }
+    lane.className = `api-credential-lane ${model.visual}`;
+    const chip = document.getElementById(ids.chip);
+    if (chip) {
+      chip.className = `chip ${ACCOUNT_VISUAL_CLASS[model.visual] || "neutral"}`;
+      chip.lastElementChild.textContent = model.chip;
+    }
+    const banner = document.getElementById(ids.banner);
+    if (banner) {
+      banner.className = `api-credential-banner ${model.visual}`;
+    }
+    text(ids.title, model.title);
+    text(ids.summary, model.summary);
+    text(ids.banner, model.banner);
+    text(ids.provider, model.provider);
+    text(ids.ref, model.credentialRef);
+    text(ids.refs, model.expectedRefs.join(", "));
+    text(ids.source, model.supportedSources.join(", "));
+    text(ids.restart, model.restartNote);
+    const checkButton = document.getElementById(ids.check);
+    if (checkButton) {
+      checkButton.hidden = !model.showCheck;
+    }
+    const retryButton = document.getElementById(ids.retry);
+    if (retryButton) {
+      retryButton.hidden = !model.showRetry;
+    }
+    const dashboard = document.getElementById(ids.dashboard);
+    if (dashboard) {
+      dashboard.hidden = !model.showDashboard;
+      dashboard.href = model.dashboardUrl;
+    }
+  }
 }
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
@@ -4206,6 +4519,7 @@ function findApiRouteById(routeId) {
 
 function closeConfirmation() {
   if (confirmationInFlight) {
+    cancelActiveActionWait();
     return;
   }
   pendingConfirmedAction = null;
@@ -4222,9 +4536,21 @@ function setConfirmationInFlight(isInFlight) {
     confirmButton.textContent = isInFlight ? "Выполняется..." : (confirmButton.dataset.readyLabel || "Подтвердить");
   }
   if (cancelButton) {
-    cancelButton.disabled = isInFlight;
+    cancelButton.disabled = false;
+    cancelButton.textContent = isInFlight ? "Отменить ожидание" : "Отмена";
   }
-  text("confirmDispatchState", isInFlight ? "однократная отправка" : "ожидание");
+  text("confirmDispatchState", isInFlight ? "ожидание owner/server packet" : "однократная отправка");
+}
+
+function cancelActiveActionWait() {
+  if (!confirmationInFlight || !activeActionAbortController) {
+    pendingConfirmedAction = null;
+    setConfirmationInFlight(false);
+    document.getElementById("confirmOverlay").hidden = true;
+    return;
+  }
+  activeActionAbortReason = "user_cancelled";
+  activeActionAbortController.abort();
 }
 
 async function confirmPendingAction() {
@@ -4710,6 +5036,7 @@ function renderQuickStart(accountsSnapshot, apiSnapshot, source, fixtureState = 
   const sidebarDot = document.getElementById("sidebarDot");
   setVisualClass(sidebarDot, "dot", bannerVisual);
   text("sidebarStatus", firstRun ? "Quick Start: first run" : "Quick Start: summary state");
+  renderApiCredentialSetupLane(lastApiCredentialActionPayload, lastApiCredentialActionRefreshState);
   applyActionAvailability();
 }
 
@@ -5175,6 +5502,7 @@ function renderApiConnectionsSnapshot(snapshot) {
   const sidebarDot = document.getElementById("sidebarDot");
   setClassName(sidebarDot, "dot", visualState);
   text("sidebarStatus", summary.human_message || "API-подключения только для чтения");
+  renderApiCredentialSetupLane(lastApiCredentialActionPayload, lastApiCredentialActionRefreshState);
 }
 
 function renderApiConnectionRows(routes) {
@@ -6304,7 +6632,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("quickStartConnectApiAction")?.addEventListener("click", () => {
     maybeConfirmAndRun("api_route_connect");
   });
+  document.getElementById("quickStartApiCredentialCheckAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_credential_check");
+  });
+  document.getElementById("quickStartApiCredentialRetryAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_connect");
+  });
   document.getElementById("apiRouteConnectAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_connect");
+  });
+  document.getElementById("apiConnectionsCredentialCheckAction")?.addEventListener("click", () => {
+    maybeConfirmAndRun("api_route_credential_check");
+  });
+  document.getElementById("apiConnectionsCredentialRetryAction")?.addEventListener("click", () => {
     maybeConfirmAndRun("api_route_connect");
   });
   document.getElementById("quickStartCheckAllAction")?.addEventListener("click", () => {

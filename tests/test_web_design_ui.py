@@ -980,7 +980,11 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("server-owned", api_screen)
         self.assertIn("Подключить API", api_screen)
         self.assertIn('data-ui-action="api_route_connect"', api_screen)
+        self.assertIn('id="apiConnectionsCredentialLane"', api_screen)
+        self.assertIn('id="apiConnectionsCredentialCheckAction"', api_screen)
+        self.assertIn('data-ui-action="api_route_credential_check"', api_screen)
         self.assertIn('maybeConfirmAndRun("api_route_connect")', js)
+        self.assertIn('maybeConfirmAndRun("api_route_credential_check")', js)
         self.assertIn("credential_expected_refs", js)
         self.assertIn("provider_dashboard", js)
         self.assertIn("browser_api_key_intake", js)
@@ -2466,6 +2470,19 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn('maybeConfirmAndRun(onboardingLiveReadyInSession() ? "onboard_account" : "onboard_account_dry_run")', js)
         self.assertIn('return "Проверить подключение";', js)
         self.assertIn('return "Подключить в резерв";', js)
+        self.assertIn('id="actionPanel" class="action-panel neutral compact-action-panel" aria-live="polite" tabindex="-1"', html)
+        self.assertIn("revealActionPanel(display.displayState);", js)
+        self.assertIn('panel.scrollIntoView({ behavior: "smooth", block: "start" });', js)
+        self.assertIn('panel.focus({ preventScroll: true });', js)
+        self.assertIn('const ACTION_URL = MODEL.serverOrigin ? MODEL.serverOrigin + "/api/action" : "api/action";', js)
+        self.assertIn('document.getElementById("checkButton")?.addEventListener("click", () => requestAction("account_login_status"));', js)
+        self.assertIn('document.getElementById("completeButton")?.addEventListener("click", () => requestAction("account_login_complete"));', js)
+        self.assertIn('document.getElementById("cancelButton")?.addEventListener("click", () => requestAction("account_login_cancel"));', js)
+        self.assertIn("URL.createObjectURL(new Blob([html], { type: \"text/html;charset=utf-8\" }))", js)
+        self.assertNotIn("data:text/html;charset=utf-8", js)
+        self.assertIn('const checkHidden = model?.canCheck === false ? " hidden" : "";', js)
+        self.assertIn('const completeHidden = model?.canComplete === true ? "" : " hidden";', js)
+        self.assertIn('const cancelHidden = model?.canCancel === false ? " hidden" : "";', js)
 
         self.assertNotIn("onboard-stepper", onboard_modal)
         self.assertNotIn("onboard-source-card", onboard_modal)
@@ -3391,6 +3408,231 @@ for (const expected of [
 }
 if (details.includes("sk-") || details.includes("secret=") || details.includes("token=")) {
   throw new Error(`support details leaked sensitive material: ${details}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_render_api_credential_lane_surfaces_missing_owner_env_inline(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function makeNode() {
+  const child = { textContent: "" };
+  return {
+    textContent: "",
+    hidden: true,
+    className: "",
+    href: "",
+    title: "",
+    dataset: {},
+    lastElementChild: child,
+    classList: { toggle() {} },
+    focus() {},
+    scrollIntoView() {}
+  };
+}
+
+const nodes = {};
+for (const id of [
+  "quickStartApiCredentialLane",
+  "quickStartApiCredentialTitle",
+  "quickStartApiCredentialSummary",
+  "quickStartApiCredentialChip",
+  "quickStartApiCredentialBanner",
+  "quickStartApiCredentialProvider",
+  "quickStartApiCredentialRef",
+  "quickStartApiCredentialRefs",
+  "quickStartApiCredentialSource",
+  "quickStartApiCredentialRestart",
+  "quickStartApiCredentialCheckAction",
+  "quickStartApiCredentialRetryAction",
+  "quickStartApiCredentialDashboardAction"
+]) {
+  nodes[id] = makeNode();
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    createElement() { return makeNode(); },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.renderApiCredentialSetupLane({
+  ui_action: "api_route_connect",
+  result: {
+    status: "command_error",
+    machine_error_code: "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+    human_message: "Owner credential source is missing for provider: openrouter.",
+    data: {
+      credential_phase: "credential_missing",
+      credential_present: false,
+      credential_admitted: false,
+      credential_provider: "openrouter",
+      credential_ref: "OPENROUTER_API_KEY",
+      credential_supported_sources: ["owner-env"],
+      credential_expected_refs: [
+        "OPENROUTER_API_KEY",
+        "WBP_OPENROUTER_API_KEY",
+        "WBP_PROVIDER_OPENROUTER_API_KEY"
+      ],
+      credential_provider_dashboard_url: "https://openrouter.ai/settings/keys",
+      browser_api_key_intake: false,
+      secret_value_exposed: false
+    }
+  }
+}, "none");
+
+if (nodes.quickStartApiCredentialLane.hidden !== false) {
+  throw new Error("credential lane should be visible");
+}
+if (!nodes.quickStartApiCredentialTitle.textContent.includes("owner credential")) {
+  throw new Error(`unexpected title: ${nodes.quickStartApiCredentialTitle.textContent}`);
+}
+if (!nodes.quickStartApiCredentialChip.lastElementChild.textContent.includes("missing")) {
+  throw new Error(`unexpected chip: ${nodes.quickStartApiCredentialChip.lastElementChild.textContent}`);
+}
+if (!nodes.quickStartApiCredentialRefs.textContent.includes("WBP_PROVIDER_OPENROUTER_API_KEY")) {
+  throw new Error(`expected refs missing: ${nodes.quickStartApiCredentialRefs.textContent}`);
+}
+if (nodes.quickStartApiCredentialDashboardAction.href !== "https://openrouter.ai/settings/keys") {
+  throw new Error(`unexpected dashboard href: ${nodes.quickStartApiCredentialDashboardAction.href}`);
+}
+if (nodes.quickStartApiCredentialCheckAction.hidden !== false) {
+  throw new Error("check action should remain visible");
+}
+if (nodes.quickStartApiCredentialRetryAction.hidden !== false) {
+  throw new Error("retry action should remain visible");
+}
+if (!nodes.quickStartApiCredentialRestart.textContent.includes("restart")) {
+  throw new Error(`restart note missing: ${nodes.quickStartApiCredentialRestart.textContent}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_render_api_credential_lane_marks_connected_after_refresh_proof(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+function makeNode() {
+  const child = { textContent: "" };
+  return {
+    textContent: "",
+    hidden: true,
+    className: "",
+    href: "",
+    title: "",
+    dataset: {},
+    lastElementChild: child,
+    classList: { toggle() {} },
+    focus() {},
+    scrollIntoView() {}
+  };
+}
+
+const nodes = {};
+for (const id of [
+  "apiConnectionsCredentialLane",
+  "apiConnectionsCredentialTitle",
+  "apiConnectionsCredentialSummary",
+  "apiConnectionsCredentialChip",
+  "apiConnectionsCredentialBanner",
+  "apiConnectionsCredentialProvider",
+  "apiConnectionsCredentialRef",
+  "apiConnectionsCredentialRefs",
+  "apiConnectionsCredentialSource",
+  "apiConnectionsCredentialRestart",
+  "apiConnectionsCredentialCheckAction",
+  "apiConnectionsCredentialRetryAction",
+  "apiConnectionsCredentialDashboardAction"
+]) {
+  nodes[id] = makeNode();
+}
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return nodes[id] || null; },
+    createElement() { return makeNode(); },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "api-connections", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=api-connections" },
+    history: { replaceState() {} },
+    addEventListener() {}
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+sandbox.renderApiCredentialSetupLane({
+  ui_action: "api_route_connect",
+  result: {
+    status: "ok",
+    human_message: "API route connected.",
+    data: {
+      credential_phase: "credential_admitted",
+      credential_present: true,
+      credential_admitted: true,
+      credential_provider: "openrouter",
+      credential_ref: "OPENROUTER_API_KEY",
+      credential_supported_sources: ["owner-env"],
+      credential_expected_refs: ["OPENROUTER_API_KEY"],
+      credential_provider_dashboard_url: "https://openrouter.ai/settings/keys",
+      validate_status: "ok"
+    }
+  }
+}, "complete");
+
+if (nodes.apiConnectionsCredentialLane.hidden !== false) {
+  throw new Error("credential lane should remain visible for connected proof");
+}
+if (!nodes.apiConnectionsCredentialTitle.textContent.includes("подключён")) {
+  throw new Error(`unexpected connected title: ${nodes.apiConnectionsCredentialTitle.textContent}`);
+}
+if (!nodes.apiConnectionsCredentialChip.lastElementChild.textContent.includes("connected")) {
+  throw new Error(`unexpected connected chip: ${nodes.apiConnectionsCredentialChip.lastElementChild.textContent}`);
+}
+if (nodes.apiConnectionsCredentialCheckAction.hidden !== true) {
+  throw new Error("check action should be hidden after connected proof");
+}
+if (nodes.apiConnectionsCredentialRetryAction.hidden !== true) {
+  throw new Error("retry action should be hidden after connected proof");
 }
 """
         result = subprocess.run(
@@ -4481,6 +4723,172 @@ vm.runInContext("renderSettingsSnapshot = () => {};", sandbox);
   await Promise.all([first, second]);
   if (fetchCount !== 1) {
     throw new Error(`duplicate dispatch leaked after resolve: ${fetchCount}`);
+  }
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_confirmation_cancel_aborts_inflight_onboard_wait_and_recovers_modal(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.className = "";
+    this.textContent = "";
+    this.hidden = false;
+    this.disabled = false;
+    this.value = "";
+    this.dataset = {};
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.classList = {
+      add: () => {},
+      remove: () => {},
+      toggle: () => {},
+      contains: () => false
+    };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  appendChild(item) {
+    this.append(item);
+    return item;
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.lastElementChild = { textContent: "" };
+    this.append(...items);
+  }
+  addEventListener() {}
+  focus() {}
+}
+
+const ids = [
+  "actionPanel",
+  "actionUiAction",
+  "actionRole",
+  "actionAccountId",
+  "actionStatus",
+  "actionDisplayState",
+  "actionMachineCode",
+  "actionMessage",
+  "actionNextAction",
+  "actionChangedFiles",
+  "actionRefreshStatus",
+  "actionTruthNote",
+  "actionSupportDetails",
+  "actionOnboardingOutcome",
+  "actionOnboardingReserveProof",
+  "actionOnboardingBackend",
+  "actionDisplayChip",
+  "actionSummaryTitle",
+  "actionSummaryMeta",
+  "actionSummaryMessage",
+  "actionSummaryTarget",
+  "actionSummaryRefresh",
+  "actionLedgerList",
+  "confirmOverlay",
+  "confirmAction",
+  "cancelAction",
+  "confirmDispatchState"
+];
+const elements = Object.fromEntries(ids.map((id) => [id, new Node()]));
+elements.confirmOverlay.hidden = false;
+elements.confirmAction.dataset.readyLabel = "Подключить в резерв";
+
+let fetchCount = 0;
+let aborted = false;
+const sandbox = {
+  console,
+  Node,
+  AbortController,
+  document: {
+    getElementById(id) {
+      if (!elements[id]) {
+        elements[id] = new Node();
+      }
+      return elements[id];
+    },
+    createElement(tag) {
+      return new Node(tag);
+    },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} },
+    open() { return null; }
+  },
+  URL,
+  URLSearchParams,
+  fetch(_url, options = {}) {
+    fetchCount += 1;
+    return new Promise((_resolve, reject) => {
+      if (options.signal) {
+        options.signal.addEventListener("abort", () => {
+          aborted = true;
+          const error = new Error("The operation was aborted.");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      }
+    });
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+vm.runInContext("renderSettingsSnapshot = () => {};", sandbox);
+vm.runInContext('pendingConfirmedAction = { uiAction: "onboard_account", extraPayload: {} };', sandbox);
+
+(async () => {
+  const runPromise = sandbox.confirmPendingAction();
+  if (fetchCount !== 1) {
+    throw new Error(`confirm dispatch should start exactly one fetch, got ${fetchCount}`);
+  }
+  if (elements.cancelAction.textContent !== "Отменить ожидание") {
+    throw new Error(`cancel button must switch to wait-cancel label: ${elements.cancelAction.textContent}`);
+  }
+  if (elements.cancelAction.disabled) {
+    throw new Error("cancel button must stay enabled while waiting for owner/server packet");
+  }
+  sandbox.closeConfirmation();
+  await runPromise;
+  if (!aborted) {
+    throw new Error("cancel confirmation must abort in-flight wait");
+  }
+  if (elements.confirmOverlay.hidden !== true) {
+    throw new Error("confirmation overlay must close after cancelling wait");
+  }
+  if (elements.actionMachineCode.textContent !== "UI_ACTION_WAIT_CANCELLED") {
+    throw new Error(`cancelled wait machine code missing: ${elements.actionMachineCode.textContent}`);
+  }
+  if (elements.actionDisplayState.textContent !== "cancelled") {
+    throw new Error(`cancelled wait display state missing: ${elements.actionDisplayState.textContent}`);
+  }
+  if (elements.cancelAction.textContent !== "Отмена") {
+    throw new Error(`cancel button label must recover after abort: ${elements.cancelAction.textContent}`);
+  }
+  if (elements.confirmAction.textContent !== "Подключить в резерв") {
+    throw new Error(`confirm button label must recover after abort: ${elements.confirmAction.textContent}`);
   }
 })().catch((error) => {
   console.error(error);
