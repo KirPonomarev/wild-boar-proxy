@@ -1,0 +1,50 @@
+{
+  "account_id": "",
+  "action_claim_scope": "owner login session status only; browser sends only owner-created session_id",
+  "action_role": "account_login_status",
+  "affects_primary_truth": false,
+  "confirmation_required": false,
+  "mutates_runtime": false,
+  "mutation_class": "account_admission",
+  "post_action_refresh_required": false,
+  "result": {
+    "changed_files": [
+      "account_onboarding_artifact"
+    ],
+    "data": {
+      "login_bridge": {
+        "auth_materialized": true,
+        "auth_ref_present": true,
+        "auth_ref_scope": "",
+        "browser_path_intake": false,
+        "browser_secret_intake": false,
+        "device_code": "[redacted-device-code]",
+        "device_code_present": true,
+        "device_url": "https://auth.openai.com/codex/device",
+        "device_url_present": true,
+        "login_session_id": "codex-24569373b5e84899aa2a061d2ba6cb2c",
+        "login_session_id_present": true,
+        "login_url": "https://auth.openai.com/codex/device",
+        "login_url_kind": "device_code",
+        "login_url_present": true,
+        "machine_error_code": "OK",
+        "mode": "device",
+        "next_action": "accounts_onboard",
+        "phase": "status",
+        "provider": "codex",
+        "session_id": "codex-24569373b5e84899aa2a061d2ba6cb2c",
+        "status": "auth_materialized"
+      }
+    },
+    "human_message": "Login session materialized sandbox auth and is ready for onboarding.",
+    "machine_error_code": "OK",
+    "next_action": "accounts_onboard",
+    "status": "ok"
+  },
+  "route_id": "",
+  "schema_version": 1,
+  "session_id": "codex-24569373b5e84899aa2a061d2ba6cb2c",
+  "source": "ui_action",
+  "status": "ok",
+  "ui_action": "account_login_status"
+}

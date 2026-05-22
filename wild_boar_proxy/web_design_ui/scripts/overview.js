@@ -1354,22 +1354,28 @@ function maybeNavigateOnboardLoginWindow(loginWindow, payload) {
   writeOnboardLoginWindowStatus(loginWindow, model.title, model.message, model.tone);
 }
 
+function isOnboardLoginUiAction(uiAction) {
+  return ["onboard_account", "account_login_status", "account_login_complete", "account_login_cancel"].includes(uiAction);
+}
+
 async function handleActionPayload(payload, loginWindow = null) {
-  maybeNavigateOnboardLoginWindow(loginWindow, payload);
-  renderOnboardLoginOverlay(onboardLoginWindowModelFromPayload(payload));
-  const sessionId = onboardLoginSessionIdFromPayload(payload);
-  const loginBridge = onboardLoginBridgeFromPayload(payload);
-  if (sessionId) {
-    activeOnboardLoginSession = {
-      sessionId,
-      status: typeof loginBridge.status === "string" ? loginBridge.status : "",
-      phase: typeof loginBridge.phase === "string" ? loginBridge.phase : "",
-      deviceUrl: typeof loginBridge.device_url === "string" ? loginBridge.device_url : "",
-      deviceCode: typeof loginBridge.device_code === "string" ? loginBridge.device_code : "",
-    };
-    onboardLoginWindowRef = loginWindow || onboardLoginWindowRef;
-  } else if (payload?.ui_action === "account_login_cancel" || payload?.ui_action === "account_login_complete") {
-    activeOnboardLoginSession = null;
+  if (isOnboardLoginUiAction(payload?.ui_action)) {
+    maybeNavigateOnboardLoginWindow(loginWindow, payload);
+    renderOnboardLoginOverlay(onboardLoginWindowModelFromPayload(payload));
+    const sessionId = onboardLoginSessionIdFromPayload(payload);
+    const loginBridge = onboardLoginBridgeFromPayload(payload);
+    if (sessionId) {
+      activeOnboardLoginSession = {
+        sessionId,
+        status: typeof loginBridge.status === "string" ? loginBridge.status : "",
+        phase: typeof loginBridge.phase === "string" ? loginBridge.phase : "",
+        deviceUrl: typeof loginBridge.device_url === "string" ? loginBridge.device_url : "",
+        deviceCode: typeof loginBridge.device_code === "string" ? loginBridge.device_code : "",
+      };
+      onboardLoginWindowRef = loginWindow || onboardLoginWindowRef;
+    } else if (payload?.ui_action === "account_login_cancel" || payload?.ui_action === "account_login_complete") {
+      activeOnboardLoginSession = null;
+    }
   }
   setActionPanel(payload);
   if (payload.post_action_refresh_required) {

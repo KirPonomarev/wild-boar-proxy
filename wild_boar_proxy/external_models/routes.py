@@ -14,6 +14,23 @@ from .paths import ExternalModelsPaths
 from .state import atomic_write_json, dual_lock, ensure_secrets_permissions, load_state_file, serialized_lock, write_state_file
 
 
+def _parse_secrets_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _available_secret_refs(path: Path) -> list[str]:
+    return [key for key, value in _parse_secrets_file(path).items() if value.strip()]
+
+
 def _load_json_from_file(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -278,6 +295,9 @@ def list_routes(paths: ExternalModelsPaths) -> list[dict[str, Any]]:
 def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
     routes_payload = load_routes_file(paths.routes_file)
     state_payload = load_state_file(paths.state_file)
+    ensure_secrets_permissions(paths.secrets_file)
+    secret_refs = _available_secret_refs(paths.secrets_file)
+    token_present = bool(secret_refs) or bool(state_payload["local_auth"]["token_present"])
     return {
         "foundation_phase": "C3",
         "adapter_runtime_available": False,
@@ -289,11 +309,17 @@ def foundation_status(paths: ExternalModelsPaths) -> dict[str, Any]:
         "routes_count": len(routes_payload["routes"]),
         "observed_routes_count": len(state_payload["routes"]),
         "observed_routes": contracts.sanitize_observed_routes(state_payload.get("routes", {})),
+        "available_secret_refs": secret_refs,
         "paths": {
             "routes_file": str(paths.routes_file),
             "state_file": str(paths.state_file),
             "secrets_file": str(paths.secrets_file),
             "evidence_dir": str(paths.evidence_dir),
+        },
+        "local_auth": {
+            "token_ref": state_payload["local_auth"]["token_ref"],
+            "token_present": token_present,
+            "token_created_at_utc": state_payload["local_auth"]["token_created_at_utc"],
         },
     }
 

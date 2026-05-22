@@ -47,6 +47,18 @@ def _write_secrets_file(path: Path, values: dict[str, str]) -> None:
     os.chmod(path, 0o600)
 
 
+def _credential_present_from_secrets(paths: ExternalModelsPaths) -> bool:
+    ensure_secrets_permissions(paths.secrets_file)
+    values = _parse_secrets_file(paths.secrets_file)
+    return any(value.strip() for value in values.values())
+
+
+def _available_secret_refs(paths: ExternalModelsPaths) -> list[str]:
+    ensure_secrets_permissions(paths.secrets_file)
+    values = _parse_secrets_file(paths.secrets_file)
+    return [key for key, value in values.items() if value.strip()]
+
+
 def ensure_local_token(paths: ExternalModelsPaths) -> tuple[bool, str | None]:
     ensure_secrets_permissions(paths.secrets_file)
     values = _parse_secrets_file(paths.secrets_file)
@@ -130,6 +142,8 @@ def stop_synthetic_adapter(paths: ExternalModelsPaths) -> tuple[dict[str, Any], 
 
 def synthetic_status_payload(paths: ExternalModelsPaths) -> dict[str, Any]:
     state_payload = load_state_file(paths.state_file)
+    secret_refs = _available_secret_refs(paths)
+    token_present = bool(state_payload["local_auth"]["token_present"]) or bool(secret_refs)
     return {
         "foundation_phase": "C3",
         "adapter_runtime_available": False,
@@ -141,6 +155,7 @@ def synthetic_status_payload(paths: ExternalModelsPaths) -> dict[str, Any]:
         "routes_count": len(_safe_routes(paths)),
         "observed_routes_count": len(state_payload["routes"]),
         "observed_routes": contracts.sanitize_observed_routes(state_payload.get("routes", {})),
+        "available_secret_refs": secret_refs,
         "paths": {
             "routes_file": str(paths.routes_file),
             "state_file": str(paths.state_file),
@@ -150,7 +165,7 @@ def synthetic_status_payload(paths: ExternalModelsPaths) -> dict[str, Any]:
         "adapter": dict(state_payload["adapter"]),
         "local_auth": {
             "token_ref": state_payload["local_auth"]["token_ref"],
-            "token_present": state_payload["local_auth"]["token_present"],
+            "token_present": token_present,
             "token_created_at_utc": state_payload["local_auth"]["token_created_at_utc"],
         },
     }

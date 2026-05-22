@@ -1,0 +1,10 @@
+{
+  "argv_capture": "[sandbox-argv-capture-redacted]",
+  "auth_ref": "[sandbox-auth-ref-redacted]",
+  "provider_port": 62921,
+  "ready_file": "[sandbox-ready-file-redacted]",
+  "root": "[sandbox-root-redacted]",
+  "stable_port": 62920,
+  "web_port": 62922,
+  "web_url": "http://127.0.0.1:62922/?screen=quick-start&source=live"
+}

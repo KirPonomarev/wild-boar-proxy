@@ -457,6 +457,7 @@ class ExternalModelsSnapshot:
     observed_routes_count: int
     observed_routes: dict[str, dict[str, Any]]
     local_token_present: bool
+    available_secret_refs: tuple[str, ...] | None
     models_source: str
     models: tuple[ExternalModelRecord, ...]
     routes: tuple[ExternalRouteRecord, ...]
@@ -476,6 +477,7 @@ class ExternalModelsSnapshot:
             observed_routes_count=0,
             observed_routes={},
             local_token_present=False,
+            available_secret_refs=None,
             models_source="integration_failure",
             models=(),
             routes=(),
@@ -721,6 +723,17 @@ def build_external_models_snapshot(
     observed_routes = _normalize_external_observed_routes(
         status_data.get("observed_routes", {})
     )
+    available_secret_refs_raw = status_data.get("available_secret_refs")
+    available_secret_refs: tuple[str, ...] | None = None
+    if available_secret_refs_raw is not None:
+        if not isinstance(available_secret_refs_raw, list):
+            raise UiShellError("external-models available_secret_refs must be a list when present")
+        normalized_refs: list[str] = []
+        for item in available_secret_refs_raw:
+            if not isinstance(item, str) or not item.strip():
+                raise UiShellError("external-models available_secret_refs must contain non-empty strings")
+            normalized_refs.append(item.strip())
+        available_secret_refs = tuple(normalized_refs)
 
     return ExternalModelsSnapshot(
         foundation_phase=str(status_data["foundation_phase"]),
@@ -751,11 +764,23 @@ def build_external_models_snapshot(
         local_token_present=require_bool(
             local_auth.get("token_present", False), "external-models local token present"
         ),
+        available_secret_refs=available_secret_refs,
         models_source=str(models_data["source"]),
         models=models,
         routes=routes,
         integration_error="",
     )
+
+
+def external_route_secret_available(
+    snapshot: ExternalModelsSnapshot,
+    secret_ref: str,
+) -> bool:
+    if not secret_ref:
+        return False
+    if snapshot.available_secret_refs is not None:
+        return secret_ref in snapshot.available_secret_refs
+    return snapshot.local_token_present
 
 
 def _normalize_external_observed_routes(payload: Any) -> dict[str, dict[str, Any]]:
@@ -1204,7 +1229,7 @@ def describe_primary_external_route(
             "note": "Основной API route не подтверждён bounded snapshot.",
         }
     secret_ref = route.secret_ref
-    if secret_ref and snapshot.local_token_present:
+    if external_route_secret_available(snapshot, secret_ref):
         secret_status_label = "available"
         secret_visual_state = "green"
         status_code = "enabled" if route.enabled else "disabled"

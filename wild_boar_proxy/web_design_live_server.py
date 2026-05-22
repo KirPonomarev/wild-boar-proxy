@@ -22,6 +22,7 @@ from wild_boar_proxy.ui_shell import (
     build_account_pool_snapshot,
     build_external_models_snapshot,
     build_runtime_snapshot,
+    external_route_secret_available,
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
@@ -3275,7 +3276,7 @@ def _api_connection_rows(external_models: Any) -> list[dict[str, Any]]:
         if isinstance(getattr(external_models, "observed_routes", {}), dict):
             observed = external_models.observed_routes.get(model.route_id, {}) or {}
         secret_ref = _safe_short_text(getattr(route, "secret_ref", ""), max_length=64)
-        if secret_ref and external_models.local_token_present:
+        if external_route_secret_available(external_models, secret_ref):
             secret_status_label = "available"
             secret_visual_state = "green"
         elif secret_ref:

@@ -1,0 +1,9 @@
+node --check wild_boar_proxy/web_design_ui/scripts/overview.js
+status: pass
+
+git diff --check
+status: pass
+
+/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_cli tests.test_cli_external_models tests.test_external_models -q
+result: Ran 592 tests in 193.826s
+result: OK

@@ -324,6 +324,12 @@ class ExternalModelsCliTests(unittest.TestCase):
             self.assertFalse(status_credential["secret_value_exposed"])
             self.assertNotIn("admit-owner-env-key", status_result.stdout)
 
+            lifecycle_status = self.run_cli("external-models", "status", "--json")
+            lifecycle_payload = self.parse_payload(lifecycle_status)
+            self.assertEqual(lifecycle_payload["status"], "ok")
+            self.assertTrue(lifecycle_payload["data"]["local_auth"]["token_present"])
+            self.assertNotIn("admit-owner-env-key", lifecycle_status.stdout)
+
             validate_result = self.run_cli(
                 "external-models",
                 "routes",

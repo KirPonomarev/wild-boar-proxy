@@ -1,0 +1,32 @@
+{
+  "artifacts": {
+    "final_screenshot": "audit_results/web_account_and_api_connect_e2e_hardening_pass_2026-05-22/evidence/browser-final-quick-start.png"
+  },
+  "contour": "WEB_ACCOUNT_AND_API_CONNECT_E2E_HARDENING_PASS",
+  "date": "2026-05-22",
+  "mode": "seeded_sandbox_browser_proof",
+  "observed_steps": [
+    {
+      "evidence": "Quick Start main API card refreshed to provider=openrouter, model=gpt-5.4, secret_ref=OPENROUTER_API_KEY, route check=ok.",
+      "status": "pass",
+      "step": "api_connect_confirmed"
+    },
+    {
+      "evidence": "After api_route_connect the account login overlay did not reappear; the page stayed on the Quick Start summary state.",
+      "status": "pass",
+      "step": "api_connect_overlay_not_rendered"
+    },
+    {
+      "evidence": "Quick Start account flow showed the Codex device URL and a redacted device code with a bounded session id.",
+      "status": "pass",
+      "step": "account_connect_handoff_rendered"
+    },
+    {
+      "evidence": "After status -> complete, Quick Start refreshed to one reserve account and kept the new account out of active.",
+      "status": "pass",
+      "step": "account_complete_refresh_reserve"
+    }
+  ],
+  "verdict": "pass",
+  "web_url": "http://127.0.0.1:60855/?screen=quick-start&source=live"
+}

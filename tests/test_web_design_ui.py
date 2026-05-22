@@ -3716,6 +3716,94 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_api_route_connect_does_not_render_onboard_login_overlay(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+let overlayCalls = 0;
+let windowCalls = 0;
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} },
+    open() {
+      throw new Error("api route connect must not open onboard login window");
+    }
+  },
+  URL,
+  URLSearchParams,
+  fetch() {
+    throw new Error("api route connect test should not fetch directly");
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderOnboardLoginOverlay = () => { overlayCalls += 1; };
+sandbox.maybeNavigateOnboardLoginWindow = () => { windowCalls += 1; };
+sandbox.setActionPanel = () => {};
+sandbox.setMiniPill = () => {};
+sandbox.text = () => {};
+sandbox.currentScreen = () => "quick-start";
+sandbox.setLiveReadonly = async () => ({
+  status: "ok",
+  apiConnections: {
+    status: "ok",
+    routes: [{ route_id: "wbp-web-primary-openrouter", enabled: true }]
+  }
+});
+
+(async () => {
+  await sandbox.handleActionPayload({
+    status: "ok",
+    ui_action: "api_route_connect",
+    action_role: "api_route_admission",
+    post_action_refresh_required: true,
+    result: {
+      status: "ok",
+      machine_error_code: "OK",
+      human_message: "API connected",
+      next_action: "none",
+      changed_files: [],
+      data: {
+        route_id: "wbp-web-primary-openrouter",
+        api_route_connect_phase: "created_and_validated",
+        credential_phase: "credential_admitted",
+        credential_present: true,
+        credential_admitted: true,
+        credential_ref: "OPENROUTER_API_KEY",
+        browser_secret_intake: false
+      }
+    }
+  });
+  if (overlayCalls !== 0) {
+    throw new Error(`api route connect should not render onboard login overlay: ${overlayCalls}`);
+  }
+  if (windowCalls !== 0) {
+    throw new Error(`api route connect should not mutate onboard login window: ${windowCalls}`);
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_onboarding_refresh_uses_accounts_snapshot_from_quick_start_composite_payload(self) -> None:
         script = r"""
 const fs = require("fs");

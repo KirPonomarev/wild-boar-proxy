@@ -1,0 +1,34 @@
+{
+  "checked_files": [
+    "account-login-complete.json",
+    "account-login-start.json",
+    "account-login-status.json",
+    "accounts-refresh-after.json",
+    "api-connections-refresh-after.json",
+    "api-credential-admit.json",
+    "api-credential-status-after.json",
+    "api-credential-status-before.json",
+    "api-route-connect.json",
+    "api-route-validate.json",
+    "api-routes-after.json",
+    "browser-run-summary.json",
+    "seeded-run-manifest.json"
+  ],
+  "forbidden_found": {
+    "device_auth_token_literal": [],
+    "device_code_literal": [],
+    "owner_env_secret_literal": [],
+    "sandbox_path_prefix_private": [],
+    "sandbox_path_prefix_var": [],
+    "tmp_path_prefix": []
+  },
+  "pattern_labels": [
+    "device_auth_token_literal",
+    "device_code_literal",
+    "owner_env_secret_literal",
+    "sandbox_path_prefix_private",
+    "sandbox_path_prefix_var",
+    "tmp_path_prefix"
+  ],
+  "result": "pass"
+}

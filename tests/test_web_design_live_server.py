@@ -1931,9 +1931,6 @@ class WebDesignLiveServerTests(unittest.TestCase):
             sandbox_env["OPENROUTER_API_KEY"] = "test-key"
             runner = JsonCommandRunner(cwd=str(profile_dir), env=sandbox_env)
             try:
-                start_payload = runner.run("external-models", "start", "--json").payload
-                self.assertIn(start_payload["status"], {"ok"})
-
                 readonly_before = build_api_connections_readonly_snapshot(runner)
                 self.assertEqual(readonly_before["status"], "ok")
                 self.assertEqual(readonly_before["routes"], [])
@@ -1969,6 +1966,67 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertTrue(readonly_after["routes"][0]["enabled"])
             self.assertEqual(readonly_after["routes"][0]["secret_status_label"], "available")
             self.assertEqual(readonly_after["routes"][0]["validation_label"], "ok")
+
+    def test_api_connections_readonly_requires_matching_secret_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            external_dir = data_dir / "external-models"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(external_dir),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                paths = RuntimePaths.from_env()
+                install_payload = run_installer_init(paths)
+            self.assertEqual(install_payload["status"], "ok")
+
+            (external_dir / "routes.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "routes": [
+                            external_route(
+                                "wbp-web-primary-openrouter",
+                                enabled=True,
+                                display_name="OpenRouter primary",
+                            )
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (external_dir / "secrets.env").write_text(
+                "WBP_EXTERNAL_MODELS_LOCAL_TOKEN=synthetic-only\n",
+                encoding="utf-8",
+            )
+            os.chmod(external_dir / "secrets.env", 0o600)
+
+            contract = LaunchCopyContract(
+                client_path=TEST_LAUNCH_CLIENT_PATH,
+                profile_dir=str(profile_dir),
+                data_dir=str(data_dir),
+                copy_port=9349,
+                action_server_port=9348,
+            )
+            from wild_boar_proxy.ui_shell import JsonCommandRunner
+
+            runner = JsonCommandRunner(
+                cwd=str(profile_dir),
+                env=_sandbox_action_runner_env(contract),
+            )
+
+            readonly_snapshot = build_api_connections_readonly_snapshot(runner)
+
+            self.assertEqual(readonly_snapshot["status"], "ok")
+            self.assertTrue(readonly_snapshot["adapter"]["local_token_present"])
+            self.assertEqual(len(readonly_snapshot["routes"]), 1)
+            self.assertEqual(readonly_snapshot["routes"][0]["secret_ref"], "OPENROUTER_API_KEY")
+            self.assertEqual(readonly_snapshot["routes"][0]["secret_status_label"], "missing")
+            self.assertEqual(readonly_snapshot["routes"][0]["validation_label"], "blocked by secret")
 
     def test_http_sandbox_readonly_endpoints_follow_sandbox_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
