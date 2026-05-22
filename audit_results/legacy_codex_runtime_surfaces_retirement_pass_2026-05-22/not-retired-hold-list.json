@@ -1,0 +1,36 @@
+{
+  "contour": "LEGACY_CODEX_RUNTIME_SURFACES_RETIREMENT_PASS",
+  "date": "2026-05-22",
+  "held_or_kept": [
+    {
+      "surface": "cli-proxy-api",
+      "verdict": "still_needed",
+      "reason": "Canonical engine dependency. Removing it would break the Codex login session bridge."
+    },
+    {
+      "surface": "managed/bin/codex-account-onboard",
+      "verdict": "still_needed",
+      "reason": "Owner helper remains implementation plumbing for accounts onboard --json."
+    },
+    {
+      "surface": "wild_boar_proxy.sandbox_owner_helpers login",
+      "verdict": "hold",
+      "reason": "Compatibility helper remains available but is no longer the primary generated operator entrypoint."
+    },
+    {
+      "surface": "~/.codex-custom-cli",
+      "verdict": "dangerous_to_remove",
+      "reason": "Default private runtime/profile/auth boundary; outside repo retirement scope."
+    },
+    {
+      "surface": "~/.cli-proxy-api",
+      "verdict": "still_needed",
+      "reason": "Default CLIProxyAPI config/source boundary; outside repo retirement scope."
+    },
+    {
+      "surface": "vpn-sync.sh",
+      "verdict": "external_operator_asset",
+      "reason": "No repo-owned script file found; if it exists, it is external and not deleted in this contour."
+    }
+  ]
+}

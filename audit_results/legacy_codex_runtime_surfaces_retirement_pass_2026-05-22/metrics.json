@@ -1,0 +1,27 @@
+{
+  "contour": "LEGACY_CODEX_RUNTIME_SURFACES_RETIREMENT_PASS",
+  "date": "2026-05-22",
+  "status": "closed_success",
+  "repo_owned_superseded_surfaces_retired": 2,
+  "external_assets_deleted": 0,
+  "historical_audit_artifacts_rewritten": 0,
+  "classifications": {
+    "superseded": 2,
+    "still_needed": 2,
+    "hold": 1,
+    "adopted": 1,
+    "external_operator_asset": 1,
+    "dangerous_to_remove": 1
+  },
+  "verification": {
+    "targeted_operator_wrapper_tests": "pass",
+    "node_check": "pass",
+    "full_unittest_gate": {
+      "status": "pass",
+      "tests": 554,
+      "duration_seconds": 193.4
+    },
+    "git_diff_check": "pass",
+    "closeout_resilience": "pass"
+  }
+}

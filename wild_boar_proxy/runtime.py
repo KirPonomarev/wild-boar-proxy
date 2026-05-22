@@ -1205,36 +1205,36 @@ def ensure_repo_owned_owner_helper(path: Path, helper_kind: str) -> None:
 
 
 def build_repo_owned_operator_wrapper_script_payload(wrapper_kind: str) -> str:
-    profile_dir_line = 'PROFILE_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"'
     if wrapper_kind == "add-account":
         return "\n".join(
             [
                 "set -eu",
-                profile_dir_line,
-                'exec "$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"',
+                'printf "%s\\n" "Add Account.command is retired." >&2',
+                (
+                    'printf "%s\\n" "Use Wild Boar Proxy web: '
+                    'Connect account -> Codex device login session." >&2'
+                ),
+                (
+                    'printf "%s\\n" "Owner CLI fallback: accounts login start '
+                    '--provider codex --mode device --json." >&2'
+                ),
+                "exit 64",
             ]
         )
     if wrapper_kind == "team-codex-login":
-        python_bin = get_repo_owned_python_bin()
         return "\n".join(
             [
                 "set -eu",
-                profile_dir_line,
-                'MANAGED_DIR="$PROFILE_DIR/managed"',
-                'unset HTTP_PROXY HTTPS_PROXY ALL_PROXY',
-                'unset http_proxy https_proxy all_proxy',
-                'export NO_PROXY="127.0.0.1,localhost,::1"',
-                'export no_proxy="$NO_PROXY"',
-                f'PY_BIN="${{WBP_PYTHON_BIN:-{python_bin}}}"',
-                f'REPO_ROOT="${{WBP_REPO_ROOT:-{REPO_ROOT}}}"',
-                'export WBP_PROFILE_DIR="$PROFILE_DIR"',
-                'export WBP_MANAGED_DIR="$MANAGED_DIR"',
-                'if [ -n "${PYTHONPATH:-}" ]; then',
-                '  export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"',
-                "else",
-                '  export PYTHONPATH="$REPO_ROOT"',
-                "fi",
-                'exec "$PY_BIN" -m wild_boar_proxy.sandbox_owner_helpers login --no-browser "$@"',
+                'printf "%s\\n" "team-codex-login.command is retired." >&2',
+                (
+                    'printf "%s\\n" "Use Wild Boar Proxy web: '
+                    'Connect account -> Codex device login session." >&2'
+                ),
+                (
+                    'printf "%s\\n" "Owner CLI fallback: accounts login start '
+                    '--provider codex --mode device --json." >&2'
+                ),
+                "exit 64",
             ]
         )
     raise RuntimeError(f"Unsupported operator wrapper kind: {wrapper_kind}")
@@ -1295,7 +1295,7 @@ def ensure_repo_owned_operator_wrapper(path: Path, wrapper_kind: str) -> None:
     if not path.exists():
         write_executable_text_atomic(path, expected_text)
         return
-    if not repo_managed_operator_wrapper_recognized(path, wrapper_kind):
+    if repo_managed_operator_wrapper_payload_if_valid(path, wrapper_kind) is None:
         return
     current_text = path.read_text(encoding="utf-8").rstrip("\n")
     if current_text != expected_text:

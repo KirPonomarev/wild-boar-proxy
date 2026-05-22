@@ -668,7 +668,7 @@ class CliTests(unittest.TestCase):
             self.assertNotIn("~/.codex-custom-cli", text)
             self.assertNotIn("~/.cli-proxy-api", text)
 
-    def test_installer_init_materializes_repo_owned_operator_wrappers(self) -> None:
+    def test_installer_init_materializes_retired_operator_wrappers(self) -> None:
         add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
         team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
         add_account_wrapper.unlink(missing_ok=True)
@@ -685,11 +685,15 @@ class CliTests(unittest.TestCase):
         )
         add_account_text = add_account_wrapper.read_text(encoding="utf-8")
         self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, add_account_text)
-        self.assertIn('"$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"', add_account_text)
+        self.assertIn("Add Account.command is retired.", add_account_text)
+        self.assertIn("accounts login start --provider codex --mode device --json", add_account_text)
+        self.assertNotIn("codex-account-onboard", add_account_text)
         self.assertTrue(os.access(add_account_wrapper, os.X_OK))
         team_login_text = team_login_wrapper.read_text(encoding="utf-8")
         self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, team_login_text)
-        self.assertIn("sandbox_owner_helpers login --no-browser", team_login_text)
+        self.assertIn("team-codex-login.command is retired.", team_login_text)
+        self.assertIn("accounts login start --provider codex --mode device --json", team_login_text)
+        self.assertNotIn("sandbox_owner_helpers login --no-browser", team_login_text)
         self.assertTrue(os.access(team_login_wrapper, os.X_OK))
         self.assertIn(str(add_account_wrapper), payload["changed_files"])
         self.assertIn(str(team_login_wrapper), payload["changed_files"])
@@ -719,17 +723,9 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(str(add_account_wrapper), payload["changed_files"])
         self.assertNotIn(str(team_login_wrapper), payload["changed_files"])
 
-    def test_repo_managed_operator_wrappers_execute_expected_owner_lanes(self) -> None:
+    def test_repo_managed_operator_wrappers_are_retired_stubs(self) -> None:
         add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
         team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
-        fake_onboard_args = self.profile_dir / "fake-onboard-args.txt"
-        fake_onboard = self.onboard_bin
-        fake_onboard.write_text(
-            "#!/bin/sh\n"
-            f"printf '%s\\n' \"$@\" > {shlex.quote(str(fake_onboard_args))}\n",
-            encoding="utf-8",
-        )
-        fake_onboard.chmod(0o755)
         fake_cli_proxy = self.profile_dir / "fake-cli-proxy.sh"
         fake_cli_proxy_args = self.profile_dir / "fake-cli-proxy-args.txt"
         fake_cli_proxy.write_text(
@@ -752,11 +748,9 @@ class CliTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-        self.assertEqual(add_run.returncode, 0, add_run.stderr)
-        self.assertEqual(
-            fake_onboard_args.read_text(encoding="utf-8").splitlines(),
-            ["--loop", "--note", "example"],
-        )
+        self.assertEqual(add_run.returncode, 64)
+        self.assertIn("Add Account.command is retired.", add_run.stderr)
+        self.assertIn("accounts login start --provider codex --mode device --json", add_run.stderr)
 
         login_env = self.env()
         login_env.pop("WBP_LAUNCHER_SCRIPT", None)
@@ -771,16 +765,46 @@ class CliTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
-        self.assertEqual(login_run.returncode, 0, login_run.stderr)
-        self.assertEqual(
-            fake_cli_proxy_args.read_text(encoding="utf-8").splitlines(),
-            [
-                "-config",
-                str(self.stable_dir / "config.yaml"),
-                "-codex-login",
-                "-no-browser",
-            ],
+        self.assertEqual(login_run.returncode, 64)
+        self.assertIn("team-codex-login.command is retired.", login_run.stderr)
+        self.assertIn(
+            "accounts login start --provider codex --mode device --json",
+            login_run.stderr,
         )
+        self.assertFalse(fake_cli_proxy_args.exists())
+
+    def test_installer_init_upgrades_old_repo_managed_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        old_payload = "\n".join(
+            [
+                "set -eu",
+                'PROFILE_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"',
+                'exec "$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"',
+            ]
+        )
+        old_text = "\n".join(
+            [
+                "#!/bin/sh",
+                runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER,
+                f"{runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}add-account",
+                (
+                    f"{runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX}"
+                    f"{runtime_mod.compute_repo_managed_operator_wrapper_digest(old_payload)}"
+                ),
+                old_payload,
+            ]
+        )
+        add_account_wrapper.write_text(old_text, encoding="utf-8")
+        add_account_wrapper.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        upgraded_text = add_account_wrapper.read_text(encoding="utf-8")
+        self.assertIn("Add Account.command is retired.", upgraded_text)
+        self.assertNotIn("codex-account-onboard", upgraded_text)
+        self.assertIn(str(add_account_wrapper), payload["changed_files"])
 
     def test_installer_materialized_owner_helpers_support_explicit_auth_onboarding_lane(
         self,
