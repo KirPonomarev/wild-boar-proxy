@@ -53,6 +53,13 @@ REPO_MANAGED_DEFAULT_LAUNCHER_DIGEST_PREFIX = (
 REPO_MANAGED_OWNER_HELPER_MARKER = "# WBP_REPO_MANAGED_OWNER_HELPER=v1"
 REPO_MANAGED_OWNER_HELPER_KIND_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_KIND="
 REPO_MANAGED_OWNER_HELPER_DIGEST_PREFIX = "# WBP_REPO_MANAGED_OWNER_HELPER_SHA256="
+REPO_MANAGED_OPERATOR_WRAPPER_MARKER = "# WBP_REPO_MANAGED_OPERATOR_WRAPPER=v1"
+REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX = (
+    "# WBP_REPO_MANAGED_OPERATOR_WRAPPER_KIND="
+)
+REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX = (
+    "# WBP_REPO_MANAGED_OPERATOR_WRAPPER_SHA256="
+)
 CURRENT_PROXY_OWNER_PATH_LAUNCHER_MODE = "adopt-current-proxy-owner-path"
 DETERMINISTIC_RUNTIME_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 SYSTEM_OPEN_BIN = Path("/usr/bin/open")
@@ -97,10 +104,29 @@ PROXY_REPROBE_MAX_CANDIDATES = 8
 PROXY_REPROBE_CONCURRENCY_LIMIT = 1
 PROXY_REPROBE_DEPTH = "shallow_socket_listener_only"
 PROXY_REPROBE_STRATEGY = "sequential_first_success"
+LEGACY_PROXY_REPROBE_DEFAULT_CANDIDATES = [
+    "http://127.0.0.1:10808",
+    "http://127.0.0.1:10809",
+    "socks5h://127.0.0.1:10808",
+    "socks5h://127.0.0.1:10809",
+]
+LEGACY_PROXY_REPROBE_EXCLUDED_PORTS = {
+    5000,
+    7000,
+    8318,
+    8319,
+    8320,
+    8321,
+    9150,
+    9151,
+    49157,
+}
 PROXY_REPROBE_CANDIDATE_SOURCE_ORDER = [
     "env.WBP_PROXY_REPROBE_CANDIDATES",
     "runtime_state.last_known_good_proxy_url",
     "runtime_state.current_proxy_url",
+    "legacy.default_local_proxy_candidates",
+    "legacy.dynamic_local_listener_candidates",
 ]
 SELECTED_BACKEND_SNAPSHOT_ALLOWED_SOURCE_CLASSES = {
     "engine_observed",
@@ -619,12 +645,14 @@ def http_get_json(url: str, api_key: str) -> dict[str, Any]:
 
 
 def http_post_json(url: str, api_key: str, payload: dict[str, Any]) -> dict[str, Any]:
+    session_id = f"wbp-runtime-{uuid.uuid4().hex}"
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "X-Session-ID": session_id,
         },
     )
     with proxyless_urlopen(request, timeout=20) as response:
@@ -891,6 +919,14 @@ def default_launcher_script_path(profile_dir: Path) -> Path:
     return profile_dir / DEFAULT_LAUNCHER_SCRIPT_NAME
 
 
+def add_account_wrapper_path(profile_dir: Path) -> Path:
+    return profile_dir / "Add Account.command"
+
+
+def team_codex_login_wrapper_path(profile_dir: Path) -> Path:
+    return profile_dir / "team-codex-login.command"
+
+
 def managed_status_script_path(paths: RuntimePaths) -> Path:
     return paths.managed_dir / "bin" / "codex-managed-status"
 
@@ -1076,6 +1112,10 @@ def compute_repo_managed_owner_helper_digest(script_payload: str) -> str:
     return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
 
 
+def compute_repo_managed_operator_wrapper_digest(script_payload: str) -> str:
+    return hashlib.sha256(script_payload.encode("utf-8")).hexdigest()
+
+
 def build_repo_owned_owner_helper_script_payload(helper_kind: str) -> str:
     if helper_kind not in {"accounts", "onboard", "status", "sync"}:
         raise RuntimeError(f"Unsupported owner helper kind: {helper_kind}")
@@ -1162,6 +1202,107 @@ def ensure_repo_owned_owner_helper(path: Path, helper_kind: str) -> None:
         path.chmod(0o755)
 
 
+def build_repo_owned_operator_wrapper_script_payload(wrapper_kind: str) -> str:
+    profile_dir_line = 'PROFILE_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"'
+    if wrapper_kind == "add-account":
+        return "\n".join(
+            [
+                "set -eu",
+                profile_dir_line,
+                'exec "$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"',
+            ]
+        )
+    if wrapper_kind == "team-codex-login":
+        python_bin = get_repo_owned_python_bin()
+        return "\n".join(
+            [
+                "set -eu",
+                profile_dir_line,
+                'MANAGED_DIR="$PROFILE_DIR/managed"',
+                'unset HTTP_PROXY HTTPS_PROXY ALL_PROXY',
+                'unset http_proxy https_proxy all_proxy',
+                'export NO_PROXY="127.0.0.1,localhost,::1"',
+                'export no_proxy="$NO_PROXY"',
+                f'PY_BIN="${{WBP_PYTHON_BIN:-{python_bin}}}"',
+                f'REPO_ROOT="${{WBP_REPO_ROOT:-{REPO_ROOT}}}"',
+                'export WBP_PROFILE_DIR="$PROFILE_DIR"',
+                'export WBP_MANAGED_DIR="$MANAGED_DIR"',
+                'if [ -n "${PYTHONPATH:-}" ]; then',
+                '  export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"',
+                "else",
+                '  export PYTHONPATH="$REPO_ROOT"',
+                "fi",
+                'exec "$PY_BIN" -m wild_boar_proxy.sandbox_owner_helpers login --no-browser "$@"',
+            ]
+        )
+    raise RuntimeError(f"Unsupported operator wrapper kind: {wrapper_kind}")
+
+
+def render_repo_owned_operator_wrapper_script_text(wrapper_kind: str) -> str:
+    script_payload = build_repo_owned_operator_wrapper_script_payload(wrapper_kind)
+    return "\n".join(
+        [
+            "#!/bin/sh",
+            REPO_MANAGED_OPERATOR_WRAPPER_MARKER,
+            f"{REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}{wrapper_kind}",
+            (
+                f"{REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX}"
+                f"{compute_repo_managed_operator_wrapper_digest(script_payload)}"
+            ),
+            script_payload,
+        ]
+    )
+
+
+def repo_managed_operator_wrapper_payload_if_valid(
+    path: Path, wrapper_kind: str
+) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    if len(lines) < 5:
+        return None
+    if lines[0] != "#!/bin/sh" or lines[1] != REPO_MANAGED_OPERATOR_WRAPPER_MARKER:
+        return None
+    if lines[2] != f"{REPO_MANAGED_OPERATOR_WRAPPER_KIND_PREFIX}{wrapper_kind}":
+        return None
+    digest_line = lines[3]
+    if not digest_line.startswith(REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX):
+        return None
+    expected_digest = digest_line.removeprefix(
+        REPO_MANAGED_OPERATOR_WRAPPER_DIGEST_PREFIX
+    )
+    script_payload = "\n".join(lines[4:])
+    if expected_digest != compute_repo_managed_operator_wrapper_digest(script_payload):
+        return None
+    return script_payload
+
+
+def repo_managed_operator_wrapper_recognized(path: Path, wrapper_kind: str) -> bool:
+    script_payload = repo_managed_operator_wrapper_payload_if_valid(path, wrapper_kind)
+    if script_payload is None:
+        return False
+    return script_payload == build_repo_owned_operator_wrapper_script_payload(wrapper_kind)
+
+
+def ensure_repo_owned_operator_wrapper(path: Path, wrapper_kind: str) -> None:
+    expected_text = render_repo_owned_operator_wrapper_script_text(wrapper_kind)
+    if not path.exists():
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not repo_managed_operator_wrapper_recognized(path, wrapper_kind):
+        return
+    current_text = path.read_text(encoding="utf-8").rstrip("\n")
+    if current_text != expected_text:
+        write_executable_text_atomic(path, expected_text)
+        return
+    if not os.access(path, os.X_OK):
+        path.chmod(0o755)
+
+
 def ensure_repo_owned_default_sync_helper(paths: RuntimePaths) -> None:
     if not sync_script_path_is_default(paths):
         return
@@ -1186,11 +1327,27 @@ def installer_owner_helper_paths(paths: RuntimePaths) -> list[Path]:
     ]
 
 
+def installer_operator_wrapper_paths(paths: RuntimePaths) -> list[Path]:
+    return [
+        add_account_wrapper_path(paths.profile_dir),
+        team_codex_login_wrapper_path(paths.profile_dir),
+    ]
+
+
 def ensure_repo_owned_owner_helper_chain(paths: RuntimePaths) -> None:
     ensure_repo_owned_owner_helper(paths.accounts_bin, "accounts")
     ensure_repo_owned_owner_helper(paths.onboard_bin, "onboard")
     ensure_repo_owned_owner_helper(managed_status_script_path(paths), "status")
     ensure_repo_owned_owner_helper(paths.sync_script, "sync")
+
+
+def ensure_repo_owned_operator_wrapper_chain(paths: RuntimePaths) -> None:
+    ensure_repo_owned_operator_wrapper(
+        add_account_wrapper_path(paths.profile_dir), "add-account"
+    )
+    ensure_repo_owned_operator_wrapper(
+        team_codex_login_wrapper_path(paths.profile_dir), "team-codex-login"
+    )
 
 
 def ensure_repo_owned_default_launcher_consumer(paths: RuntimePaths) -> None:
@@ -2814,6 +2971,8 @@ def build_last_known_good_proxy_contract(paths: RuntimePaths) -> dict[str, Any]:
             "WBP_PROXY_REPROBE_CANDIDATES",
             LAST_KNOWN_GOOD_PROXY_URL_FIELD,
             "current_proxy_url",
+            "legacy.default_local_proxy_candidates",
+            "legacy.dynamic_local_listener_candidates",
         ],
         "candidate_inputs_bounded_local_only": True,
         "candidate_input_deduped_after_filter": True,
@@ -5522,12 +5681,55 @@ def parse_local_proxy_candidate(candidate: str) -> tuple[str, int] | None:
     return host, port
 
 
+def parse_dynamic_local_listener_candidates(raw_output: str) -> list[str]:
+    ports: list[int] = []
+    seen_ports: set[int] = set()
+    for match in re.finditer(r"(127\.0\.0\.1|localhost):(\d+)", raw_output):
+        port = int(match.group(2))
+        if port in LEGACY_PROXY_REPROBE_EXCLUDED_PORTS:
+            continue
+        if port < 1024 or port > 65535:
+            continue
+        if port in seen_ports:
+            continue
+        seen_ports.add(port)
+        ports.append(port)
+    candidates: list[str] = []
+    for port in ports:
+        candidates.append(f"http://127.0.0.1:{port}")
+    for port in ports:
+        candidates.append(f"socks5h://127.0.0.1:{port}")
+    return candidates
+
+
+def discover_dynamic_local_proxy_candidates() -> list[str]:
+    lsof_bin = shutil.which("lsof")
+    if not lsof_bin:
+        return []
+    try:
+        result = subprocess.run(
+            [lsof_bin, "-nP", "-iTCP", "-sTCP:LISTEN"],
+            capture_output=True,
+            text=True,
+            env=sanitized_env(),
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    return parse_dynamic_local_listener_candidates(result.stdout)
+
+
 def get_proxy_reprobe_candidates(state: dict[str, Any]) -> list[str]:
     raw_candidates = []
     env_candidates = os.environ.get("WBP_PROXY_REPROBE_CANDIDATES", "")
     raw_candidates.extend(item.strip() for item in env_candidates.split(","))
     raw_candidates.append(str(state.get(LAST_KNOWN_GOOD_PROXY_URL_FIELD) or ""))
     raw_candidates.append(str(state.get("current_proxy_url") or ""))
+    if os.environ.get("WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES") != "1":
+        raw_candidates.extend(LEGACY_PROXY_REPROBE_DEFAULT_CANDIDATES)
+        raw_candidates.extend(discover_dynamic_local_proxy_candidates())
 
     candidates: list[str] = []
     seen: set[str] = set()
@@ -5607,6 +5809,17 @@ def process_is_alive(pid_text: str) -> bool:
 
 def managed_pid_path(paths: RuntimePaths) -> Path:
     return paths.managed_dir / "managed-proxy.pid"
+
+
+def clear_stale_managed_pid_if_needed(paths: RuntimePaths) -> bool:
+    pid_path = managed_pid_path(paths)
+    if not pid_path.exists():
+        return False
+    pid_text = read_text(pid_path)
+    if not pid_text or process_is_alive(pid_text):
+        return False
+    pid_path.unlink(missing_ok=True)
+    return True
 
 
 def reconcile_stable_fallback(
@@ -6155,6 +6368,7 @@ def run_healthcheck(
     allow_stable_fallback_write: bool = True,
 ) -> dict[str, Any]:
     before = snapshot_known_files(paths)
+    clear_stale_managed_pid_if_needed(paths)
     state = read_json(paths.state_file, required=False)
     desired_mode = get_desired_mode(paths)
     effective_mode = get_effective_mode(paths, state)
@@ -13274,6 +13488,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
             paths.runtime_mode_file,
             paths.runtime_effective_mode_file,
             *installer_owner_helper_paths(paths),
+            *installer_operator_wrapper_paths(paths),
             *installer_managed_paths(external_paths),
         ]
     )
@@ -13292,6 +13507,7 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
         if not paths.config_toml.exists():
             write_text_atomic(paths.config_toml, 'model = "gpt-5.3-codex"\nbase_url = "http://127.0.0.1:8318/v1"')
         ensure_repo_owned_owner_helper_chain(paths)
+        ensure_repo_owned_operator_wrapper_chain(paths)
         ensure_installed_layout(external_paths)
     changed_files = detect_changed_files_by_state(before_state, list(before_state.keys()))
     return build_command_payload(
@@ -13307,6 +13523,9 @@ def run_installer_init(paths: RuntimePaths) -> dict[str, Any]:
                 "status": "owner_path_emitted",
                 "final_outcome": "baseline_initialized",
                 "owner_helper_paths": [str(path) for path in installer_owner_helper_paths(paths)],
+                "operator_wrapper_paths": [
+                    str(path) for path in installer_operator_wrapper_paths(paths)
+                ],
             },
             "external_models_result": {
                 "status": "owner_path_emitted",

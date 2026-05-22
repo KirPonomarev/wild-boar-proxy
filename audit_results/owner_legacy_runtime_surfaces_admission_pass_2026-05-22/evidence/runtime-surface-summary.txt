@@ -1,0 +1,13 @@
+Runtime surface changes captured for OWNER_LEGACY_RUNTIME_SURFACES_ADMISSION_PASS
+
+1. Canonical healthcheck remains the only live truth surface.
+2. Legacy proxy defaults 10808/10809 and dynamic local listeners are helper
+   candidates only; they do not produce green status without reproof.
+3. Dynamic local listener parsing excludes service ports such as
+   5000, 7000, 8318, 8319, 8320, 8321, 9150, 9151, 49157.
+4. healthcheck clears stale managed pid state before proof decisions.
+5. /v1/responses probe emits X-Session-ID.
+6. Installer materializes repo-managed wrappers for:
+   - Add Account.command -> managed/bin/codex-account-onboard --loop
+   - team-codex-login.command -> python -m wild_boar_proxy.sandbox_owner_helpers login --no-browser
+7. Unmarked user-owned wrappers are preserved rather than overwritten.

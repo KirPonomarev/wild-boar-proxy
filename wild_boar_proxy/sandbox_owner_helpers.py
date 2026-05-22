@@ -271,6 +271,8 @@ def run_login_flow(paths: RuntimePaths, args: argparse.Namespace) -> int:
     use_device = bool(getattr(args, "device_login", False))
     command = [str(cli_proxy_bin), "-config", str(paths.stable_config)]
     command.append("-codex-device-login" if use_device else "-codex-login")
+    if bool(getattr(args, "no_browser", False)):
+        command.append("-no-browser")
     result = subprocess.run(command, env=env, check=False)
     return int(result.returncode)
 
@@ -626,6 +628,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status")
 
+    login = sub.add_parser("login")
+    login_group = login.add_mutually_exclusive_group()
+    login_group.add_argument("--oauth-login", action="store_true")
+    login_group.add_argument("--device-login", action="store_true")
+    login.add_argument("--no-browser", action="store_true")
+
     sync = sub.add_parser("sync")
     sync.add_argument("model", nargs="?")
 
@@ -664,6 +672,9 @@ def main() -> int:
 
     if args.helper_command == "status":
         return cmd_accounts_status(paths, args)
+
+    if args.helper_command == "login":
+        return run_login_flow(paths, args)
 
     if args.helper_command == "sync":
         return cmd_sync(paths, args)

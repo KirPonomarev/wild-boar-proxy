@@ -28,6 +28,7 @@ class ProbeHandler(BaseHTTPRequestHandler):
     response_text = "OK"
     response_status = 200
     response_payload: object | None = None
+    last_request_headers: dict[str, str] | None = None
     dynamic_state_file: str | None = None
     dynamic_launcher_path: str | None = None
     dynamic_managed_config_path: str | None = None
@@ -48,6 +49,7 @@ class ProbeHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/responses":
             length = int(self.headers.get("Content-Length", "0"))
             _ = self.rfile.read(length)
+            self.__class__.last_request_headers = dict(self.headers.items())
             if (
                 self.dynamic_state_file is not None
                 and self.dynamic_success_proxy_url is not None
@@ -125,6 +127,7 @@ class CliTests(unittest.TestCase):
         ProbeHandler.response_text = "OK"
         ProbeHandler.response_status = 200
         ProbeHandler.response_payload = None
+        ProbeHandler.last_request_headers = None
         ProbeHandler.dynamic_state_file = None
         ProbeHandler.dynamic_launcher_path = None
         ProbeHandler.dynamic_managed_config_path = None
@@ -405,6 +408,120 @@ class CliTests(unittest.TestCase):
             self.assertIn(runtime_mod.REPO_MANAGED_OWNER_HELPER_MARKER, text)
             self.assertNotIn("~/.codex-custom-cli", text)
             self.assertNotIn("~/.cli-proxy-api", text)
+
+    def test_installer_init_materializes_repo_owned_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        add_account_wrapper.unlink(missing_ok=True)
+        team_login_wrapper.unlink(missing_ok=True)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        installer_result = payload["installer_result"]
+        self.assertCountEqual(
+            installer_result["operator_wrapper_paths"],
+            [str(add_account_wrapper), str(team_login_wrapper)],
+        )
+        add_account_text = add_account_wrapper.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, add_account_text)
+        self.assertIn('"$PROFILE_DIR/managed/bin/codex-account-onboard" --loop "$@"', add_account_text)
+        self.assertTrue(os.access(add_account_wrapper, os.X_OK))
+        team_login_text = team_login_wrapper.read_text(encoding="utf-8")
+        self.assertIn(runtime_mod.REPO_MANAGED_OPERATOR_WRAPPER_MARKER, team_login_text)
+        self.assertIn("sandbox_owner_helpers login --no-browser", team_login_text)
+        self.assertTrue(os.access(team_login_wrapper, os.X_OK))
+        self.assertIn(str(add_account_wrapper), payload["changed_files"])
+        self.assertIn(str(team_login_wrapper), payload["changed_files"])
+
+    def test_installer_init_does_not_overwrite_unmarked_operator_wrappers(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        add_account_original = "#!/bin/sh\nexit 9\n"
+        team_login_original = "#!/bin/sh\nexit 8\n"
+        add_account_wrapper.write_text(add_account_original, encoding="utf-8")
+        add_account_wrapper.chmod(0o755)
+        team_login_wrapper.write_text(team_login_original, encoding="utf-8")
+        team_login_wrapper.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            add_account_wrapper.read_text(encoding="utf-8"),
+            add_account_original,
+        )
+        self.assertEqual(
+            team_login_wrapper.read_text(encoding="utf-8"),
+            team_login_original,
+        )
+        self.assertNotIn(str(add_account_wrapper), payload["changed_files"])
+        self.assertNotIn(str(team_login_wrapper), payload["changed_files"])
+
+    def test_repo_managed_operator_wrappers_execute_expected_owner_lanes(self) -> None:
+        add_account_wrapper = runtime_mod.add_account_wrapper_path(self.profile_dir)
+        team_login_wrapper = runtime_mod.team_codex_login_wrapper_path(self.profile_dir)
+        fake_onboard_args = self.profile_dir / "fake-onboard-args.txt"
+        fake_onboard = self.onboard_bin
+        fake_onboard.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$@\" > {shlex.quote(str(fake_onboard_args))}\n",
+            encoding="utf-8",
+        )
+        fake_onboard.chmod(0o755)
+        fake_cli_proxy = self.profile_dir / "fake-cli-proxy.sh"
+        fake_cli_proxy_args = self.profile_dir / "fake-cli-proxy-args.txt"
+        fake_cli_proxy.write_text(
+            "#!/bin/sh\n"
+            f"printf '%s\\n' \"$@\" > {shlex.quote(str(fake_cli_proxy_args))}\n",
+            encoding="utf-8",
+        )
+        fake_cli_proxy.chmod(0o755)
+
+        result = self.run_cli("installer", "init", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        add_env = self.env()
+        add_env.pop("WBP_LAUNCHER_SCRIPT", None)
+        add_run = subprocess.run(
+            [str(add_account_wrapper), "--note", "example"],
+            cwd=ROOT,
+            env=add_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(add_run.returncode, 0, add_run.stderr)
+        self.assertEqual(
+            fake_onboard_args.read_text(encoding="utf-8").splitlines(),
+            ["--loop", "--note", "example"],
+        )
+
+        login_env = self.env()
+        login_env.pop("WBP_LAUNCHER_SCRIPT", None)
+        login_env["WBP_CLIPROXY_BIN"] = str(fake_cli_proxy)
+        login_env["WBP_PYTHON_BIN"] = sys.executable
+        login_env["WBP_REPO_ROOT"] = str(ROOT)
+        login_run = subprocess.run(
+            [str(team_login_wrapper)],
+            cwd=ROOT,
+            env=login_env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(login_run.returncode, 0, login_run.stderr)
+        self.assertEqual(
+            fake_cli_proxy_args.read_text(encoding="utf-8").splitlines(),
+            [
+                "-config",
+                str(self.stable_dir / "config.yaml"),
+                "-codex-login",
+                "-no-browser",
+            ],
+        )
 
     def test_installer_materialized_owner_helpers_support_explicit_auth_onboarding_lane(
         self,
@@ -2420,7 +2537,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2626,7 +2747,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2671,7 +2796,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2773,7 +2902,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2823,7 +2956,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2860,7 +2997,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -2897,7 +3038,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -3005,7 +3150,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -3028,6 +3177,8 @@ class CliTests(unittest.TestCase):
                 "env.WBP_PROXY_REPROBE_CANDIDATES",
                 "runtime_state.last_known_good_proxy_url",
                 "runtime_state.current_proxy_url",
+                "legacy.default_local_proxy_candidates",
+                "legacy.dynamic_local_listener_candidates",
             ],
         )
         self.assertFalse(payload["proxy_reprobe"]["found_candidate"])
@@ -3075,7 +3226,11 @@ class CliTests(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
-            result = self.run_cli("healthcheck", "--json")
+            result = self.run_cli_with_env(
+                {"WBP_PROXY_REPROBE_DISABLE_LEGACY_CANDIDATES": "1"},
+                "healthcheck",
+                "--json",
+            )
         finally:
             server.shutdown()
             thread.join()
@@ -4456,7 +4611,7 @@ class CliTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["machine_error_code"], "PROXY_PATH_BROKEN")
         self.assertEqual(
-            payload["proxy_reprobe"]["candidates"],
+            payload["proxy_reprobe"]["candidates"][:3],
             [
                 f"http://127.0.0.1:{env_candidate_port}",
                 f"http://127.0.0.1:{lkg_candidate_port}",
@@ -4532,6 +4687,81 @@ class CliTests(unittest.TestCase):
             reprobe["candidates"],
             [f"http://127.0.0.1:{18000 + index}" for index in range(8)],
         )
+
+    def test_parse_dynamic_local_listener_candidates_filters_service_ports_and_dedupes(
+        self,
+    ) -> None:
+        parsed = runtime_mod.parse_dynamic_local_listener_candidates(
+            "\n".join(
+                [
+                    "cliproxy 1 user 10u IPv4 0t0 TCP 127.0.0.1:8318 (LISTEN)",
+                    "vpn 2 user 11u IPv4 0t0 TCP localhost:10808 (LISTEN)",
+                    "random 3 user 12u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
+                    "random 4 user 13u IPv4 0t0 TCP localhost:18081 (LISTEN)",
+                    "random 5 user 14u IPv4 0t0 TCP 127.0.0.1:18080 (LISTEN)",
+                ]
+            )
+        )
+        self.assertEqual(
+            parsed,
+            [
+                "http://127.0.0.1:10808",
+                "http://127.0.0.1:18080",
+                "http://127.0.0.1:18081",
+                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:18080",
+                "socks5h://127.0.0.1:18081",
+            ],
+        )
+
+    def test_get_proxy_reprobe_candidates_appends_legacy_defaults_and_dynamic_candidates(
+        self,
+    ) -> None:
+        state = {
+            "current_proxy_url": "http://127.0.0.1:19000",
+            "last_known_good_proxy_url": "http://127.0.0.1:19001",
+        }
+        with mock.patch.object(
+            runtime_mod,
+            "discover_dynamic_local_proxy_candidates",
+            return_value=[
+                "http://127.0.0.1:19002",
+                "socks5h://127.0.0.1:19002",
+            ],
+        ):
+            candidates = runtime_mod.get_proxy_reprobe_candidates(state)
+        self.assertEqual(
+            candidates,
+            [
+                "http://127.0.0.1:19001",
+                "http://127.0.0.1:19000",
+                "http://127.0.0.1:10808",
+                "http://127.0.0.1:10809",
+                "socks5h://127.0.0.1:10808",
+                "socks5h://127.0.0.1:10809",
+                "http://127.0.0.1:19002",
+                "socks5h://127.0.0.1:19002",
+            ],
+        )
+
+    def test_healthcheck_responses_probe_emits_x_session_id(self) -> None:
+        port = free_port()
+        self.configure_stable_runtime_probe(port)
+        server, thread = self.start_probe_server(port)
+        try:
+            result = self.run_cli("healthcheck", "--json")
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNotNone(ProbeHandler.last_request_headers)
+        session_id = ""
+        for key, value in ProbeHandler.last_request_headers.items():
+            if key.lower() == "x-session-id":
+                session_id = value
+                break
+        self.assertTrue(session_id.startswith("wbp-runtime-"))
 
     def test_healthcheck_requires_effective_mode_artifact(self) -> None:
         port = free_port()
@@ -6072,6 +6302,8 @@ class CliTests(unittest.TestCase):
                 "WBP_PROXY_REPROBE_CANDIDATES",
                 "last_known_good_proxy_url",
                 "current_proxy_url",
+                "legacy.default_local_proxy_candidates",
+                "legacy.dynamic_local_listener_candidates",
             ],
         )
         self.assertEqual(last_known_good_contract["write_path_status"], "owner_path_emitted")
@@ -8875,6 +9107,11 @@ class CliTests(unittest.TestCase):
     def test_accounts_onboard_sync_failure_does_not_overclaim_managed_ready_success(
         self,
     ) -> None:
+        unavailable_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unavailable_stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli_with_env(
             {
                 "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
@@ -16318,6 +16555,11 @@ class CliTests(unittest.TestCase):
         )
 
     def test_sync_does_not_expose_deterministic_stable_recovery_result(self) -> None:
+        unavailable_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unavailable_stable_port}\n",
+            encoding="utf-8",
+        )
         result = self.run_cli("sync", "--json")
         self.assertEqual(result.returncode, 1, result.stderr)
         payload = json.loads(result.stdout)
