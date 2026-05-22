@@ -1,0 +1,21 @@
+{
+  "contour": "LEGACY_ACCOUNT_POOL_ADOPTION_PASS",
+  "node_check": {
+    "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+    "status": "pass"
+  },
+  "targeted_regressions": {
+    "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_live_server.WebDesignLiveServerTests.test_real_json_runner_supports_sandbox_api_route_connect_from_profile_cwd tests.test_cli.CliTests.test_package_launchable_launcher_smoke_packaged_continuity_json_works -q",
+    "status": "pass",
+    "tests_run": 2
+  },
+  "full_unittest_gate": {
+    "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q",
+    "status": "pass",
+    "tests_run": 568,
+    "duration_seconds": 195.698
+  },
+  "known_non_blocking_warning": "Pillow deprecation warning in tests/test_web_design_ui.py:6669",
+  "runtime_truth_outcome": "imported_with_runtime_blocker",
+  "runtime_blocker": "ATTESTATION_FAILED / HTTP 401 Invalid API key"
+}

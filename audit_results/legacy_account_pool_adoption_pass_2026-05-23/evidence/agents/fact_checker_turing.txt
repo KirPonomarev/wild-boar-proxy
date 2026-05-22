@@ -1,0 +1,32 @@
+FACT-CHECK REPORT: LEGACY_ACCOUNT_POOL_ADOPTION_PASS
+
+Sources inspected:
+- /Users/kirillponomarev/.codex-custom-cli/managed/backend-registry.json
+- /Users/kirillponomarev/.cli-proxy-api/
+- /Users/kirillponomarev/.codex-custom-cli/removed-auth/
+
+registry_total_backends: 25
+registry_unique_ids: 25
+registry_unique_labels: 24
+registry_duplicate_labels: { "kp8750410@gmail.com": 2 }
+registry_unique_auth_refs: 25
+registry_duplicate_auth_refs: none
+
+auth_file_total: 25
+auth_unique_emails: 24
+auth_duplicate_emails: { "kp8750410@gmail.com": 2 }
+auth_unique_account_ids: 22
+auth_duplicate_account_ids:
+  - fca7a069-ad2c-4fda-921f-e8c971365b31 -> 3 files
+  - eabb9614-e701-451c-8a05-1792f278efc2 -> 2 files
+
+operator_exclusion_candidate_match: found only in removed-auth
+candidate_file: codex-ponomarevkirill89@gmail.com-free.20260508-172823.json
+candidate_email: ponomarevkirill89@gmail.com
+candidate_account_id: 252b844e-2714-4440-b32b-4a435510636f
+present_in_active_auth_files: false
+present_in_backend_registry: false
+
+Verdicts:
+- candidate_for_operator_exclusion: YES, historical/removed entry only.
+- import_all_non_excluded_entries_structurally_safe: NO for identity-merge import; acceptable for registry-file-level import only with duplicate warnings preserved.

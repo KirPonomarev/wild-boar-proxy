@@ -1,0 +1,30 @@
+{
+  "risks": [
+    {
+      "id": "operator_excluded_identity",
+      "status": "not_in_active_source",
+      "guard": "exact ponomarevkirill89 removed-auth candidate documented and not staged"
+    },
+    {
+      "id": "duplicate_account_ids",
+      "status": "present",
+      "guard": "recorded; duplicate entries imported as backend entries, not independent identities"
+    },
+    {
+      "id": "legacy_state_stale_failed",
+      "status": "mitigated",
+      "guard": "staged state based on target state, counts recalculated, selected ids empty"
+    },
+    {
+      "id": "api_secret_import",
+      "status": "out_of_scope",
+      "guard": "no external-models directory in staged source"
+    }
+  ],
+  "stop_conditions": [
+    "missing target snapshot",
+    "historical excluded candidate appears in staged registry",
+    "legacy source mutation",
+    "undeclared external-models import"
+  ]
+}

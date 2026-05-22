@@ -6,6 +6,7 @@ import json
 import socket
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +25,14 @@ class HttpJsonResponse:
     latency_ms: int | None
 
 
+def _open_request(request: urllib.request.Request, *, timeout_seconds: float):
+    parsed = urllib.parse.urlparse(request.full_url)
+    if parsed.hostname in {"127.0.0.1", "localhost", "::1"}:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        return opener.open(request, timeout=timeout_seconds)
+    return urllib.request.urlopen(request, timeout=timeout_seconds)
+
+
 def request_json(
     *,
     url: str,
@@ -40,7 +49,7 @@ def request_json(
     request = urllib.request.Request(url=url, method=method, headers=headers, data=data)
     started_at = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with _open_request(request, timeout_seconds=timeout_seconds) as response:
             raw = response.read()
             parsed = json.loads(raw.decode("utf-8"))
             return HttpJsonResponse(

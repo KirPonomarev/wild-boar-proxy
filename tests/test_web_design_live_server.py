@@ -17,6 +17,7 @@ from unittest import mock
 
 from wild_boar_proxy.runtime import RuntimePaths, run_installer_init
 from wild_boar_proxy.ui_shell import CommandResult
+import wild_boar_proxy.web_design_live_server as live_server
 from wild_boar_proxy.web_design_command_adapter import ALLOWLIST
 from wild_boar_proxy.web_design_live_server import (
     ACCOUNTS_READONLY_COMMAND_IDS,
@@ -739,6 +740,49 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["sync_runtime"]["available"])
         self.assertNotIn(("sync", "--json"), runner.calls)
         self.assertNotIn(("launch", "client", "--json"), runner.calls)
+
+    def test_sandbox_action_phase_routes_all_readonly_surfaces_to_sandbox_runner(self) -> None:
+        default_payloads = live_payloads()
+        default_payloads[("status", "--json")] = status_packet(
+            machine_error_code="DEFAULT_RUNNER",
+            human_message="Default runner should not serve sandbox readonly.",
+        )
+        sandbox_payloads = live_payloads()
+        sandbox_payloads[("status", "--json")] = status_packet(
+            machine_error_code="SANDBOX_RUNNER",
+            human_message="Sandbox readonly runner used.",
+        )
+        default_runner = MappingRunner(default_payloads)
+        sandbox_runner = MappingRunner(sandbox_payloads)
+
+        with mock.patch.object(
+            live_server,
+            "JsonCommandRunner",
+            side_effect=[default_runner, sandbox_runner],
+        ):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    launch_copy_contract=launch_copy_contract(),
+                    action_phase=SANDBOX_ACTION_PHASE,
+                ),
+            )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            overview = json.loads(fetch(f"{base_url}/api/live-readonly"))
+            accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(overview["runtime"]["machine_error_code"], "SANDBOX_RUNNER")
+        self.assertIn(("status", "--json"), sandbox_runner.calls)
+        self.assertIn(("accounts", "list", "--json"), sandbox_runner.calls)
+        self.assertEqual(default_runner.calls, [])
+        self.assertEqual(accounts["source"], "accounts_readonly")
 
     def test_ui_action_metadata_hides_adapter_commands_and_marks_confirmed_actions(self) -> None:
         metadata = ui_action_metadata()
@@ -2029,14 +2073,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 provider.server_close()
                 provider_thread.join(timeout=5)
 
-            self.assertEqual(result["status"], "command_error")
+            self.assertEqual(result["status"], "ok")
             self.assertEqual(result["action_role"], "api_route_admission")
-            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_validate_failed")
+            self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "created_and_validated")
             self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admitted")
             self.assertTrue(result["result"]["data"]["credential_admitted"])
             self.assertFalse(result["result"]["data"]["secret_value_exposed"])
             self.assertEqual(result["result"]["data"]["route_id"], "wbp-web-primary-openrouter")
-            self.assertEqual(result["result"]["machine_error_code"], "invalid_upstream_response")
+            self.assertEqual(result["result"]["machine_error_code"], "OK")
+            self.assertEqual(result["result"]["data"]["validate_status"], "ok")
+            self.assertEqual(result["result"]["data"]["validate_machine_error_code"], "OK")
             self.assertFalse(result["result"]["data"]["browser_secret_intake"])
             self.assertFalse(result["result"]["data"]["browser_path_intake"])
             self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
@@ -2047,7 +2093,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(readonly_after["routes"][0]["route_id"], "wbp-web-primary-openrouter")
             self.assertTrue(readonly_after["routes"][0]["enabled"])
             self.assertEqual(readonly_after["routes"][0]["secret_status_label"], "available")
-            self.assertEqual(readonly_after["routes"][0]["validation_label"], "check failed")
+            self.assertEqual(readonly_after["routes"][0]["validation_label"], "ok")
+            self.assertFalse(readonly_after["adapter"]["profile_ready"])
+            self.assertTrue(readonly_after["adapter"]["runtime_claim_blocked"])
 
     def test_api_connections_readonly_requires_matching_secret_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

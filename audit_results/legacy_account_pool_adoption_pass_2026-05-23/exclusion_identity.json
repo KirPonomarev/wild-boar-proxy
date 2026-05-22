@@ -1,0 +1,21 @@
+{
+  "operator_phrase": "Пономарев/Пановарев Кирилл 89",
+  "candidates": [
+    {
+      "backend_id": "",
+      "email": "ponomarevkirill89@gmail.com",
+      "account_id": "252b844e-2714-4440-b32b-4a435510636f",
+      "auth_ref": "/Users/kirillponomarev/.codex-custom-cli/removed-auth/codex-ponomarevkirill89@gmail.com-free.20260508-172823.json",
+      "auth_file": "codex-ponomarevkirill89@gmail.com-free.20260508-172823.json",
+      "source": "removed-auth",
+      "present_in_active_auth_files": false,
+      "present_in_backend_registry": false,
+      "operator_phrase": "Пономарев/Пановарев Кирилл 89",
+      "match_confidence": "exact_email_removed_auth_match",
+      "verdict": "excluded_operator_hold_already_absent_from_active_source",
+      "action": "document_no_import_needed"
+    }
+  ],
+  "exact_match_status": "exact_removed_auth_match_absent_from_active_source",
+  "import_source_exclusion_required": false
+}

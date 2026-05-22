@@ -1,0 +1,34 @@
+{
+  "status": "ok",
+  "machine_error_code": "OK",
+  "count": 25,
+  "pool_counts": {
+    "retired": 8,
+    "active": 17
+  },
+  "status_counts": {
+    "down": 8,
+    "healthy": 15,
+    "degraded": 2
+  },
+  "registry_identity": {
+    "status": "clear",
+    "machine_error_code": "OK",
+    "duplicate_backend_ids": [],
+    "duplicate_auth_basenames": [],
+    "missing_auth_refs": [],
+    "empty_auth_ref_backends": [],
+    "invalid_auth_basenames": [],
+    "invalid_backend_pools": [],
+    "registry_schema_version": 2,
+    "unsupported_schema_versions": [],
+    "claim_blockers": [],
+    "next_action": "none"
+  },
+  "pool_policy": {
+    "active_target": 20,
+    "active_min": 20,
+    "reserve_target": 0
+  },
+  "stable_default_backend_id": "gpt2026bis-team"
+}

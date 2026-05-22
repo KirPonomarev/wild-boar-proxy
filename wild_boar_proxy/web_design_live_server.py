@@ -1619,6 +1619,7 @@ def build_handler(
             cwd=str(Path(launch_copy_contract.profile_dir or "").expanduser()),
             env=_sandbox_action_runner_env(launch_copy_contract),
         )
+        readonly_runner = sandbox_runner
         accounts_readonly_runner = sandbox_runner
         api_connections_readonly_runner = sandbox_runner
         action_runner = sandbox_runner

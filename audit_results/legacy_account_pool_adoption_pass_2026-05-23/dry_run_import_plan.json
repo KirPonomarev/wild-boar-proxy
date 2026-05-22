@@ -1,0 +1,37 @@
+{
+  "staged_source_dir": "/tmp/wbp-legacy-account-adoption-source-20260523",
+  "source_total": 25,
+  "staged_total": 25,
+  "excluded_total": 0,
+  "historical_operator_exclusion_absent_from_source": true,
+  "expected_post_import_count": 25,
+  "external_models_in_scope": false,
+  "config_strategy": "preserve_current_target_config_and_modes_not_legacy_model_preferences",
+  "state_strategy": "preserve_current_target_state_shape_with_imported_account_counts_and_empty_selected_backend_ids",
+  "declared_write_surfaces": [
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/backend-registry.json",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/supervisor-state.json",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/config.toml",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/runtime-mode.txt",
+    "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile/runtime-effective-mode.txt"
+  ],
+  "forbidden_write_surfaces": [
+    "/Users/kirillponomarev/.codex-custom-cli",
+    "/Users/kirillponomarev/.cli-proxy-api"
+  ],
+  "staged_pool_counts": {
+    "retired": 8,
+    "active": 17
+  },
+  "staged_status_counts": {
+    "down": 8,
+    "healthy": 15,
+    "degraded": 2
+  },
+  "classification_counts": {
+    "import_retired": 7,
+    "dedupe_group_import_with_warning": 5,
+    "import_active": 11,
+    "import_degraded_hold": 2
+  }
+}
