@@ -92,7 +92,7 @@ const ACCOUNT_VISUAL_CLASS = {
   neutral: "neutral"
 };
 const ACTION_LEDGER_LIMIT = 5;
-const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id"];
+const BROWSER_ACTION_PAYLOAD_KEYS = ["account_id", "route_id", "session_id"];
 const SETTINGS_SECTIONS = ["hub", "runtime", "client", "accounts-policy", "diagnostics-privacy", "advanced", "data-layout"];
 const UI_READONLY_LANE_NEXT_CONTOUR = "STOP_AND_DIAGNOSE_REPEATED_SELECTOR_LOCK_AND_RUNTIME_REGRESSION";
 const UI_READONLY_LANE_BLOCKERS = [
@@ -456,6 +456,9 @@ let selectedAccountIds = new Set();
 let actionLedger = [];
 let actionLedgerFilter = "all";
 let activeActionRequestKey = "";
+let activeOnboardLoginSession = null;
+let onboardLoginWindowRef = null;
+let onboardLoginOverlayOpenUrl = "";
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -849,7 +852,7 @@ function actionRefreshLabel(payload, refreshState) {
 async function runUiAction(uiAction, extraPayload = {}) {
   const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
   const requestKey = actionRequestKey(requestPayload);
-  const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : null;
+  const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : onboardLoginWindowRef;
   if (activeActionRequestKey) {
     const sameRequest = activeActionRequestKey === requestKey;
     setActionPanel({
@@ -898,30 +901,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       throw new Error(`action http ${response.status}`);
     }
     const payload = await response.json();
-    maybeNavigateOnboardLoginWindow(onboardLoginWindow, payload);
-    setActionPanel(payload);
-    if (payload.post_action_refresh_required) {
-      const refreshTarget = currentScreen() === "accounts"
-        ? "accounts"
-        : (
-          currentScreen() === "api-connections"
-            ? "api-connections"
-            : (currentScreen() === "settings" ? "settings" : (currentScreen() === "quick-start" ? "quick-start" : "overview"))
-        );
-      text("actionRefreshStatus", `обновление live ${refreshTarget}`);
-      const refreshed = await setLiveReadonly(false);
-      if (actionRefreshSucceeded(payload, refreshed)) {
-        const refreshState = canonicalActionRefreshState(payload, refreshed);
-        setActionPanel(payload, refreshState);
-        setMiniPill(
-          "onboardingResultRefreshChip",
-          refreshState === "mismatch" ? "refresh mismatch" : "refresh complete",
-          refreshState === "mismatch" ? "amber" : "green"
-        );
-      } else {
-        setActionPanel(payload, "failed");
-      }
-    }
+    await handleActionPayload(payload, onboardLoginWindow);
   } catch (error) {
     const timeoutFailure = error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout");
     if (onboardLoginWindow) {
@@ -967,20 +947,154 @@ function openOnboardLoginWindow() {
   try {
     const loginWindow = openFn.call(window, "about:blank", "_blank");
     if (loginWindow) {
-      try {
-        loginWindow.opener = null;
-      } catch (_openerError) {
-      }
+      onboardLoginWindowRef = loginWindow;
       writeOnboardLoginWindowStatus(
         loginWindow,
-        "Owner login is starting",
-        "Waiting for the owner-controlled login URL from the server.",
+        "Codex login is starting",
+        "Waiting for the owner-controlled device login session from the server.",
         "pending"
       );
     }
     return loginWindow;
   } catch (_error) {
     return null;
+  }
+}
+
+function ensureOnboardLoginOverlay() {
+  if (typeof document === "undefined" || !document.body) {
+    return null;
+  }
+  let overlay = document.getElementById("onboardLoginOverlay");
+  if (overlay) {
+    return overlay;
+  }
+  overlay = document.createElement("div");
+  overlay.id = "onboardLoginOverlay";
+  overlay.style.cssText = "position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(32,26,18,0.52);z-index:9999;padding:24px;";
+  overlay.innerHTML = `
+    <div style="width:min(680px,100%);background:#fffaf2;border:1px solid #d8cfc0;border-left:6px solid #2f5f9f;box-shadow:0 20px 60px rgba(30,24,16,0.18);padding:28px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#2b2925;">
+      <div id="onboardLoginOverlayTone" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:#edf3ff;color:#244f8f;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">owner login</div>
+      <h2 id="onboardLoginOverlayTitle" style="margin:18px 0 12px;font-size:22px;line-height:1.25;">Codex device login</h2>
+      <p id="onboardLoginOverlayMessage" style="margin:0;font-size:15px;line-height:1.6;">Waiting for the owner-controlled device login session from the server.</p>
+      <div style="display:grid;gap:14px;margin-top:22px;padding-top:18px;border-top:1px solid #e6dccd;">
+        <div style="display:grid;gap:6px;">
+          <span style="color:#746d63;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">device URL</span>
+          <strong id="onboardLoginOverlayUrl" style="font-size:17px;word-break:break-word;">-</strong>
+        </div>
+        <div style="display:grid;gap:6px;">
+          <span style="color:#746d63;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">device code</span>
+          <strong id="onboardLoginOverlayCode" style="font-size:22px;letter-spacing:0.04em;word-break:break-word;">-</strong>
+        </div>
+        <div style="display:grid;gap:6px;">
+          <span style="color:#746d63;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">session</span>
+          <strong id="onboardLoginOverlaySession" style="font-size:16px;word-break:break-word;">-</strong>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:24px;">
+        <button id="onboardLoginOverlayOpen" type="button" style="appearance:none;border:1px solid #244f8f;background:#244f8f;color:#fff;font:inherit;padding:10px 14px;cursor:pointer;">Открыть вход</button>
+        <button id="onboardLoginOverlayCheck" type="button" style="appearance:none;border:1px solid #d8cfc0;background:#fff;color:#2b2925;font:inherit;padding:10px 14px;cursor:pointer;">Проверить</button>
+        <button id="onboardLoginOverlayComplete" type="button" style="appearance:none;border:1px solid #2f7a46;background:#2f7a46;color:#fff;font:inherit;padding:10px 14px;cursor:pointer;display:none;">Завершить</button>
+        <button id="onboardLoginOverlayCancel" type="button" style="appearance:none;border:1px solid #d8cfc0;background:#fff;color:#2b2925;font:inherit;padding:10px 14px;cursor:pointer;">Отменить</button>
+        <button id="onboardLoginOverlayClose" type="button" style="appearance:none;border:1px solid #d8cfc0;background:#fff;color:#2b2925;font:inherit;padding:10px 14px;cursor:pointer;margin-left:auto;">Скрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.append(overlay);
+  overlay.querySelector("#onboardLoginOverlayOpen")?.addEventListener("click", () => {
+    const targetUrl = activeOnboardLoginSession?.deviceUrl || onboardLoginOverlayOpenUrl;
+    if (typeof targetUrl !== "string" || !targetUrl) {
+      return;
+    }
+    try {
+      const openFn = window["open"];
+      if (typeof openFn === "function") {
+        const opened = openFn.call(window, targetUrl, "_blank");
+        if (opened) {
+          onboardLoginWindowRef = opened;
+        }
+      }
+    } catch (_openError) {
+    }
+  });
+  overlay.querySelector("#onboardLoginOverlayCheck")?.addEventListener("click", () => {
+    const sessionId = activeOnboardLoginSession?.sessionId || "";
+    if (sessionId) {
+      runUiAction("account_login_status", { session_id: sessionId }).catch(() => {});
+    }
+  });
+  overlay.querySelector("#onboardLoginOverlayComplete")?.addEventListener("click", () => {
+    const sessionId = activeOnboardLoginSession?.sessionId || "";
+    if (sessionId) {
+      runUiAction("account_login_complete", { session_id: sessionId }).catch(() => {});
+    }
+  });
+  overlay.querySelector("#onboardLoginOverlayCancel")?.addEventListener("click", () => {
+    const sessionId = activeOnboardLoginSession?.sessionId || "";
+    if (sessionId) {
+      runUiAction("account_login_cancel", { session_id: sessionId }).catch(() => {});
+    }
+  });
+  overlay.querySelector("#onboardLoginOverlayClose")?.addEventListener("click", () => {
+    overlay.style.display = "none";
+  });
+  return overlay;
+}
+
+function renderOnboardLoginOverlay(model) {
+  const overlay = ensureOnboardLoginOverlay();
+  if (!overlay) {
+    return;
+  }
+  overlay.style.display = "flex";
+  onboardLoginOverlayOpenUrl = typeof model?.deviceUrl === "string" ? model.deviceUrl : "";
+  const toneNode = overlay.querySelector("#onboardLoginOverlayTone");
+  const titleNode = overlay.querySelector("#onboardLoginOverlayTitle");
+  const messageNode = overlay.querySelector("#onboardLoginOverlayMessage");
+  const urlNode = overlay.querySelector("#onboardLoginOverlayUrl");
+  const codeNode = overlay.querySelector("#onboardLoginOverlayCode");
+  const sessionNode = overlay.querySelector("#onboardLoginOverlaySession");
+  const openNode = overlay.querySelector("#onboardLoginOverlayOpen");
+  const checkNode = overlay.querySelector("#onboardLoginOverlayCheck");
+  const completeNode = overlay.querySelector("#onboardLoginOverlayComplete");
+  const cancelNode = overlay.querySelector("#onboardLoginOverlayCancel");
+  if (toneNode) {
+    toneNode.textContent = model?.tone === "success"
+      ? "owner login completed"
+      : (model?.tone === "error" ? "owner login attention" : "owner login session");
+    toneNode.style.background = model?.tone === "success" ? "#e9f6ee" : (model?.tone === "error" ? "#fff0ed" : "#edf3ff");
+    toneNode.style.color = model?.tone === "success" ? "#2f7a46" : (model?.tone === "error" ? "#9f2f2f" : "#244f8f");
+  }
+  if (titleNode) titleNode.textContent = model?.title || "Codex device login";
+  if (messageNode) messageNode.textContent = model?.message || "Waiting for the owner-controlled device login session from the server.";
+  if (urlNode) urlNode.textContent = model?.deviceUrl || "-";
+  if (codeNode) codeNode.textContent = model?.deviceCode || "-";
+  if (sessionNode) sessionNode.textContent = model?.sessionId || "-";
+  if (openNode) openNode.style.display = model?.deviceUrl ? "inline-flex" : "none";
+  if (checkNode) checkNode.style.display = model?.canCheck ? "inline-flex" : "none";
+  if (completeNode) completeNode.style.display = model?.canComplete ? "inline-flex" : "none";
+  if (cancelNode) cancelNode.style.display = model?.canCancel ? "inline-flex" : "none";
+}
+
+function openDeviceLoginWindowIfNeeded(loginWindow, payload) {
+  if (!loginWindow) {
+    return;
+  }
+  const model = onboardLoginWindowModelFromPayload(payload);
+  if (!model.deviceUrl) {
+    return;
+  }
+  try {
+    const currentUrl = typeof loginWindow.location?.href === "string" ? loginWindow.location.href : "";
+    if (currentUrl === model.deviceUrl) {
+      return;
+    }
+  } catch (_currentUrlError) {
+    return;
+  }
+  try {
+    loginWindow.location.href = model.deviceUrl;
+  } catch (_navigateError) {
   }
 }
 
@@ -992,10 +1106,36 @@ function onboardLoginWindowEscape(value) {
     .replaceAll('"', "&quot;");
 }
 
-function onboardLoginWindowHtml(title, message, tone = "pending") {
+function onboardLoginWindowHtml(model) {
+  const title = typeof model?.title === "string" ? model.title : "Owner login";
+  const message = typeof model?.message === "string" ? model.message : "Waiting for owner login status.";
+  const tone = typeof model?.tone === "string" ? model.tone : "pending";
   const safeTitle = onboardLoginWindowEscape(title);
   const safeMessage = onboardLoginWindowEscape(message);
-  const borderColor = tone === "error" ? "#9f2f2f" : "#2f5f9f";
+  const safeDeviceUrl = onboardLoginWindowEscape(model?.deviceUrl || "");
+  const safeDeviceCode = onboardLoginWindowEscape(model?.deviceCode || "");
+  const safeSessionId = onboardLoginWindowEscape(model?.sessionId || "");
+  const borderColor = tone === "error" ? "#9f2f2f" : (tone === "success" ? "#2f7a46" : "#2f5f9f");
+  const encodedModel = JSON.stringify({
+    sessionId: model?.sessionId || "",
+    title,
+    message,
+    tone,
+    deviceUrl: model?.deviceUrl || "",
+    deviceCode: model?.deviceCode || "",
+    status: model?.status || "",
+    canCheck: model?.canCheck === true,
+    canComplete: model?.canComplete === true,
+    canCancel: model?.canCancel === true,
+  }).replace(/</g, "\\u003c");
+  const deviceSection = safeDeviceUrl || safeDeviceCode
+    ? `
+    <section class="detail-block">
+      <div class="detail-row"><span>device URL</span><strong id="deviceUrl">${safeDeviceUrl || "-"}</strong></div>
+      <div class="detail-row"><span>device code</span><strong id="deviceCode">${safeDeviceCode || "-"}</strong></div>
+      <div class="detail-row"><span>session</span><strong id="sessionId">${safeSessionId || "-"}</strong></div>
+    </section>`
+    : "";
   return `<!doctype html>
 <html lang="ru">
 <head>
@@ -1006,13 +1146,96 @@ function onboardLoginWindowHtml(title, message, tone = "pending") {
     main { max-width: 560px; padding: 28px; border: 1px solid #d8cfc0; border-left: 6px solid ${borderColor}; background: #fffaf2; box-shadow: 0 20px 60px rgba(30, 24, 16, 0.14); }
     h1 { margin: 0 0 12px; font-size: 20px; line-height: 1.3; }
     p { margin: 0; font-size: 15px; line-height: 1.55; }
+    .detail-block { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e6dccd; display: grid; gap: 10px; }
+    .detail-row { display: grid; gap: 6px; }
+    .detail-row span { color: #746d63; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .detail-row strong { font-size: 18px; word-break: break-word; }
+    .actions { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+    button { appearance: none; border: 1px solid #d8cfc0; background: white; color: #2b2925; font: inherit; padding: 10px 14px; cursor: pointer; }
+    button.primary { background: #244f8f; color: white; border-color: #244f8f; }
+    button[hidden] { display: none; }
   </style>
 </head>
 <body>
   <main>
-    <h1>${safeTitle}</h1>
-    <p>${safeMessage}</p>
+    <h1 id="title">${safeTitle}</h1>
+    <p id="message">${safeMessage}</p>
+    ${deviceSection}
+    <div class="actions">
+      <button id="checkButton" class="primary" type="button">Проверить</button>
+      <button id="completeButton" type="button" hidden>Завершить</button>
+      <button id="cancelButton" type="button">Отменить</button>
+    </div>
   </main>
+  <script>
+    const MODEL = ${encodedModel};
+    const safeText = (value, fallback = "-") => {
+      if (typeof value !== "string") return fallback;
+      const trimmed = value.trim();
+      return trimmed ? trimmed : fallback;
+    };
+    const postToOpener = (payload) => {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: "wbp-onboard-login-payload", payload }, "*");
+        }
+      } catch (_openerError) {
+      }
+    };
+    const requestActionFromOpener = (uiAction) => {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(
+            { type: "wbp-onboard-login-command", uiAction, sessionId: MODEL.sessionId },
+            "*"
+          );
+        }
+      } catch (_openerError) {
+      }
+    };
+    const setButtonState = (id, visible) => {
+      const node = document.getElementById(id);
+      if (node) {
+        node.hidden = !visible;
+      }
+    };
+    const setText = (id, value) => {
+      const node = document.getElementById(id);
+      if (node) {
+        node.textContent = safeText(value);
+      }
+    };
+    const renderPayload = (payload) => {
+      const result = payload && payload.result ? payload.result : {};
+      const bridge = result.data && result.data.login_bridge ? result.data.login_bridge : {};
+      const status = safeText(bridge.status, "unknown");
+      const title = payload && payload.ui_action === "account_login_complete"
+        ? (result.status === "ok" ? "Codex login completed" : "Codex login completion failed")
+        : (payload && payload.ui_action === "account_login_cancel"
+          ? "Codex login cancelled"
+          : (status === "auth_materialized" ? "Codex auth materialized" : "Codex device login"));
+      const message = safeText(result.human_message, MODEL.message);
+      setText("title", title);
+      setText("message", message);
+      setText("deviceUrl", bridge.device_url || bridge.login_url || MODEL.deviceUrl);
+      setText("deviceCode", bridge.device_code || MODEL.deviceCode);
+      setText("sessionId", bridge.session_id || bridge.login_session_id || MODEL.sessionId);
+      const canComplete = status === "auth_materialized";
+      const terminal = ["completed", "cancelled", "expired", "failed"].includes(status)
+        || payload?.ui_action === "account_login_complete"
+        || payload?.ui_action === "account_login_cancel";
+      setButtonState("checkButton", !terminal && !canComplete);
+      setButtonState("completeButton", canComplete);
+      setButtonState("cancelButton", !terminal);
+      postToOpener(payload);
+    };
+    document.getElementById("checkButton")?.addEventListener("click", () => requestActionFromOpener("account_login_status"));
+    document.getElementById("completeButton")?.addEventListener("click", () => requestActionFromOpener("account_login_complete"));
+    document.getElementById("cancelButton")?.addEventListener("click", () => requestActionFromOpener("account_login_cancel"));
+    setButtonState("checkButton", MODEL.canCheck !== false);
+    setButtonState("completeButton", MODEL.canComplete === true);
+    setButtonState("cancelButton", MODEL.canCancel !== false);
+  </script>
 </body>
 </html>`;
 }
@@ -1021,7 +1244,7 @@ function writeOnboardLoginWindowStatus(loginWindow, title, message, tone = "pend
   if (!loginWindow) {
     return false;
   }
-  const html = onboardLoginWindowHtml(title, message, tone);
+  const html = onboardLoginWindowHtml({ title, message, tone, canCheck: false, canCancel: false, canComplete: false });
   try {
     if (loginWindow.document && typeof loginWindow.document.write === "function") {
       if (typeof loginWindow.document.open === "function") {
@@ -1045,59 +1268,138 @@ function writeOnboardLoginWindowStatus(loginWindow, title, message, tone = "pend
   return false;
 }
 
-function onboardLoginUrlFromPayload(payload) {
-  const loginBridge = payload?.result?.data?.login_bridge;
-  return typeof loginBridge?.login_url === "string" ? loginBridge.login_url : "";
-}
-
 function onboardLoginBridgeFromPayload(payload) {
   const loginBridge = payload?.result?.data?.login_bridge;
   return loginBridge && typeof loginBridge === "object" ? loginBridge : {};
+}
+
+function onboardLoginSessionIdFromPayload(payload) {
+  const loginBridge = onboardLoginBridgeFromPayload(payload);
+  const value = loginBridge.session_id || loginBridge.login_session_id || "";
+  return typeof value === "string" ? value : "";
+}
+
+function onboardLoginWindowModelFromPayload(payload) {
+  const loginBridge = onboardLoginBridgeFromPayload(payload);
+  const result = payload?.result || {};
+  const status = typeof loginBridge.status === "string" ? loginBridge.status : "";
+  const sessionId = onboardLoginSessionIdFromPayload(payload);
+  const deviceUrl = typeof loginBridge.device_url === "string"
+    ? loginBridge.device_url
+    : (typeof loginBridge.login_url === "string" ? loginBridge.login_url : "");
+  const deviceCode = typeof loginBridge.device_code === "string" ? loginBridge.device_code : "";
+  let title = "Owner login is starting";
+  let message = typeof result.human_message === "string" && result.human_message
+    ? result.human_message
+    : "Waiting for the owner-controlled login status from the server.";
+  let tone = "pending";
+  if (status === "waiting_for_user" || status === "started") {
+    title = "Codex device login";
+    message = "Open the device URL, enter the code, then click Проверить.";
+  } else if (status === "auth_materialized") {
+    title = "Codex auth materialized";
+    message = "Owner auth artifact was detected in sandbox. Click Завершить to onboard the account into reserve.";
+  } else if (status === "completed") {
+    title = "Codex login completed";
+    message = "Reserve onboarding completed. Return to Wild Boar Proxy for refreshed account state.";
+    tone = "success";
+  } else if (status === "cancelled") {
+    title = "Codex login cancelled";
+    message = "Owner login session was cancelled.";
+    tone = "error";
+  } else if (status === "expired" || status === "failed") {
+    title = "Codex login failed";
+    tone = "error";
+  } else if (payload?.result?.status !== "ok") {
+    title = "Codex login blocked";
+    tone = "error";
+  }
+  return {
+    title,
+    message,
+    tone,
+    sessionId,
+    deviceUrl,
+    deviceCode,
+    status,
+    canCheck: Boolean(sessionId) && ["started", "waiting_for_user", "unknown"].includes(status || "waiting_for_user"),
+    canComplete: status === "auth_materialized",
+    canCancel: Boolean(sessionId) && !["completed", "cancelled", "expired", "failed"].includes(status),
+  };
 }
 
 function maybeNavigateOnboardLoginWindow(loginWindow, payload) {
   if (!loginWindow) {
     return;
   }
-  const loginUrl = onboardLoginUrlFromPayload(payload);
-  if (!loginUrl) {
-    const loginBridge = onboardLoginBridgeFromPayload(payload);
-    if (payload?.result?.status === "ok" && loginBridge.provider === "codex") {
-      writeOnboardLoginWindowStatus(
-        loginWindow,
-        "Codex login completed",
-        "The owner-controlled Codex login and reserve onboarding packet completed. Return to Wild Boar Proxy for the refreshed account state.",
-        "pending"
-      );
-      return;
-    }
-    writeOnboardLoginWindowStatus(
-      loginWindow,
-      "Owner login URL missing",
-      "The owner login flow did not return a browser URL. Return to Wild Boar Proxy and inspect the action result.",
-      "error"
-    );
+  const model = onboardLoginWindowModelFromPayload(payload);
+  if (model.deviceUrl) {
+    openDeviceLoginWindowIfNeeded(loginWindow, payload);
     return;
   }
   try {
-    if (loginWindow.location && typeof loginWindow.location === "object") {
-      loginWindow.location.href = loginUrl;
+    const html = onboardLoginWindowHtml(model);
+    if (loginWindow.document && typeof loginWindow.document.write === "function") {
+      if (typeof loginWindow.document.open === "function") {
+        loginWindow.document.open();
+      }
+      loginWindow.document.write(html);
+      if (typeof loginWindow.document.close === "function") {
+        loginWindow.document.close();
+      }
       return;
     }
-  } catch (_locationError) {
+  } catch (_documentError) {
   }
-  try {
-    if (typeof loginWindow.close === "function") {
-      loginWindow.close();
+  writeOnboardLoginWindowStatus(loginWindow, model.title, model.message, model.tone);
+}
+
+async function handleActionPayload(payload, loginWindow = null) {
+  maybeNavigateOnboardLoginWindow(loginWindow, payload);
+  renderOnboardLoginOverlay(onboardLoginWindowModelFromPayload(payload));
+  const sessionId = onboardLoginSessionIdFromPayload(payload);
+  const loginBridge = onboardLoginBridgeFromPayload(payload);
+  if (sessionId) {
+    activeOnboardLoginSession = {
+      sessionId,
+      status: typeof loginBridge.status === "string" ? loginBridge.status : "",
+      phase: typeof loginBridge.phase === "string" ? loginBridge.phase : "",
+      deviceUrl: typeof loginBridge.device_url === "string" ? loginBridge.device_url : "",
+      deviceCode: typeof loginBridge.device_code === "string" ? loginBridge.device_code : "",
+    };
+    onboardLoginWindowRef = loginWindow || onboardLoginWindowRef;
+  } else if (payload?.ui_action === "account_login_cancel" || payload?.ui_action === "account_login_complete") {
+    activeOnboardLoginSession = null;
+  }
+  setActionPanel(payload);
+  if (payload.post_action_refresh_required) {
+    const refreshTarget = currentScreen() === "accounts"
+      ? "accounts"
+      : (
+        currentScreen() === "api-connections"
+          ? "api-connections"
+          : (currentScreen() === "settings" ? "settings" : (currentScreen() === "quick-start" ? "quick-start" : "overview"))
+      );
+    text("actionRefreshStatus", `обновление live ${refreshTarget}`);
+    const refreshed = await setLiveReadonly(false);
+    if (actionRefreshSucceeded(payload, refreshed)) {
+      const refreshState = canonicalActionRefreshState(payload, refreshed);
+      setActionPanel(payload, refreshState);
+      setMiniPill(
+        "onboardingResultRefreshChip",
+        refreshState === "mismatch" ? "refresh mismatch" : "refresh complete",
+        refreshState === "mismatch" ? "amber" : "green"
+      );
+    } else {
+      setActionPanel(payload, "failed");
     }
-  } catch (_closeError) {
   }
 }
 
 function actionRequestKey(payload) {
   return [
     payload.ui_action || "unknown",
-    payload.account_id || payload.route_id || "-"
+    payload.account_id || payload.route_id || payload.session_id || "-"
   ].join("|");
 }
 
@@ -1142,7 +1444,7 @@ function accountsSnapshotFromRefreshPayload(refreshed) {
 }
 
 function onboardingRefreshState(payload, refreshed) {
-  if (payload.ui_action !== "onboard_account") {
+  if (!["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return "complete";
   }
   const onboarding = payload.result?.onboarding || {};
@@ -1174,7 +1476,7 @@ function actionRefreshSurfaceSnapshot(payload, refreshed) {
     }
     return null;
   }
-  if (payload.ui_action === "onboard_account") {
+  if (["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return accountsSnapshotFromRefreshPayload(refreshed);
   }
   if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
@@ -1206,7 +1508,7 @@ function canonicalActionRefreshState(payload, refreshed) {
   if (payload.ui_action && payload.ui_action.startsWith("api_route_")) {
     return apiRouteRemoveRefreshState(payload, refreshed);
   }
-  if (payload.ui_action === "onboard_account") {
+  if (["onboard_account", "account_login_complete"].includes(payload.ui_action)) {
     return onboardingRefreshState(payload, refreshed);
   }
   return "complete";
@@ -1944,7 +2246,7 @@ function updateDiagnosticsDetailSource(source) {
 function setActionPanel(payload, refreshState = "none") {
   const result = payload.result || {};
   const onboarding = result.onboarding || {};
-  lastOnboardingActionPayload = ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action)
+  lastOnboardingActionPayload = ["onboard_account_dry_run", "account_login_complete"].includes(payload.ui_action)
     ? payload
     : lastOnboardingActionPayload;
   const onboardingModel = onboardingResultModel(onboarding, payload, refreshState);
@@ -1955,7 +2257,7 @@ function setActionPanel(payload, refreshState = "none") {
     : null;
   const safeUiAction = safeLedgerText(payload.ui_action || "unknown", "unknown");
   const safeRole = safeLedgerText(payload.action_role || "unknown", "unknown");
-  const safeTarget = safeLedgerText(payload.account_id || payload.route_id || "-", "-");
+  const safeTarget = safeLedgerText(payload.account_id || payload.route_id || payload.session_id || "-", "-");
   const safeMachineCode = safeLedgerText(result.machine_error_code || "-", "-");
   const safeMessage = safeLedgerText(result.human_message || "-", "-");
   const safeNextAction = safeLedgerText(result.next_action || "none", "none");
@@ -1970,7 +2272,7 @@ function setActionPanel(payload, refreshState = "none") {
   const panel = document.getElementById("actionPanel");
   const panelVisualClass = exportModel
     ? exportModel.visual
-    : ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action)
+    : ["onboard_account_dry_run", "account_login_complete"].includes(payload.ui_action)
     ? actionPanelVisualForOnboarding(onboardingModel, display)
     : display.visualClass;
   const displayStateLabel = exportModel ? exportModel.state : display.displayState;
@@ -2043,7 +2345,7 @@ function renderOnboardingResultFlow(payload, onboarding, refreshState = "none") 
   if (!flow) {
     return;
   }
-  const isOnboarding = ["onboard_account", "onboard_account_dry_run"].includes(payload.ui_action);
+  const isOnboarding = ["onboard_account_dry_run", "account_login_complete"].includes(payload.ui_action);
   flow.hidden = !isOnboarding;
   const panel = document.getElementById("actionPanel");
   if (panel && panel.classList && typeof panel.classList.toggle === "function") {
@@ -2366,7 +2668,7 @@ function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
     key: actionLedgerKey(payload, result),
     uiAction: payload.ui_action || "unknown",
     role: payload.action_role || metadataFor(payload.ui_action || "unknown").action_role || "unknown",
-    target: safeLedgerText(payload.account_id || payload.route_id || "-", "-"),
+    target: safeLedgerText(payload.account_id || payload.route_id || payload.session_id || "-", "-"),
     status: display.status,
     displayState: exportModel ? exportModel.state : display.displayState,
     visualClass: exportModel ? exportModel.visual : display.visualClass,
@@ -2392,7 +2694,7 @@ function recordActionLedgerEntry(payload, refreshState, display, changedFiles) {
 function actionLedgerKey(payload, result) {
   return [
     payload.ui_action || "unknown",
-    payload.account_id || payload.route_id || "-",
+    payload.account_id || payload.route_id || payload.session_id || "-",
     result.machine_error_code || "-",
     result.human_message || "-"
   ].join("|");
@@ -2812,14 +3114,17 @@ function renderUiReadonlyLaneExitList(containerId, entries, visual) {
 function actionSupportDetails(payload) {
   const result = payload.result || {};
   const data = result.data || {};
-  if (payload.ui_action === "onboard_account") {
+  if (["onboard_account", "account_login_status", "account_login_complete", "account_login_cancel"].includes(payload.ui_action)) {
     const loginBridge = data.login_bridge || {};
     const authScope = loginBridge["auth" + "_ref_scope"] || "-";
     if (Object.keys(loginBridge).length) {
       return [
         `login_bridge=${loginBridge.status || "unknown"}`,
         `provider=${loginBridge.provider || "unknown"}`,
-        `login_url=${loginBridge.login_url_kind || (loginBridge.login_url_present ? "present" : "missing")}`,
+        `phase=${loginBridge.phase || "unknown"}`,
+        `session=${loginBridge.session_id || loginBridge.login_session_id || "-"}`,
+        `device_url=${loginBridge.device_url ? "present" : "missing"}`,
+        `device_code=${loginBridge.device_code_present === true ? "present" : "missing"}`,
         `auth_scope=${authScope}`,
         `browser_secret_intake=${loginBridge.browser_secret_intake === false ? "false" : "unknown"}`
       ].join(" · ");
@@ -2875,6 +3180,27 @@ function actionSupportDetails(payload) {
     return `support artifact · ${artifactReference(data.bundle_path)} · redaction=${exportModel.redactionStatus}`;
   }
   return "-";
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("message", (event) => {
+    const payload = event?.data;
+    if (!payload || typeof payload !== "object") {
+      return;
+    }
+    if (payload.type === "wbp-onboard-login-payload" && payload.payload) {
+      handleActionPayload(payload.payload, onboardLoginWindowRef).catch(() => {});
+      return;
+    }
+    if (payload.type === "wbp-onboard-login-command") {
+      const uiAction = typeof payload.uiAction === "string" ? payload.uiAction : "";
+      const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
+      if (!uiAction || !sessionId) {
+        return;
+      }
+      runUiAction(uiAction, { session_id: sessionId }).catch(() => {});
+    }
+  });
 }
 
 function renderDiagnosticsAction(payload) {

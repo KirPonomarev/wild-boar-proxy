@@ -615,6 +615,26 @@ class CliTests(unittest.TestCase):
             command_path="accounts login complete",
         )
 
+    def test_accounts_login_status_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "status",
+            "--session",
+            "codex-session",
+            command_path="accounts login status",
+        )
+
+    def test_accounts_login_cancel_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "accounts",
+            "login",
+            "cancel",
+            "--session",
+            "codex-session",
+            command_path="accounts login cancel",
+        )
+
     def test_installer_init_materializes_repo_owned_owner_helper_chain(self) -> None:
         status_bin = self.bin_dir / "codex-managed-status"
         for candidate in (
@@ -2288,6 +2308,52 @@ class CliTests(unittest.TestCase):
             "    print(stderr_text, file=sys.stderr)\n"
             "raise SystemExit(int(os.environ.get('WBP_TEST_ONBOARD_EXIT_CODE', '0')))\n"
             "PY\n",
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+
+    def write_test_device_login_cli_proxy(
+        self,
+        path: Path,
+        *,
+        argv_capture_path: Path,
+        ready_file: Path,
+        auth_filename: str = "codex-device-login.json",
+    ) -> None:
+        path.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, re, sys, time\n"
+            "from pathlib import Path\n"
+            f"argv_capture = Path({str(argv_capture_path)!r})\n"
+            f"ready_file = Path({str(ready_file)!r})\n"
+            "argv_capture.write_text(json.dumps(sys.argv[1:]) + '\\n', encoding='utf-8')\n"
+            "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
+            "text = config.read_text(encoding='utf-8')\n"
+            "match = re.search(r'^auth-dir:\\s*[\"\\']?(.*?)[\"\\']?\\s*$', text, re.M)\n"
+            "if not match:\n"
+            "    raise SystemExit('missing auth-dir')\n"
+            "auth_dir = Path(match.group(1)).expanduser()\n"
+            "if not auth_dir.is_absolute():\n"
+            "    auth_dir = config.parent / auth_dir\n"
+            "auth_dir.mkdir(parents=True, exist_ok=True)\n"
+            "print('Codex device URL: https://auth.openai.com/codex/device', flush=True)\n"
+            "print('Codex device code: WBP-1234', flush=True)\n"
+            "mode = os.environ.get('WBP_TEST_DEVICE_LOGIN_MODE', 'wait')\n"
+            "if mode == 'exit-no-auth':\n"
+            "    raise SystemExit(int(os.environ.get('WBP_TEST_DEVICE_LOGIN_EXIT_CODE', '0')))\n"
+            "deadline = time.time() + float(os.environ.get('WBP_TEST_DEVICE_LOGIN_WAIT_SECONDS', '10'))\n"
+            "while time.time() < deadline:\n"
+            "    if ready_file.exists():\n"
+            "        payload = {\n"
+            "            'type': 'codex',\n"
+            "            'email': 'device-login@example.com',\n"
+            "            'access_token': 'token-device-login',\n"
+            "            'account_id': 'acct-device-login',\n"
+            "        }\n"
+            f"        (auth_dir / {str(auth_filename)!r}).write_text(json.dumps(payload) + '\\n', encoding='utf-8')\n"
+            "        raise SystemExit(0)\n"
+            "    time.sleep(0.05)\n"
+            "raise SystemExit(int(os.environ.get('WBP_TEST_DEVICE_LOGIN_TIMEOUT_EXIT_CODE', '0')))\n",
             encoding="utf-8",
         )
         path.chmod(0o755)
@@ -8502,6 +8568,268 @@ class CliTests(unittest.TestCase):
         ]
         self.assertEqual(len(added), 1)
         self.assertEqual(added[0]["pool"], "reserve")
+
+    def test_accounts_login_start_codex_device_returns_session_url_and_code(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-api"
+        argv_capture = self.managed_dir / "device-login-argv.json"
+        ready_file = self.managed_dir / "device-login.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        self.assertEqual(started.returncode, 0, started.stderr)
+        payload = json.loads(started.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["mode"], "device")
+        self.assertEqual(payload["next_action"], "wait_for_login")
+        self.assertEqual(payload["device_url"], "https://auth.openai.com/codex/device")
+        self.assertEqual(payload["device_code"], "WBP-1234")
+        self.assertTrue(payload["device_code_present"])
+        session_id = payload["session_id"]
+        self.assertTrue(session_id.startswith("codex-"))
+        session_path = self.managed_dir / "login-sessions" / f"{session_id}.json"
+        self.assertTrue(session_path.is_file())
+        session_payload = json.loads(session_path.read_text(encoding="utf-8"))
+        self.assertEqual(session_payload["provider"], "codex")
+        self.assertEqual(session_payload["state"], "waiting_for_user")
+        self.assertIn(str(session_path), payload["changed_files"])
+        self.assertEqual(
+            json.loads(argv_capture.read_text(encoding="utf-8")),
+            [
+                "-config",
+                str(self.stable_dir / "config.yaml"),
+                "-codex-device-login",
+                "-no-browser",
+            ],
+        )
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+        cancelled_payload = json.loads(cancelled.stdout)
+        self.assertEqual(cancelled_payload["login_result"]["status"], "cancelled")
+
+    def test_accounts_login_status_codex_detects_materialized_auth(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-status"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-status"
+        argv_capture = self.managed_dir / "device-login-status-argv.json"
+        ready_file = self.managed_dir / "device-login-status.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+            auth_filename="codex-device-status.json",
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        ready_file.write_text("ready\n", encoding="utf-8")
+        deadline = time.time() + 5
+        payload = {}
+        while time.time() < deadline:
+            status = self.run_cli(
+                "accounts", "login", "status", "--session", session_id, "--json"
+            )
+            payload = json.loads(status.stdout)
+            if payload["login_result"]["status"] == "auth_materialized":
+                break
+            time.sleep(0.05)
+        self.assertEqual(payload["status"], "ok", payload)
+        self.assertEqual(payload["next_action"], "accounts_onboard")
+        self.assertEqual(payload["login_result"]["status"], "auth_materialized")
+        self.assertTrue(payload["login_result"]["auth_materialized"])
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_complete_codex_requires_materialized_auth(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-incomplete"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-incomplete"
+        argv_capture = self.managed_dir / "device-login-incomplete-argv.json"
+        ready_file = self.managed_dir / "device-login-incomplete.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        completed = self.run_cli(
+            "accounts", "login", "complete", "--session", session_id, "--json"
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["machine_error_code"], "LOGIN_AUTH_NOT_MATERIALIZED")
+
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+
+    def test_accounts_login_complete_codex_onboards_explicit_auth_to_reserve(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-complete"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-complete"
+        argv_capture = self.managed_dir / "device-login-complete-argv.json"
+        ready_file = self.managed_dir / "device-login-complete.ready"
+        auth_ref = auth_dir / "codex-device-complete.json"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+            auth_filename=auth_ref.name,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        ready_file.write_text("ready\n", encoding="utf-8")
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            status = self.run_cli(
+                "accounts", "login", "status", "--session", session_id, "--json"
+            )
+            status_payload = json.loads(status.stdout)
+            if status_payload["login_result"]["status"] == "auth_materialized":
+                break
+            time.sleep(0.05)
+        completed = self.run_cli_with_env(
+            {
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        self.build_backend(
+                            backend_id="backend-from-codex-device-login",
+                            auth_ref=str(auth_ref),
+                        )
+                    ]
+                )
+            },
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            session_id,
+            "--json",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["next_action"], "accounts_refresh")
+        self.assertEqual(payload["provider"], "codex")
+        self.assertEqual(payload["login_result"]["status"], "completed")
+        onboarding = payload["onboarding_result"]
+        self.assertEqual(onboarding["input_mode"], "explicit_auth_ref")
+        self.assertEqual(onboarding["selected_backend_id"], "backend-from-codex-device-login")
+        self.assertTrue(onboarding["reserve_first_enforced"])
+        self.assertFalse(onboarding["active_routing_changed"])
+        self.assertEqual(onboarding["final_outcome"], "explicit_auth_imported_to_reserve")
+
+    def test_accounts_login_cancel_codex_only_kills_session_owned_pid(self) -> None:
+        auth_dir = self.managed_dir / "device-login-auth-cancel"
+        self.stable_dir.joinpath("config.yaml").write_text(
+            f'host: 127.0.0.1\nport: 8318\nauth-dir: "{auth_dir}"\n',
+            encoding="utf-8",
+        )
+        fake_cli = self.bin_dir / "fake-device-cli-proxy-cancel"
+        argv_capture = self.managed_dir / "device-login-cancel-argv.json"
+        ready_file = self.managed_dir / "device-login-cancel.ready"
+        self.write_test_device_login_cli_proxy(
+            fake_cli,
+            argv_capture_path=argv_capture,
+            ready_file=ready_file,
+        )
+
+        started = self.run_cli_with_env(
+            {"WBP_CLIPROXY_BIN": str(fake_cli)},
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        )
+        session_id = json.loads(started.stdout)["session_id"]
+        cancelled = self.run_cli(
+            "accounts", "login", "cancel", "--session", session_id, "--json"
+        )
+        self.assertEqual(cancelled.returncode, 0, cancelled.stderr)
+        payload = json.loads(cancelled.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["login_result"]["used"] is False)
+        self.assertEqual(payload["login_result"]["status"], "cancelled")
+        session_payload = json.loads(
+            (self.managed_dir / "login-sessions" / f"{session_id}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertTrue(session_payload["cancelled_process_owned_by_session"])
 
     def test_accounts_onboard_explicit_auth_imports_backend_to_reserve_without_sync(
         self,

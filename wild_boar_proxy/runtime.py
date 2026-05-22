@@ -76,6 +76,8 @@ SCALE_GATE_FALLBACK_DRILL = "FALLBACK_DRILL_GATE"
 SCALE_GATE_EVIDENCE_PACKET = "SCALE_EVIDENCE_PACKET_GATE"
 SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT = 300
 SANDBOX_LOGIN_URL_BASE_DEFAULT = "http://127.0.0.1:8788"
+CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT = 5.0
+LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT = 2.0
 SCALE_GATE_ORDER = [
     SCALE_GATE_RUNTIME_ATTESTATION,
     SCALE_GATE_STRICT_JSON_COMMAND_API,
@@ -3538,11 +3540,22 @@ def sandbox_login_auth_artifacts_dir(paths: RuntimePaths) -> Path:
     return paths.managed_dir / "sandbox-auth"
 
 
-def sandbox_login_session_ttl_seconds() -> int:
+def codex_login_session_stdout_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.stdout.log"
+
+
+def codex_login_session_stderr_path(paths: RuntimePaths, login_session_id: str) -> Path:
+    return sandbox_login_sessions_dir(paths) / f"{login_session_id}.stderr.log"
+
+
+def login_session_ttl_seconds() -> int:
     raw = str(
         os.environ.get(
-            "WBP_SANDBOX_LOGIN_SESSION_TTL_SECONDS",
-            SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT,
+            "WBP_LOGIN_SESSION_TTL_SECONDS",
+            os.environ.get(
+                "WBP_SANDBOX_LOGIN_SESSION_TTL_SECONDS",
+                SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT,
+            ),
         )
     ).strip()
     try:
@@ -3550,6 +3563,10 @@ def sandbox_login_session_ttl_seconds() -> int:
     except ValueError:
         return SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
     return value if value > 0 else SANDBOX_LOGIN_SESSION_TTL_SECONDS_DEFAULT
+
+
+def sandbox_login_session_ttl_seconds() -> int:
+    return login_session_ttl_seconds()
 
 
 def sandbox_login_session_id_valid(value: str) -> bool:
@@ -3602,6 +3619,248 @@ def build_sandbox_login_auth_payload(login_session_id: str) -> dict[str, Any]:
         "issued_at": now_iso(),
         "OPENAI_API_KEY": synthetic_key,
     }
+
+
+def codex_device_login_handoff_timeout_seconds() -> float:
+    raw = str(
+        os.environ.get(
+            "WBP_CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS",
+            CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT,
+        )
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT
+    return value if value > 0 else CODEX_DEVICE_LOGIN_HANDOFF_TIMEOUT_SECONDS_DEFAULT
+
+
+def login_session_cancel_grace_seconds() -> float:
+    raw = str(
+        os.environ.get(
+            "WBP_LOGIN_SESSION_CANCEL_GRACE_SECONDS",
+            LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT,
+        )
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT
+    return value if value > 0 else LOGIN_SESSION_CANCEL_GRACE_SECONDS_DEFAULT
+
+
+def login_session_auth_inventory_dir(paths: RuntimePaths) -> tuple[Path, dict[str, Any]]:
+    return get_stable_auth_inventory_source(paths)
+
+
+def path_is_sandbox_scoped(paths: RuntimePaths, candidate: Path) -> bool:
+    resolved = candidate.expanduser().resolve(strict=False)
+    allowed_roots = [
+        paths.profile_dir.expanduser().resolve(strict=False),
+        paths.managed_dir.expanduser().resolve(strict=False),
+    ]
+    return any(resolved == root or root in resolved.parents for root in allowed_roots)
+
+
+def list_login_auth_inventory_entries(paths: RuntimePaths) -> list[Path]:
+    auth_dir, _ = login_session_auth_inventory_dir(paths)
+    if not auth_dir.is_dir():
+        return []
+    return sorted(path for path in auth_dir.glob("codex-*.json") if path.is_file())
+
+
+def login_session_entries_digest(entries: list[str]) -> str:
+    return get_auth_inventory_entries_digest(entries)
+
+
+def resolve_cli_proxy_bin() -> Path:
+    return Path(
+        os.environ.get("WBP_CLIPROXY_BIN", "~/.local/bin/cli-proxy-api")
+    ).expanduser()
+
+
+def read_text_if_exists(path: Path) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def parse_codex_device_handoff(text: str) -> tuple[str, str]:
+    url_match = re.search(r"^Codex device URL:\s*(\S+)\s*$", text, re.MULTILINE)
+    code_match = re.search(r"^Codex device code:\s*([A-Z0-9-]+)\s*$", text, re.MULTILINE)
+    return (
+        url_match.group(1).strip() if url_match else "",
+        code_match.group(1).strip() if code_match else "",
+    )
+
+
+def login_session_pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def terminate_login_session_pid(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return False
+    deadline = time.time() + login_session_cancel_grace_seconds()
+    while time.time() < deadline:
+        if not login_session_pid_is_running(pid):
+            return True
+        time.sleep(0.05)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return not login_session_pid_is_running(pid)
+    deadline = time.time() + login_session_cancel_grace_seconds()
+    while time.time() < deadline:
+        if not login_session_pid_is_running(pid):
+            return True
+        time.sleep(0.05)
+    return not login_session_pid_is_running(pid)
+
+
+def find_login_auth_candidates(
+    paths: RuntimePaths, before_entries: list[str]
+) -> tuple[list[Path], dict[str, Any]]:
+    auth_dir, source = login_session_auth_inventory_dir(paths)
+    if not auth_dir.is_dir():
+        return [], source
+    before_set = {
+        str(Path(item).expanduser().resolve(strict=False)) for item in before_entries
+    }
+    candidates = [
+        path
+        for path in list_login_auth_inventory_entries(paths)
+        if str(path.expanduser().resolve(strict=False)) not in before_set
+    ]
+    return candidates, source
+
+
+def codex_login_session_payload(session: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": str(session.get("state", "")),
+        "provider": str(session.get("provider", "")),
+        "mode": str(session.get("mode", "")),
+        "session_id": str(session.get("login_session_id", "")),
+        "login_session_id": str(session.get("login_session_id", "")),
+        "device_url": str(session.get("device_url", "")),
+        "device_code": str(session.get("device_code", "")),
+        "device_code_present": bool(session.get("device_code_present", False)),
+        "auth_materialized": bool(session.get("auth_materialized", False)),
+        "auth_ref_present": bool(session.get("auth_ref")),
+        "used": bool(session.get("used", False)),
+        "scope": "sandbox" if bool(session.get("sandbox_scope", False)) else "unknown",
+        "created_at": str(session.get("created_at", "")),
+        "expires_at": str(session.get("expires_at", "")),
+        "browser_secret_intake": False,
+        "browser_path_intake": False,
+    }
+
+
+def load_login_session(
+    paths: RuntimePaths, login_session_id: str
+) -> tuple[Path, dict[str, Any]]:
+    session_path = sandbox_login_session_path(paths, login_session_id)
+    if not session_path.exists():
+        raise RuntimeErrorInfo(
+            "Login session was not found.",
+            machine_error_code="LOGIN_SESSION_NOT_FOUND",
+            operator_action="user_action",
+        )
+    session = read_json(session_path)
+    if not isinstance(session, dict):
+        raise RuntimeErrorInfo(
+            "Login session payload is invalid.",
+            machine_error_code="LOGIN_SESSION_INVALID",
+            operator_action="user_action",
+        )
+    return session_path, session
+
+
+def refresh_codex_login_session(
+    paths: RuntimePaths, login_session_id: str
+) -> tuple[dict[str, Any], list[str]]:
+    session_path, session = load_login_session(paths, login_session_id)
+    stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+    stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+    before = snapshot_path_states([session_path, stdout_path, stderr_path])
+    provider = str(session.get("provider", ""))
+    if provider != "codex":
+        return session, []
+    changed = False
+    stdout_text = read_text_if_exists(stdout_path)
+    device_url, device_code = parse_codex_device_handoff(stdout_text)
+    if device_url and str(session.get("device_url", "")) != device_url:
+        session["device_url"] = device_url
+        changed = True
+    if device_code and str(session.get("device_code", "")) != device_code:
+        session["device_code"] = device_code
+        session["device_code_present"] = True
+        changed = True
+    candidates, inventory_source = find_login_auth_candidates(
+        paths, [str(item) for item in session.get("auth_inventory_before", []) or []]
+    )
+    if session.get("auth_inventory_source") != inventory_source:
+        session["auth_inventory_source"] = inventory_source
+        changed = True
+    auth_materialized = bool(session.get("auth_materialized", False))
+    if len(candidates) == 1:
+        auth_ref = str(candidates[0])
+        if str(session.get("auth_ref", "")) != auth_ref:
+            session["auth_ref"] = auth_ref
+            changed = True
+        if not auth_materialized:
+            session["auth_materialized"] = True
+            changed = True
+        auth_materialized = True
+    elif len(candidates) > 1:
+        if str(session.get("failure_reason", "")) != "ambiguous_auth_materialization":
+            session["failure_reason"] = "ambiguous_auth_materialization"
+            changed = True
+        if str(session.get("state", "")) != "failed":
+            session["state"] = "failed"
+            changed = True
+
+    current_state = str(session.get("state", ""))
+    if sandbox_login_session_expired(session) and current_state not in {
+        "completed",
+        "cancelled",
+        "expired",
+    }:
+        pid = int(session.get("pid", 0) or 0)
+        if pid > 0:
+            terminate_login_session_pid(pid)
+        session["state"] = "expired"
+        changed = True
+    elif auth_materialized and current_state not in {"completed", "cancelled"}:
+        if current_state != "auth_materialized":
+            session["state"] = "auth_materialized"
+            changed = True
+    elif current_state in {"started", "waiting_for_user"}:
+        pid = int(session.get("pid", 0) or 0)
+        if login_session_pid_is_running(pid):
+            if current_state != "waiting_for_user":
+                session["state"] = "waiting_for_user"
+                changed = True
+        else:
+            session["state"] = "failed"
+            session["failure_reason"] = str(
+                session.get("failure_reason", "process_exited_before_auth_materialized")
+            )
+            changed = True
+
+    if changed:
+        write_json_atomic(session_path, session)
+    return session, detect_changed_files_by_state(before, [session_path, stdout_path, stderr_path])
 
 
 def runtime_write_surface_candidates(paths: RuntimePaths) -> list[Path]:
@@ -11141,7 +11400,232 @@ def run_accounts_command(
     )
 
 
-def run_accounts_login_start(paths: RuntimePaths, provider: str) -> dict[str, Any]:
+def build_codex_login_start_payload(
+    session: dict[str, Any], *, changed_files: list[str], reused: bool
+) -> dict[str, Any]:
+    return build_command_payload(
+        ok=True,
+        human_message=(
+            "Codex device login session is already waiting for operator completion."
+            if reused
+            else "Codex device login session started."
+        ),
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=changed_files,
+        extra={
+            "next_action": "wait_for_login",
+            "provider": "codex",
+            "mode": "device",
+            "session_id": str(session.get("login_session_id", "")),
+            "login_session_id": str(session.get("login_session_id", "")),
+            "device_url": str(session.get("device_url", "")),
+            "device_code": str(session.get("device_code", "")),
+            "device_code_present": bool(session.get("device_code_present", False)),
+            "login_result": codex_login_session_payload(session),
+        },
+    )
+
+
+def run_accounts_login_start(
+    paths: RuntimePaths, provider: str, *, mode: str | None = None
+) -> dict[str, Any]:
+    if provider == "codex":
+        if mode != "device":
+            return build_command_payload(
+                ok=False,
+                human_message="Only Codex device mode is supported for owner-lane login start.",
+                machine_error_code="LOGIN_MODE_UNSUPPORTED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+                extra={
+                    "provider": provider,
+                    "mode": mode or "",
+                    "supported_modes": ["device"],
+                },
+            )
+
+        session_dir = sandbox_login_sessions_dir(paths)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        for session_path in sorted(session_dir.glob("codex-*.json")):
+            try:
+                session = read_json(session_path)
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(session, dict):
+                continue
+            if str(session.get("provider", "")) != "codex":
+                continue
+            login_session_id = str(session.get("login_session_id", ""))
+            if not login_session_id:
+                continue
+            refreshed, changed_files = refresh_codex_login_session(paths, login_session_id)
+            if str(refreshed.get("state", "")) in {"waiting_for_user", "auth_materialized"}:
+                return build_codex_login_start_payload(
+                    refreshed,
+                    changed_files=changed_files,
+                    reused=True,
+                )
+
+        auth_dir, auth_inventory_source = login_session_auth_inventory_dir(paths)
+        if not path_is_sandbox_scoped(paths, auth_dir):
+            return build_command_payload(
+                ok=False,
+                human_message="Configured auth-dir is outside sandbox profile/managed paths.",
+                machine_error_code="LOGIN_SANDBOX_SCOPE_UNPROVEN",
+                liveness="unknown",
+                severity="fatal",
+                operator_action="stop",
+                changed_files=[],
+            )
+        auth_dir.mkdir(parents=True, exist_ok=True)
+
+        cli_proxy_bin = resolve_cli_proxy_bin()
+        if not cli_proxy_bin.exists():
+            return build_command_payload(
+                ok=False,
+                human_message=f"Missing cli-proxy-api binary: {cli_proxy_bin}",
+                machine_error_code="LOGIN_CLI_PROXY_BIN_MISSING",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+        if not paths.stable_config.exists():
+            return build_command_payload(
+                ok=False,
+                human_message=f"Missing CLIProxyAPI config: {paths.stable_config}",
+                machine_error_code="LOGIN_STABLE_CONFIG_MISSING",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=[],
+            )
+
+        login_session_id = f"codex-{uuid.uuid4().hex}"
+        created_at = now_iso()
+        ttl_seconds = login_session_ttl_seconds()
+        expires_at = datetime.fromtimestamp(
+            datetime.now(timezone.utc).timestamp() + ttl_seconds,
+            tz=timezone.utc,
+        ).isoformat()
+        stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+        stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+        session_path = sandbox_login_session_path(paths, login_session_id)
+        before = snapshot_path_states([session_dir, session_path, stdout_path, stderr_path])
+        command = [
+            str(cli_proxy_bin),
+            "-config",
+            str(paths.stable_config),
+            "-codex-device-login",
+            "-no-browser",
+        ]
+        before_entries = [
+            str(path.expanduser().resolve(strict=False))
+            for path in list_login_auth_inventory_entries(paths)
+        ]
+        session: dict[str, Any] = {
+            "schema_version": 1,
+            "login_session_id": login_session_id,
+            "provider": "codex",
+            "mode": "device",
+            "pid": 0,
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "state": "started",
+            "device_url": "",
+            "device_code": "",
+            "device_code_present": False,
+            "auth_materialized": False,
+            "auth_ref": "",
+            "auth_inventory_before": before_entries,
+            "auth_inventory_before_digest": login_session_entries_digest(before_entries),
+            "auth_inventory_source": auth_inventory_source,
+            "sandbox_scope": True,
+            "used": False,
+        }
+        stdout_path.parent.mkdir(parents=True, exist_ok=True)
+        stdout_path.touch()
+        stderr_path.touch()
+        env = sanitized_env()
+        env.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
+        env.setdefault("no_proxy", env["NO_PROXY"])
+        with stdout_path.open("a", encoding="utf-8") as stdout_handle, stderr_path.open(
+            "a", encoding="utf-8"
+        ) as stderr_handle:
+            process = subprocess.Popen(  # noqa: S603
+                command,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                text=True,
+                env=env,
+            )
+        session["pid"] = int(process.pid)
+        write_json_atomic(session_path, session)
+
+        deadline = time.time() + codex_device_login_handoff_timeout_seconds()
+        changed_files = detect_changed_files_by_state(
+            before, [session_dir, session_path, stdout_path, stderr_path]
+        )
+        while time.time() < deadline:
+            refreshed, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+            changed_files = sorted(set(changed_files + refresh_changed))
+            if (
+                str(refreshed.get("device_url", ""))
+                and bool(refreshed.get("device_code_present", False))
+            ):
+                return build_codex_login_start_payload(
+                    refreshed,
+                    changed_files=changed_files,
+                    reused=False,
+                )
+            if str(refreshed.get("state", "")) in {"failed", "expired", "cancelled"}:
+                break
+            time.sleep(0.1)
+
+        refreshed, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+        changed_files = sorted(set(changed_files + refresh_changed))
+        if str(refreshed.get("device_url", "")) and bool(
+            refreshed.get("device_code_present", False)
+        ):
+            return build_codex_login_start_payload(
+                refreshed,
+                changed_files=changed_files,
+                reused=False,
+            )
+        terminate_login_session_pid(int(refreshed.get("pid", 0) or 0))
+        refreshed["state"] = "failed"
+        refreshed["failure_reason"] = "device_handoff_missing"
+        write_json_atomic(session_path, refreshed)
+        changed_files = sorted(
+            set(
+                changed_files
+                + detect_changed_files_by_state(
+                    before, [session_dir, session_path, stdout_path, stderr_path]
+                )
+            )
+        )
+        return build_command_payload(
+            ok=False,
+            human_message="Codex login flow did not emit a device URL/code handoff.",
+            machine_error_code="LOGIN_DEVICE_HANDOFF_MISSING",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="retry",
+            changed_files=changed_files,
+            extra={
+                "provider": "codex",
+                "mode": "device",
+                "session_id": login_session_id,
+                "login_session_id": login_session_id,
+                "login_result": codex_login_session_payload(refreshed),
+            },
+        )
+
     if provider != "sandbox":
         return build_command_payload(
             ok=False,
@@ -11153,7 +11637,7 @@ def run_accounts_login_start(paths: RuntimePaths, provider: str) -> dict[str, An
             changed_files=[],
             extra={
                 "provider": provider,
-                "supported_providers": ["sandbox"],
+                "supported_providers": ["sandbox", "codex"],
             },
         )
 
@@ -11220,15 +11704,9 @@ def run_accounts_login_start(paths: RuntimePaths, provider: str) -> dict[str, An
     )
 
 
-def run_accounts_login_complete(
-    paths: RuntimePaths,
-    *,
-    login_session_id: str,
-    state: str,
-    proof: str,
-) -> dict[str, Any]:
+def run_accounts_login_status(paths: RuntimePaths, login_session_id: str) -> dict[str, Any]:
     try:
-        session_path = sandbox_login_session_path(paths, login_session_id)
+        _, session = load_login_session(paths, login_session_id)
     except RuntimeErrorInfo as exc:
         return build_command_payload(
             ok=False,
@@ -11241,23 +11719,189 @@ def run_accounts_login_complete(
             exit_code=exc.exit_code,
         )
 
+    provider = str(session.get("provider", ""))
+    changed_files: list[str] = []
+    if provider == "codex":
+        session, changed_files = refresh_codex_login_session(paths, login_session_id)
+    elif provider == "sandbox" and sandbox_login_session_expired(session):
+        session["state"] = "expired"
+    else:
+        session.setdefault("state", "started")
+
+    current_state = str(session.get("state", ""))
+    ok = current_state not in {"failed", "expired", "cancelled"}
+    machine_error_code = "OK"
+    next_action = "wait_for_login"
+    operator_action = "none"
+    human_message = "Login session is waiting for operator completion."
+    if current_state == "auth_materialized":
+        next_action = "accounts_onboard"
+        human_message = "Login session materialized sandbox auth and is ready for onboarding."
+    elif current_state == "completed":
+        next_action = "none"
+        human_message = "Login session has already completed onboarding."
+    elif current_state == "failed":
+        machine_error_code = "LOGIN_SESSION_FAILED"
+        next_action = "retry"
+        operator_action = "retry"
+        human_message = "Login session failed before auth materialized."
+    elif current_state == "expired":
+        machine_error_code = "LOGIN_SESSION_EXPIRED"
+        next_action = "user_action"
+        operator_action = "user_action"
+        human_message = "Login session expired before auth materialized."
+    elif current_state == "cancelled":
+        machine_error_code = "LOGIN_SESSION_CANCELLED"
+        next_action = "none"
+        human_message = "Login session was cancelled."
+
+    return build_command_payload(
+        ok=ok,
+        human_message=human_message,
+        machine_error_code=machine_error_code,
+        liveness="unknown",
+        severity="recoverable",
+        operator_action=operator_action,
+        changed_files=changed_files,
+        extra={
+            "next_action": next_action,
+            "provider": provider,
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+        },
+    )
+
+
+def run_accounts_login_complete(
+    paths: RuntimePaths,
+    *,
+    login_session_id: str,
+    state: str | None,
+    proof: str | None,
+) -> dict[str, Any]:
+    try:
+        session_path, session = load_login_session(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    if str(session.get("provider", "")) == "codex":
+        stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+        stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+        before = snapshot_path_states([session_path, stdout_path, stderr_path])
+        session, refresh_changed = refresh_codex_login_session(paths, login_session_id)
+        current_state = str(session.get("state", ""))
+        if current_state == "completed" or bool(session.get("used")):
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has already been used.",
+                machine_error_code="LOGIN_SESSION_REPLAY_BLOCKED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state == "cancelled":
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session was cancelled.",
+                machine_error_code="LOGIN_SESSION_CANCELLED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state == "expired":
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has expired.",
+                machine_error_code="LOGIN_SESSION_EXPIRED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="user_action",
+                changed_files=refresh_changed,
+            )
+        if current_state != "auth_materialized" or not str(session.get("auth_ref", "")):
+            return build_command_payload(
+                ok=False,
+                human_message="Codex login session has not materialized auth yet.",
+                machine_error_code="LOGIN_AUTH_NOT_MATERIALIZED",
+                liveness="unknown",
+                severity="recoverable",
+                operator_action="retry",
+                changed_files=refresh_changed,
+                extra={
+                    "provider": "codex",
+                    "session_id": login_session_id,
+                    "login_session_id": login_session_id,
+                    "login_result": codex_login_session_payload(session),
+                },
+            )
+
+        onboard_payload = run_onboard(
+            paths,
+            auth_ref=str(session.get("auth_ref", "")),
+            loop=False,
+            skip_login=True,
+            no_sync=False,
+            non_interactive=True,
+        )
+        if onboard_payload.get("status") == "ok":
+            session["state"] = "completed"
+            session["used"] = True
+            write_json_atomic(session_path, session)
+        changed_files = sorted(
+            set(
+                refresh_changed
+                + detect_changed_files_by_state(before, [session_path, stdout_path, stderr_path])
+                + [str(item) for item in onboard_payload.get("changed_files", []) or []]
+            )
+        )
+        extra = {
+            "next_action": "accounts_refresh"
+            if onboard_payload.get("status") == "ok"
+            else str(onboard_payload.get("next_action", "retry")),
+            "provider": "codex",
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+            "onboarding_result": onboard_payload.get("onboarding_result"),
+        }
+        if onboard_payload.get("validate_result") is not None:
+            extra["validate_result"] = onboard_payload.get("validate_result")
+        if onboard_payload.get("sync_result") is not None:
+            extra["sync_result"] = onboard_payload.get("sync_result")
+        return build_command_payload(
+            ok=bool(onboard_payload.get("status") == "ok"),
+            human_message=str(onboard_payload.get("human_message", "")),
+            machine_error_code=str(
+                onboard_payload.get("machine_error_code", "LOGIN_COMPLETE_FAILED")
+            ),
+            liveness=str(onboard_payload.get("liveness", "unknown")),
+            severity=str(onboard_payload.get("severity", "recoverable")),
+            operator_action=str(onboard_payload.get("operator_action", "retry")),
+            changed_files=changed_files,
+            extra=extra,
+            exit_code=int(onboard_payload.get("exit_code", 1) or 1)
+            if onboard_payload.get("status") != "ok"
+            else None,
+        )
+
     session_dir = sandbox_login_sessions_dir(paths)
     auth_dir = sandbox_login_auth_artifacts_dir(paths)
     auth_path = auth_dir / f"codex-sandbox-synthetic-{login_session_id}.json"
     before = snapshot_path_states([session_dir, session_path, auth_dir, auth_path, paths.auth_file])
 
     with serialized_lock(paths):
-        if not session_path.exists():
-            return build_command_payload(
-                ok=False,
-                human_message="Sandbox login session was not found.",
-                machine_error_code="LOGIN_SESSION_NOT_FOUND",
-                liveness="unknown",
-                severity="recoverable",
-                operator_action="user_action",
-                changed_files=[],
-            )
-        session = read_json(session_path)
         if str(session.get("provider", "")) != "sandbox":
             return build_command_payload(
                 ok=False,
@@ -11288,7 +11932,7 @@ def run_accounts_login_complete(
                 operator_action="user_action",
                 changed_files=[],
             )
-        if str(session.get("state", "")) != state:
+        if str(session.get("state", "")) != (state or ""):
             return build_command_payload(
                 ok=False,
                 human_message="Sandbox login session state did not match.",
@@ -11343,6 +11987,62 @@ def run_accounts_login_complete(
                 "used": True,
             },
         },
+    )
+
+
+def run_accounts_login_cancel(paths: RuntimePaths, login_session_id: str) -> dict[str, Any]:
+    try:
+        session_path, session = load_login_session(paths, login_session_id)
+    except RuntimeErrorInfo as exc:
+        return build_command_payload(
+            ok=False,
+            human_message=exc.message,
+            machine_error_code=exc.machine_error_code,
+            liveness="unknown",
+            severity=exc.severity,
+            operator_action=exc.operator_action,
+            changed_files=[],
+            exit_code=exc.exit_code,
+        )
+
+    if str(session.get("provider", "")) != "codex":
+        return build_command_payload(
+            ok=False,
+            human_message="Only Codex owner sessions support cancel.",
+            machine_error_code="LOGIN_CANCEL_UNSUPPORTED",
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+        )
+
+    stdout_path = codex_login_session_stdout_path(paths, login_session_id)
+    stderr_path = codex_login_session_stderr_path(paths, login_session_id)
+    before = snapshot_path_states([session_path, stdout_path, stderr_path])
+    pid = int(session.get("pid", 0) or 0)
+    terminated = terminate_login_session_pid(pid)
+    session["state"] = "cancelled"
+    session["cancelled_process_owned_by_session"] = terminated
+    write_json_atomic(session_path, session)
+    ok = terminated or not login_session_pid_is_running(pid)
+    return build_command_payload(
+        ok=ok,
+        human_message="Codex login session was cancelled.",
+        machine_error_code="OK" if ok else "LOGIN_CANCEL_FAILED",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none" if ok else "retry",
+        changed_files=detect_changed_files_by_state(
+            before, [session_path, stdout_path, stderr_path]
+        ),
+        extra={
+            "next_action": "none",
+            "provider": "codex",
+            "session_id": login_session_id,
+            "login_session_id": login_session_id,
+            "login_result": codex_login_session_payload(session),
+        },
+        exit_code=None if ok else 1,
     )
 
 
@@ -13540,6 +14240,33 @@ def classify_onboarded_backend_selection(
     ]
     added_backend_ids = sorted(str(item.get("id")) for item in added_backends)
     if explicit_auth_ref:
+        before_matching_backends = [
+            item
+            for item in before_registry.get("backends", [])
+            if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
+        ]
+        after_matching_backends = [
+            item
+            for item in after_registry.get("backends", [])
+            if auth_ref_matches(explicit_auth_ref, item.get("auth_ref"))
+        ]
+        if not before_matching_backends and len(after_matching_backends) == 1:
+            selected_backend = after_matching_backends[0]
+            selected_backend_id = str(selected_backend.get("id"))
+            if selected_backend_id and selected_backend_id not in added_backend_ids:
+                added_backend_ids = sorted(added_backend_ids + [selected_backend_id])
+            return added_backend_ids, selected_backend, "selected_unique_backend"
+        if not before_matching_backends and len(after_matching_backends) > 1:
+            selected_ids = sorted(
+                str(item.get("id"))
+                for item in after_matching_backends
+                if item.get("id") is not None
+            )
+            if selected_ids:
+                added_backend_ids = sorted(
+                    set(added_backend_ids).union(selected_ids)
+                )
+            return added_backend_ids, None, "ambiguous_new_backend_selection"
         matching_backends = [
             item
             for item in added_backends

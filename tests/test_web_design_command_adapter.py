@@ -63,6 +63,10 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "accounts_onboard_auth_ref",
             "accounts_login_start_sandbox",
             "accounts_login_complete_sandbox",
+            "accounts_login_start_codex_device",
+            "accounts_login_status",
+            "accounts_login_complete_codex",
+            "accounts_login_cancel",
             "accounts_validate",
             "accounts_promote",
             "accounts_demote",
@@ -95,6 +99,10 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["accounts_onboard_auth_ref"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_start_sandbox"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_complete_sandbox"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_start_codex_device"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_status"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_complete_codex"].ui_enabled)
+        self.assertFalse(ALLOWLIST["accounts_login_cancel"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_routes_add_server_owned"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_credentials_status_openrouter"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_credentials_admit_openrouter_owner_env"].ui_enabled)
@@ -327,6 +335,25 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
 
         blocked_start = execute_command(runner, "accounts_login_start_sandbox")
         start = execute_command(runner, "accounts_login_start_sandbox", allow_disabled=True)
+        codex_start = execute_command(runner, "accounts_login_start_codex_device", allow_disabled=True)
+        codex_status = execute_command(
+            runner,
+            "accounts_login_status",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
+        codex_complete = execute_command(
+            runner,
+            "accounts_login_complete_codex",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
+        codex_cancel = execute_command(
+            runner,
+            "accounts_login_cancel",
+            structured_args={"session_id": "codex-abc"},
+            allow_disabled=True,
+        )
         complete = execute_command(
             runner,
             "accounts_login_complete_sandbox",
@@ -345,6 +372,19 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             runner.calls,
             [
                 ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ),
+                ("accounts", "login", "status", "--session", "codex-abc", "--json"),
+                ("accounts", "login", "complete", "--session", "codex-abc", "--json"),
+                ("accounts", "login", "cancel", "--session", "codex-abc", "--json"),
                 (
                     "accounts",
                     "login",
@@ -367,6 +407,10 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             ],
         )
         self.assertEqual(start["status"], "ok")
+        self.assertEqual(codex_start["status"], "ok")
+        self.assertEqual(codex_status["status"], "ok")
+        self.assertEqual(codex_complete["status"], "ok")
+        self.assertEqual(codex_cancel["status"], "ok")
         self.assertEqual(complete["status"], "ok")
         self.assertEqual(onboard["status"], "ok")
 

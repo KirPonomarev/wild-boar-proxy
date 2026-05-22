@@ -8,6 +8,7 @@ import os
 import socket
 import threading
 import tempfile
+import time
 import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,6 +46,9 @@ TEST_LAUNCH_CLIENT_PATH = "/bin/sh"
 TEST_SANDBOX_LOGIN_SESSION_ID = "sandbox-test-session"
 TEST_SANDBOX_LOGIN_STATE = "sandbox-state-test"
 TEST_SANDBOX_AUTH_REF = "/tmp/wbp-sandbox-auth.json"
+TEST_CODEX_LOGIN_SESSION_ID = "codex-test-session"
+TEST_CODEX_DEVICE_URL = "https://auth.openai.com/codex/device"
+TEST_CODEX_DEVICE_CODE = "WBP-1234"
 
 
 class StableProbeHandler(BaseHTTPRequestHandler):
@@ -1063,7 +1067,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["data"]["bundle_verdict"], "partial")
         self.assertEqual(result["result"]["data"]["bundle"]["runtime"]["status"], "partial")
 
-    def test_onboard_account_action_executes_exact_command_without_browser_args(self) -> None:
+    def test_onboard_account_action_starts_codex_login_session_without_browser_args(self) -> None:
         runner = MappingRunner(live_payloads())
 
         result = run_ui_action(
@@ -1084,39 +1088,35 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(result["mutates_runtime"])
         self.assertFalse(result["affects_primary_truth"])
         self.assertTrue(result["confirmation_required"])
-        self.assertTrue(result["post_action_refresh_required"])
+        self.assertFalse(result["post_action_refresh_required"])
         self.assertEqual(result["account_id"], "")
-        self.assertEqual(result["result"]["onboarding"]["ui_state"], "success")
-        self.assertEqual(
-            result["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
-        )
-        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "completed")
+        self.assertNotIn("onboarding", result["result"])
+        self.assertEqual(result["session_id"], TEST_CODEX_LOGIN_SESSION_ID)
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
         self.assertEqual(result["result"]["data"]["login_bridge"]["provider"], "codex")
-        self.assertFalse(result["result"]["data"]["login_bridge"]["login_session_id_present"])
-        self.assertFalse(result["result"]["data"]["login_bridge"]["login_url_present"])
-        self.assertEqual(
-            result["result"]["data"]["login_bridge"]["login_url_kind"],
-            "engine_owned_browser_or_device_handoff",
-        )
-        self.assertEqual(result["result"]["data"]["login_bridge"]["auth_ref_scope"], "sandbox")
+        self.assertEqual(result["result"]["data"]["login_bridge"]["mode"], "device")
+        self.assertTrue(result["result"]["data"]["login_bridge"]["login_session_id_present"])
+        self.assertTrue(result["result"]["data"]["login_bridge"]["login_url_present"])
+        self.assertEqual(result["result"]["data"]["login_bridge"]["device_url"], TEST_CODEX_DEVICE_URL)
+        self.assertEqual(result["result"]["data"]["login_bridge"]["device_code"], TEST_CODEX_DEVICE_CODE)
         self.assertFalse(result["result"]["data"]["login_bridge"]["browser_secret_intake"])
-        self.assertEqual(result["result"]["onboarding"]["input_mode"], "default")
         serialized_result = json.dumps(result)
         self.assertNotIn(TEST_SANDBOX_AUTH_REF, serialized_result)
         self.assertNotIn("/tmp/wbp-sandbox-auth.json", serialized_result)
         self.assertEqual(
-            result["result"]["onboarding"]["auth_snapshot_before_login_status"],
-            "ok",
-        )
-        self.assertEqual(result["result"]["onboarding"]["external_command_status"], "nonzero")
-        self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
-        self.assertEqual(result["result"]["onboarding"]["selected_backend_id"], "acct-new")
-        self.assertEqual(
             runner.calls,
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ),
             ],
         )
 
@@ -1148,14 +1148,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn(
             (
                 "accounts",
-                "login",
-                "complete",
-                "--session",
-                TEST_SANDBOX_LOGIN_SESSION_ID,
-                "--state",
-                TEST_SANDBOX_LOGIN_STATE,
-                "--proof",
-                "sandbox-ok",
+                "onboard",
                 "--json",
             ),
             runner.calls,
@@ -1165,12 +1158,29 @@ class WebDesignLiveServerTests(unittest.TestCase):
         runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
-                    "no_new_auth_detected",
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ): codex_login_start_packet(
                     status="error",
-                    machine_error_code="ONBOARD_NO_NEW_BACKEND",
-                    selected_backend_id="",
-                    reserve_first_enforced=False,
+                    machine_error_code="LOGIN_DEVICE_HANDOFF_MISSING",
+                    login_result={
+                        "status": "failed",
+                        "provider": "codex",
+                        "mode": "device",
+                        "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "device_url": "",
+                        "device_code_present": False,
+                        "auth_materialized": False,
+                        "auth_ref_present": False,
+                    },
                 ),
             }
         )
@@ -1190,20 +1200,104 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["status"], "command_error")
         self.assertEqual(
             result["result"]["machine_error_code"],
-            "ONBOARD_NO_NEW_BACKEND",
-        )
-        self.assertEqual(
-            result["result"]["onboarding"]["final_outcome"],
-            "no_new_auth_detected",
+            "LOGIN_DEVICE_HANDOFF_MISSING",
         )
         self.assertEqual(result["result"]["data"]["login_bridge"]["provider"], "codex")
         self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "failed")
 
-    def test_real_json_runner_supports_sandbox_onboard_from_profile_cwd(self) -> None:
+    def test_account_login_status_action_executes_exact_command(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "account_login_status", "session_id": TEST_CODEX_LOGIN_SESSION_ID},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["session_id"], TEST_CODEX_LOGIN_SESSION_ID)
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "auth_materialized")
+        self.assertEqual(
+            runner.calls,
+            [("accounts", "login", "status", "--session", TEST_CODEX_LOGIN_SESSION_ID, "--json")],
+        )
+
+    def test_account_login_complete_action_executes_exact_command_and_returns_onboarding(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "account_login_complete", "session_id": TEST_CODEX_LOGIN_SESSION_ID},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["post_action_refresh_required"])
+        self.assertEqual(result["session_id"], TEST_CODEX_LOGIN_SESSION_ID)
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "completed")
+        self.assertEqual(
+            result["result"]["onboarding"]["final_outcome"],
+            "explicit_auth_imported_to_reserve",
+        )
+        self.assertEqual(
+            runner.calls,
+            [("accounts", "login", "complete", "--session", TEST_CODEX_LOGIN_SESSION_ID, "--json")],
+        )
+
+    def test_account_login_cancel_action_executes_exact_command(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "login", "cancel", "--session", TEST_CODEX_LOGIN_SESSION_ID, "--json"): command_packet(
+                    human_message="Codex login session cancelled.",
+                    provider="codex",
+                    session_id=TEST_CODEX_LOGIN_SESSION_ID,
+                    login_session_id=TEST_CODEX_LOGIN_SESSION_ID,
+                    login_result={
+                        "status": "cancelled",
+                        "provider": "codex",
+                        "mode": "device",
+                        "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "used": False,
+                    },
+                ),
+            }
+        )
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "account_login_cancel", "session_id": TEST_CODEX_LOGIN_SESSION_ID},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["session_id"], TEST_CODEX_LOGIN_SESSION_ID)
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "cancelled")
+        self.assertEqual(
+            runner.calls,
+            [("accounts", "login", "cancel", "--session", TEST_CODEX_LOGIN_SESSION_ID, "--json")],
+        )
+
+    def test_real_json_runner_supports_codex_login_session_bridge_from_profile_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             profile_dir = root / "profile"
             data_dir = root / "managed"
+            auth_dir = data_dir / "device-login-auth"
+            fake_cli = root / "fake-device-cli-proxy.py"
+            argv_capture = data_dir / "device-login-argv.json"
+            ready_file = data_dir / "device-login.ready"
+            auth_ref = auth_dir / "codex-device-login.json"
+            write_test_device_login_cli_proxy(
+                fake_cli,
+                argv_capture_path=argv_capture,
+                ready_file=ready_file,
+                auth_filename=auth_ref.name,
+            )
             env_updates = {
                 "WBP_PROFILE_DIR": str(profile_dir),
                 "WBP_MANAGED_DIR": str(data_dir),
@@ -1215,16 +1309,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(install_payload["status"], "ok")
             stable_port = free_port()
             (data_dir / "stable-runtime-config.yaml").write_text(
-                f"host: 127.0.0.1\nport: {stable_port}\n", encoding="utf-8"
-            )
-            (profile_dir / "auth.json").write_text(
-                json.dumps(
-                    {
-                        "auth_mode": "apikey",
-                        "OPENAI_API_KEY": "test-key",
-                    }
-                )
-                + "\n",
+                f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "device-login-auth"\n',
                 encoding="utf-8",
             )
             contract = LaunchCopyContract(
@@ -1258,6 +1343,18 @@ class WebDesignLiveServerTests(unittest.TestCase):
             for key, expected in expected_sandbox_paths.items():
                 self.assertEqual(sandbox_env[key], str(expected), key)
             self.assertEqual(sandbox_env["WBP_REQUIRE_SANDBOX_AUTH_DIR"], "1")
+            sandbox_env["WBP_CLIPROXY_BIN"] = str(fake_cli)
+            sandbox_env["WBP_TEST_DEVICE_LOGIN_WAIT_SECONDS"] = "10"
+            sandbox_env["WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON"] = json.dumps(
+                [
+                    account(
+                        "acct-device-login",
+                        "reserve",
+                        "healthy",
+                        auth_ref=str(auth_ref),
+                    )
+                ]
+            )
 
             runner = JsonCommandRunner(
                 cwd=str(profile_dir),
@@ -1275,9 +1372,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
             stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
             stable_thread.start()
             try:
-                result = run_ui_action(
+                started = run_ui_action(
                     runner,
                     {"ui_action": "onboard_account"},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+                self.assertEqual(started["status"], "ok")
+                session_id = started["session_id"]
+                self.assertTrue(session_id.startswith("codex-"))
+                ready_file.write_text("ready\n", encoding="utf-8")
+
+                status = run_ui_action(
+                    runner,
+                    {"ui_action": "account_login_status", "session_id": session_id},
+                    launch_copy_contract=contract,
+                    action_phase=SANDBOX_ACTION_PHASE,
+                )
+                deadline = time.time() + 5
+                while status["result"]["data"]["login_bridge"]["status"] != "auth_materialized" and time.time() < deadline:
+                    time.sleep(0.05)
+                    status = run_ui_action(
+                        runner,
+                        {"ui_action": "account_login_status", "session_id": session_id},
+                        launch_copy_contract=contract,
+                        action_phase=SANDBOX_ACTION_PHASE,
+                    )
+                self.assertEqual(status["result"]["data"]["login_bridge"]["status"], "auth_materialized")
+                result = run_ui_action(
+                    runner,
+                    {"ui_action": "account_login_complete", "session_id": session_id},
                     launch_copy_contract=contract,
                     action_phase=SANDBOX_ACTION_PHASE,
                 )
@@ -1289,7 +1413,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(
                 result["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                "explicit_auth_imported_to_reserve",
             )
             self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
             self.assertEqual(
@@ -1298,6 +1422,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             selected_backend_id = result["result"]["onboarding"]["selected_backend_id"]
             self.assertTrue(selected_backend_id)
+            self.assertEqual(
+                json.loads(argv_capture.read_text(encoding="utf-8")),
+                [
+                    "-config",
+                    str(data_dir / "stable-runtime-config.yaml"),
+                    "-codex-device-login",
+                    "-no-browser",
+                ],
+            )
 
             readonly_after = build_accounts_readonly_snapshot(runner)
             self.assertEqual(readonly_after["status"], "ok")
@@ -1840,77 +1973,126 @@ class WebDesignLiveServerTests(unittest.TestCase):
     def test_http_sandbox_readonly_endpoints_follow_sandbox_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            profile_dir = root / "profile"
-            data_dir = root / "managed"
-            env_updates = {
+            current_profile_dir = root / "current-profile"
+            current_data_dir = root / "current-managed"
+            profile_dir = root / "copy-profile"
+            data_dir = root / "copy-managed"
+            auth_dir = data_dir / "device-login-auth"
+            fake_cli = root / "fake-device-cli-proxy.py"
+            argv_capture = data_dir / "device-login-argv.json"
+            ready_file = data_dir / "device-login.ready"
+            auth_ref = auth_dir / "codex-device-login.json"
+            write_test_device_login_cli_proxy(
+                fake_cli,
+                argv_capture_path=argv_capture,
+                ready_file=ready_file,
+                auth_filename=auth_ref.name,
+            )
+            current_env_updates = {
+                "WBP_PROFILE_DIR": str(current_profile_dir),
+                "WBP_MANAGED_DIR": str(current_data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(current_data_dir / "external-models"),
+                "WBP_CLIPROXY_BIN": str(fake_cli),
+                "WBP_TEST_DEVICE_LOGIN_WAIT_SECONDS": "10",
+                "WBP_TEST_ONBOARD_ADDED_BACKENDS_JSON": json.dumps(
+                    [
+                        account(
+                            "acct-device-login",
+                            "reserve",
+                            "healthy",
+                            auth_ref=str(auth_ref),
+                        )
+                    ]
+                ),
+            }
+            target_env_updates = {
                 "WBP_PROFILE_DIR": str(profile_dir),
                 "WBP_MANAGED_DIR": str(data_dir),
                 "WBP_EXTERNAL_MODELS_DIR": str(data_dir / "external-models"),
             }
-            with mock.patch.dict(os.environ, env_updates, clear=False):
+            with mock.patch.dict(os.environ, target_env_updates, clear=False):
                 paths = RuntimePaths.from_env()
                 install_payload = run_installer_init(paths)
-            self.assertEqual(install_payload["status"], "ok")
-            stable_port = free_port()
-            (data_dir / "stable-runtime-config.yaml").write_text(
-                f"host: 127.0.0.1\nport: {stable_port}\n", encoding="utf-8"
-            )
-            (profile_dir / "auth.json").write_text(
-                json.dumps(
-                    {
-                        "auth_mode": "apikey",
-                        "OPENAI_API_KEY": "test-key",
-                    }
+                self.assertEqual(install_payload["status"], "ok")
+                stable_port = free_port()
+                (data_dir / "stable-runtime-config.yaml").write_text(
+                    f'host: 127.0.0.1\nport: {stable_port}\nauth-dir: "device-login-auth"\n',
+                    encoding="utf-8",
                 )
-                + "\n",
-                encoding="utf-8",
-            )
-            stable_server = ThreadingHTTPServer(
-                ("127.0.0.1", stable_port), StableProbeHandler
-            )
-            stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
-            stable_thread.start()
-            server = ThreadingHTTPServer(
-                ("127.0.0.1", free_port()),
-                build_handler(
-                    launch_client_path=TEST_LAUNCH_CLIENT_PATH,
-                    launch_copy_contract=LaunchCopyContract(
-                        client_path=TEST_LAUNCH_CLIENT_PATH,
-                        profile_dir=str(profile_dir),
-                        data_dir=str(data_dir),
-                        copy_port=9343,
-                        action_server_port=9342,
+            with mock.patch.dict(os.environ, current_env_updates, clear=False):
+                stable_server = ThreadingHTTPServer(
+                    ("127.0.0.1", stable_port), StableProbeHandler
+                )
+                stable_thread = threading.Thread(target=stable_server.serve_forever, daemon=True)
+                stable_thread.start()
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+                        launch_copy_contract=LaunchCopyContract(
+                            client_path=TEST_LAUNCH_CLIENT_PATH,
+                            profile_dir=str(profile_dir),
+                            data_dir=str(data_dir),
+                            copy_port=9343,
+                            action_server_port=9342,
+                        ),
+                        action_phase=SANDBOX_ACTION_PHASE,
                     ),
-                    action_phase=SANDBOX_ACTION_PHASE,
-                ),
-            )
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            try:
-                base_url = f"http://127.0.0.1:{server.server_port}"
-                before_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
-                before_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
-                dry_run = json.loads(
-                    post_json(
-                        f"{base_url}/api/action",
-                        {"ui_action": "onboard_account_dry_run"},
-                    )
                 )
-                live = json.loads(
-                    post_json(
-                        f"{base_url}/api/action",
-                        {"ui_action": "onboard_account"},
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    base_url = f"http://127.0.0.1:{server.server_port}"
+                    before_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+                    before_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
+                    dry_run = json.loads(
+                        post_json(
+                            f"{base_url}/api/action",
+                            {"ui_action": "onboard_account_dry_run"},
+                        )
                     )
-                )
-                after_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
-                after_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=5)
-                stable_server.shutdown()
-                stable_server.server_close()
-                stable_thread.join(timeout=5)
+                    live = json.loads(
+                        post_json(
+                            f"{base_url}/api/action",
+                            {"ui_action": "onboard_account"},
+                        )
+                    )
+                    session_id = str(live["session_id"])
+                    self.assertTrue(session_id.startswith("codex-"))
+                    ready_file.write_text("ready\n", encoding="utf-8")
+                    login_status = json.loads(
+                        post_json(
+                            f"{base_url}/api/action",
+                            {"ui_action": "account_login_status", "session_id": session_id},
+                        )
+                    )
+                    deadline = time.time() + 5
+                    while (
+                        login_status["result"]["data"]["login_bridge"]["status"] != "auth_materialized"
+                        and time.time() < deadline
+                    ):
+                        time.sleep(0.05)
+                        login_status = json.loads(
+                            post_json(
+                                f"{base_url}/api/action",
+                                {"ui_action": "account_login_status", "session_id": session_id},
+                            )
+                        )
+                    live_complete = json.loads(
+                        post_json(
+                            f"{base_url}/api/action",
+                            {"ui_action": "account_login_complete", "session_id": session_id},
+                        )
+                    )
+                    after_accounts = json.loads(fetch(f"{base_url}/api/accounts-readonly"))
+                    after_api = json.loads(fetch(f"{base_url}/api/api-connections-readonly"))
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+                    stable_server.shutdown()
+                    stable_server.server_close()
+                    stable_thread.join(timeout=5)
 
             self.assertEqual(before_accounts["status"], "ok")
             self.assertEqual(before_accounts["source"], "accounts_readonly")
@@ -1925,14 +2107,24 @@ class WebDesignLiveServerTests(unittest.TestCase):
             )
             self.assertEqual(live["status"], "ok")
             self.assertEqual(
-                live["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                live["result"]["data"]["login_bridge"]["status"],
+                "waiting_for_user",
+            )
+            self.assertEqual(login_status["status"], "ok")
+            self.assertEqual(
+                login_status["result"]["data"]["login_bridge"]["status"],
+                "auth_materialized",
+            )
+            self.assertEqual(live_complete["status"], "ok")
+            self.assertEqual(
+                live_complete["result"]["onboarding"]["final_outcome"],
+                "explicit_auth_imported_to_reserve",
             )
             self.assertEqual(after_accounts["status"], "ok")
             self.assertEqual(len(after_accounts["accounts"]), 1)
             self.assertEqual(
                 after_accounts["accounts"][0]["id"],
-                live["result"]["onboarding"]["selected_backend_id"],
+                live_complete["result"]["onboarding"]["selected_backend_id"],
             )
             self.assertEqual(after_accounts["accounts"][0]["pool"], "reserve")
             self.assertEqual(after_api["status"], "ok")
@@ -1989,10 +2181,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
 
         self.assertEqual(preflight["status"], "ok")
-        self.assertEqual(
-            preflight["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
-        )
+        self.assertEqual(preflight["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
 
     def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -2014,11 +2203,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner,
             {"ui_action": "onboard_account", "backend_id": "acct-new"},
         )
+        bad_session = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account", "session_id": TEST_CODEX_LOGIN_SESSION_ID},
+        )
 
-        for payload in [raw_action, auth_ref, source_dir, credentials, backend_id]:
+        for payload in [raw_action, auth_ref, source_dir, credentials, backend_id, bad_session]:
             self.assertEqual(payload["status"], "integration_failure")
             self.assertEqual(payload["action_role"], "blocked")
             self.assertEqual(payload["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
+        self.assertEqual(runner.calls, [])
+
+    def test_account_login_follow_up_actions_require_safe_session_id_only(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        missing = run_ui_action(runner, {"ui_action": "account_login_status"})
+        unsafe = run_ui_action(
+            runner,
+            {"ui_action": "account_login_complete", "session_id": "../codex-session"},
+        )
+        extra = run_ui_action(
+            runner,
+            {"ui_action": "account_login_cancel", "session_id": TEST_CODEX_LOGIN_SESSION_ID, "auth_ref": "/tmp/forbidden.json"},
+        )
+
+        self.assertEqual(missing["status"], "integration_failure")
+        self.assertEqual(missing["result"]["machine_error_code"], "UI_LOGIN_SESSION_ID_REQUIRED")
+        self.assertEqual(unsafe["status"], "integration_failure")
+        self.assertEqual(unsafe["result"]["machine_error_code"], "UI_LOGIN_SESSION_ID_INVALID")
+        self.assertEqual(extra["status"], "integration_failure")
+        self.assertEqual(extra["result"]["machine_error_code"], "UI_ACTION_NOT_ALLOWED")
         self.assertEqual(runner.calls, [])
 
     def test_onboard_account_blocks_live_connect_when_server_owned_preflight_is_not_admitted(self) -> None:
@@ -2065,44 +2279,36 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(runner.calls, [("accounts", "list", "--json")])
 
     def test_onboard_outcomes_do_not_overclaim_success_without_reserve_proof(self) -> None:
-        no_new_runner = MappingRunner(
-            {
-                **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("no_new_auth_detected"),
-            }
-        )
-        ambiguous_runner = MappingRunner(
-            {
-                **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
-                    "ambiguous_new_auth_detection",
-                    selected_backend_id="",
-                    pool_after_onboarding="",
-                    reserve_first_enforced=False,
-                ),
-            }
-        )
-        unknown_runner = MappingRunner(
-            {
-                **live_payloads(),
-                ("accounts", "onboard", "--json"): command_packet(
-                    human_message="Onboarding packet had no structured result."
-                ),
-            }
-        )
-        validate_failed_runner = MappingRunner(
-            {
-                **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("validate_failed"),
-            }
-        )
+        no_new_runner = MappingRunner({**live_payloads()})
+        ambiguous_runner = MappingRunner({**live_payloads()})
+        unknown_runner = MappingRunner({**live_payloads()})
+        validate_failed_runner = MappingRunner({**live_payloads()})
         command_error_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
-                    "reserve_only_success",
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ): codex_login_start_packet(
                     status="error",
-                    machine_error_code="ONBOARDING_OWNER_FAILED",
+                    machine_error_code="LOGIN_DEVICE_HANDOFF_MISSING",
+                    login_result={
+                        "status": "failed",
+                        "provider": "codex",
+                        "mode": "device",
+                        "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+                        "device_url": "",
+                        "device_code_present": False,
+                        "auth_materialized": False,
+                        "auth_ref_present": False,
+                    },
                 ),
             }
         )
@@ -2113,20 +2319,15 @@ class WebDesignLiveServerTests(unittest.TestCase):
         validate_failed = run_ui_action(validate_failed_runner, {"ui_action": "onboard_account"})
         command_error = run_ui_action(command_error_runner, {"ui_action": "onboard_account"})
 
-        self.assertEqual(no_new["result"]["onboarding"]["ui_state"], "needs_user_action")
-        self.assertTrue(no_new["result"]["onboarding"]["operator_action_required"])
-        self.assertEqual(ambiguous["result"]["onboarding"]["ui_state"], "needs_user_action")
-        self.assertTrue(ambiguous["result"]["onboarding"]["operator_action_required"])
-        self.assertEqual(unknown["result"]["onboarding"]["ui_state"], "unknown_outcome")
-        self.assertTrue(unknown["result"]["onboarding"]["operator_action_required"])
-        self.assertEqual(validate_failed["result"]["onboarding"]["ui_state"], "command_error")
-        self.assertTrue(validate_failed["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(no_new["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
+        self.assertEqual(ambiguous["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
+        self.assertEqual(unknown["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
+        self.assertEqual(validate_failed["result"]["data"]["login_bridge"]["status"], "waiting_for_user")
         self.assertEqual(command_error["status"], "command_error")
-        self.assertEqual(command_error["result"]["onboarding"]["ui_state"], "command_error")
-        self.assertTrue(command_error["result"]["onboarding"]["operator_action_required"])
+        self.assertEqual(command_error["result"]["data"]["login_bridge"]["status"], "failed")
         for payload in [no_new, ambiguous, unknown, validate_failed, command_error]:
-            self.assertNotEqual(payload["result"]["onboarding"]["ui_state"], "success")
-            self.assertEqual(payload["result"]["onboarding"]["selected_backend_id"], "")
+            self.assertEqual(payload["result"]["data"]["login_bridge"]["provider"], "codex")
+            self.assertFalse(payload["result"]["data"]["login_bridge"]["browser_secret_intake"])
 
     def test_ui_action_endpoint_accepts_allowlisted_actions_only(self) -> None:
         runner = MappingRunner(live_payloads())
@@ -3404,12 +3605,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             "admitted",
         )
         self.assertEqual(
-            action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            action_results["onboard_account"]["result"]["data"]["login_bridge"]["status"],
+            "waiting_for_user",
         )
-        self.assertTrue(
-            action_results["onboard_account"]["result"]["onboarding"]["reserve_first_proven"]
-        )
+        self.assertFalse(action_results["onboard_account"]["post_action_refresh_required"])
         self.assertEqual(action_results["export_diagnostics"]["action_role"], "support_artifact")
         self.assertFalse(action_results["export_diagnostics"]["post_action_refresh_required"])
         self.assertEqual(action_results["api_route_remove"]["action_role"], "api_route_registry_cleanup")
@@ -3498,7 +3697,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "start",
+                    "--provider",
+                    "codex",
+                    "--mode",
+                    "device",
+                    "--json",
+                ),
                 ("accounts", "list", "--json"),
             ],
             [
@@ -3581,6 +3789,32 @@ def live_payloads() -> dict[tuple[str, ...], dict[str, object]]:
         ("healthcheck", "--json"): command_packet(human_message="Healthcheck passed."),
         ("mode", "get", "--json"): mode_packet(),
         ("accounts", "list", "--json"): accounts_packet(),
+        (
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        ): codex_login_start_packet(),
+        (
+            "accounts",
+            "login",
+            "status",
+            "--session",
+            TEST_CODEX_LOGIN_SESSION_ID,
+            "--json",
+        ): codex_login_status_packet(),
+        (
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            TEST_CODEX_LOGIN_SESSION_ID,
+            "--json",
+        ): codex_login_complete_packet(),
         ("accounts", "onboard", "--json"): onboarding_packet("reserve_only_success"),
         ("accounts", "login", "start", "--provider", "sandbox", "--json"): login_start_packet(),
         (
@@ -3918,10 +4152,132 @@ def login_complete_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def codex_login_start_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Codex device login session started.",
+        next_action="wait_for_login",
+        provider="codex",
+        mode="device",
+        session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        login_session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        device_url=TEST_CODEX_DEVICE_URL,
+        device_code=TEST_CODEX_DEVICE_CODE,
+        login_result={
+            "status": "waiting_for_user",
+            "provider": "codex",
+            "mode": "device",
+            "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "device_url": TEST_CODEX_DEVICE_URL,
+            "device_code": TEST_CODEX_DEVICE_CODE,
+            "device_code_present": True,
+            "auth_materialized": False,
+            "auth_ref_present": False,
+            "used": False,
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
+def codex_login_status_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Codex login session materialized sandbox auth.",
+        next_action="accounts_onboard",
+        provider="codex",
+        session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        login_session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        login_result={
+            "status": "auth_materialized",
+            "provider": "codex",
+            "mode": "device",
+            "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "device_url": TEST_CODEX_DEVICE_URL,
+            "device_code_present": True,
+            "auth_materialized": True,
+            "auth_ref_present": True,
+            "auth_ref_scope": "sandbox",
+            "used": False,
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
+def codex_login_complete_packet(**overrides: object) -> dict[str, object]:
+    payload = command_packet(
+        human_message="Codex login session completed reserve-first onboarding.",
+        next_action="accounts_refresh",
+        provider="codex",
+        session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        login_session_id=TEST_CODEX_LOGIN_SESSION_ID,
+        onboarding_result=onboarding_packet("explicit_auth_imported_to_reserve")["onboarding_result"],  # type: ignore[index]
+        login_result={
+            "status": "completed",
+            "provider": "codex",
+            "mode": "device",
+            "session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "login_session_id": TEST_CODEX_LOGIN_SESSION_ID,
+            "device_url": TEST_CODEX_DEVICE_URL,
+            "device_code_present": True,
+            "auth_materialized": True,
+            "auth_ref_present": True,
+            "auth_ref_scope": "sandbox",
+            "used": True,
+        },
+    )
+    payload.update(overrides)
+    return payload
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def write_test_device_login_cli_proxy(
+    path: Path,
+    *,
+    argv_capture_path: Path,
+    ready_file: Path,
+    auth_filename: str = "codex-device-login.json",
+) -> None:
+    path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, re, sys, time\n"
+        "from pathlib import Path\n"
+        f"argv_capture = Path({str(argv_capture_path)!r})\n"
+        f"ready_file = Path({str(ready_file)!r})\n"
+        "argv_capture.write_text(json.dumps(sys.argv[1:]) + '\\n', encoding='utf-8')\n"
+        "config = Path(sys.argv[sys.argv.index('-config') + 1])\n"
+        "text = config.read_text(encoding='utf-8')\n"
+        "match = re.search(r'^auth-dir:\\s*[\"\\']?(.*?)[\"\\']?\\s*$', text, re.M)\n"
+        "if not match:\n"
+        "    raise SystemExit('missing auth-dir')\n"
+        "auth_dir = Path(match.group(1)).expanduser()\n"
+        "if not auth_dir.is_absolute():\n"
+        "    auth_dir = config.parent / auth_dir\n"
+        "auth_dir.mkdir(parents=True, exist_ok=True)\n"
+        "print('Codex device URL: https://auth.openai.com/codex/device', flush=True)\n"
+        "print('Codex device code: WBP-1234', flush=True)\n"
+        "deadline = time.time() + float(os.environ.get('WBP_TEST_DEVICE_LOGIN_WAIT_SECONDS', '10'))\n"
+        "while time.time() < deadline:\n"
+        "    if ready_file.exists():\n"
+        "        payload = {\n"
+        "            'type': 'codex',\n"
+        "            'email': 'device-login@example.com',\n"
+        "            'access_token': 'token-device-login',\n"
+        "            'account_id': 'acct-device-login',\n"
+        "        }\n"
+        f"        (auth_dir / {auth_filename!r}).write_text(json.dumps(payload) + '\\n', encoding='utf-8')\n"
+        "        raise SystemExit(0)\n"
+        "    time.sleep(0.05)\n"
+        "raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
 
 
 def fetch(url: str) -> str:

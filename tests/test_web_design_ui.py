@@ -1144,7 +1144,6 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertNotIn('type="file"', html)
         self.assertNotIn("readAsText", js)
         self.assertNotIn("localStorage", js)
-        self.assertNotIn("window.open", js)
         self.assertNotIn("diagnostics export --json", html + js)
         self.assertNotIn("runtime healthy", (html + js).lower())
         self.assertNotIn("pilot", html + js)
@@ -1457,7 +1456,6 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertNotIn("webkitdirectory", settings_markup + js)
         self.assertNotIn("readAsText", settings_markup + js)
         self.assertNotIn("localStorage", settings_markup + js)
-        self.assertNotIn("window.open", settings_markup + js)
         self.assertNotIn("policy_stage", html + js)
         self.assertNotIn("rollout stage", html + js)
         self.assertNotIn("JSON.stringify({ command_id", js)
@@ -2658,7 +2656,7 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 
 sandbox.setActionPanel({
   status: "ok",
-  ui_action: "onboard_account",
+  ui_action: "account_login_complete",
   action_role: "account_onboarding",
   post_action_refresh_required: true,
   result: {
@@ -2685,7 +2683,7 @@ sandbox.setActionPanel({
 
 const serialized = JSON.stringify(elements);
 if (elements.onboardingResultFlow.hidden !== false) {
-  throw new Error("onboarding result flow must be visible for onboard_account");
+  throw new Error("onboarding result flow must be visible for account_login_complete");
 }
 if (elements.onboardingResultBanner.className !== "onboarding-result-banner green") {
   throw new Error(`success banner must be green: ${elements.onboardingResultBanner.className}`);
@@ -2717,7 +2715,7 @@ if (serialized.includes("Аккаунт активен") || serialized.includes(
 
 sandbox.setActionPanel({
   status: "ok",
-  ui_action: "onboard_account",
+  ui_action: "account_login_complete",
   action_role: "account_onboarding",
   post_action_refresh_required: true,
   result: {
@@ -2750,7 +2748,7 @@ if (elements.actionDisplayState.textContent !== "ok_refresh_failed") {
 
 sandbox.setActionPanel({
   status: "ok",
-  ui_action: "onboard_account",
+  ui_action: "account_login_complete",
   action_role: "account_onboarding",
   post_action_refresh_required: true,
   result: {
@@ -2783,7 +2781,7 @@ if (!elements.onboardingResultBanner.textContent.includes("не добавило
 
 sandbox.setActionPanel({
   status: "ok",
-  ui_action: "onboard_account",
+  ui_action: "account_login_complete",
   action_role: "account_onboarding",
   post_action_refresh_required: true,
   result: {
@@ -2848,7 +2846,7 @@ if (elements.onboardingResultSelected.textContent !== "-") {
 }
 
 sandbox.setActionPanel({
-  ui_action: "onboard_account",
+  ui_action: "account_login_complete",
   action_role: "integration_failure",
   post_action_refresh_required: false,
   result: {
@@ -3278,20 +3276,26 @@ const details = sandbox.actionSupportDetails({
   result: {
     data: {
       login_bridge: {
-        status: "completed",
-        provider: "sandbox",
-        login_url_kind: "owner_provided",
+        status: "waiting_for_user",
+        provider: "codex",
+        phase: "start",
+        session_id: "codex-session",
+        device_url: "https://auth.openai.com/codex/device",
+        device_code_present: true,
         auth_ref_scope: "sandbox",
         browser_secret_intake: false
       }
     }
   }
 });
-if (!details.includes("login_bridge=completed")) {
+if (!details.includes("login_bridge=waiting_for_user")) {
   throw new Error(`login bridge status missing: ${details}`);
 }
-if (!details.includes("login_url=owner_provided")) {
-  throw new Error(`login_url provenance missing: ${details}`);
+if (!details.includes("device_url=present")) {
+  throw new Error(`device handoff marker missing: ${details}`);
+}
+if (!details.includes("device_code=present")) {
+  throw new Error(`device code marker missing: ${details}`);
 }
 if (!details.includes("browser_secret_intake=false")) {
   throw new Error(`browser_secret_intake marker missing: ${details}`);
@@ -3382,7 +3386,7 @@ if (details.includes("sk-") || details.includes("secret=") || details.includes("
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_onboard_account_opens_owner_login_url_in_browser_window(self) -> None:
+    def test_onboard_account_opens_device_login_window_with_session_handoff(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -3433,27 +3437,20 @@ const sandbox = {
             status: "ok",
             machine_error_code: "OK",
             human_message: "done",
-            next_action: "none",
+            next_action: "wait_for_login",
             changed_files: [],
             data: {
               login_bridge: {
-                login_url: "http://127.0.0.1:8788/owner-login/sandbox?session=test&state=state",
+                status: "waiting_for_user",
+                provider: "codex",
+                phase: "start",
+                session_id: "codex-session",
+                device_url: "https://auth.openai.com/codex/device",
+                device_code: "WBP-1234",
+                device_code_present: true,
                 login_url_present: true,
-                login_url_kind: "owner_provided"
+                login_url_kind: "device_code"
               }
-            },
-            onboarding: {
-              final_outcome: "explicit_auth_imported_to_reserve",
-              selected_backend_id: "sandbox-synthetic",
-              reserve_first_proven: true,
-              active_routing_changed: false,
-              validate_outcome: "ok",
-              sync_outcome: "ok",
-              status_observed: { command_status: "ok" },
-              ui_state: "success",
-              operator_action_required: false,
-              selection_status: "selected_unique_backend",
-              pool_after_onboarding: "reserve"
             }
           }
         })
@@ -3470,11 +3467,16 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   if (openCalls.length !== 1 || openCalls[0].features) {
     throw new Error(`owner login pre-open must stay controllable, got ${JSON.stringify(openCalls)}`);
   }
-  if (!writes.join("\n").includes("Owner login is starting")) {
+  const html = writes.join("\n");
+  if (!html.includes("Codex login is starting")) {
     throw new Error("owner login window did not receive a visible waiting page");
   }
-  if (!opened.href.includes("/owner-login/sandbox?session=test&state=state")) {
-    throw new Error(`owner login window did not navigate to owner-provided URL: ${opened.href}`);
+  const hasDeviceHtml = html.includes("Codex device login")
+    && html.includes("https://auth.openai.com/codex/device")
+    && html.includes("WBP-1234");
+  const navigatedToDeviceUrl = opened.href === "https://auth.openai.com/codex/device";
+  if (!hasDeviceHtml && !navigatedToDeviceUrl) {
+    throw new Error(`device handoff missing from login window: html=${html} href=${opened.href}`);
   }
   if (opened.closed) {
     throw new Error("owner login window should stay open when login_url is present");
@@ -3493,7 +3495,7 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_onboard_account_owner_login_window_shows_error_when_url_missing(self) -> None:
+    def test_onboard_account_owner_login_window_shows_blocked_status_when_start_packet_fails(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -3541,10 +3543,10 @@ const sandbox = {
           result: {
             status: "command_error",
             machine_error_code: "UI_LOGIN_START_PACKET_INVALID",
-            human_message: "login url missing",
+            human_message: "login start failed",
             next_action: "retry",
             changed_files: [],
-            data: { login_bridge: { login_url_present: false, login_url_kind: "missing" } }
+            data: { login_bridge: { status: "failed", provider: "codex", phase: "start", login_url_present: false, login_url_kind: "missing" } }
           }
         })
       });
@@ -3558,11 +3560,11 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 (async () => {
   await sandbox.runUiAction("onboard_account");
   const html = writes.join("\n");
-  if (!html.includes("Owner login is starting")) {
+  if (!html.includes("Codex login is starting")) {
     throw new Error("owner login window did not show initial waiting state");
   }
-  if (!html.includes("Owner login URL missing")) {
-    throw new Error(`owner login window did not show missing URL error: ${html}`);
+  if (!html.includes("Codex login failed")) {
+    throw new Error(`owner login window did not show failed start status: ${html}`);
   }
   if (opened.closed) {
     throw new Error("owner login window should stay visible with a diagnostic instead of closing blank");
@@ -3581,7 +3583,7 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_onboard_account_codex_owner_handoff_without_url_shows_completion(self) -> None:
+    def test_onboard_account_codex_auth_materialized_status_shows_completion_step(self) -> None:
         script = r"""
 const fs = require("fs");
 const vm = require("vm");
@@ -3623,36 +3625,28 @@ const sandbox = {
         ok: true,
         json: async () => ({
           status: "ok",
-          ui_action: "onboard_account",
-          action_role: "account_onboarding",
+          ui_action: "account_login_status",
+          action_role: "account_login_status",
           post_action_refresh_required: false,
+          session_id: "codex-session",
           result: {
             status: "ok",
             machine_error_code: "OK",
             human_message: "done",
-            next_action: "none",
+            next_action: "accounts_onboard",
             changed_files: [],
             data: {
               login_bridge: {
                 provider: "codex",
-                status: "completed",
-                login_url: "",
-                login_url_present: false,
-                login_url_kind: "engine_owned_browser_or_device_handoff"
+                status: "auth_materialized",
+                phase: "status",
+                session_id: "codex-session",
+                device_url: "https://auth.openai.com/codex/device",
+                device_code_present: true,
+                auth_materialized: true,
+                auth_ref_present: true,
+                auth_ref_scope: "sandbox"
               }
-            },
-            onboarding: {
-              final_outcome: "reserve_only_success",
-              selected_backend_id: "acct-new",
-              reserve_first_proven: true,
-              active_routing_changed: false,
-              validate_outcome: "ok",
-              sync_outcome: "ok",
-              status_observed: { command_status: "ok" },
-              ui_state: "success",
-              operator_action_required: false,
-              selection_status: "selected_unique_backend",
-              pool_after_onboarding: "reserve"
             }
           }
         })
@@ -3665,16 +3659,45 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
 
 (async () => {
-  await sandbox.runUiAction("onboard_account");
+  await sandbox.handleActionPayload({
+    status: "ok",
+    ui_action: "account_login_status",
+    action_role: "account_login_status",
+    post_action_refresh_required: false,
+    session_id: "codex-session",
+    result: {
+      status: "ok",
+      machine_error_code: "OK",
+      human_message: "done",
+      next_action: "accounts_onboard",
+      changed_files: [],
+      data: {
+        login_bridge: {
+          provider: "codex",
+          status: "auth_materialized",
+          phase: "status",
+          session_id: "codex-session",
+          device_url: "https://auth.openai.com/codex/device",
+          device_code_present: true,
+          auth_materialized: true,
+          auth_ref_present: true,
+          auth_ref_scope: "sandbox"
+        }
+      }
+    }
+  }, sandbox.openOnboardLoginWindow());
   const html = writes.join("\n");
-  if (!html.includes("Owner login is starting")) {
+  if (!html.includes("Codex login is starting")) {
     throw new Error("owner login window did not show initial waiting state");
   }
-  if (!html.includes("Codex login completed")) {
-    throw new Error(`owner login window did not show completed Codex handoff: ${html}`);
+  if (!html.includes("Codex auth materialized")) {
+    throw new Error(`owner login window did not show auth materialized handoff: ${html}`);
   }
-  if (opened.href) {
-    throw new Error(`Codex owner handoff without URL should not navigate to a fake URL: ${opened.href}`);
+  if (!html.includes("Завершить")) {
+    throw new Error(`owner login window did not expose completion button: ${html}`);
+  }
+  if (opened.href && opened.href !== "https://auth.openai.com/codex/device") {
+    throw new Error(`Codex owner handoff navigated to unexpected URL: ${opened.href}`);
   }
   if (opened.closed) {
     throw new Error("owner login window should stay visible with completion status");

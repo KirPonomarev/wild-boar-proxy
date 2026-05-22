@@ -1,0 +1,51 @@
+{
+  "contour": "CODEX_OWNER_LOGIN_SESSION_BRIDGE_PASS",
+  "date": "2026-05-22",
+  "status": "implementation_complete_pending_full_gate",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before_closeout_commit": "7298d94",
+  "changed_files": [
+    "COMMAND_API.md",
+    "tests/test_cli.py",
+    "tests/test_web_design_command_adapter.py",
+    "tests/test_web_design_live_server.py",
+    "tests/test_web_design_ui.py",
+    "wild_boar_proxy/cli.py",
+    "wild_boar_proxy/runtime.py",
+    "wild_boar_proxy/web_design_command_adapter.py",
+    "wild_boar_proxy/web_design_live_server.py",
+    "wild_boar_proxy/web_design_ui/scripts/overview.js"
+  ],
+  "verification": {
+    "node_check": "pass",
+    "git_diff_check": "pass",
+    "targeted_cli_tests": {
+      "status": "pass",
+      "tests": 9
+    },
+    "targeted_web_suites": {
+      "status": "pass",
+      "tests": 146
+    },
+    "focused_regression_tests": {
+      "status": "pass",
+      "tests": 3
+    },
+    "full_composite_gate": {
+      "status": "timeout",
+      "timeout_seconds": 90
+    }
+  },
+  "browser_proof": {
+    "status": "pass",
+    "selected_backend_id": "device-login",
+    "final_outcome": "explicit_auth_imported_to_reserve",
+    "reserve_first_proven": true,
+    "active_routing_changed": false,
+    "accounts_after_count": 1,
+    "accounts_after_pool": "reserve"
+  },
+  "residual_risks": [
+    "Full composite unittest gate still times out and must be isolated before formal contour closure."
+  ]
+}

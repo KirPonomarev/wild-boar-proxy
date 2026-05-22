@@ -17,6 +17,8 @@ from .runtime import (
     mode_get,
     mode_set,
     run_accounts_command,
+    run_accounts_login_cancel,
+    run_accounts_login_status,
     run_accounts_login_complete,
     run_accounts_login_start,
     run_demote,
@@ -128,12 +130,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     accounts_login_start = accounts_login_subparsers.add_parser("start")
     accounts_login_start.add_argument("--provider", required=True)
+    accounts_login_start.add_argument("--mode")
     accounts_login_start.add_argument("--json", action="store_true", required=True)
+    accounts_login_status = accounts_login_subparsers.add_parser("status")
+    accounts_login_status.add_argument("--session", required=True)
+    accounts_login_status.add_argument("--json", action="store_true", required=True)
     accounts_login_complete = accounts_login_subparsers.add_parser("complete")
     accounts_login_complete.add_argument("--session", required=True)
-    accounts_login_complete.add_argument("--state", required=True)
-    accounts_login_complete.add_argument("--proof", required=True)
+    accounts_login_complete.add_argument("--state")
+    accounts_login_complete.add_argument("--proof")
     accounts_login_complete.add_argument("--json", action="store_true", required=True)
+    accounts_login_cancel = accounts_login_subparsers.add_parser("cancel")
+    accounts_login_cancel.add_argument("--session", required=True)
+    accounts_login_cancel.add_argument("--json", action="store_true", required=True)
 
     diagnostics = subparsers.add_parser("diagnostics")
     diagnostics_subparsers = diagnostics.add_subparsers(
@@ -406,7 +415,15 @@ def main(argv: list[str] | None = None) -> int:
             and args.accounts_command == "login"
             and args.accounts_login_command == "start"
         ):
-            return emit_json(run_accounts_login_start(paths, args.provider))
+            return emit_json(
+                run_accounts_login_start(paths, args.provider, mode=args.mode)
+            )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "status"
+        ):
+            return emit_json(run_accounts_login_status(paths, args.session))
         if (
             args.command == "accounts"
             and args.accounts_command == "login"
@@ -416,10 +433,16 @@ def main(argv: list[str] | None = None) -> int:
                 run_accounts_login_complete(
                     paths,
                     login_session_id=args.session,
-                    state=args.state,
-                    proof=args.proof,
+                    state=getattr(args, "state", None),
+                    proof=getattr(args, "proof", None),
                 )
             )
+        if (
+            args.command == "accounts"
+            and args.accounts_command == "login"
+            and args.accounts_login_command == "cancel"
+        ):
+            return emit_json(run_accounts_login_cancel(paths, args.session))
         if args.command == "diagnostics" and args.diagnostics_command == "export":
             return emit_json(export_diagnostics(paths))
         if args.command == "installer" and args.installer_command == "init":

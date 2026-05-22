@@ -40,7 +40,11 @@ All operator commands must support `--json`.
 - `accounts retire <id> --json`
 - `accounts onboard --json`
 - `accounts login start --provider sandbox --json`
+- `accounts login start --provider codex --mode device --json`
+- `accounts login status --session <id> --json`
 - `accounts login complete --session <id> --state <state> --proof <proof> --json`
+- `accounts login complete --session <id> --json`
+- `accounts login cancel --session <id> --json`
 - `external-models credentials admit --provider <provider> --source owner-env --json`
 - `external-models credentials status --provider <provider> --json`
 - `diagnostics export --json`
@@ -282,6 +286,119 @@ managed storage and must return:
 - `login_result.used=true`
 
 Completion packets must not expose token/secret/password values.
+
+## Additional Codex login session owner surface
+
+`accounts login start --provider codex --mode device --json` is the owner
+surface for sessionized Codex device login handoff.
+
+`accounts login status --session <id> --json` is the read-only owner surface
+for session state, device handoff status, and sandbox auth materialization
+proof.
+
+`accounts login complete --session <id> --json` is the owner surface for
+session-bound reserve-first onboarding after auth materializes.
+
+`accounts login cancel --session <id> --json` is the owner surface for
+bounded cancellation of a session-owned login process.
+
+Codex login session packets must remain strict JSON and use the command payload
+envelope. Session storage is owner-managed only:
+
+- `<managed_dir>/login-sessions/<id>.json`
+- `<managed_dir>/login-sessions/<id>.stdout.log`
+- `<managed_dir>/login-sessions/<id>.stderr.log`
+
+Required session fields include:
+
+- `login_session_id`
+- `provider=codex`
+- `mode=device`
+- `pid`
+- `created_at`
+- `expires_at`
+- `state`
+- `device_url`
+- `device_code_present`
+- `auth_materialized`
+- `auth_ref`
+- `sandbox_scope`
+- `used`
+
+Start must enforce machine-readably:
+
+- provider validation (`codex`)
+- mode validation (`device`)
+- sandbox-scoped auth-dir proof before spawn
+- session creation under managed storage
+- bounded spawn of `cli-proxy-api -codex-device-login -no-browser`
+- device handoff capture from owner stdout
+
+Start success should expose:
+
+- `next_action=wait_for_login`
+- `provider=codex`
+- `mode=device`
+- `session_id`
+- `login_session_id`
+- `device_url`
+- `device_code`
+- `device_code_present=true`
+- `login_result.status=waiting_for_user`
+- `login_result.auth_materialized=false`
+- `login_result.browser_secret_intake=false`
+- `login_result.browser_path_intake=false`
+
+Status must enforce machine-readably:
+
+- session existence
+- provider/session binding
+- TTL expiry detection
+- stale pid refresh
+- sandbox auth artifact detection without exposing secret contents
+
+Status success should expose:
+
+- `next_action=wait_for_login|accounts_onboard|none`
+- `login_result.status`
+  (`waiting_for_user|auth_materialized|completed|failed|expired|cancelled`)
+- `login_result.device_url`
+- `login_result.device_code_present`
+- `login_result.auth_materialized`
+- `login_result.auth_ref_present`
+
+Complete must enforce machine-readably:
+
+- session existence
+- provider/session binding (`codex`)
+- replay rejection when `used=true`
+- reject before `auth_materialized=true`
+- owner-side onboarding only through `accounts onboard --json --auth-ref <session auth>`
+- reserve-first onboarding proof
+- `active_routing_changed=false`
+
+Complete success should expose:
+
+- `next_action=accounts_refresh`
+- `login_result.status=completed`
+- `login_result.auth_materialized=true`
+- `login_result.used=true`
+- nested `onboarding_result`
+
+Cancel must enforce machine-readably:
+
+- session existence
+- provider/session binding (`codex`)
+- termination bounded to session-owned pid only
+
+Cancel success should expose:
+
+- `next_action=none`
+- `login_result.status=cancelled`
+- `login_result.cancelled_process_owned_by_session=true`
+
+Codex login packets must not expose token/secret/password values or raw auth
+JSON.
 
 ## Additional external-models credential admission owner surface
 

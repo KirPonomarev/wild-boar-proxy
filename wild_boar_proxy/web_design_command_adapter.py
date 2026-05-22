@@ -107,6 +107,70 @@ ALLOWLIST: dict[str, CommandSpec] = {
         required_args=("login_session_id", "state"),
         allowed_args=("login_session_id", "state"),
     ),
+    "accounts_login_start_codex_device": CommandSpec(
+        command_id="accounts_login_start_codex_device",
+        argv_template=(
+            "accounts",
+            "login",
+            "start",
+            "--provider",
+            "codex",
+            "--mode",
+            "device",
+            "--json",
+        ),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=True,
+    ),
+    "accounts_login_status": CommandSpec(
+        command_id="accounts_login_status",
+        argv_template=(
+            "accounts",
+            "login",
+            "status",
+            "--session",
+            "{session_id}",
+            "--json",
+        ),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=False,
+        required_args=("session_id",),
+        allowed_args=("session_id",),
+    ),
+    "accounts_login_complete_codex": CommandSpec(
+        command_id="accounts_login_complete_codex",
+        argv_template=(
+            "accounts",
+            "login",
+            "complete",
+            "--session",
+            "{session_id}",
+            "--json",
+        ),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=True,
+        required_args=("session_id",),
+        allowed_args=("session_id",),
+    ),
+    "accounts_login_cancel": CommandSpec(
+        command_id="accounts_login_cancel",
+        argv_template=(
+            "accounts",
+            "login",
+            "cancel",
+            "--session",
+            "{session_id}",
+            "--json",
+        ),
+        category="onboarding_login",
+        ui_enabled=False,
+        confirmation_required=False,
+        required_args=("session_id",),
+        allowed_args=("session_id",),
+    ),
     "accounts_validate": CommandSpec(
         command_id="accounts_validate",
         argv_template=("accounts", "validate", "{account_id}", "--json"),
@@ -370,6 +434,10 @@ def _render_argv(spec: CommandSpec, structured_args: dict[str, str]) -> tuple[st
         auth_ref = structured_args["auth_ref"]
         if not os.path.isabs(auth_ref):
             raise UiShellError("accounts_onboard_auth_ref auth_ref must be absolute")
+    if "session_id" in structured_args:
+        session_id = structured_args["session_id"].strip()
+        if not session_id:
+            raise UiShellError("accounts login session_id must be non-empty")
 
     return tuple(part.format(**structured_args) for part in spec.argv_template)
 

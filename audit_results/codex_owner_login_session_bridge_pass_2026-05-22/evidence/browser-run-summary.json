@@ -1,0 +1,22 @@
+{
+  "status": "ok",
+  "flow": "browser quick-start -> onboard_account -> account_login_status -> account_login_complete -> accounts refresh",
+  "start_status": "ok",
+  "status_status": "ok",
+  "complete_status": "ok",
+  "complete_machine_error_code": "OK",
+  "selected_backend_id": "device-login",
+  "final_outcome": "explicit_auth_imported_to_reserve",
+  "reserve_first_proven": true,
+  "active_routing_changed": false,
+  "accounts_after_count": 1,
+  "accounts_after_pools": [
+    "reserve"
+  ],
+  "ledger_entries": [
+    "account_login_complete · codex-e54c5a473f4d419295699233a6fa08d917:13:28подтвержденоtarget codex-e54c5a473f4d419295699233a6fa08d9 · machine OK · refresh canonical refresh completeAccount onboarding completed with reserve-first proof.command packet outcome only · Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.machineOKnextaccounts_refreshrefreshcanonical refresh completedisplayok_refresh_completeclaim scopeaccount_login_completechanged files5 metadata entrieslogin_bridge=completed · provider=codex · phase=complete · session=codex-e54c5a473f4d419295699233a6fa08d9 · device_url=present · device_code=present · auth_scope=sandbox · browser_secret_intake=false",
+    "account_login_complete · -17:13:27выполняетсяtarget - · machine RUNNING · refresh refresh not requiredДействие выполняется.command packet outcome only · Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.machineRUNNINGnextwaitrefreshrefresh not requireddisplayrunningclaim scoperunningchanged files0 metadata entries",
+    "onboard_account · codex-e54c5a473f4d419295699233a6fa08d917:13:26подтвержденоtarget codex-e54c5a473f4d419295699233a6fa08d9 · machine OK · refresh refresh not requiredCodex device login session started.command packet outcome only · Пакет действия сообщил ok. Этот журнал не является отдельным источником runtime truth.machineOKnextwait_for_loginrefreshrefresh not requireddisplayok_refresh_completeclaim scopeaccount_onboardingchanged files3 metadata entrieslogin_bridge=auth_materialized · provider=codex · phase=start · session=codex-e54c5a473f4d419295699233a6fa08d9 · device_url=present · device_code=present · auth_scope=- · browser_secret_intake=false",
+    "onboard_account · -17:13:26выполняетсяtarget - · machine RUNNING · refresh refresh not requiredДействие выполняется.command packet outcome only · Запрос действия выполняется. UI не изменял подтверждённое состояние runtime.machineRUNNINGnextwaitrefreshrefresh not requireddisplayrunningclaim scoperunningchanged files0 metadata entries"
+  ]
+}
