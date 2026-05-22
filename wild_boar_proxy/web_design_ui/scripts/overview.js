@@ -1050,16 +1050,31 @@ function onboardLoginUrlFromPayload(payload) {
   return typeof loginBridge?.login_url === "string" ? loginBridge.login_url : "";
 }
 
+function onboardLoginBridgeFromPayload(payload) {
+  const loginBridge = payload?.result?.data?.login_bridge;
+  return loginBridge && typeof loginBridge === "object" ? loginBridge : {};
+}
+
 function maybeNavigateOnboardLoginWindow(loginWindow, payload) {
   if (!loginWindow) {
     return;
   }
   const loginUrl = onboardLoginUrlFromPayload(payload);
   if (!loginUrl) {
+    const loginBridge = onboardLoginBridgeFromPayload(payload);
+    if (payload?.result?.status === "ok" && loginBridge.provider === "codex") {
+      writeOnboardLoginWindowStatus(
+        loginWindow,
+        "Codex login completed",
+        "The owner-controlled Codex login and reserve onboarding packet completed. Return to Wild Boar Proxy for the refreshed account state.",
+        "pending"
+      );
+      return;
+    }
     writeOnboardLoginWindowStatus(
       loginWindow,
       "Owner login URL missing",
-      "The server did not return an owner login URL. Return to Wild Boar Proxy and inspect the action result.",
+      "The owner login flow did not return a browser URL. Return to Wild Boar Proxy and inspect the action result.",
       "error"
     );
     return;
@@ -2185,7 +2200,7 @@ function populateOnboardModal() {
   );
   text("onboardSourceValue", liveStep ? "owner login bridge" : "server-owned preview");
   text("onboardModeValue", liveStep ? "Live reserve-first" : "Dry-run");
-  text("onboardAfterValue", liveStep ? "login URL -> onboard -> refresh" : "Live accounts не меняются");
+  text("onboardAfterValue", liveStep ? "owner login -> onboard -> refresh" : "Live accounts не меняются");
   text("onboardResultValue", liveStep ? "login packet + onboard packet + refresh proof" : "packet preview only");
   text(
     "onboardTechnicalCommand",
@@ -2196,7 +2211,7 @@ function populateOnboardModal() {
   text(
     "onboardTechnicalPreview",
     liveStep
-      ? "Owner helper выдаёт sandbox login session, использует owner-provided login URL, завершает sandbox auth и затем выполняет reserve-first onboarding."
+      ? "Owner helper запускает engine-owned Codex login/onboard lane в sandbox и затем выполняет reserve-first onboarding."
       : "Preview не импортирует auth и не меняет registry."
   );
   text(

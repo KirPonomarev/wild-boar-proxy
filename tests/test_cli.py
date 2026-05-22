@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -879,6 +880,12 @@ class CliTests(unittest.TestCase):
         ]
         self.assertEqual(len(imported), 1)
         self.assertEqual(imported[0]["pool"], "reserve")
+        materialized_auth = json.loads((self.profile_dir / "auth.json").read_text())
+        self.assertEqual(materialized_auth["account_id"], "acct-web-login")
+        self.assertEqual(
+            stat.S_IMODE((self.profile_dir / "auth.json").stat().st_mode),
+            0o600,
+        )
 
     def test_installer_materialized_owner_helper_rejects_non_sandbox_auth_dir(
         self,

@@ -524,7 +524,19 @@ def cmd_onboard(paths: RuntimePaths, args: argparse.Namespace) -> int:
                 before,
                 non_interactive=bool(args.non_interactive),
             )
-    validate_auth_payload(auth_path)
+    auth_payload = validate_auth_payload(auth_path)
+    if (
+        os.environ.get("WBP_REQUIRE_SANDBOX_AUTH_DIR") == "1"
+        and auth_path.expanduser().resolve(strict=False)
+        != paths.auth_file.expanduser().resolve(strict=False)
+    ):
+        if not auth_dir_is_sandbox_scoped(paths, auth_path.parent):
+            raise SystemExit(
+                "Selected auth artifact is outside sandbox profile/managed paths; refusing materialization."
+            )
+        paths.auth_file.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(paths.auth_file, auth_payload)
+        paths.auth_file.chmod(0o600)
     auth_ref = str(auth_path)
     existing_backend = backend_by_auth_ref(registry, auth_ref)
     if existing_backend is None:

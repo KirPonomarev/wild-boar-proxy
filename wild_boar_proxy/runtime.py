@@ -606,10 +606,10 @@ def write_toml_string_atomic(path: Path, key: str, value: str) -> None:
 
 def read_api_key(path: Path) -> str:
     data = read_json(path)
-    api_key = data.get("OPENAI_API_KEY")
+    api_key = data.get("OPENAI_API_KEY") or data.get("access_token")
     if not api_key:
         raise RuntimeErrorInfo(
-            f"Missing OPENAI_API_KEY in {path}",
+            f"Missing OPENAI_API_KEY/access_token in {path}",
             machine_error_code="MISSING_API_KEY",
             operator_action="user_action",
         )

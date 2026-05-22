@@ -3216,7 +3216,7 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   if (elements.onboardSourceValue.textContent !== "owner login bridge") {
     throw new Error(`modal must expose owner login bridge source: ${elements.onboardSourceValue.textContent}`);
   }
-  if (elements.onboardAfterValue.textContent !== "login URL -> onboard -> refresh") {
+  if (elements.onboardAfterValue.textContent !== "owner login -> onboard -> refresh") {
     throw new Error(`modal must expose login->onboard->refresh chain: ${elements.onboardAfterValue.textContent}`);
   }
   if (elements.onboardResultValue.textContent !== "login packet + onboard packet + refresh proof") {
@@ -3228,8 +3228,8 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   if (!elements.onboardTechnicalCommand.textContent.includes("owner login bridge")) {
     throw new Error(`modal must describe owner login bridge: ${elements.onboardTechnicalCommand.textContent}`);
   }
-  if (!elements.onboardTechnicalPreview.textContent.includes("owner-provided login URL")) {
-    throw new Error(`modal must describe owner-provided login URL: ${elements.onboardTechnicalPreview.textContent}`);
+  if (!elements.onboardTechnicalPreview.textContent.includes("engine-owned Codex login/onboard lane")) {
+    throw new Error(`modal must describe engine-owned Codex login lane: ${elements.onboardTechnicalPreview.textContent}`);
   }
   if (elements.runOnboardAction.textContent !== "Подключить в резерв") {
     throw new Error(`modal action must switch to live label: ${elements.runOnboardAction.textContent}`);
@@ -3566,6 +3566,118 @@ vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
   }
   if (opened.closed) {
     throw new Error("owner login window should stay visible with a diagnostic instead of closing blank");
+  }
+})().catch((error) => {
+  console.error(error.stack || error.message);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_onboard_account_codex_owner_handoff_without_url_shows_completion(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const opened = { href: "", closed: false };
+const writes = [];
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} },
+    open() {
+      return {
+        document: {
+          open() {},
+          write(value) { writes.push(value); },
+          close() {}
+        },
+        location: {
+          set href(value) { opened.href = value; },
+          get href() { return opened.href; }
+        },
+        close() { opened.closed = true; }
+      };
+    }
+  },
+  URL,
+  URLSearchParams,
+  fetch(url) {
+    if (url === "api/action") {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          status: "ok",
+          ui_action: "onboard_account",
+          action_role: "account_onboarding",
+          post_action_refresh_required: false,
+          result: {
+            status: "ok",
+            machine_error_code: "OK",
+            human_message: "done",
+            next_action: "none",
+            changed_files: [],
+            data: {
+              login_bridge: {
+                provider: "codex",
+                status: "completed",
+                login_url: "",
+                login_url_present: false,
+                login_url_kind: "engine_owned_browser_or_device_handoff"
+              }
+            },
+            onboarding: {
+              final_outcome: "reserve_only_success",
+              selected_backend_id: "acct-new",
+              reserve_first_proven: true,
+              active_routing_changed: false,
+              validate_outcome: "ok",
+              sync_outcome: "ok",
+              status_observed: { command_status: "ok" },
+              ui_state: "success",
+              operator_action_required: false,
+              selection_status: "selected_unique_backend",
+              pool_after_onboarding: "reserve"
+            }
+          }
+        })
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+(async () => {
+  await sandbox.runUiAction("onboard_account");
+  const html = writes.join("\n");
+  if (!html.includes("Owner login is starting")) {
+    throw new Error("owner login window did not show initial waiting state");
+  }
+  if (!html.includes("Codex login completed")) {
+    throw new Error(`owner login window did not show completed Codex handoff: ${html}`);
+  }
+  if (opened.href) {
+    throw new Error(`Codex owner handoff without URL should not navigate to a fake URL: ${opened.href}`);
+  }
+  if (opened.closed) {
+    throw new Error("owner login window should stay visible with completion status");
   }
 })().catch((error) => {
   console.error(error.stack || error.message);
