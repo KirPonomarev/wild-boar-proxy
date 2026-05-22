@@ -19,6 +19,7 @@ class CredentialProviderSpec:
     provider: str
     credential_ref: str
     owner_env_candidates: tuple[str, ...]
+    provider_dashboard_url: str
 
 
 _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
@@ -30,6 +31,7 @@ _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
             "WBP_OPENROUTER_API_KEY",
             "WBP_PROVIDER_OPENROUTER_API_KEY",
         ),
+        provider_dashboard_url="https://openrouter.ai/settings/keys",
     )
 }
 
@@ -58,6 +60,7 @@ def admit_owner_credential(
     secrets_map[spec.credential_ref] = secret_value
     _write_secrets_file(paths.secrets_file, secrets_map)
     return _credential_result(
+        spec=spec,
         status="admitted",
         provider=spec.provider,
         source=normalized_source,
@@ -73,6 +76,7 @@ def credential_status(paths: ExternalModelsPaths, *, provider: str) -> dict[str,
     secrets_map = _parse_secrets_file(paths.secrets_file)
     present = bool(secrets_map.get(spec.credential_ref, "").strip())
     return _credential_result(
+        spec=spec,
         status="present" if present else "missing",
         provider=spec.provider,
         source="sandbox-managed",
@@ -81,8 +85,21 @@ def credential_status(paths: ExternalModelsPaths, *, provider: str) -> dict[str,
     )
 
 
+def missing_credential_result(*, provider: str, source: str) -> dict[str, Any]:
+    spec = _provider_spec(provider)
+    return _credential_result(
+        spec=spec,
+        status="missing",
+        provider=spec.provider,
+        source=source,
+        credential_ref=spec.credential_ref,
+        credential_present=False,
+    )
+
+
 def _credential_result(
     *,
+    spec: CredentialProviderSpec,
     status: str,
     provider: str,
     source: str,
@@ -95,6 +112,9 @@ def _credential_result(
         "source": source,
         "credential_ref": credential_ref,
         "credential_present": credential_present,
+        "supported_sources": ["owner-env"],
+        "expected_refs": list(spec.owner_env_candidates),
+        "provider_dashboard_url": spec.provider_dashboard_url,
         "secret_value_exposed": False,
         "browser_secret_intake": False,
         "browser_path_intake": False,

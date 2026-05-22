@@ -2445,6 +2445,7 @@ def _api_route_connect_result(
         or credential_admit.get("credential_present") is True
     )
     credential_admitted = credential_admit.get("status") == "admitted"
+    setup_source = credential_admit if credential_admit else credential_status
     return {
         "status": status,
         "machine_error_code": machine_error_code,
@@ -2462,6 +2463,19 @@ def _api_route_connect_result(
                 credential_status.get("credential_ref")
                 or credential_admit.get("credential_ref")
                 or ""
+            ),
+            "credential_supported_sources": (
+                setup_source.get("supported_sources")
+                if isinstance(setup_source.get("supported_sources"), list)
+                else []
+            ),
+            "credential_expected_refs": (
+                setup_source.get("expected_refs")
+                if isinstance(setup_source.get("expected_refs"), list)
+                else []
+            ),
+            "credential_provider_dashboard_url": str(
+                setup_source.get("provider_dashboard_url") or ""
             ),
             "credential_present": credential_present,
             "credential_admitted": credential_admitted,
@@ -2515,7 +2529,13 @@ def _run_api_route_credential_bridge(
         allow_disabled=True,
     )
     if credential_admit_result["status"] != "ok":
-        return credential_status_result, credential_admit_result, "credential_admit_failed", credential_admit_result
+        credential_phase = (
+            "credential_missing"
+            if credential_admit_result.get("machine_error_code")
+            == "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+            else "credential_admit_failed"
+        )
+        return credential_status_result, credential_admit_result, credential_phase, credential_admit_result
 
     admit_credential = _api_route_credential_result_status(credential_admit_result)
     if admit_credential.get("credential_present") is not True:

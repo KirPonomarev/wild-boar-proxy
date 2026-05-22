@@ -7,7 +7,11 @@ from typing import Any
 from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 from . import contracts, errors, routes
-from .credentials import admit_owner_credential, credential_status
+from .credentials import (
+    admit_owner_credential,
+    credential_status,
+    missing_credential_result,
+)
 from .lifecycle import start_synthetic_adapter, stop_synthetic_adapter, synthetic_status_payload
 from .paths import ExternalModelsPaths
 from .state import capture_local_evidence, ensure_secrets_permissions
@@ -221,11 +225,29 @@ def _run_routes_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]
 def _run_credentials_command(paths: ExternalModelsPaths, args: Any) -> dict[str, Any]:
     action = args.credentials_command
     if action == "admit":
-        credential_result, changed_files = admit_owner_credential(
-            paths,
-            provider=args.provider,
-            source=args.source,
-        )
+        try:
+            credential_result, changed_files = admit_owner_credential(
+                paths,
+                provider=args.provider,
+                source=args.source,
+            )
+        except RuntimeErrorInfo as exc:
+            if exc.machine_error_code != errors.EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING:
+                raise
+            credential_result = missing_credential_result(
+                provider=args.provider,
+                source=args.source,
+            )
+            return contracts.build_external_models_payload(
+                ok=False,
+                human_message=exc.message,
+                machine_error_code=exc.machine_error_code,
+                changed_files=[],
+                next_action="owner_action",
+                severity=exc.severity,
+                exit_code=exc.exit_code,
+                data={"credential_result": credential_result},
+            )
         return contracts.build_external_models_payload(
             ok=True,
             human_message="External-models credential admitted from owner source.",

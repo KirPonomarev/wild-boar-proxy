@@ -966,6 +966,11 @@ if (!node("accountDetailDangerActions").children[0].disabled) {
         self.assertIn("Подключить API", api_screen)
         self.assertIn('data-ui-action="api_route_connect"', api_screen)
         self.assertIn('maybeConfirmAndRun("api_route_connect")', js)
+        self.assertIn("credential_expected_refs", js)
+        self.assertIn("provider_dashboard", js)
+        self.assertIn("browser_api_key_intake", js)
+        self.assertNotIn('name="api_key"', html)
+        self.assertNotIn('placeholder="API key"', html)
         self.assertIn("Разрешены", api_screen)
         self.assertIn("<th>Состояние</th>", api_screen)
         self.assertIn("<th>Проверка</th>", api_screen)
@@ -3304,6 +3309,79 @@ if (details.includes("/tmp/") || details.includes("token") || details.includes("
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_action_support_details_surface_api_credential_missing_handoff(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const sandbox = {
+  console,
+  document: {
+    getElementById() { return { textContent: "", lastElementChild: { textContent: "" }, classList: { toggle() {} } }; },
+    createElement() { return {}; },
+    addEventListener() {},
+    querySelectorAll() { return []; },
+    querySelector() { return { dataset: { screen: "quick-start", source: "live" } }; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/?source=live&screen=quick-start" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+
+const details = sandbox.actionSupportDetails({
+  ui_action: "api_route_connect",
+  result: {
+    data: {
+      credential_phase: "credential_missing",
+      credential_present: false,
+      credential_admitted: false,
+      credential_ref: "OPENROUTER_API_KEY",
+      credential_supported_sources: ["owner-env"],
+      credential_expected_refs: [
+        "OPENROUTER_API_KEY",
+        "WBP_OPENROUTER_API_KEY",
+        "WBP_PROVIDER_OPENROUTER_API_KEY"
+      ],
+      credential_provider_dashboard_url: "https://openrouter.ai/settings/keys",
+      browser_api_key_intake: false,
+      secret_value_exposed: false
+    }
+  }
+});
+for (const expected of [
+  "credential_phase=credential_missing",
+  "credential_present=false",
+  "credential_admitted=false",
+  "credential_ref=OPENROUTER_API_KEY",
+  "supported_sources=owner-env",
+  "expected_refs=OPENROUTER_API_KEY,WBP_OPENROUTER_API_KEY,WBP_PROVIDER_OPENROUTER_API_KEY",
+  "provider_dashboard=https://openrouter.ai/settings/keys",
+  "browser_api_key_intake=false",
+  "secret_exposed=false"
+]) {
+  if (!details.includes(expected)) {
+    throw new Error(`missing ${expected}: ${details}`);
+  }
+}
+if (details.includes("sk-") || details.includes("secret=") || details.includes("token=")) {
+  throw new Error(`support details leaked sensitive material: ${details}`);
+}
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_onboard_account_opens_owner_login_url_in_browser_window(self) -> None:
         script = r"""
 const fs = require("fs");
@@ -3532,6 +3610,16 @@ const mismatch = {
 };
 if (sandbox.canonicalActionRefreshState(payload, mismatch) !== "mismatch") {
   throw new Error("missing route after api route check must yield refresh mismatch");
+}
+const failedConnectPayload = {
+  ui_action: "api_route_connect",
+  result: {
+    status: "command_error",
+    machine_error_code: "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+  }
+};
+if (sandbox.canonicalActionRefreshState(failedConnectPayload, mismatch) !== "complete") {
+  throw new Error("failed api route connect must not create a false refresh mismatch");
 }
 """
         result = subprocess.run(

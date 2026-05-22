@@ -110,6 +110,13 @@ def credential_status_packet(*, present: bool = True) -> dict[str, object]:
                 "source": "sandbox-managed",
                 "credential_ref": "OPENROUTER_API_KEY",
                 "credential_present": present,
+                "supported_sources": ["owner-env"],
+                "expected_refs": [
+                    "OPENROUTER_API_KEY",
+                    "WBP_OPENROUTER_API_KEY",
+                    "WBP_PROVIDER_OPENROUTER_API_KEY",
+                ],
+                "provider_dashboard_url": "https://openrouter.ai/settings/keys",
                 "secret_value_exposed": False,
                 "browser_secret_intake": False,
                 "browser_path_intake": False,
@@ -131,6 +138,13 @@ def credential_admit_packet() -> dict[str, object]:
                 "source": "owner-env",
                 "credential_ref": "OPENROUTER_API_KEY",
                 "credential_present": True,
+                "supported_sources": ["owner-env"],
+                "expected_refs": [
+                    "OPENROUTER_API_KEY",
+                    "WBP_OPENROUTER_API_KEY",
+                    "WBP_PROVIDER_OPENROUTER_API_KEY",
+                ],
+                "provider_dashboard_url": "https://openrouter.ai/settings/keys",
                 "secret_value_exposed": False,
                 "browser_secret_intake": False,
                 "browser_path_intake": False,
@@ -1679,6 +1693,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
                     "source": "owner-env",
                     "credential_ref": "OPENROUTER_API_KEY",
                     "credential_present": False,
+                    "supported_sources": ["owner-env"],
+                    "expected_refs": [
+                        "OPENROUTER_API_KEY",
+                        "WBP_OPENROUTER_API_KEY",
+                        "WBP_PROVIDER_OPENROUTER_API_KEY",
+                    ],
+                    "provider_dashboard_url": "https://openrouter.ai/settings/keys",
                     "secret_value_exposed": False,
                     "browser_secret_intake": False,
                     "browser_path_intake": False,
@@ -1700,11 +1721,27 @@ class WebDesignLiveServerTests(unittest.TestCase):
             result["result"]["machine_error_code"],
             "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
         )
-        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_admit_failed")
+        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_missing")
         self.assertEqual(result["result"]["data"]["add_status"], "not_run")
         self.assertEqual(result["result"]["data"]["validate_status"], "not_run")
         self.assertFalse(result["result"]["data"]["credential_present"])
         self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+        self.assertEqual(
+            result["result"]["data"]["credential_expected_refs"],
+            [
+                "OPENROUTER_API_KEY",
+                "WBP_OPENROUTER_API_KEY",
+                "WBP_PROVIDER_OPENROUTER_API_KEY",
+            ],
+        )
+        self.assertEqual(
+            result["result"]["data"]["credential_supported_sources"],
+            ["owner-env"],
+        )
+        self.assertEqual(
+            result["result"]["data"]["credential_provider_dashboard_url"],
+            "https://openrouter.ai/settings/keys",
+        )
         self.assertNotIn(
             (
                 "external-models",

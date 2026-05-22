@@ -1017,6 +1017,10 @@ function apiRouteRemoveRefreshState(payload, refreshed) {
   const snapshot = actionRefreshSurfaceSnapshot(payload, refreshed);
   const actionRouteId = apiRouteIdFromActionPayload(payload);
   if (payload.ui_action === "api_route_connect") {
+    const result = payload.result || {};
+    if (result.status !== "ok") {
+      return "complete";
+    }
     const route = apiRouteByIdFromSnapshot(snapshot, actionRouteId);
     return route && route.enabled === true ? "complete" : "mismatch";
   }
@@ -2757,11 +2761,20 @@ function actionSupportDetails(payload) {
     return `локальный artifact · ${artifactReference(data.evidence_path)}`;
   }
   if (payload.ui_action === "api_route_connect") {
+    const expectedRefs = Array.isArray(data.credential_expected_refs)
+      ? data.credential_expected_refs.join(",")
+      : "";
+    const supportedSources = Array.isArray(data.credential_supported_sources)
+      ? data.credential_supported_sources.join(",")
+      : "";
     return [
       `credential_phase=${data.credential_phase || "unknown"}`,
       `credential_present=${data.credential_present === true ? "true" : "false"}`,
       `credential_admitted=${data.credential_admitted === true ? "true" : "false"}`,
       `credential_ref=${data.credential_ref || "-"}`,
+      `supported_sources=${supportedSources || "-"}`,
+      `expected_refs=${expectedRefs || "-"}`,
+      `provider_dashboard=${data.credential_provider_dashboard_url || "-"}`,
       `browser_api_key_intake=${data.browser_api_key_intake === false ? "false" : "unknown"}`,
       `secret_exposed=${data.secret_value_exposed === false ? "false" : "unknown"}`
     ].join(" · ");

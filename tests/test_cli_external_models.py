@@ -395,6 +395,29 @@ class ExternalModelsCliTests(unittest.TestCase):
             payload["machine_error_code"],
             "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
         )
+        self.assertEqual(payload["next_action"], "owner_action")
+        credential_result = payload["data"]["credential_result"]
+        self.assertEqual(credential_result["status"], "missing")
+        self.assertEqual(credential_result["provider"], "openrouter")
+        self.assertEqual(credential_result["source"], "owner-env")
+        self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
+        self.assertFalse(credential_result["credential_present"])
+        self.assertEqual(credential_result["supported_sources"], ["owner-env"])
+        self.assertEqual(
+            credential_result["expected_refs"],
+            [
+                "OPENROUTER_API_KEY",
+                "WBP_OPENROUTER_API_KEY",
+                "WBP_PROVIDER_OPENROUTER_API_KEY",
+            ],
+        )
+        self.assertEqual(
+            credential_result["provider_dashboard_url"],
+            "https://openrouter.ai/settings/keys",
+        )
+        self.assertFalse(credential_result["secret_value_exposed"])
+        self.assertFalse(credential_result["browser_secret_intake"])
+        self.assertFalse(credential_result["browser_path_intake"])
 
     def test_credentials_status_reports_missing_without_secret_exposure(self) -> None:
         (self.external_dir / "secrets.env").write_text("", encoding="utf-8")
@@ -413,6 +436,19 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(credential_result["status"], "missing")
         self.assertFalse(credential_result["credential_present"])
         self.assertEqual(credential_result["credential_ref"], "OPENROUTER_API_KEY")
+        self.assertEqual(credential_result["supported_sources"], ["owner-env"])
+        self.assertEqual(
+            credential_result["expected_refs"],
+            [
+                "OPENROUTER_API_KEY",
+                "WBP_OPENROUTER_API_KEY",
+                "WBP_PROVIDER_OPENROUTER_API_KEY",
+            ],
+        )
+        self.assertEqual(
+            credential_result["provider_dashboard_url"],
+            "https://openrouter.ai/settings/keys",
+        )
         self.assertFalse(credential_result["secret_value_exposed"])
 
     def test_credentials_admit_blocks_unproven_sandbox_target(self) -> None:
