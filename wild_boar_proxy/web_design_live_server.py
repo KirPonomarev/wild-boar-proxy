@@ -14,7 +14,7 @@ import mimetypes
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
@@ -137,9 +137,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": True,
         "post_action_refresh_required": True,
-        "action_claim_scope": "только запрос допуска аккаунта; подтверждением остаются пакет команды и обновлённый список аккаунтов",
+        "action_claim_scope": "owner login bridge -> reserve-first onboarding -> accounts refresh; подтверждением остаются owner packets и обновлённый список аккаунтов",
         "display_name": "Подключить аккаунт",
-        "human_meaning": "Запросить подключение аккаунта сначала в резерв без browser paths или credentials, затем обновить подтверждённый список аккаунтов.",
+        "human_meaning": "Запустить owner login bridge без browser paths или credentials, затем выполнить reserve-first onboarding и обновить подтверждённый список аккаунтов.",
     },
     "validate_account": {
         "adapter_command_id": "accounts_validate",
@@ -1272,13 +1272,7 @@ def run_ui_action(
     if ui_action == "onboard_account_dry_run":
         return _run_account_connect_dry_run_action()
     if ui_action == "onboard_account":
-        return _ui_action_response_from_result(
-            ui_action,
-            _action_result(
-                execute_command(runner, "accounts_onboard"),
-                ui_action=ui_action,
-            ),
-        )
+        return _run_account_login_bridge_action(runner)
     if ui_action == "quick_start_check_all":
         return _run_quick_start_check_all_action(runner)
     if ui_action == "launch_client_dispatch":
@@ -1423,6 +1417,9 @@ def build_handler(
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
+            if parsed.path == "/owner-login/sandbox":
+                self._send_owner_login_sandbox_page(parsed.query)
+                return
             if parsed.path == "/api/live-readonly":
                 self._send_json(build_live_readonly_snapshot(readonly_runner))
                 return
@@ -1498,6 +1495,47 @@ def build_handler(
             body = target.read_bytes()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_owner_login_sandbox_page(self, raw_query: str) -> None:
+            query = parse_qs(raw_query)
+            provider = str((query.get("provider") or ["sandbox"])[0] or "sandbox")
+            session = str((query.get("session") or [""])[0] or "")
+            state = str((query.get("state") or [""])[0] or "")
+            nonce = str((query.get("nonce") or [""])[0] or "")
+            lines = [
+                "<!doctype html>",
+                '<html lang="ru"><head><meta charset="utf-8">',
+                '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                "<title>Sandbox owner login</title>",
+                "<style>",
+                "body{font-family:ui-monospace,monospace;background:#f7f3eb;color:#241f1a;margin:0;padding:32px;}",
+                ".panel{max-width:720px;margin:0 auto;background:#fffdf8;border:1px solid #dbcdb8;border-radius:20px;padding:24px 28px;box-shadow:0 18px 50px rgba(58,42,18,.08);}",
+                "h1{font-size:32px;line-height:1.1;margin:0 0 16px;}",
+                "p{font-size:18px;line-height:1.5;margin:0 0 16px;}",
+                "dl{display:grid;grid-template-columns:max-content 1fr;gap:12px 18px;margin:20px 0 0;}",
+                "dt{opacity:.72;text-transform:uppercase;font-size:12px;letter-spacing:.08em;}",
+                "dd{margin:0;word-break:break-word;}",
+                ".chip{display:inline-block;padding:6px 12px;border-radius:999px;background:#e8f4ea;color:#235b33;font-weight:700;font-size:12px;text-transform:uppercase;}",
+                "</style></head><body>",
+                '<main class="panel">',
+                '<span class="chip">owner login url</span>',
+                "<h1>Sandbox owner login surface</h1>",
+                "<p>Browser открыл owner-provided sandbox login URL. Auth completion остаётся owner-owned, а главное подтверждение подключения приходит обратно в основном web UI через onboarding packet и refresh.</p>",
+                "<dl>",
+                f"<dt>provider</dt><dd>{provider}</dd>",
+                f"<dt>session</dt><dd>{session or '-'}</dd>",
+                f"<dt>state</dt><dd>{state or '-'}</dd>",
+                f"<dt>nonce</dt><dd>{nonce or '-'}</dd>",
+                "</dl>",
+                "</main></body></html>",
+            ]
+            body = "".join(lines).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -2136,6 +2174,7 @@ def _login_bridge_public_summary(
         complete_result.get("packet") if isinstance(complete_result.get("packet"), dict) else {}
     )
     login_session_id = str(start_packet.get("login_session_id") or "")
+    login_url = str(start_packet.get("login_url") or "")
     return {
         "status": (
             "completed"
@@ -2146,6 +2185,9 @@ def _login_bridge_public_summary(
         ),
         "provider": "sandbox",
         "login_session_id_present": bool(login_session_id),
+        "login_url": login_url,
+        "login_url_present": bool(login_url),
+        "login_url_kind": "owner_provided" if login_url else "missing",
         "start_status": str(start_result.get("status") or ""),
         "start_machine_error_code": str(start_result.get("machine_error_code") or ""),
         "complete_status": str(complete_result.get("status") or ""),
@@ -2207,11 +2249,12 @@ def _run_account_login_bridge_action(runner: CommandRunner) -> dict[str, Any]:
     start_packet = start_result.get("packet") if isinstance(start_result.get("packet"), dict) else {}
     login_session_id = str(start_packet.get("login_session_id") or "")
     state = str(start_packet.get("state") or "")
-    if not login_session_id or not state:
+    login_url = str(start_packet.get("login_url") or "")
+    if not login_session_id or not state or not login_url:
         failed_result = {
             "status": "command_error",
             "machine_error_code": "UI_LOGIN_START_PACKET_INVALID",
-            "human_message": "Owner login start packet did not include session and state.",
+            "human_message": "Owner login start packet did not include session, state, and login_url.",
             "next_action": "retry",
             "changed_files": [],
             "packet": start_packet,

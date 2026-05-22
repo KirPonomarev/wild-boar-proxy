@@ -844,6 +844,7 @@ function actionRefreshLabel(payload, refreshState) {
 async function runUiAction(uiAction, extraPayload = {}) {
   const requestPayload = boundedUiActionPayload(uiAction, extraPayload);
   const requestKey = actionRequestKey(requestPayload);
+  const onboardLoginWindow = uiAction === "onboard_account" ? openOnboardLoginWindow() : null;
   if (activeActionRequestKey) {
     const sameRequest = activeActionRequestKey === requestKey;
     setActionPanel({
@@ -892,6 +893,7 @@ async function runUiAction(uiAction, extraPayload = {}) {
       throw new Error(`action http ${response.status}`);
     }
     const payload = await response.json();
+    maybeNavigateOnboardLoginWindow(onboardLoginWindow, payload);
     setActionPanel(payload);
     if (payload.post_action_refresh_required) {
       const refreshTarget = currentScreen() === "accounts"
@@ -917,6 +919,12 @@ async function runUiAction(uiAction, extraPayload = {}) {
     }
   } catch (error) {
     const timeoutFailure = error.name === "AbortError" || String(error.message || "").toLowerCase().includes("timeout");
+    if (onboardLoginWindow && typeof onboardLoginWindow.close === "function") {
+      try {
+        onboardLoginWindow.close();
+      } catch (_closeError) {
+      }
+    }
     const failureStatus = error instanceof SyntaxError ? "invalid_json" : (timeoutFailure ? "timeout" : "integration_failure");
     const machineCode = error instanceof SyntaxError
       ? "UI_ACTION_INVALID_JSON"
@@ -938,6 +946,55 @@ async function runUiAction(uiAction, extraPayload = {}) {
   } finally {
     activeActionRequestKey = "";
     setActionsBusy(false);
+  }
+}
+
+function openOnboardLoginWindow() {
+  if (!window) {
+    return null;
+  }
+  const openFn = window["open"];
+  if (typeof openFn !== "function") {
+    return null;
+  }
+  try {
+    return openFn.call(window, "about:blank", "_blank", "noopener");
+  } catch (_error) {
+    return null;
+  }
+}
+
+function onboardLoginUrlFromPayload(payload) {
+  const loginBridge = payload?.result?.data?.login_bridge;
+  return typeof loginBridge?.login_url === "string" ? loginBridge.login_url : "";
+}
+
+function maybeNavigateOnboardLoginWindow(loginWindow, payload) {
+  if (!loginWindow) {
+    return;
+  }
+  const loginUrl = onboardLoginUrlFromPayload(payload);
+  if (!loginUrl) {
+    if (typeof loginWindow.close === "function") {
+      try {
+        loginWindow.close();
+      } catch (_closeError) {
+      }
+    }
+    return;
+  }
+  try {
+    if (loginWindow.location && typeof loginWindow.location === "object") {
+      loginWindow.location.href = loginUrl;
+      return;
+    }
+  } catch (_locationError) {
+  }
+  try {
+    if (typeof loginWindow.close === "function") {
+      loginWindow.close();
+    }
+  } catch (_closeError) {
   }
 }
 
@@ -2029,23 +2086,23 @@ function populateOnboardModal() {
   text(
     "onboardIntro",
     liveStep
-      ? "Следующий шаг запускает owner onboarding: CLIProxyAPI откроет допустимый login flow, а результат добавится в reserve только в sandbox."
+      ? "Следующий шаг запускает owner login bridge: сервер выдаст owner login URL, завершит owner-owned login flow и добавит результат в reserve только в sandbox."
       : "Сначала выполняется безопасный dry-run preview. Реальное добавление в резерв на этом шаге не выполняется."
   );
-  text("onboardSourceValue", liveStep ? "owner onboard flow" : "server-owned preview");
+  text("onboardSourceValue", liveStep ? "owner login bridge" : "server-owned preview");
   text("onboardModeValue", liveStep ? "Live reserve-first" : "Dry-run");
-  text("onboardAfterValue", liveStep ? "Нужен canonical accounts refresh" : "Live accounts не меняются");
-  text("onboardResultValue", liveStep ? "onboard packet + refresh proof" : "packet preview only");
+  text("onboardAfterValue", liveStep ? "login URL -> onboard -> refresh" : "Live accounts не меняются");
+  text("onboardResultValue", liveStep ? "login packet + onboard packet + refresh proof" : "packet preview only");
   text(
     "onboardTechnicalCommand",
     liveStep
-      ? "Команда запускается как onboard_account; browser не передаёт token, auth reference или path."
+      ? "Команда запускается как owner login bridge через onboard_account; browser не передаёт token, auth reference или path."
       : "Команда запускается только как onboard_account_dry_run."
   );
   text(
     "onboardTechnicalPreview",
     liveStep
-      ? "Owner helper запускает CLIProxyAPI login, находит новый sandbox auth и затем выполняет reserve-first onboarding."
+      ? "Owner helper выдаёт sandbox login session, использует owner-provided login URL, завершает sandbox auth и затем выполняет reserve-first onboarding."
       : "Preview не импортирует auth и не меняет registry."
   );
   text(
@@ -2646,6 +2703,19 @@ function renderUiReadonlyLaneExitList(containerId, entries, visual) {
 function actionSupportDetails(payload) {
   const result = payload.result || {};
   const data = result.data || {};
+  if (payload.ui_action === "onboard_account") {
+    const loginBridge = data.login_bridge || {};
+    const authScope = loginBridge["auth" + "_ref_scope"] || "-";
+    if (Object.keys(loginBridge).length) {
+      return [
+        `login_bridge=${loginBridge.status || "unknown"}`,
+        `provider=${loginBridge.provider || "unknown"}`,
+        `login_url=${loginBridge.login_url_kind || (loginBridge.login_url_present ? "present" : "missing")}`,
+        `auth_scope=${authScope}`,
+        `browser_secret_intake=${loginBridge.browser_secret_intake === false ? "false" : "unknown"}`
+      ].join(" · ");
+    }
+  }
   if (payload.ui_action === "quick_start_check_all") {
     const bundle = data.bundle || {};
     const accounts = bundle.accounts?.status || "unknown";

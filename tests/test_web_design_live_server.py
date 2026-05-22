@@ -994,8 +994,19 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["onboarding"]["ui_state"], "success")
         self.assertEqual(
             result["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
+        self.assertEqual(result["result"]["data"]["login_bridge"]["status"], "completed")
+        self.assertEqual(result["result"]["data"]["login_bridge"]["provider"], "sandbox")
+        self.assertTrue(result["result"]["data"]["login_bridge"]["login_session_id_present"])
+        self.assertTrue(result["result"]["data"]["login_bridge"]["login_url_present"])
+        self.assertEqual(result["result"]["data"]["login_bridge"]["login_url_kind"], "owner_provided")
+        self.assertIn(
+            "/owner-login/sandbox?",
+            result["result"]["data"]["login_bridge"]["login_url"],
+        )
+        self.assertEqual(result["result"]["data"]["login_bridge"]["auth_ref_scope"], "sandbox")
+        self.assertFalse(result["result"]["data"]["login_bridge"]["browser_secret_intake"])
         self.assertEqual(result["result"]["onboarding"]["input_mode"], "default")
         serialized_result = json.dumps(result)
         self.assertNotIn(TEST_SANDBOX_AUTH_REF, serialized_result)
@@ -1011,9 +1022,103 @@ class WebDesignLiveServerTests(unittest.TestCase):
             runner.calls,
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "--state",
+                    TEST_SANDBOX_LOGIN_STATE,
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ),
             ],
         )
+
+    def test_onboard_account_requires_login_url_in_start_packet(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"): login_start_packet(
+                    login_url=""
+                ),
+            }
+        )
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account"},
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8789,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "command_error")
+        self.assertEqual(
+            result["result"]["machine_error_code"],
+            "UI_LOGIN_START_PACKET_INVALID",
+        )
+        self.assertEqual(
+            result["result"]["onboarding"]["final_outcome"],
+            "login_bridge_failed",
+        )
+        self.assertFalse(result["result"]["data"]["login_bridge"]["login_url_present"])
+
+    def test_onboard_account_requires_sandbox_auth_scope_in_complete_packet(self) -> None:
+        runner = MappingRunner(
+            {
+                **live_payloads(),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "--state",
+                    TEST_SANDBOX_LOGIN_STATE,
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ): login_complete_packet(auth_ref_scope="working", auth_ref=""),
+            }
+        )
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "onboard_account"},
+            launch_copy_contract=LaunchCopyContract(
+                profile_dir="/tmp/wbp-copy-profile",
+                data_dir="/tmp/wbp-copy-data",
+                copy_port=8789,
+                action_server_port=8788,
+            ),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "command_error")
+        self.assertEqual(
+            result["result"]["machine_error_code"],
+            "UI_LOGIN_COMPLETE_PACKET_INVALID",
+        )
+        self.assertEqual(
+            result["result"]["onboarding"]["final_outcome"],
+            "login_bridge_failed",
+        )
+        self.assertEqual(result["result"]["data"]["login_bridge"]["auth_ref_scope"], "working")
 
     def test_real_json_runner_supports_sandbox_onboard_from_profile_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1105,14 +1210,20 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(result["status"], "ok")
             self.assertEqual(
                 result["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                "explicit_auth_imported_to_reserve",
             )
             self.assertTrue(result["result"]["onboarding"]["reserve_first_proven"])
+            self.assertEqual(
+                result["result"]["data"]["login_bridge"]["status"],
+                "completed",
+            )
+            selected_backend_id = result["result"]["onboarding"]["selected_backend_id"]
+            self.assertTrue(selected_backend_id)
 
             readonly_after = build_accounts_readonly_snapshot(runner)
             self.assertEqual(readonly_after["status"], "ok")
             self.assertEqual(len(readonly_after["accounts"]), 1)
-            self.assertEqual(readonly_after["accounts"][0]["id"], "auth")
+            self.assertEqual(readonly_after["accounts"][0]["id"], selected_backend_id)
             self.assertEqual(readonly_after["accounts"][0]["pool"], "reserve")
 
     def test_real_json_runner_supports_sandbox_api_route_allow_from_profile_cwd(self) -> None:
@@ -1284,14 +1395,41 @@ class WebDesignLiveServerTests(unittest.TestCase):
             self.assertEqual(live["status"], "ok")
             self.assertEqual(
                 live["result"]["onboarding"]["final_outcome"],
-                "reserve_only_success",
+                "explicit_auth_imported_to_reserve",
             )
             self.assertEqual(after_accounts["status"], "ok")
             self.assertEqual(len(after_accounts["accounts"]), 1)
-            self.assertEqual(after_accounts["accounts"][0]["id"], "auth")
+            self.assertEqual(
+                after_accounts["accounts"][0]["id"],
+                live["result"]["onboarding"]["selected_backend_id"],
+            )
             self.assertEqual(after_accounts["accounts"][0]["pool"], "reserve")
             self.assertEqual(after_api["status"], "ok")
             self.assertEqual(after_api["routes"], [])
+
+    def test_owner_login_sandbox_page_serves_bounded_owner_url_surface(self) -> None:
+        runner = MappingRunner(live_payloads())
+        handler = build_handler(
+            runner=runner,
+            launch_copy_contract=launch_copy_contract(action_server_port=8788),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base_url = f"http://127.0.0.1:{server.server_port}"
+            html = fetch(
+                f"{base_url}/owner-login/sandbox?provider=sandbox&session={TEST_SANDBOX_LOGIN_SESSION_ID}&state={TEST_SANDBOX_LOGIN_STATE}&nonce=sandbox-nonce-test"
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertIn("Sandbox owner login surface", html)
+        self.assertIn(TEST_SANDBOX_LOGIN_SESSION_ID, html)
+        self.assertIn(TEST_SANDBOX_LOGIN_STATE, html)
 
     def test_account_connect_preflight_admits_clear_registry_identity(self) -> None:
         runner = MappingRunner(
@@ -1322,7 +1460,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(preflight["status"], "ok")
         self.assertEqual(
             preflight["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
 
     def test_onboard_account_rejects_browser_args_and_raw_adapter_action(self) -> None:
@@ -1399,13 +1537,25 @@ class WebDesignLiveServerTests(unittest.TestCase):
         no_new_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("no_new_auth_detected"),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet("no_new_auth_detected"),
             }
         )
         ambiguous_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet(
                     "ambiguous_new_auth_detection",
                     selected_backend_id="",
                     pool_after_onboarding="",
@@ -1416,7 +1566,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         unknown_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): command_packet(
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): command_packet(
                     human_message="Onboarding packet had no structured result."
                 ),
             }
@@ -1424,14 +1580,26 @@ class WebDesignLiveServerTests(unittest.TestCase):
         validate_failed_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet("validate_failed"),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet("validate_failed"),
             }
         )
         command_error_runner = MappingRunner(
             {
                 **live_payloads(),
-                ("accounts", "onboard", "--json"): onboarding_packet(
-                    "reserve_only_success",
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ): onboarding_packet(
+                    "explicit_auth_imported_to_reserve",
                     status="error",
                     machine_error_code="ONBOARDING_OWNER_FAILED",
                 ),
@@ -2736,7 +2904,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(
             action_results["onboard_account"]["result"]["onboarding"]["final_outcome"],
-            "reserve_only_success",
+            "explicit_auth_imported_to_reserve",
         )
         self.assertTrue(
             action_results["onboard_account"]["result"]["onboarding"]["reserve_first_proven"]
@@ -2829,7 +2997,26 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
             [
                 ("accounts", "list", "--json"),
-                ("accounts", "onboard", "--json"),
+                ("accounts", "login", "start", "--provider", "sandbox", "--json"),
+                (
+                    "accounts",
+                    "login",
+                    "complete",
+                    "--session",
+                    TEST_SANDBOX_LOGIN_SESSION_ID,
+                    "--state",
+                    TEST_SANDBOX_LOGIN_STATE,
+                    "--proof",
+                    "sandbox-ok",
+                    "--json",
+                ),
+                (
+                    "accounts",
+                    "onboard",
+                    "--json",
+                    "--auth-ref",
+                    TEST_SANDBOX_AUTH_REF,
+                ),
                 ("accounts", "list", "--json"),
             ],
             [
