@@ -6003,6 +6003,484 @@ def build_command_payload(
     return payload
 
 
+INVARIANT_CHECK_REQUIRED_FIELDS = [
+    "status",
+    "exit_code",
+    "human_message",
+    "machine_error_code",
+    "changed_files",
+    "next_action",
+    "invariant_result",
+    "recovery_hints",
+]
+
+RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS = [
+    "status",
+    "exit_code",
+    "human_message",
+    "machine_error_code",
+    "changed_files",
+    "next_action",
+]
+
+RECOVERY_HINT_SPECS: dict[str, dict[str, Any]] = {
+    "LISTENER_DOWN": {
+        "impact": 5,
+        "urgency": 5,
+        "recoverability": 4,
+        "risk": "high",
+        "diagnosis": "Runtime listener is not reachable from the declared endpoint.",
+        "operator_action": "Check the managed/stable listener process and rerun runtime proof.",
+        "allowed_next_commands": ["healthcheck --json", "status --json"],
+    },
+    "LISTENER_TIMEOUT": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Runtime listener probe timed out before returning a usable packet.",
+        "operator_action": "Check listener load and retry a bounded healthcheck.",
+        "allowed_next_commands": ["healthcheck --json", "status --json"],
+    },
+    "MODE_MISMATCH": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 4,
+        "risk": "medium",
+        "diagnosis": "Desired and effective runtime modes do not agree.",
+        "operator_action": "Inspect mode state and run the appropriate sync or mode command.",
+        "allowed_next_commands": ["mode get --json", "status --json"],
+    },
+    "MANAGED_PATH_UNBOUND": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Managed runtime paths are missing or not bound to readable local files.",
+        "operator_action": "Verify WBP managed/profile path environment and rerun invariant-check.",
+        "allowed_next_commands": ["status --json"],
+    },
+    "ACCOUNTS_POOL_INVALID": {
+        "impact": 4,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Account registry pool data is structurally invalid or ambiguous.",
+        "operator_action": "Inspect accounts registry before attempting account lifecycle actions.",
+        "allowed_next_commands": ["accounts list --json"],
+    },
+    "ACTIVE_ROUTING_AMBIGUOUS": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 3,
+        "risk": "high",
+        "diagnosis": "Active routing consequence is missing or ambiguous in evidence.",
+        "operator_action": "Require explicit routing proof before claiming success.",
+        "allowed_next_commands": ["status --json", "accounts list --json"],
+    },
+    "ONBOARDING_NOT_RESERVE_FIRST": {
+        "impact": 5,
+        "urgency": 4,
+        "recoverability": 4,
+        "risk": "high",
+        "diagnosis": "Onboarding/import evidence does not prove reserve-first placement.",
+        "operator_action": "Stop claiming onboarding success until reserve placement is proven.",
+        "allowed_next_commands": ["accounts list --json", "status --json"],
+    },
+    "COMMAND_PACKET_MALFORMED": {
+        "impact": 4,
+        "urgency": 3,
+        "recoverability": 4,
+        "risk": "medium",
+        "diagnosis": "A command or evidence packet is missing required strict JSON fields.",
+        "operator_action": "Fix the packet producer before downstream automation relies on it.",
+        "allowed_next_commands": ["status --json"],
+    },
+    "UNKNOWN_RUNTIME_FAILURE": {
+        "impact": 3,
+        "urgency": 3,
+        "recoverability": 2,
+        "risk": "medium",
+        "diagnosis": "Runtime evidence contains a failure code without a specific hint.",
+        "operator_action": "Preserve the packet and diagnose the producer-specific failure.",
+        "allowed_next_commands": ["status --json", "healthcheck --json"],
+    },
+}
+
+
+def recovery_priority_score(spec: dict[str, Any]) -> int:
+    return int(spec["impact"]) * int(spec["urgency"]) * int(spec["recoverability"])
+
+
+def build_recovery_hint(machine_error_code: str) -> dict[str, Any]:
+    code = machine_error_code if machine_error_code in RECOVERY_HINT_SPECS else "UNKNOWN_RUNTIME_FAILURE"
+    spec = RECOVERY_HINT_SPECS[code]
+    return {
+        "machine_error_code": machine_error_code,
+        "priority_score": recovery_priority_score(spec),
+        "impact": int(spec["impact"]),
+        "urgency": int(spec["urgency"]),
+        "recoverability": int(spec["recoverability"]),
+        "risk": str(spec["risk"]),
+        "diagnosis": str(spec["diagnosis"]),
+        "operator_action": str(spec["operator_action"]),
+        "allowed_next_commands": list(spec["allowed_next_commands"]),
+    }
+
+
+def build_invariant_check(
+    check_id: str,
+    *,
+    passed: bool,
+    severity: str,
+    evidence_source: str,
+    human_message: str,
+    machine_error_code: str = "OK",
+) -> dict[str, Any]:
+    return {
+        "id": check_id,
+        "status": "pass" if passed else "fail",
+        "severity": severity,
+        "evidence_source": evidence_source,
+        "human_message": human_message,
+        "machine_error_code": "OK" if passed else machine_error_code,
+    }
+
+
+def missing_packet_fields(packet: dict[str, Any], required_fields: list[str]) -> list[str]:
+    return [field for field in required_fields if field not in packet]
+
+
+def registry_pool_integrity_failure(registry: dict[str, Any]) -> str:
+    backends = registry.get("backends")
+    if not isinstance(backends, list):
+        return "registry_backends_not_list"
+    seen_backend_pools: dict[str, set[str]] = {}
+    for index, backend in enumerate(backends):
+        if not isinstance(backend, dict):
+            return f"backend_{index}_not_object"
+        backend_id = str(backend.get("id") or "").strip()
+        if not backend_id:
+            return f"backend_{index}_missing_id"
+        pool = str(backend.get("pool") or "").strip()
+        if pool not in VALID_BACKEND_REGISTRY_POOLS:
+            return f"{backend_id}:invalid_pool:{pool or '<missing>'}"
+        seen_backend_pools.setdefault(backend_id, set()).add(pool)
+    conflicted = sorted(
+        backend_id for backend_id, pools in seen_backend_pools.items() if len(pools) > 1
+    )
+    if conflicted:
+        return f"conflicting_backend_pool:{','.join(conflicted)}"
+    return ""
+
+
+def managed_paths_bound_failure(paths: RuntimePaths, desired_mode: str, effective_mode: str) -> str:
+    if desired_mode != "managed" and effective_mode != "managed":
+        return ""
+    required_paths = [
+        paths.profile_dir,
+        paths.managed_dir,
+        paths.registry_file,
+        paths.state_file,
+        paths.managed_config_file,
+        paths.config_toml,
+    ]
+    missing = [str(path) for path in required_paths if not path.exists()]
+    if missing:
+        return "missing:" + ",".join(missing)
+    non_absolute = [str(path) for path in required_paths if not path.is_absolute()]
+    if non_absolute:
+        return "non_absolute:" + ",".join(non_absolute)
+    return ""
+
+
+def reserve_first_failure(onboarding_evidence: dict[str, Any] | None) -> str:
+    if not onboarding_evidence:
+        return ""
+    final_outcome = str(onboarding_evidence.get("final_outcome") or "")
+    evidence_status = str(onboarding_evidence.get("status") or "")
+    success_claimed = final_outcome in {
+        "reserve_only_success",
+        "explicit_auth_imported_to_reserve",
+    } or evidence_status in {"ok", "success"}
+    if not success_claimed:
+        return ""
+    selected_backend_id = str(onboarding_evidence.get("selected_backend_id") or "")
+    new_backend_ids = onboarding_evidence.get("new_backend_ids")
+    has_identity = bool(selected_backend_id) or bool(
+        isinstance(new_backend_ids, list) and new_backend_ids
+    )
+    pool_after = str(onboarding_evidence.get("pool_after_onboarding") or "")
+    active_routing_changed = onboarding_evidence.get("active_routing_changed")
+    if not has_identity:
+        return "missing_backend_identity"
+    if pool_after != "reserve":
+        return "pool_after_onboarding_not_reserve"
+    if active_routing_changed is not False:
+        return "active_routing_changed_not_false"
+    return ""
+
+
+def active_routing_failure(onboarding_evidence: dict[str, Any] | None) -> str:
+    if not onboarding_evidence:
+        return ""
+    if "active_routing_changed" not in onboarding_evidence:
+        return "active_routing_changed_missing"
+    if onboarding_evidence.get("active_routing_changed") not in {False, True}:
+        return "active_routing_changed_ambiguous"
+    return ""
+
+
+def build_invariant_check_packet(
+    paths: RuntimePaths,
+    *,
+    status_evidence: dict[str, Any] | None = None,
+    onboarding_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    state = read_json(paths.state_file, required=False)
+    registry = read_json(paths.registry_file)
+    desired_mode = get_desired_mode(paths)
+    effective_mode = get_effective_mode(paths, state)
+    host, port, endpoint = get_endpoint(paths, effective_mode)
+    listener_ok = socket_is_listening(host, port)
+    status_packet = status_evidence or {
+        "status": "ok" if listener_ok else "error",
+        "exit_code": 0 if listener_ok else 1,
+        "human_message": (
+            "Runtime listener is reachable."
+            if listener_ok
+            else f"Runtime listener is not reachable at {endpoint}."
+        ),
+        "machine_error_code": "OK" if listener_ok else "LISTENER_DOWN",
+        "changed_files": [],
+        "next_action": "none" if listener_ok else "operator_action",
+        "liveness": "healthy" if listener_ok else "down",
+        "desired_mode": desired_mode,
+        "effective_mode": effective_mode,
+        "endpoint": endpoint,
+    }
+
+    checks: list[dict[str, Any]] = []
+    failure_codes: list[str] = []
+
+    shape_missing = missing_packet_fields(
+        status_packet, RUNTIME_EVIDENCE_PACKET_REQUIRED_FIELDS
+    )
+    if shape_missing:
+        failure_codes.append("COMMAND_PACKET_MALFORMED")
+    checks.append(
+        build_invariant_check(
+            "command_packet_shape",
+            passed=not shape_missing,
+            severity="critical",
+            evidence_source="status_evidence_packet",
+            human_message=(
+                "Runtime evidence packet has required strict JSON fields."
+                if not shape_missing
+                else "Runtime evidence packet is missing fields: " + ", ".join(shape_missing)
+            ),
+            machine_error_code="COMMAND_PACKET_MALFORMED",
+        )
+    )
+
+    status_green = (
+        str(status_packet.get("status") or "") == "ok"
+        and str(status_packet.get("machine_error_code") or "") == "OK"
+    )
+    false_green = status_green and not listener_ok
+    if false_green:
+        failure_codes.append("LISTENER_DOWN")
+    checks.append(
+        build_invariant_check(
+            "no_false_green",
+            passed=not false_green,
+            severity="critical",
+            evidence_source="listener_socket_truth,status_evidence_packet",
+            human_message=(
+                "No false-green status was observed."
+                if not false_green
+                else "Status evidence claims OK while listener truth is down."
+            ),
+            machine_error_code="LISTENER_DOWN",
+        )
+    )
+
+    listener_packet_code = str(status_packet.get("machine_error_code") or "")
+    listener_passed = listener_ok and listener_packet_code == "OK"
+    if not listener_passed:
+        failure_codes.append(listener_packet_code or "LISTENER_DOWN")
+    checks.append(
+        build_invariant_check(
+            "listener_truth",
+            passed=listener_passed,
+            severity="critical",
+            evidence_source="listener_socket_truth,status_evidence_packet",
+            human_message=(
+                "Declared runtime endpoint is reachable and evidence agrees."
+                if listener_passed
+                else f"Declared runtime endpoint is not proven reachable at {endpoint}."
+            ),
+            machine_error_code=listener_packet_code or "LISTENER_DOWN",
+        )
+    )
+
+    mode_passed = desired_mode == effective_mode
+    if not mode_passed:
+        failure_codes.append("MODE_MISMATCH")
+    checks.append(
+        build_invariant_check(
+            "mode_truth",
+            passed=mode_passed,
+            severity="critical",
+            evidence_source="runtime_mode_files",
+            human_message=(
+                "Desired and effective runtime modes agree."
+                if mode_passed
+                else f"Desired mode {desired_mode} differs from effective mode {effective_mode}."
+            ),
+            machine_error_code="MODE_MISMATCH",
+        )
+    )
+
+    pool_failure = registry_pool_integrity_failure(registry)
+    if pool_failure:
+        failure_codes.append("ACCOUNTS_POOL_INVALID")
+    checks.append(
+        build_invariant_check(
+            "accounts_pool_integrity",
+            passed=not pool_failure,
+            severity="critical",
+            evidence_source="backend_registry",
+            human_message=(
+                "Account registry pool data is structurally valid."
+                if not pool_failure
+                else f"Account registry pool data is invalid: {pool_failure}."
+            ),
+            machine_error_code="ACCOUNTS_POOL_INVALID",
+        )
+    )
+
+    reserve_failure = reserve_first_failure(onboarding_evidence)
+    if reserve_failure:
+        failure_codes.append("ONBOARDING_NOT_RESERVE_FIRST")
+    checks.append(
+        build_invariant_check(
+            "reserve_first_policy",
+            passed=not reserve_failure,
+            severity="critical",
+            evidence_source="onboarding_evidence_packet",
+            human_message=(
+                "No onboarding evidence violates reserve-first policy."
+                if not reserve_failure
+                else f"Onboarding evidence violates reserve-first policy: {reserve_failure}."
+            ),
+            machine_error_code="ONBOARDING_NOT_RESERVE_FIRST",
+        )
+    )
+
+    routing_failure = active_routing_failure(onboarding_evidence)
+    if routing_failure:
+        failure_codes.append("ACTIVE_ROUTING_AMBIGUOUS")
+    checks.append(
+        build_invariant_check(
+            "active_routing_explicit",
+            passed=not routing_failure,
+            severity="critical",
+            evidence_source="onboarding_evidence_packet",
+            human_message=(
+                "No active routing evidence is ambiguous."
+                if not routing_failure
+                else f"Active routing evidence is ambiguous: {routing_failure}."
+            ),
+            machine_error_code="ACTIVE_ROUTING_AMBIGUOUS",
+        )
+    )
+
+    paths_failure = managed_paths_bound_failure(paths, desired_mode, effective_mode)
+    if paths_failure:
+        failure_codes.append("MANAGED_PATH_UNBOUND")
+    checks.append(
+        build_invariant_check(
+            "managed_paths_bound",
+            passed=not paths_failure,
+            severity="critical",
+            evidence_source="runtime_path_contract",
+            human_message=(
+                "Managed runtime paths are bound to existing local files."
+                if not paths_failure
+                else f"Managed runtime paths are not fully bound: {paths_failure}."
+            ),
+            machine_error_code="MANAGED_PATH_UNBOUND",
+        )
+    )
+
+    failed_checks = [check for check in checks if check["status"] == "fail"]
+    unique_failure_codes = sorted(
+        {
+            code
+            for code in failure_codes
+            if code and code != "OK"
+        }
+    )
+    recovery_hints = sorted(
+        (build_recovery_hint(code) for code in unique_failure_codes),
+        key=lambda item: int(item["priority_score"]),
+        reverse=True,
+    )
+    invariant_result = {
+        "status": "failed" if failed_checks else "passed",
+        "passed": len(checks) - len(failed_checks),
+        "failed": len(failed_checks),
+        "checks": checks,
+    }
+    payload = build_command_payload(
+        ok=not failed_checks,
+        human_message=(
+            "Runtime invariant check passed."
+            if not failed_checks
+            else "Runtime invariant check failed."
+        ),
+        machine_error_code="OK" if not failed_checks else "RUNTIME_INVARIANT_FAILED",
+        liveness="healthy" if not failed_checks else "degraded",
+        severity="recoverable" if not failed_checks else "fatal",
+        operator_action="none" if not failed_checks else "required_repair",
+        changed_files=[],
+        extra={
+            "invariant_result": invariant_result,
+            "recovery_hints": recovery_hints,
+            "runtime_evidence": {
+                "desired_mode": desired_mode,
+                "effective_mode": effective_mode,
+                "endpoint": endpoint,
+                "listener_ok": listener_ok,
+            },
+        },
+    )
+    own_missing = missing_packet_fields(payload, INVARIANT_CHECK_REQUIRED_FIELDS)
+    if own_missing and invariant_result["checks"]:
+        invariant_result["status"] = "failed"
+        invariant_result["failed"] += 1
+        invariant_result["checks"][0] = build_invariant_check(
+            "command_packet_shape",
+            passed=False,
+            severity="critical",
+            evidence_source="invariant_check_packet",
+            human_message="Invariant-check packet is missing fields: " + ", ".join(own_missing),
+            machine_error_code="COMMAND_PACKET_MALFORMED",
+        )
+        payload["status"] = "error"
+        payload["exit_code"] = 1
+        payload["machine_error_code"] = "RUNTIME_INVARIANT_FAILED"
+        payload["next_action"] = "required_repair"
+        payload["operator_action"] = "required_repair"
+        payload["recovery_hints"] = [build_recovery_hint("COMMAND_PACKET_MALFORMED")]
+    return payload
+
+
+def run_invariant_check(paths: RuntimePaths) -> dict[str, Any]:
+    return build_invariant_check_packet(paths)
+
+
 def summarize_status(
     paths: RuntimePaths, health_payload: dict[str, Any] | None = None
 ) -> dict[str, Any]:

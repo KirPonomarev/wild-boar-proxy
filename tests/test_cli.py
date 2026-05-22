@@ -319,6 +319,244 @@ class CliTests(unittest.TestCase):
     def test_status_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection("status", command_path="status")
 
+    def test_invariant_check_requires_json_flag(self) -> None:
+        self.assert_missing_json_parser_rejection(
+            "invariant-check", command_path="invariant-check"
+        )
+
+    def test_invariant_check_json_healthy_passes(self) -> None:
+        port = free_port()
+        server = ThreadingHTTPServer(("127.0.0.1", port), ProbeHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            (self.managed_dir / "managed-config.yaml").write_text(
+                f"host: 127.0.0.1\nport: {port}\n",
+                encoding="utf-8",
+            )
+            result = self.run_cli("invariant-check", "--json")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["machine_error_code"], "OK")
+        self.assertEqual(payload["changed_files"], [])
+        self.assertEqual(payload["invariant_result"]["status"], "passed")
+        self.assertEqual(payload["invariant_result"]["failed"], 0)
+        self.assertEqual(payload["recovery_hints"], [])
+
+    def test_invariant_check_reports_listener_down(self) -> None:
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_INVARIANT_FAILED")
+        self.assertEqual(payload["invariant_result"]["status"], "failed")
+        listener_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "listener_truth"
+        )
+        self.assertEqual(listener_check["status"], "fail")
+        self.assertEqual(listener_check["machine_error_code"], "LISTENER_DOWN")
+        self.assertEqual(payload["recovery_hints"][0]["machine_error_code"], "LISTENER_DOWN")
+
+    def test_invariant_check_reports_mode_mismatch(self) -> None:
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        mode_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "mode_truth"
+        )
+        self.assertEqual(mode_check["status"], "fail")
+        self.assertEqual(mode_check["machine_error_code"], "MODE_MISMATCH")
+
+    def test_invariant_check_reports_bad_pool(self) -> None:
+        registry = json.loads((self.managed_dir / "backend-registry.json").read_text())
+        registry["backends"][0]["pool"] = "hold"
+        (self.managed_dir / "backend-registry.json").write_text(
+            json.dumps(registry) + "\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        pool_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "accounts_pool_integrity"
+        )
+        self.assertEqual(pool_check["status"], "fail")
+        self.assertEqual(pool_check["machine_error_code"], "ACCOUNTS_POOL_INVALID")
+
+    def test_invariant_check_reports_managed_path_unbound(self) -> None:
+        (self.profile_dir / "config.toml").unlink()
+
+        result = self.run_cli("invariant-check", "--json")
+
+        self.assertNotEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        path_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "managed_paths_bound"
+        )
+        self.assertEqual(path_check["status"], "fail")
+        self.assertEqual(path_check["machine_error_code"], "MANAGED_PATH_UNBOUND")
+
+    def test_invariant_check_reports_onboarding_not_reserve_first(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                onboarding_evidence={
+                    "status": "ok",
+                    "final_outcome": "explicit_auth_imported_to_reserve",
+                    "selected_backend_id": "backend-b",
+                    "pool_after_onboarding": "active",
+                    "active_routing_changed": False,
+                },
+            )
+
+        reserve_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "reserve_first_policy"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(reserve_check["status"], "fail")
+        self.assertEqual(
+            reserve_check["machine_error_code"], "ONBOARDING_NOT_RESERVE_FIRST"
+        )
+
+    def test_invariant_check_reports_ambiguous_active_routing(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                onboarding_evidence={
+                    "status": "ok",
+                    "final_outcome": "explicit_auth_imported_to_reserve",
+                    "selected_backend_id": "backend-b",
+                    "pool_after_onboarding": "reserve",
+                },
+            )
+
+        routing_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "active_routing_explicit"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(routing_check["status"], "fail")
+        self.assertEqual(routing_check["machine_error_code"], "ACTIVE_ROUTING_AMBIGUOUS")
+
+    def test_invariant_check_requires_command_packet_shape(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                status_evidence={"status": "ok"},
+            )
+
+        shape_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "command_packet_shape"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(shape_check["status"], "fail")
+        self.assertEqual(shape_check["machine_error_code"], "COMMAND_PACKET_MALFORMED")
+
+    def test_invariant_check_rejects_false_green(self) -> None:
+        with mock.patch.dict(os.environ, self.env(), clear=False):
+            payload = runtime_mod.build_invariant_check_packet(
+                runtime_mod.RuntimePaths.from_env(),
+                status_evidence={
+                    "status": "ok",
+                    "exit_code": 0,
+                    "human_message": "incorrect green",
+                    "machine_error_code": "OK",
+                    "changed_files": [],
+                    "next_action": "none",
+                },
+            )
+
+        false_green_check = next(
+            check
+            for check in payload["invariant_result"]["checks"]
+            if check["id"] == "no_false_green"
+        )
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "RUNTIME_INVARIANT_FAILED")
+        self.assertEqual(false_green_check["status"], "fail")
+        self.assertEqual(false_green_check["machine_error_code"], "LISTENER_DOWN")
+
+    def test_recovery_hints_are_sorted_by_priority(self) -> None:
+        unused_stable_port = free_port()
+        (self.stable_dir / "config.yaml").write_text(
+            f"host: 127.0.0.1\nport: {unused_stable_port}\n",
+            encoding="utf-8",
+        )
+        (self.profile_dir / "runtime-effective-mode.txt").write_text(
+            "stable\n", encoding="utf-8"
+        )
+
+        result = self.run_cli("invariant-check", "--json")
+
+        payload = json.loads(result.stdout)
+        scores = [hint["priority_score"] for hint in payload["recovery_hints"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+        self.assertIn(
+            "LISTENER_DOWN",
+            [hint["machine_error_code"] for hint in payload["recovery_hints"]],
+        )
+        self.assertIn(
+            "MODE_MISMATCH",
+            [hint["machine_error_code"] for hint in payload["recovery_hints"]],
+        )
+
+    def test_invariant_check_unknown_error_gets_fallback_hint(self) -> None:
+        hint = runtime_mod.build_recovery_hint("FUTURE_RUNTIME_FAILURE")
+
+        self.assertEqual(hint["machine_error_code"], "FUTURE_RUNTIME_FAILURE")
+        self.assertEqual(hint["risk"], "medium")
+        self.assertIn("status --json", hint["allowed_next_commands"])
+
+    def test_invariant_check_does_not_write_runtime_state(self) -> None:
+        watched_paths = [
+            self.managed_dir / "backend-registry.json",
+            self.managed_dir / "supervisor-state.json",
+            self.managed_dir / "managed-config.yaml",
+            self.profile_dir / "runtime-mode.txt",
+            self.profile_dir / "runtime-effective-mode.txt",
+            self.profile_dir / "config.toml",
+        ]
+        before = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in watched_paths
+        }
+
+        result = self.run_cli("invariant-check", "--json")
+
+        after = {
+            str(path): path.read_text(encoding="utf-8")
+            for path in watched_paths
+        }
+        payload = json.loads(result.stdout)
+        self.assertEqual(before, after)
+        self.assertEqual(payload["changed_files"], [])
+
     def test_policy_stage_set_requires_json_flag(self) -> None:
         self.assert_missing_json_parser_rejection(
             "policy",

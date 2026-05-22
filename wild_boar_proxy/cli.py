@@ -21,6 +21,7 @@ from .runtime import (
     run_accounts_login_start,
     run_demote,
     run_healthcheck,
+    run_invariant_check,
     run_installer_init,
     run_hold,
     run_launch_client,
@@ -59,6 +60,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status")
     status.add_argument("--json", action="store_true", required=True)
+
+    invariant_check = subparsers.add_parser("invariant-check")
+    invariant_check.add_argument("--json", action="store_true", required=True)
 
     stable = subparsers.add_parser("stable")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
@@ -326,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_healthcheck(paths, args.model))
         if args.command == "status":
             return emit_json(summarize_status(paths))
+        if args.command == "invariant-check":
+            return emit_json(run_invariant_check(paths))
         if args.command == "stable" and args.stable_command == "repair":
             if args.apply:
                 return emit_json(run_stable_repair_apply(paths))

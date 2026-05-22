@@ -16,6 +16,7 @@ All operator commands must support `--json`.
 ## Required commands
 
 - `status --json`
+- `invariant-check --json`
 - `sync --json`
 - `launch client --json`
 - `healthcheck --json`
@@ -49,6 +50,49 @@ All operator commands must support `--json`.
 - `package experimental verify --manifest <path> --json`
 - `package launchable build --output-dir <path> [--runtime-executable <path>] --json`
 - `package launchable verify --manifest <path> --json`
+
+## Runtime invariant check owner surface
+
+`invariant-check --json` is a read-only runtime truth guard. It machine-checks a
+bounded set of runtime invariants and emits advisory recovery hints.
+
+It must not execute recovery, mutate runtime state, or write runtime files.
+
+Additional required fields:
+
+- `invariant_result`
+- `recovery_hints`
+
+`invariant_result` must include:
+
+- `status` (`passed` or `failed`)
+- `passed`
+- `failed`
+- `checks`
+
+Each check must include:
+
+- `id`
+- `status` (`pass` or `fail`)
+- `severity`
+- `evidence_source`
+- `human_message`
+- `machine_error_code`
+
+Each recovery hint must include:
+
+- `machine_error_code`
+- `priority_score`
+- `impact`
+- `urgency`
+- `recoverability`
+- `risk`
+- `diagnosis`
+- `operator_action`
+- `allowed_next_commands`
+
+Any critical invariant failure must produce a non-green command packet with
+`machine_error_code=RUNTIME_INVARIANT_FAILED`.
 
 ## Required response fields
 
