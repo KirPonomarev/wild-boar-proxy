@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contour": "WEB_SAFE_APP_COPY_LAUNCH_PASS",
-  "status": "verified_pending_git_close",
+  "status": "closed_success",
   "decision": "ISOLATED_COPY_PREFLIGHT_GATE_ADDED_TO_BOUNDED_WEB_LAUNCH",
   "final_outcome": "PREFLIGHT_ONLY_ADMITTED_RESULT",
   "branch": "codex/external-agent-lab-isolated",
@@ -29,7 +29,8 @@
     ],
     "raw_paths_exposed": false,
     "profile_context_exposed": false,
-    "current_session_untouched_claim_machine_backed": true
+    "current_session_untouched_claim_machine_backed": false,
+    "current_session_untouched_claim_preflight_backed": true
   },
   "verification": {
         "unit_tests": [
@@ -48,6 +49,18 @@
       "action_phase": "process_confirmed"
     },
     "live_runtime_launch_performed": false
+  },
+  "closure_verification": {
+    "verified_on": "2026-05-23",
+    "implementation_commit": "955f00045d2a716045716ae41d0b62fb7edc82a4",
+    "implementation_commit_subject": "Add safe isolated copy launch preflight",
+    "implementation_commit_present_in_head": true,
+    "implementation_commit_present_in_origin_branch": true,
+    "verification_head": "b7f67f813550e1fa8493df36321ab51bc10a66b2",
+    "verification_branch": "codex/external-agent-lab-isolated",
+    "targeted_regressions_rechecked": true,
+    "browser_proof_rerun": true,
+    "artifact_wording_corrected": true
   },
   "next_admitted_contour": "WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS"
 }

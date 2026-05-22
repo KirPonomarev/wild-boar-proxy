@@ -1,0 +1,62 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_LAUNCH_PASS",
+  "verified_on": "2026-05-23",
+  "implementation_commit": {
+    "hash": "955f00045d2a716045716ae41d0b62fb7edc82a4",
+    "subject": "Add safe isolated copy launch preflight",
+    "present_in_head": true,
+    "present_in_origin_branch": true
+  },
+  "tests": [
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter",
+      "status": "ok",
+      "result": "Ran 158 tests in 13.245s"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest -q tests.test_cli.CliTests.test_launch_client_dispatches_bounded_executable_with_sanitized_env tests.test_cli.CliTests.test_launch_client_reports_missing_client_path_as_owner_packet tests.test_cli.CliTests.test_launch_client_rejects_nonabsolute_client_path tests.test_cli.CliTests.test_launch_client_blocks_dispatch_when_runtime_precondition_is_unhealthy tests.test_cli.CliTests.test_launch_client_treats_detached_executable_as_bounded_dispatch_only tests.test_cli.CliTests.test_launch_client_reports_exec_format_failure_as_json_packet tests.test_cli.CliTests.test_launch_client_reports_precondition_exceptions_inside_owner_packet tests.test_cli.CliTests.test_launch_client_reports_unsupported_app_bundle_shape_in_owner_packet tests.test_cli.CliTests.test_launch_client_uses_absolute_system_open_under_hostile_path",
+      "status": "ok",
+      "result": "Ran 9 tests in 3.990s"
+    },
+    {
+      "command": "python3 -m json.tool audit_results/web_safe_app_copy_launch_pass_2026-05-16/decision_packet.json",
+      "status": "ok"
+    },
+    {
+      "command": "git diff --check",
+      "status": "ok"
+    }
+  ],
+  "browser_proof": {
+    "runner_mode": "safe fake runner",
+    "server_url": "http://127.0.0.1:61196/?screen=settings&section=client&source=live",
+    "browser_engine": "Google Chrome headless via Playwright executablePath",
+    "pre_click": {
+      "availability_text": "preflight admitted · isolated copy admitted"
+    },
+    "confirmation_modal": {
+      "overlay_hidden": false,
+      "ui_action": "launch_client_dispatch",
+      "claim_scope": "только bounded OS dispatch request; это не успех сессии внешнего клиента",
+      "target_kind": "executable",
+      "separate_profile": "separate",
+      "separate_data_dir": "separate",
+      "separate_port": "separate",
+      "process_confirmation": "packet-confirmable"
+    },
+    "action_result": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "launch_phase": "process_confirmed",
+      "process_confirmed": true,
+      "current_session_untouched": true,
+      "preflight_status": "admitted",
+      "preflight_backing_only_for_current_session_untouched": true
+    }
+  },
+  "scope_limitations": [
+    "This contour does not prove full external client session success.",
+    "This contour does not perform real host-app launch against the current working Codex.",
+    "The current_session_untouched field is preflight-backed, not post-dispatch machine-observed."
+  ]
+}
