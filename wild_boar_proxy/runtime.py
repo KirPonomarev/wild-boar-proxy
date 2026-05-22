@@ -1944,12 +1944,35 @@ def classify_backend_stage_posture_eligibility(
 
 
 def get_launch_capable_backend_ids(registry: dict[str, Any]) -> list[str]:
-    return sorted(
-        str(item.get("id")).strip()
+    ranked_backends = [
+        item
         for item in registry.get("backends", [])
         if str(item.get("id") or "").strip()
         and classify_backend_runtime_eligibility(item)[0] == "live_capable"
-    )
+    ]
+    ranked_backends.sort(key=backend_runtime_ranking_key)
+    return [str(item.get("id")).strip() for item in ranked_backends]
+
+
+def _coerce_backend_rank_int(value: Any, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def backend_runtime_ranking_key(backend: dict[str, Any]) -> tuple[int, int, int, str]:
+    priority = _coerce_backend_rank_int(backend.get("priority"), default=100)
+    fail_count = max(0, _coerce_backend_rank_int(backend.get("fail_count"), default=0))
+    success_count = max(0, _coerce_backend_rank_int(backend.get("success_count"), default=0))
+    backend_id = str(backend.get("id") or "").strip()
+    return (priority, fail_count, -success_count, backend_id)
 
 
 def summarize_auth_pool_hygiene(
@@ -1977,7 +2000,7 @@ def summarize_auth_pool_hygiene(
     selected_backend_ids = sorted(
         str(item) for item in state.get("selected_backend_ids", []) or []
     )
-    launch_capable_backend_ids = sorted(class_backend_ids["live_capable"])
+    launch_capable_backend_ids = get_launch_capable_backend_ids(registry)
     launch_capable_backend_id_set = set(launch_capable_backend_ids)
     selected_launch_capable_backend_ids = [
         backend_id
@@ -2011,6 +2034,10 @@ def summarize_auth_pool_hygiene(
         "claim_scope": "bounded_runtime_auth_usability_only",
         "candidate_universe_backend_ids": sorted(candidate_universe_backend_ids),
         "launch_capable_backend_ids": launch_capable_backend_ids,
+        "ranking_policy": {
+            "status": "applied",
+            "fields": ["priority_ascending", "fail_count_ascending", "success_count_descending", "backend_id_ascending"],
+        },
         "quota_exhausted_backend_ids": sorted(class_backend_ids["quota_exhausted"]),
         "auth_invalid_backend_ids": sorted(class_backend_ids["auth_invalid"]),
         "cooldown_only_backend_ids": sorted(class_backend_ids["cooldown_only"]),

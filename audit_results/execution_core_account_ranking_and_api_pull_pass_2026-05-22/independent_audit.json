@@ -1,0 +1,43 @@
+{
+  "contour": "EXECUTION_CORE_ACCOUNT_RANKING_AND_API_PULL_PASS",
+  "date": "2026-05-22",
+  "audit_mode": "manual_fact_check_against_code_and_targeted_tests",
+  "verdict": "closed_success",
+  "checks": [
+    {
+      "id": "ranking_policy_explicit",
+      "status": "pass",
+      "evidence": "get_launch_capable_backend_ids now sorts live-capable backends by priority, fail_count, success_count, then backend id."
+    },
+    {
+      "id": "ranking_policy_exposed",
+      "status": "pass",
+      "evidence": "summarize_auth_pool_hygiene exposes ranking_policy.status=applied and the ranked launch_capable_backend_ids."
+    },
+    {
+      "id": "ranking_does_not_bypass_lifecycle",
+      "status": "pass",
+      "evidence": "Ranking is applied only after classify_backend_runtime_eligibility returns live_capable; reserve, hold, retired, quota, auth-invalid, and cooldown entries remain excluded."
+    },
+    {
+      "id": "disabled_route_check_blocks_network",
+      "status": "pass",
+      "evidence": "external-models check returns route_disabled and request_count=0 for disabled routes."
+    },
+    {
+      "id": "disabled_route_validate_blocks_network",
+      "status": "pass",
+      "evidence": "external-models routes validate returns route_disabled and request_count=0 for disabled routes."
+    },
+    {
+      "id": "scope_integrity",
+      "status": "pass",
+      "evidence": "No UI redesign, credential intake, login flow, promotion policy, or external local runtime cleanup was mixed into this contour."
+    },
+    {
+      "id": "full_gate",
+      "status": "pass",
+      "evidence": "Composite suite recorded 595 tests in 200.157s OK."
+    }
+  ]
+}

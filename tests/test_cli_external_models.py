@@ -917,6 +917,57 @@ class ExternalModelsCliTests(unittest.TestCase):
         self.assertEqual(payload["data"]["route_state"], "blocked")
         self.assertEqual(request_count, 0)
 
+    def test_check_disabled_route_is_blocked_without_provider_call(self) -> None:
+        with mocked_provider() as (base_url, server):
+            route = sample_route(base_url=base_url) | {"enabled": False}
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(route),
+            )
+            result = self.run_cli(
+                "external-models",
+                "check",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "route_disabled")
+        self.assertEqual(payload["data"]["route_state"], "blocked")
+        self.assertEqual(request_count, 0)
+
+    def test_validate_disabled_route_is_blocked_without_provider_call(self) -> None:
+        with mocked_provider() as (base_url, server):
+            route = sample_route(base_url=base_url) | {"enabled": False}
+            self.run_cli(
+                "external-models",
+                "routes",
+                "add",
+                "--json",
+                "--stdin",
+                stdin_text=json.dumps(route),
+            )
+            result = self.run_cli(
+                "external-models",
+                "routes",
+                "validate",
+                "--json",
+                "--route",
+                "wbp-deepseek-v3",
+            )
+            request_count = server.request_count  # type: ignore[attr-defined]
+        payload = self.parse_payload(result)
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["machine_error_code"], "route_disabled")
+        self.assertEqual(payload["data"]["route_state"], "blocked")
+        self.assertEqual(request_count, 0)
+
     def test_check_network_failure_is_route_local_only(self) -> None:
         route = sample_route(base_url=f"http://127.0.0.1:{_free_port()}/v1")
         self.run_cli(

@@ -446,6 +446,37 @@ Status success should expose:
 Admission and status packets must not expose token/secret/password values or
 raw owner-env dumps.
 
+## Additional external-models route verification surfaces
+
+`external-models routes validate --route <id> --json` is the owner surface for
+route-level provider model visibility proof.
+
+`external-models check --route <id> --json` is the owner surface for route-level
+provider smoke proof.
+
+Both surfaces must remain route-local. They may write route observation state and
+network evidence, but they must not claim live listener readiness or mutate Codex
+account routing.
+
+Verification must block before any provider network call when:
+
+- the route is disabled;
+- the route has `cost_class=paid_direct`;
+- the route secret is missing or invalid.
+
+Disabled routes must return a non-green packet with
+`machine_error_code=route_disabled` and `data.route_state=blocked`.
+
+Successful route validation/check packets should expose:
+
+- `verification_scope=route_provider_only`
+- `requested_model`
+- `effective_model`
+- `provider`
+- `listener_proven=false`
+- `runtime_claim_blocked=true`
+- `profile_ready=false`
+
 ## Additional launch-client owner surface
 
 `launch client --json` is the owner surface for bounded external host-client
@@ -677,6 +708,20 @@ They must not be synthesized from registry active ids, registry active counts,
 or routing-candidate counts.
 Selected backend ids without `observed_at_utc` from the same observation event
 must not be treated as available participation evidence.
+
+When the owner path materializes a selected backend snapshot from live-capable
+registry entries, candidate ordering must be deterministic and machine-readable.
+The current runtime ranking policy is:
+
+1. lower `priority` first;
+2. lower `fail_count` first;
+3. higher `success_count` first;
+4. `backend_id` ascending as a stable tie-breaker.
+
+`auth_pool_hygiene` may expose `ranking_policy.status=applied` and the ordered
+`launch_capable_backend_ids`. This ranking is a candidate-selection input only;
+it must not bypass lifecycle gates, selected-backend evidence validation, or
+reserve/active policy proof.
 
 `evidence_strength` is the normalized strength axis and must use:
 

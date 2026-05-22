@@ -1,0 +1,11 @@
+targeted regressions:
+
+/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli.CliTests.test_launch_capable_backend_ids_apply_runtime_ranking_policy tests.test_cli_external_models.ExternalModelsCliTests.test_check_disabled_route_is_blocked_without_provider_call tests.test_cli_external_models.ExternalModelsCliTests.test_validate_disabled_route_is_blocked_without_provider_call -q
+result: Ran 3 tests in 1.023s
+result: OK
+
+broader runtime/api suite:
+
+/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_cli_external_models tests.test_external_models -q
+result: Ran 447 tests in 180.706s
+result: OK

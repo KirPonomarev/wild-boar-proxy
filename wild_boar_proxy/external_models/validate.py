@@ -79,6 +79,15 @@ def _completion_url(route: dict[str, Any]) -> str:
     return str(route["base_url"]).rstrip("/") + str(route["endpoint_path"])
 
 
+def _require_enabled_route(route: dict[str, Any], *, action_label: str) -> None:
+    if route.get("enabled") is False:
+        raise RuntimeErrorInfo(
+            f"External-models route is disabled for {action_label}: {route['route_id']}",
+            machine_error_code=errors.ROUTE_DISABLED,
+            operator_action="user_action",
+        )
+
+
 def _write_network_evidence(
     *,
     paths: ExternalModelsPaths,
@@ -207,6 +216,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
         error.data.update(transform_metadata)
         raise error
     try:
+        _require_enabled_route(route, action_label="validate")
         probe_data, model_count = _handle_models_probe(route, paths)
         observed_at = contracts.utc_now_iso()
         state_path = _update_route_observation(
@@ -264,6 +274,7 @@ def validate_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[
             errors.PROVIDER_NETWORK_FAILED: "provider_network_failed",
             errors.MODEL_NOT_AVAILABLE: "model_not_available",
             errors.PAID_ROUTE_BLOCKED: "blocked",
+            errors.ROUTE_DISABLED: "blocked",
             errors.MISSING_SECRET: "blocked",
             errors.UNSAFE_SECRET_PERMISSIONS: "blocked",
             errors.INVALID_SECRET: "blocked",
@@ -336,6 +347,7 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
         error.data.update(transform_metadata)
         raise error
     try:
+        _require_enabled_route(route, action_label="check")
         headers = _provider_headers(route, paths)
         request_payload, request_metadata = transforms.build_check_request(
             route, user_prompt="ping"
@@ -433,6 +445,7 @@ def check_route_provider(paths: ExternalModelsPaths, route_id: str) -> tuple[dic
             errors.PROVIDER_NETWORK_FAILED: "provider_network_failed",
             errors.MODEL_NOT_AVAILABLE: "model_not_available",
             errors.PAID_ROUTE_BLOCKED: "blocked",
+            errors.ROUTE_DISABLED: "blocked",
             errors.MISSING_SECRET: "blocked",
             errors.UNSAFE_SECRET_PERMISSIONS: "blocked",
             errors.INVALID_SECRET: "blocked",

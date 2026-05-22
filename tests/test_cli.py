@@ -16904,6 +16904,39 @@ class CliTests(unittest.TestCase):
             runtime_mod.get_selected_backend_ids_digest(["backend-a"]),
         )
 
+    def test_launch_capable_backend_ids_apply_runtime_ranking_policy(self) -> None:
+        registry = {"backends": []}
+        for backend_id, priority, fail_count, success_count in (
+            ("backend-d", 20, 0, 99),
+            ("backend-b", 10, 1, 99),
+            ("backend-c", 10, 0, 1),
+            ("backend-a", 10, 0, 3),
+            ("backend-reserve", 1, 0, 100),
+        ):
+            backend = self.build_backend(
+                backend_id=backend_id,
+                auth_ref=f"/tmp/{backend_id}.json",
+                pool="active" if backend_id != "backend-reserve" else "reserve",
+                status="healthy",
+            )
+            backend["priority"] = priority
+            backend["fail_count"] = fail_count
+            backend["success_count"] = success_count
+            registry["backends"].append(backend)
+
+        ranked_ids = runtime_mod.get_launch_capable_backend_ids(registry)
+
+        self.assertEqual(ranked_ids, ["backend-a", "backend-c", "backend-b", "backend-d"])
+
+        hygiene = runtime_mod.summarize_auth_pool_hygiene(
+            registry, {"selected_backend_ids": []}
+        )
+        self.assertEqual(
+            hygiene["launch_capable_backend_ids"],
+            ["backend-a", "backend-c", "backend-b", "backend-d"],
+        )
+        self.assertEqual(hygiene["ranking_policy"]["status"], "applied")
+
     def test_sync_refreshes_selected_backend_snapshot_observed_at_on_success(self) -> None:
         self.configure_rotation_evidence_fixture(
             selected_backend_ids=["backend-a", "backend-b"]
