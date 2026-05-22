@@ -23,6 +23,16 @@ class CredentialProviderSpec:
 
 
 _PROVIDER_SPECS: dict[str, CredentialProviderSpec] = {
+    "deepseek": CredentialProviderSpec(
+        provider="deepseek",
+        credential_ref="DEEPSEEK_API_KEY",
+        owner_env_candidates=(
+            "DEEPSEEK_API_KEY",
+            "WBP_DEEPSEEK_API_KEY",
+            "WBP_PROVIDER_DEEPSEEK_API_KEY",
+        ),
+        provider_dashboard_url="https://platform.deepseek.com/api_keys",
+    ),
     "openrouter": CredentialProviderSpec(
         provider="openrouter",
         credential_ref="OPENROUTER_API_KEY",

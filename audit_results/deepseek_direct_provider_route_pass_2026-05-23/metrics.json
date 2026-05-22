@@ -1,0 +1,17 @@
+{
+  "check_machine_error_code": "provider_auth_failed",
+  "check_status": "error",
+  "contour": "DEEPSEEK_DIRECT_PROVIDER_ROUTE_PASS",
+  "deepseek_ref_present": true,
+  "openrouter_ref_present": false,
+  "outcome": "closed_direct_lane_added_provider_auth_failed",
+  "redaction_status": "pass",
+  "route_base_url": "https://api.deepseek.com",
+  "route_model": "deepseek-chat",
+  "route_provider": "deepseek",
+  "secret_ref_migration_status": "migrated",
+  "validate_machine_error_code": "provider_auth_failed",
+  "validate_status": "error",
+  "web_route_provider": "deepseek",
+  "web_validation_label": "validate failed"
+}

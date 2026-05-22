@@ -342,6 +342,55 @@ class ExternalModelsCliTests(unittest.TestCase):
             self.assertEqual(validate_payload["status"], "ok")
             self.assertEqual(validate_payload["machine_error_code"], "OK")
 
+    def test_deepseek_credentials_admit_and_status_use_direct_provider_refs(self) -> None:
+        admit_result = self.run_cli(
+            "external-models",
+            "credentials",
+            "admit",
+            "--provider",
+            "deepseek",
+            "--source",
+            "owner-env",
+            "--json",
+            extra_env={"DEEPSEEK_API_KEY": "deepseek-owner-key"},
+        )
+        admit_payload = self.parse_payload(admit_result)
+        self.assertEqual(admit_payload["status"], "ok")
+        credential_result = admit_payload["data"]["credential_result"]
+        self.assertEqual(credential_result["status"], "admitted")
+        self.assertEqual(credential_result["provider"], "deepseek")
+        self.assertEqual(credential_result["credential_ref"], "DEEPSEEK_API_KEY")
+        self.assertEqual(
+            credential_result["expected_refs"],
+            [
+                "DEEPSEEK_API_KEY",
+                "WBP_DEEPSEEK_API_KEY",
+                "WBP_PROVIDER_DEEPSEEK_API_KEY",
+            ],
+        )
+        self.assertEqual(
+            credential_result["provider_dashboard_url"],
+            "https://platform.deepseek.com/api_keys",
+        )
+        self.assertFalse(credential_result["secret_value_exposed"])
+        self.assertNotIn("deepseek-owner-key", admit_result.stdout)
+
+        status_result = self.run_cli(
+            "external-models",
+            "credentials",
+            "status",
+            "--provider",
+            "deepseek",
+            "--json",
+        )
+        status_payload = self.parse_payload(status_result)
+        self.assertEqual(status_payload["status"], "ok")
+        status_credential = status_payload["data"]["credential_result"]
+        self.assertEqual(status_credential["status"], "present")
+        self.assertEqual(status_credential["provider"], "deepseek")
+        self.assertEqual(status_credential["credential_ref"], "DEEPSEEK_API_KEY")
+        self.assertNotIn("deepseek-owner-key", status_result.stdout)
+
     def test_credentials_admit_rejects_unsupported_provider(self) -> None:
         result = self.run_cli(
             "external-models",
