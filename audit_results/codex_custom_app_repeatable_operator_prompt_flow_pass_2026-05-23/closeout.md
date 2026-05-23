@@ -14,7 +14,7 @@ Prove a disposable custom app launcher can run two controlled isolated Codex pro
 
 - goal: disposable `/tmp` app launcher -> controlled prompt files -> two isolated codex exec runs -> exact `WBP_ONE` and `WBP_TWO`
 - branch: codex/external-agent-lab-isolated
-- head: 5d56550
+- head: c65750a
 - touched files: audit_results/codex_custom_app_repeatable_operator_prompt_flow_pass_2026-05-23/*
 - tests run: WBP status/healthcheck; authenticated `/v1/models`; static safety gate; prompt_1 proof; prompt_2 proof; isolation diff; redaction audit; independent audit
 - blocked risks: GUI/Desktop chat not claimed; persistent session/daemon not claimed; provider-route proof not claimed; rotation/heavy-load not claimed
@@ -36,7 +36,7 @@ Prove a disposable custom app launcher can run two controlled isolated Codex pro
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: 5d56550 (`Add repeatable custom app prompt flow proof`)
+- commit: 5d56550 (`Add repeatable custom app prompt flow proof`), c65750a (`Fix repeatable prompt flow closeout git truth`)
 - pushed: yes, `origin/codex/external-agent-lab-isolated`
 
 ## Scope Check
