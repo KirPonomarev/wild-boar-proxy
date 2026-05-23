@@ -1,17 +1,13 @@
 {
   "schema_version": 1,
-  "model_count": 8,
-  "dry_run_requests": 1,
-  "forbidden_field_rejection_requests": 1,
-  "allowed_network_calls_made": [
-    "/v1/models"
-  ],
-  "forbidden_network_calls_made": [],
-  "provider_direct_calls_made": false,
-  "inference_calls_made": 0,
+  "contour": "WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS",
   "token_burn": 0,
-  "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
-  "independent_runtime_meter_attached": false,
-  "browser_screenshot_count": 1,
-  "test_groups_passed_before_closeout": 6
+  "live_api_calls": 0,
+  "live_runtime_commands": 0,
+  "live_prompt_runs": 0,
+  "network_calls_made_by_model_dry_run": false,
+  "browser_fake_server_model_count": 2,
+  "targeted_tests_run": 162,
+  "extended_tests_run": 661,
+  "extended_tests_duration_seconds": 210.063
 }

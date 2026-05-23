@@ -968,7 +968,7 @@ function renderCodexCustomModels(registry, compat) {
   );
   codexCustomModelsSetText(
     "codexCustomApiCompat",
-    `/v1/models ${compat?.compat_surfaces?.["/v1/models"]?.status || "unknown"} · responses ${compat?.compat_surfaces?.["/v1/responses"]?.status || "not_called"}`
+    `shape ${compat?.openai_compatible_shape_declared === true ? "declared" : "unknown"} · wire ${compat?.configured_wire_api || "unknown"} · live ${compat?.live_api_checked === true ? "checked" : "not checked"}`
   );
   codexCustomModelsSetText("codexCustomModelsClaimGate", claimGate);
   codexCustomModelsSetText("codexCustomModelCount", String(modelIds.length));
@@ -991,7 +991,11 @@ function renderCodexCustomModelDryRun(packet) {
       selected_model: packet?.selected_model || "",
       dry_run: packet?.dry_run === true,
       model_server_issued: packet?.model_server_issued === true,
+      selected_model_server_issued: packet?.selected_model_server_issued === true,
       codex_config_compatible: packet?.codex_config_compatible === true,
+      model_provider: packet?.model_provider || "",
+      wire_api: packet?.wire_api || "",
+      network_calls_made: packet?.network_call_summary?.network_calls_made === true,
       route_or_backend_exposed: packet?.route_or_backend_exposed === true,
       inference_called: packet?.inference_called === true,
       provider_called: packet?.provider_called === true,

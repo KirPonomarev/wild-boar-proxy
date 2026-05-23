@@ -1,45 +1,55 @@
+<!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+
 # WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS Closeout
+
+## Goal
+
+Prove the Codex Custom model/API-control layer as server-issued registry plus
+OpenAI-compatible shape declaration, without live WBP/API/provider calls.
+
+## Result
+
+- status: passed
+- final verdict: `WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_READY`
+- next action: `GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS`
 
 ## Contour Capsule
 
-- goal: Prove readonly WBP OpenAI-compatible model registry and server-issued model dry-run for Codex Custom without inference or token burn.
+- goal: server-issued Codex Custom model registry and config-compatible model dry-run with no network or token burn
 - branch: codex/external-agent-lab-isolated
-- head: c7619f3 before contour commit; final commit is recorded in git history after this closeout is committed.
-- touched files: wild_boar_proxy/codex_model_registry.py, wild_boar_proxy/web_design_live_server.py, wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, tests/test_codex_model_registry.py, tests/test_web_design_live_server.py, tests/test_web_design_ui.py, audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23/*
-- tests run: node --check overview.js; unittest tests.test_codex_model_registry tests.test_codex_launch_modes tests.test_operator_surface tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter -q; git diff --check
-- blocked risks: GPT account inference, API/provider inference, custom session manager, and claim-gate repair are intentionally not claimed in this contour.
-- next exact command: /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_cli tests.test_cli_external_models tests.test_external_models tests.test_web_design_live_server tests.test_web_design_ui tests.test_web_design_command_adapter tests.test_codex_model_registry -q
-- resume from here: GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS
+- head: f83ec34 before contour commit
+- touched files: wild_boar_proxy/codex_model_registry.py; wild_boar_proxy/web_design_ui/scripts/overview.js; tests/test_codex_model_registry.py; tests/test_web_design_live_server.py; tests/test_web_design_ui.py; audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23/*
+- tests run: node --check overview.js; project Python targeted 162-test suite; browser fake-server model dry-run proof; git diff --check; closeout resilience; project Python extended 661-test suite
+- blocked risks: live API calls, GPT inference, Codex Custom prompt, account mutation, route mutation, and current Codex mutation stayed out of scope
+- next exact command: plan `GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS`
 
-## Outcome
+## Verification
 
-Implemented a bounded Codex Custom model registry and UI panel. Browser can refresh the server-issued model list and run a model selection dry-run, but the packet keeps the state degraded while claim gate is blocked.
+- tests: targeted suite passed with 162 tests; extended CLI/web/Codex suite passed with 661 tests
+- build: `node --check wild_boar_proxy/web_design_ui/scripts/overview.js` passed; `git diff --check` passed
+- manual: Codex in-app browser clicked model refresh and model dry-run on a fake no-runtime local server
+- live verification: not run; live WBP/API/provider calls were intentionally out of scope
 
-The dry-run packet proves the bounded static dry-run path:
+## Artifacts
 
-- `model_server_issued=true`
-- `codex_config_compatible=true`
-- `route_or_backend_exposed=false`
-- `inference_called=false`
-- `provider_called=false`
-- `responses_called=false`
-- `chat_completions_called=false`
-- `token_burn=0`
-- `negative_claim_basis=dry_run_static_code_path_no_inference_adapter`
-- `independent_runtime_meter_attached=false`
+- spec: audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23/spec.md
+- packet: audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23/proof.json
+- report: audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23/browser_proof.json
 
-Auditor note: these negative claims are code-path guarded dry-run claims, not independent runtime token-meter claims. The next inference contour must add runtime metering before claiming real token accounting.
+## Git
 
-## Evidence
+- branch: codex/external-agent-lab-isolated
+- commit: contour commit created after this closeout is staged
+- pushed: pushed after contour commit
 
-- `model_registry_packet.json`
-- `api_compat_packet.json`
-- `model_dry_run_proof.json`
-- `evidence/forbidden_browser_fields_rejection.json`
-- `evidence/browser_custom_models.png`
-- `redaction_audit.json`
-- `independent_audit.json`
+## Scope Check
 
-## Non-Claims
+- unrelated work mixed in: no; unrelated existing untracked files were ignored
+- private-data risk reviewed: yes; no auth contents, tokens, provider credentials, account state, or runtime packets captured
 
-This closeout does not claim that GPT accounts, external API routes, `/v1/responses`, `/v1/chat/completions`, or Codex Custom sessions work end-to-end.
+## Notes
+
+- blockers encountered: stale test/packet wording implied `/v1/models` was called; fixed to shape declaration and `models_endpoint_called=false`
+- follow-up contour: `GPT_ACCOUNTS_POOL_TRUTH_AND_SELECTION_PASS`
+- resume from here: CLOSED

@@ -11,6 +11,13 @@ from wild_boar_proxy.operator_surface import DEFAULT_ENDPOINT, DEFAULT_MODEL
 
 
 CUSTOM_MODEL_DRY_RUN_ALLOWED_FIELDS = {"model_id"}
+CANONICAL_INTERNAL_MODEL_IDS = (
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+)
 CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS = {
     "api_key",
     "apikey",
@@ -23,6 +30,10 @@ CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS = {
     "route_id",
     "provider",
     "endpoint",
+    "base_url",
+    "openai_base_url",
+    "model_provider",
+    "wire_api",
     "proxy",
     "http_proxy",
     "https_proxy",
@@ -36,7 +47,8 @@ FORBIDDEN_INFERENCE_SURFACES = (
     "/v1/chat/completions",
     "provider_direct_calls",
 )
-ALLOWED_NETWORK_CALLS = ("/v1/models",)
+CONFIGURED_MODEL_PROVIDER = "cliproxy"
+CONFIGURED_WIRE_API = "responses"
 
 
 def utc_now() -> str:
@@ -90,6 +102,28 @@ def _model_source_hint(model_id: str) -> str:
     return "cliproxy_external_alias"
 
 
+def _provider_class(model_id: str) -> str:
+    if model_id.startswith("gpt-"):
+        return "gpt_account_or_alias"
+    return "external_alias"
+
+
+def _model_entry(model_id: str) -> dict[str, Any]:
+    source = _model_source_hint(model_id)
+    return {
+        "model_id": model_id,
+        "label": model_id,
+        "source": source,
+        "provider_class": _provider_class(model_id),
+        "codex_compatible": True,
+        "codex_config_compatible": True,
+        "responses_supported": True,
+        "chat_completions_supported": True,
+        "server_issued": True,
+        "model_source_hint": source,
+    }
+
+
 def _status_for_models(model_ids: list[str], claim_gate_status: str, models_ok: bool) -> tuple[str, str]:
     if not model_ids or not models_ok:
         return "degraded", "CUSTOM_MODELS_NOT_VISIBLE"
@@ -123,31 +157,40 @@ def build_custom_model_registry_packet(
         "mode_id": "codex_custom",
         "endpoint": endpoint,
         "endpoint_scope": "local_wbp_openai_compat",
+        "model_provider": CONFIGURED_MODEL_PROVIDER,
+        "base_url": endpoint,
+        "wire_api": CONFIGURED_WIRE_API,
+        "configured_wire_api": CONFIGURED_WIRE_API,
         "recommended_default_model": recommended_default_model,
+        "recommended_model": recommended_default_model,
         "reported_configured_model": reported_configured_model,
+        "configured_model": reported_configured_model,
         "configured_model_visible": reported_configured_model in model_ids,
         "server_issued": True,
-        "model_count": len(model_ids),
-        "available_models": [
-            {
-                "model_id": model_id,
-                "server_issued": True,
-                "codex_config_compatible": True,
-                "model_source_hint": _model_source_hint(model_id),
-            }
-            for model_id in model_ids
+        "canonical_internal_model_ids": list(CANONICAL_INTERNAL_MODEL_IDS),
+        "canonical_internal_model_ids_visible": [
+            model_id for model_id in CANONICAL_INTERNAL_MODEL_IDS if model_id in model_ids
         ],
+        "model_count": len(model_ids),
+        "available_models": [_model_entry(model_id) for model_id in model_ids],
         "claim_gate_status": claim_gate_status,
         "allowed_browser_fields": ["model_id"],
         "forbidden_browser_fields": sorted(CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS),
         "route_or_backend_exposed": False,
-        "allowed_network_calls": list(ALLOWED_NETWORK_CALLS),
+        "openai_compatible_shape_declared": True,
+        "models_endpoint_shape_declared": True,
+        "responses_shape_declared": True,
+        "chat_completions_shape_declared": True,
+        "codex_config_compatible": True,
+        "live_api_checked": False,
+        "network_calls_made": False,
+        "allowed_network_calls": [],
         "forbidden_network_calls": list(FORBIDDEN_INFERENCE_SURFACES),
-        "models_endpoint_called": True,
+        "models_endpoint_called": False,
         "inference_called": False,
         "provider_called": False,
         "token_burn": 0,
-        "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
+        "negative_claim_basis": "shape_declaration_no_live_api_or_inference_call",
         "independent_runtime_meter_attached": False,
         "fresh_truth": True,
         "launch_claim_scope": "model_registry_only",
@@ -169,31 +212,46 @@ def build_custom_api_compat_packet(
         "captured_at_utc": utc_now(),
         "mode_id": "codex_custom",
         "endpoint": endpoint,
+        "model_provider": CONFIGURED_MODEL_PROVIDER,
+        "base_url": endpoint,
+        "wire_api": CONFIGURED_WIRE_API,
+        "configured_wire_api": CONFIGURED_WIRE_API,
+        "openai_compatible_shape_declared": True,
+        "models_endpoint_shape_declared": True,
+        "responses_shape_declared": True,
+        "chat_completions_shape_declared": True,
+        "codex_config_compatible": True,
+        "live_api_checked": False,
+        "token_burn": 0,
         "compat_surfaces": {
             "/v1/models": {
-                "called": True,
-                "fresh_truth": True,
-                "status": "ok" if models_ok else "degraded",
+                "called": False,
+                "fresh_truth": False,
+                "status": "shape_declared" if models_ok else "shape_declared_models_not_visible",
                 "model_count": registry["model_count"],
+                "shape_declared": True,
             },
             "/v1/responses": {
                 "called": False,
                 "fresh_truth": False,
-                "status": "not_called_in_this_contour",
+                "status": "shape_declared_not_called",
+                "shape_declared": True,
             },
             "/v1/chat/completions": {
                 "called": False,
                 "fresh_truth": False,
-                "status": "not_called_in_this_contour",
+                "status": "shape_declared_not_called",
+                "shape_declared": True,
             },
         },
         "network_call_summary": {
-            "allowed_calls_made": list(ALLOWED_NETWORK_CALLS),
+            "network_calls_made": False,
+            "allowed_calls_made": [],
             "forbidden_calls_made": [],
             "provider_direct_calls_made": False,
             "inference_called": False,
             "token_burn": 0,
-            "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
+            "negative_claim_basis": "shape_declaration_no_live_api_or_inference_call",
             "independent_runtime_meter_attached": False,
         },
         "route_or_backend_exposed": False,
@@ -222,14 +280,24 @@ def build_custom_model_dry_run_packet(
             "human_message": "Codex Custom model dry-run accepts only server-issued model_id.",
             "forbidden_fields": forbidden,
             "model_server_issued": False,
+            "selected_model_server_issued": False,
             "codex_config_compatible": False,
+            "model_provider": CONFIGURED_MODEL_PROVIDER,
+            "base_url": endpoint,
+            "wire_api": CONFIGURED_WIRE_API,
             "route_or_backend_exposed": False,
             "inference_called": False,
             "provider_called": False,
             "responses_called": False,
             "chat_completions_called": False,
+            "network_call_summary": {
+                "network_calls_made": False,
+                "allowed_calls_made": [],
+                "forbidden_calls_made": [],
+                "provider_direct_calls_made": False,
+            },
             "token_burn": 0,
-            "negative_claim_basis": "dry_run_rejected_before_inference_adapter",
+            "negative_claim_basis": "dry_run_rejected_before_network_or_inference_adapter",
             "independent_runtime_meter_attached": False,
             "refresh_packet": registry,
             "next_action": "remove_forbidden_browser_fields",
@@ -247,14 +315,24 @@ def build_custom_model_dry_run_packet(
             "human_message": "Model id was not present in the current server-issued list.",
             "selected_model": model_id if isinstance(model_id, str) else "",
             "model_server_issued": False,
+            "selected_model_server_issued": False,
             "codex_config_compatible": False,
+            "model_provider": CONFIGURED_MODEL_PROVIDER,
+            "base_url": endpoint,
+            "wire_api": CONFIGURED_WIRE_API,
             "route_or_backend_exposed": False,
             "inference_called": False,
             "provider_called": False,
             "responses_called": False,
             "chat_completions_called": False,
+            "network_call_summary": {
+                "network_calls_made": False,
+                "allowed_calls_made": [],
+                "forbidden_calls_made": [],
+                "provider_direct_calls_made": False,
+            },
             "token_burn": 0,
-            "negative_claim_basis": "dry_run_rejected_before_inference_adapter",
+            "negative_claim_basis": "dry_run_rejected_before_network_or_inference_adapter",
             "independent_runtime_meter_attached": False,
             "refresh_packet": registry,
             "next_action": "select_model_from_server_registry",
@@ -270,7 +348,11 @@ def build_custom_model_dry_run_packet(
         "human_message": "Codex Custom model selection is config-compatible; no inference was called.",
         "selected_model": model_id,
         "model_server_issued": True,
+        "selected_model_server_issued": True,
         "codex_config_compatible": bool(selected_entry["codex_config_compatible"]),
+        "model_provider": CONFIGURED_MODEL_PROVIDER,
+        "base_url": endpoint,
+        "wire_api": CONFIGURED_WIRE_API,
         "model_source_hint": selected_entry["model_source_hint"],
         "claim_gate_status": registry["claim_gate_status"],
         "route_or_backend_exposed": False,
@@ -278,8 +360,14 @@ def build_custom_model_dry_run_packet(
         "provider_called": False,
         "responses_called": False,
         "chat_completions_called": False,
+        "network_call_summary": {
+            "network_calls_made": False,
+            "allowed_calls_made": [],
+            "forbidden_calls_made": [],
+            "provider_direct_calls_made": False,
+        },
         "token_burn": 0,
-        "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
+        "negative_claim_basis": "shape_declaration_no_live_api_or_inference_call",
         "independent_runtime_meter_attached": False,
         "refresh_packet": registry,
         "next_action": "custom_session_manager_contour",

@@ -1,26 +1,47 @@
 {
   "schema_version": 1,
   "contour": "WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS",
-  "model_registry_packet": "model_registry_packet.json",
-  "api_compat_packet": "api_compat_packet.json",
-  "model_dry_run_proof": "model_dry_run_proof.json",
-  "browser_proof": "browser_proof.json",
-  "screenshot": "evidence/browser_custom_models.png",
-  "observed": {
-    "model_count": 8,
-    "selected_model": "gpt-5.3-codex",
-    "model_server_issued": true,
+  "status": "passed",
+  "machine_error_code": "OK",
+  "implemented": {
+    "server_issued_model_registry": true,
+    "canonical_model_metadata": true,
+    "openai_compatible_shape_declared": true,
+    "live_api_checked": false,
+    "models_endpoint_called": false,
+    "network_calls_made": false,
+    "model_dry_run_endpoint": "/api/codex/custom/model-dry-run",
+    "ui_model_selector_server_issued_only": true
+  },
+  "dry_run_guards": {
+    "selected_model_server_issued": true,
     "codex_config_compatible": true,
+    "model_provider": "cliproxy",
+    "wire_api": "responses",
     "route_or_backend_exposed": false,
     "inference_called": false,
     "provider_called": false,
     "responses_called": false,
     "chat_completions_called": false,
     "token_burn": 0,
-    "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
-    "independent_runtime_meter_attached": false,
-    "claim_gate_status": "blocked",
-    "status": "degraded",
-    "machine_error_code": "CLAIM_GATE_BLOCKED"
-  }
+    "negative_claim_basis": "shape_declaration_no_live_api_or_inference_call"
+  },
+  "tests": {
+    "node_check_overview_js": "passed",
+    "targeted_project_python_unittest": {
+      "status": "passed",
+      "tests_run": 162
+    },
+    "extended_project_python_unittest": {
+      "status": "passed",
+      "tests_run": 661,
+      "duration_seconds": 210.063
+    },
+    "git_diff_check": "passed",
+    "closeout_resilience": "passed"
+  },
+  "live_runtime_commands_run": false,
+  "live_account_commands_run": false,
+  "live_api_commands_run": false,
+  "live_prompt_run": false
 }

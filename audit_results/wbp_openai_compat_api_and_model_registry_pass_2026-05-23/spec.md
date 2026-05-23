@@ -1,32 +1,57 @@
-# WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS
+<!-- SPDX-FileCopyrightText: 2026 Kirill Ponomarev -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-## Goal
+# Spec: WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS
 
-Prove the readonly OpenAI-compatible model registry path for Codex Custom through WBP without inference, provider calls, account rotation, session management, or token burn.
+## Objective
 
-## Scope
+Make Codex Custom model selection safe for the web/control layer by exposing a
+server-issued model registry and OpenAI-compatible shape declaration without
+performing live WBP/API/provider calls.
 
-- Add a server-side Codex Custom model registry packet.
-- Expose `/api/codex/custom/models`, `/api/codex/custom/api-compat`, and `/api/codex/custom/model-dry-run`.
-- Render a bounded `Codex Custom Models` web panel.
-- Allow browser payload to send only server-issued `model_id`.
-- Keep `route_id`, `backend_id`, provider, endpoint, path, auth, and secret fields forbidden.
+## In Scope
 
-## Out Of Scope
+- Server-issued model registry packet.
+- Codex config compatibility dry-run.
+- OpenAI-compatible shape declaration for models/responses/chat completions.
+- Browser model selector populated from server packet only.
+- Rejection of browser-controlled route/backend/provider/base URL/auth/path/home.
 
-- `/v1/responses` proof.
-- `/v1/chat/completions` proof.
-- GPT account inference proof.
-- External provider inference proof.
-- Codex Custom session manager.
-- Original Codex launch mutation.
-- Current Codex mutation.
+## Out of Scope
 
-## Success Criteria
+- Live `/v1/models` request.
+- Live `/v1/responses` request.
+- Live `/v1/chat/completions` request.
+- Real provider/API validation.
+- GPT account inference.
+- Codex Custom launch or prompt.
+- Account rotation/load.
 
-- `/v1/models` registry is visible as fresh truth.
-- `/v1/responses` and `/v1/chat/completions` are explicitly `not_called_in_this_contour`.
-- Model dry-run accepts only a server-issued model.
-- Dry-run proves `inference_called=false`, `provider_called=false`, `responses_called=false`, `chat_completions_called=false`, and `token_burn=0`.
-- Claim gate blocked remains degraded and is not rendered as global success.
-- Browser proof captures the panel and dry-run packet.
+## Constraints
+
+- Browser may send only `model_id`.
+- `model_id` must already exist in the server-issued registry.
+- Dry-run must report zero token burn and no network calls.
+- Packets must not claim live API readiness.
+
+## Acceptance Criteria
+
+- [x] Model entries include canonical metadata and `server_issued=true`.
+- [x] API compatibility is a shape declaration, not live proof.
+- [x] Model dry-run accepts a server-issued model.
+- [x] Free-form models are rejected.
+- [x] Browser route/backend/provider/base URL/auth/path/home fields are rejected.
+- [x] UI shows configured, recommended, selected, compatibility, and zero-token state.
+- [x] Browser fake-server proof passes without runtime/API calls.
+- [x] Targeted and extended tests pass.
+
+## Verification
+
+- tests: `node --check`; targeted project Python suite; extended project Python suite.
+- build: `git diff --check`.
+- manual: Codex in-app browser against fake no-runtime local server.
+- live evidence: not run; intentionally out of scope.
+
+## Open Questions
+
+- Live WBP/API/GPT proof is deferred to later authorized contours.

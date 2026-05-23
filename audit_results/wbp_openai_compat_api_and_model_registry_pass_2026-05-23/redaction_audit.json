@@ -1,8 +1,15 @@
 {
   "schema_version": 1,
-  "status": "clean",
-  "scan_command": "rg -n \"sk-[A-Za-z0-9_-]{8,}|Bearer\\\\s+[A-Za-z0-9._-]{8,}|OPENAI_API_KEY\\\\s*[:=]|secret-key\\\\s*:|api-keys\\\\s*:\" audit_results/wbp_openai_compat_api_and_model_registry_pass_2026-05-23 || true",
-  "findings": [],
+  "contour": "WBP_OPENAI_COMPAT_API_AND_MODEL_REGISTRY_PASS",
+  "status": "passed",
   "raw_secret_recorded": false,
-  "auth_file_recorded": false
+  "auth_file_content_recorded": false,
+  "raw_backend_id_recorded": false,
+  "raw_route_id_recorded": false,
+  "provider_credential_recorded": false,
+  "browser_secret_fields_accepted": false,
+  "notes": [
+    "Artifacts contain only repo paths, model ids, and localhost endpoint literals.",
+    "No live runtime/account/API command output was captured."
+  ]
 }
