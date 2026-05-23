@@ -22,7 +22,7 @@ through-app request with machine-backed evidence.
 - goal: prove isolated launch, isolation boundaries, and one machine-backed
   through-app smoke for the Codex Desktop copy running through the WBP stack
 - branch: `codex/external-agent-lab-isolated`
-- head: `fbd9835`
+- head: `74310e6`
 - touched files:
   - `audit_results/isolated_codex_app_e2e_pass_2026-05-23/spec.md`
   - `audit_results/isolated_codex_app_e2e_pass_2026-05-23/baseline.json`
@@ -89,7 +89,9 @@ through-app request with machine-backed evidence.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `fbd9835` (packet + closeout), `20cd62b` (git-truth normalization)
+- commit: `fbd9835` (packet + closeout), `20cd62b` (git-truth normalization),
+  `d005b0a` (pushed-state normalization), `74310e6` (boundary evidence
+  strengthening)
 - pushed: yes
 
 ## Scope Check

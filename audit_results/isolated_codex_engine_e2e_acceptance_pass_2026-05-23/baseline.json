@@ -1,0 +1,56 @@
+{
+  "contour": "ISOLATED_CODEX_ENGINE_E2E_ACCEPTANCE_PASS",
+  "program": "EXECUTION_CORE_FULL_SYSTEM_TO_ISOLATED_CODEX_APP_PASS",
+  "captured_at_utc": "2026-05-23T06:00:03Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_at_start": "74310e6",
+  "prior_gui_boundary": {
+    "contour": "ISOLATED_CODEX_APP_E2E_PASS",
+    "status": "closed_blocked_by_current_codex_protection_boundary",
+    "meaning": "GUI Desktop through-app proof remains blocked; this contour does not claim GUI success."
+  },
+  "sandbox_target": {
+    "profile_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile",
+    "managed_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+    "auth_source": "sandbox-scoped auth.json from launch-copy profile"
+  },
+  "wbp_preflight": {
+    "status": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "current_proxy_url": "http://127.0.0.1:10808",
+      "configured_model": "gpt-5.3-codex",
+      "launch_readiness": "ready",
+      "launch_capable_backend_count": 15
+    },
+    "healthcheck": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "launch_readiness": "ready",
+      "launch_capable_backend_count": 15
+    },
+    "accounts": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "accounts_count": 25,
+      "active_count": 17,
+      "healthy_count": 15
+    },
+    "external_models_status": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "routes_count": 1,
+      "observed_routes_count": 1,
+      "wbp_deepseek_v3_state": "verified",
+      "effective_model": "deepseek-chat",
+      "evidence_level": "network_route_check"
+    },
+    "external_models_check": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "route_id": "wbp-deepseek-v3"
+    }
+  }
+}

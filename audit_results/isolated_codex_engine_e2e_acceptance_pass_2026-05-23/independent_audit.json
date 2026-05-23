@@ -1,0 +1,40 @@
+{
+  "auditor_mode": "local_replay_independent_audit",
+  "external_subagent_attempted": true,
+  "external_subagent_available": false,
+  "external_subagent_blocker": "agent thread limit reached",
+  "verdict": "SUPPORTED",
+  "checks": [
+    {
+      "name": "engine_response",
+      "result": "supported",
+      "fact": "codex exec --json with isolated CODEX_HOME returned agent_message=OK and exit_code=0"
+    },
+    {
+      "name": "strict_home_response",
+      "result": "supported",
+      "fact": "repeat smoke with both HOME and CODEX_HOME isolated also returned agent_message=OK"
+    },
+    {
+      "name": "wbp_endpoint_binding",
+      "result": "supported",
+      "fact": "config used openai_base_url=http://127.0.0.1:8318/v1 and WBP healthcheck stayed OK on that endpoint"
+    },
+    {
+      "name": "current_profile_boundary",
+      "result": "supported_with_nuance",
+      "fact": "full ~/.codex tree has ambient sqlite/cache mtime changes from the live operator Codex, but sensitive ~/.codex/auth.json and ~/.codex/config.toml stayed unchanged during strict replay"
+    },
+    {
+      "name": "gui_claim_boundary",
+      "result": "supported",
+      "fact": "packet does not claim GUI Desktop E2E success and preserves the previous GUI host-surface boundary verdict"
+    },
+    {
+      "name": "redaction",
+      "result": "supported",
+      "fact": "no raw secret values are present in committed artifacts; temporary auth copies were removed"
+    }
+  ],
+  "final_classification": "closed_success_engine_acceptance"
+}

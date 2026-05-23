@@ -1,0 +1,26 @@
+{
+  "verdict": "clean",
+  "raw_secret_committed": false,
+  "raw_auth_file_committed": false,
+  "temporary_auth_copy_location": "/tmp/wbp-codex-engine.yNtgxd/*/auth.json",
+  "temporary_auth_copy_removed": true,
+  "scans": [
+    {
+      "target": "temporary stdout/stderr and WBP packet outputs excluding auth.json",
+      "patterns": [
+        "sk-[A-Za-z0-9]",
+        "sess-[A-Za-z0-9]",
+        "OPENAI_API_KEY=",
+        "DEEPSEEK_API_KEY=<value>"
+      ],
+      "matches": 0
+    }
+  ],
+  "allowed_secret_refs": [
+    "DEEPSEEK_API_KEY as a reference name only"
+  ],
+  "notes": [
+    "The sandbox-scoped auth file was copied only into temporary CODEX_HOME locations under /tmp and removed before closeout.",
+    "Artifacts contain route, endpoint, token usage, and response facts, not raw credentials."
+  ]
+}
