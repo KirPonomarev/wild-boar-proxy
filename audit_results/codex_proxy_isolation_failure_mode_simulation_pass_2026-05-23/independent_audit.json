@@ -1,0 +1,19 @@
+{
+  "answers": {
+    "Did any failure look like success?": "No: timeout/nonzero/no agent_message rows are not marked success.",
+    "Did current Codex liveness change?": "process count before=32 after=32; command env not modified by subprocess.",
+    "Did isolated Codex ever use ~/.codex?": "No evidence: HOME and CODEX_HOME were temp; sensitive ~/.codex hashes unchanged; mock endpoint received Authorization from temp fake auth.",
+    "Did real WBP smoke succeed?": "Yes: exit_code=0 and item.completed agent_message text=OK",
+    "Did we stop or mutate real WBP?": "No: no real WBP shutdown command was run.",
+    "Was provider-native model used incorrectly?": "No: config model was gpt-5.3-codex only.",
+    "Were raw secrets written?": "No raw secret pattern found; sandbox auth contents not stored.",
+    "Were temp homes removed?": "True"
+  },
+  "residual_risks": [
+    "Mock success is blocked by protocol incompatibility: Codex CLI probes GET /v1/responses, not just OpenAI POST /v1/responses.",
+    "Full ~/.codex tree metadata may have ambient live Codex noise; sensitive auth/config hashes are the primary sentinel.",
+    "Isolated Codex attempted remote plugin sync to chatgpt.com and received 401; this did not mutate main Codex but should be disabled/gated for longer work-session safety."
+  ],
+  "schema_version": 1,
+  "verdict": "pass_with_blocked_mock_success"
+}
