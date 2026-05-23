@@ -132,15 +132,30 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["status"], "degraded")
         self.assertEqual(packet["machine_error_code"], "CLAIM_GATE_BLOCKED")
         self.assertEqual(packet["managed_total"], 5)
+        self.assertEqual(packet["account_source"], "provided_packet_or_fake")
+        self.assertEqual(packet["account_count_claim_scope"], "packet_shape_only")
+        self.assertFalse(packet["live_account_truth_checked"])
         self.assertEqual(packet["expected_managed_total"], 25)
         self.assertEqual(packet["launch_capable_count"], 2)
+        self.assertEqual(packet["accounts_visible"], 5)
+        self.assertEqual(packet["launch_capable_backend_ids"], [])
+        self.assertEqual(len(packet["launch_capable_backend_refs"]), 2)
         self.assertEqual(packet["pool_classes"]["active"], 3)
+        self.assertEqual(packet["pool_counts"]["active"], 3)
         self.assertEqual(packet["pool_classes"]["reserve"], 1)
         self.assertEqual(packet["pool_classes"]["hold"], 1)
         self.assertEqual(packet["pool_classes"]["problem"], 1)
         self.assertEqual(packet["quota_classes"]["quota_exhausted"], 1)
         self.assertFalse(packet["account_mutation_performed"])
+        self.assertTrue(packet["account_ids_redacted"])
+        self.assertFalse(packet["raw_backend_ids_exposed"])
         self.assertFalse(packet["raw_auth_refs_exposed"])
+        self.assertFalse(packet["raw_auth_visible"])
+        self.assertEqual(packet["token_burn"], 0)
+        self.assertEqual(packet["selected_backend_ids_observed"], [])
+        self.assertEqual(len(packet["selected_backend_refs_observed"]), 1)
+        self.assertNotIn("acct-a", json.dumps(packet))
+        self.assertNotIn("acct-b", json.dumps(packet))
         self.assertNotIn(".cli-proxy-api", json.dumps(packet["accounts"]))
         self.assertNotIn("auth.json", json.dumps(packet["accounts"]))
 
@@ -149,15 +164,27 @@ class CodexAccountSelectionTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "degraded")
         self.assertEqual(packet["machine_error_code"], "CLAIM_GATE_BLOCKED")
+        self.assertTrue(packet["selection_dry_run_proven"])
+        self.assertFalse(packet["live_selection_proven"])
         self.assertTrue(packet["selection_proven"])
         self.assertFalse(packet["inference_proven"])
-        self.assertEqual(packet["selected_backend_id"], "acct-a")
+        self.assertEqual(packet["selected_backend_id"], "")
+        self.assertTrue(packet["selected_backend_ref"])
+        self.assertTrue(packet["selected_backend_id_redacted"])
         self.assertTrue(packet["selected_backend_server_issued"])
+        self.assertEqual(packet["selected_backend_source"], "server")
         self.assertFalse(packet["browser_selected_backend"])
         self.assertEqual(packet["selected_source_class"], "gpt_account")
         self.assertFalse(packet["runtime_meter_attached"])
         self.assertFalse(packet["smoke_admitted"])
+        self.assertFalse(packet["responses_called"])
+        self.assertFalse(packet["chat_completions_called"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
+        self.assertFalse(packet["raw_backend_id_exposed"])
+        self.assertEqual(packet["token_burn"], 0)
         self.assertTrue(packet["selection_not_inference"])
+        self.assertNotIn("acct-a", json.dumps(packet))
 
     def test_account_smoke_dry_run_rejects_backend_route_account_provider_fields(self) -> None:
         packet = build_account_smoke_dry_run_packet(
@@ -167,6 +194,8 @@ class CodexAccountSelectionTests(unittest.TestCase):
                 "backend_id": "acct-a",
                 "route_id": "route",
                 "provider": "openai",
+                "openai_base_url": "http://127.0.0.1:8318/v1",
+                "wire_api": "responses",
                 "nested": {"auth": "secret"},
             },
             commands(),
@@ -177,9 +206,21 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(
             packet["forbidden_fields"],
-            ["account_id", "backend_id", "route_id", "provider", "nested", "nested.auth"],
+            [
+                "account_id",
+                "backend_id",
+                "route_id",
+                "provider",
+                "openai_base_url",
+                "wire_api",
+                "nested",
+                "nested.auth",
+            ],
         )
+        self.assertFalse(packet["selection_dry_run_proven"])
+        self.assertFalse(packet["live_selection_proven"])
         self.assertFalse(packet["inference_proven"])
+        self.assertFalse(packet["network_calls_made"])
         self.assertFalse(packet["account_mutation_performed"])
 
     def test_account_smoke_dry_run_accepts_server_model_but_does_not_admit_smoke(self) -> None:
@@ -192,11 +233,20 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertEqual(packet["status"], "degraded")
         self.assertTrue(packet["dry_run"])
         self.assertTrue(packet["model_server_issued"])
+        self.assertTrue(packet["selection_dry_run_proven"])
+        self.assertFalse(packet["live_selection_proven"])
         self.assertTrue(packet["selection_proven"])
         self.assertFalse(packet["inference_proven"])
         self.assertFalse(packet["smoke_admitted"])
         self.assertFalse(packet["runtime_meter_attached"])
+        self.assertFalse(packet["responses_called"])
+        self.assertFalse(packet["chat_completions_called"])
+        self.assertFalse(packet["provider_called"])
+        self.assertFalse(packet["network_calls_made"])
         self.assertFalse(packet["account_mutation_performed"])
+        self.assertTrue(packet["selected_backend_id_redacted"])
+        self.assertEqual(packet["selected_backend_id"], "")
+        self.assertTrue(packet["selected_backend_ref"])
         self.assertEqual(packet["token_burn"], 0)
         self.assertEqual(
             packet["negative_claim_basis"],

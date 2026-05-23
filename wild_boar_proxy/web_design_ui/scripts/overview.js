@@ -1084,14 +1084,15 @@ function renderCodexCustomAccounts(accounts, selection) {
   const claimGate = accounts?.claim_gate_status || selection?.claim_gate_status || "not_reported";
   const claimGateBlocked = String(claimGate).includes("blocked");
   const status = accounts?.status || "unknown";
-  const selectionProven = selection?.selection_proven === true;
+  const selectionDryRunProven = selection?.selection_dry_run_proven === true || selection?.selection_proven === true;
+  const liveSelectionProven = selection?.live_selection_proven === true;
   codexCustomAccountsSetChip(
-    status === "ok" && selectionProven && !claimGateBlocked ? "green" : (status === "failed" ? "red" : "amber"),
-    selectionProven && claimGateBlocked ? "selection ready / gate blocked" : (selectionProven ? "selection ready" : status)
+    status === "ok" && selectionDryRunProven && !claimGateBlocked ? "green" : (status === "failed" ? "red" : "amber"),
+    selectionDryRunProven && claimGateBlocked ? "dry-run ready / gate blocked" : (selectionDryRunProven ? "dry-run ready" : status)
   );
   codexCustomAccountsSetText(
     "codexCustomAccountsSummary",
-    `${accounts?.managed_total ?? 0} managed accounts · ${accounts?.launch_capable_count ?? 0} launch capable`
+    `${accounts?.managed_total ?? 0} packet accounts · ${accounts?.launch_capable_count ?? 0} launch capable · live unchecked`
   );
   codexCustomAccountsSetText(
     "codexCustomAccountsManaged",
@@ -1105,24 +1106,25 @@ function renderCodexCustomAccounts(accounts, selection) {
   );
   codexCustomAccountsSetText(
     "codexCustomAccountsSelection",
-    selectionProven
+    selectionDryRunProven
       ? `${selection?.selected_source_class || "gpt_account"} · ${selection?.selection_reason || "server-side selection"}`
       : (selection?.selection_reason || "not proven")
   );
   codexCustomAccountsSetText("codexCustomAccountsClaimGate", claimGate);
-  codexCustomAccountsSetText("codexCustomSelectionState", selectionProven ? "server-side proven" : "not proven");
+  codexCustomAccountsSetText("codexCustomSelectionState", selectionDryRunProven ? (liveSelectionProven ? "live proven" : "selection dry-run") : "not proven");
   codexCustomAccountsSetText("codexCustomInferenceState", selection?.inference_proven === true ? "metered proof" : "not claimed");
 }
 
 function renderCodexCustomAccountDryRun(packet) {
   const response = document.getElementById("codexCustomAccountDryRunResponse");
-  const ok = packet?.dry_run === true && packet?.selection_proven === true && packet?.browser_selected_backend === false;
+  const selectionDryRunProven = packet?.selection_dry_run_proven === true || packet?.selection_proven === true;
+  const ok = packet?.dry_run === true && selectionDryRunProven && packet?.browser_selected_backend === false;
   const claimGateBlocked = String(packet?.claim_gate_status || packet?.refresh_packet?.claim_gate_status || "").includes("blocked");
   codexCustomAccountsSetChip(
     ok && !claimGateBlocked ? "green" : (ok ? "amber" : (packet?.status === "rejected" ? "amber" : "red")),
     ok && claimGateBlocked ? "dry-run ok / gate blocked" : (ok ? "dry-run ok" : (packet?.status || "failed"))
   );
-  codexCustomAccountsSetText("codexCustomSelectionState", packet?.selection_proven ? "server-side proven" : "not proven");
+  codexCustomAccountsSetText("codexCustomSelectionState", selectionDryRunProven ? (packet?.live_selection_proven ? "live proven" : "selection dry-run") : "not proven");
   codexCustomAccountsSetText("codexCustomInferenceState", packet?.inference_proven ? "metered proof" : "not claimed");
   if (response) {
     response.textContent = JSON.stringify({
@@ -1131,14 +1133,21 @@ function renderCodexCustomAccountDryRun(packet) {
       selected_model: packet?.selected_model || "",
       dry_run: packet?.dry_run === true,
       model_server_issued: packet?.model_server_issued === true,
+      selection_dry_run_proven: packet?.selection_dry_run_proven === true,
+      live_selection_proven: packet?.live_selection_proven === true,
       selection_proven: packet?.selection_proven === true,
       inference_proven: packet?.inference_proven === true,
       selected_source_class: packet?.selected_source_class || "",
-      selected_backend_id: packet?.selected_backend_id || "",
+      selected_backend_ref: packet?.selected_backend_ref || "",
+      selected_backend_id_redacted: packet?.selected_backend_id_redacted === true,
       selected_backend_server_issued: packet?.selected_backend_server_issued === true,
       browser_selected_backend: packet?.browser_selected_backend === true,
       smoke_admitted: packet?.smoke_admitted === true,
       runtime_meter_attached: packet?.runtime_meter_attached === true,
+      responses_called: packet?.responses_called === true,
+      chat_completions_called: packet?.chat_completions_called === true,
+      provider_called: packet?.provider_called === true,
+      network_calls_made: packet?.network_calls_made === true,
       account_mutation_performed: packet?.account_mutation_performed === true,
       token_burn: packet?.token_burn ?? 0,
       negative_claim_basis: packet?.negative_claim_basis || "",
@@ -1189,11 +1198,17 @@ async function runCodexCustomAccountSmokeDryRun() {
       human_message: error.message,
       dry_run: true,
       model_server_issued: false,
+      selection_dry_run_proven: false,
+      live_selection_proven: false,
       selection_proven: false,
       inference_proven: false,
       browser_selected_backend: false,
       smoke_admitted: false,
       runtime_meter_attached: false,
+      responses_called: false,
+      chat_completions_called: false,
+      provider_called: false,
+      network_calls_made: false,
       account_mutation_performed: false,
       token_burn: 0
     });

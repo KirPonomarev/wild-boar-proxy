@@ -177,8 +177,10 @@ class CodexCustomSessionManager:
             "model_id": model_id,
             "model_server_issued": True,
             "selected_source_class": selection.get("selected_source_class"),
-            "selected_backend_id": selection.get("selected_backend_id"),
+            "selected_backend_ref": selection.get("selected_backend_ref"),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
+            "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
+            "live_selection_proven": selection.get("live_selection_proven") is True,
             "selection_proven": selection.get("selection_proven") is True,
             "selection_machine_error_code": selection.get("machine_error_code"),
             "session_root": str(session_root),
@@ -353,8 +355,10 @@ class CodexCustomSessionManager:
             "model_id": model_id,
             "model_server_issued": True,
             "selected_source_class": session.get("selected_source_class"),
-            "selected_backend_digest": _digest(str(session.get("selected_backend_id") or "")),
+            "selected_backend_digest": str(session.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+            "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
+            "live_selection_proven": session.get("live_selection_proven") is True,
             "browser_selected_backend": False,
             "prompt_present": True,
             "prompt_length": len(prompt),
@@ -546,7 +550,7 @@ class CodexCustomSessionManager:
 
     def _public_session(self, session: dict[str, Any]) -> dict[str, Any]:
         session_id = str(session["session_id"])
-        selected_backend_id = str(session.get("selected_backend_id") or "")
+        selected_backend_ref = str(session.get("selected_backend_ref") or "")
         session_root = str(session.get("session_root") or "")
         codex_home = str(session.get("codex_home") or "")
         return {
@@ -557,8 +561,10 @@ class CodexCustomSessionManager:
             "model_id": session.get("model_id"),
             "model_server_issued": session.get("model_server_issued") is True,
             "selected_source_class": session.get("selected_source_class"),
-            "selected_backend_digest": _digest(selected_backend_id) if selected_backend_id else "",
+            "selected_backend_digest": selected_backend_ref,
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+            "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
+            "live_selection_proven": session.get("live_selection_proven") is True,
             "selection_proven": session.get("selection_proven") is True,
             "selection_machine_error_code": session.get("selection_machine_error_code"),
             "session_root_digest": _digest(session_root) if session_root else "",
@@ -601,11 +607,12 @@ class CodexCustomSessionManager:
         }
 
     def _selection_summary(self, selection: dict[str, Any]) -> dict[str, Any]:
-        selected_backend_id = str(selection.get("selected_backend_id") or "")
         return {
+            "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
+            "live_selection_proven": selection.get("live_selection_proven") is True,
             "selection_proven": selection.get("selection_proven") is True,
             "selected_source_class": selection.get("selected_source_class"),
-            "selected_backend_digest": _digest(selected_backend_id) if selected_backend_id else "",
+            "selected_backend_digest": str(selection.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
             "browser_selected_backend": selection.get("browser_selected_backend") is True,
             "machine_error_code": selection.get("machine_error_code"),

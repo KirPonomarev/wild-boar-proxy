@@ -24,10 +24,13 @@ ACCOUNT_SMOKE_DRY_RUN_FORBIDDEN_FIELDS = {
     "apikey",
     "auth",
     "auth_path",
+    "base_url",
     "backend_id",
     "codex_home",
     "endpoint",
     "home",
+    "model_provider",
+    "openai_base_url",
     "path",
     "profile",
     "provider",
@@ -35,6 +38,7 @@ ACCOUNT_SMOKE_DRY_RUN_FORBIDDEN_FIELDS = {
     "runtime_config",
     "secret",
     "token",
+    "wire_api",
 }
 POOL_CLASS_NAMES = ("active", "reserve", "hold", "problem", "retired")
 ELIGIBILITY_CLASS_NAMES = (
@@ -134,10 +138,12 @@ def _redacted_account_rows(accounts: list[dict[str, Any]]) -> list[dict[str, Any
         if not backend_id:
             continue
         eligibility, reasons = classify_backend_runtime_eligibility(account)
+        backend_ref = _backend_ref(backend_id)
         rows.append(
             {
-                "backend_id": backend_id,
-                "label": str(account.get("label") or backend_id),
+                "backend_id": "",
+                "backend_ref": backend_ref,
+                "label": f"account-{backend_ref[:12]}",
                 "pool": str(account.get("pool") or ""),
                 "status": str(account.get("status") or ""),
                 "manual_hold": bool(account.get("manual_hold")),
@@ -202,6 +208,14 @@ def _sanitized_accounts_digest(accounts: list[dict[str, Any]]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _backend_ref(backend_id: str) -> str:
+    return hashlib.sha256(backend_id.encode("utf-8")).hexdigest()
+
+
+def _backend_refs(backend_ids: list[str]) -> list[str]:
+    return [_backend_ref(backend_id) for backend_id in backend_ids if backend_id]
+
+
 def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str, Any]:
     status_packet = _packet_from_command(commands, "status")
     accounts_packet = _packet_from_command(commands, "accounts_list")
@@ -224,12 +238,18 @@ def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str
         "machine_error_code": machine_error_code,
         "captured_at_utc": utc_now(),
         "mode_id": "codex_custom",
+        "account_source": "provided_packet_or_fake",
+        "account_count_claim_scope": "packet_shape_only",
+        "live_account_truth_checked": False,
         "managed_total": len(accounts),
+        "accounts_visible": len(accounts),
         "expected_managed_total": 25,
         "managed_total_matches_expected": len(accounts) == 25,
         "launch_capable_count": len(launch_capable),
-        "launch_capable_backend_ids": [str(account.get("id")) for account in launch_capable],
+        "launch_capable_backend_ids": [],
+        "launch_capable_backend_refs": _backend_refs([str(account.get("id")) for account in launch_capable]),
         "pool_classes": pool_classes,
+        "pool_counts": pool_classes,
         "eligibility_classes": {name: len(ids) for name, ids in class_ids.items()},
         "auth_classes": {
             "auth_ref_present": sum(1 for account in accounts if account.get("auth_ref")),
@@ -253,11 +273,16 @@ def build_accounts_truth_packet(commands: dict[str, dict[str, Any]]) -> dict[str
             hygiene.get("selection_alignment_status") or "not_reported"
         ),
         "runtime_auth_pool_hygiene_status": str(hygiene.get("status") or "not_reported"),
-        "selected_backend_ids_observed": _selected_backend_ids(status_packet),
+        "selected_backend_ids_observed": [],
+        "selected_backend_refs_observed": _backend_refs(_selected_backend_ids(status_packet)),
         "rotation_packet_present": bool(rotation_packet),
         "fresh_truth": bool(accounts_packet),
         "account_mutation_performed": False,
+        "account_ids_redacted": True,
+        "raw_backend_ids_exposed": False,
         "raw_auth_refs_exposed": False,
+        "raw_auth_visible": False,
+        "token_burn": 0,
         "accounts_digest": _sanitized_accounts_digest(accounts),
         "accounts": _redacted_account_rows(accounts),
         "command_error_codes": command_errors,
@@ -283,7 +308,8 @@ def build_account_selection_packet(
         eligibility, reasons = classify_backend_runtime_eligibility(account)
         not_selected_reasons.append(
             {
-                "backend_id": backend_id,
+                "backend_id": "",
+                "backend_ref": _backend_ref(backend_id),
                 "eligibility_class": eligibility,
                 "reasons": reasons or ["ranked_after_selected_backend"],
             }
@@ -302,14 +328,19 @@ def build_account_selection_packet(
         "machine_error_code": machine_error_code,
         "captured_at_utc": utc_now(),
         "mode_id": "codex_custom",
+        "selection_dry_run_proven": selection_proven,
+        "live_selection_proven": False,
         "selection_proven": selection_proven,
         "inference_proven": False,
         "selected_source_class": "gpt_account" if selection_proven else "none",
-        "selected_backend_id": selected_backend_id,
+        "selected_backend_id": "",
+        "selected_backend_ref": _backend_ref(selected_backend_id) if selected_backend_id else "",
+        "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection_proven,
+        "selected_backend_source": "server" if selection_proven else "none",
         "browser_selected_backend": False,
         "selection_reason": (
-            "first live_capable active backend by runtime ranking policy"
+            "dry-run first live_capable active backend by runtime ranking policy"
             if selection_proven
             else "no live_capable active backend available"
         ),
@@ -320,20 +351,30 @@ def build_account_selection_packet(
                 "success_count_descending",
                 "backend_id_ascending",
             ],
-            "selected_backend_ids_observed": selected_backend_ids_observed,
+            "selected_backend_ids_observed": [],
+            "selected_backend_refs_observed": _backend_refs(selected_backend_ids_observed),
             "launch_capable_count": accounts_truth["launch_capable_count"],
         },
         "not_selected_reasons": not_selected_reasons[:50],
         "runtime_meter_attached": False,
         "smoke_admitted": False,
         "smoke_not_admitted_reason": "runtime_meter_not_attached",
+        "responses_called": False,
+        "chat_completions_called": False,
+        "provider_called": False,
+        "network_calls_made": False,
         "claim_gate_status": claim_gate_status,
         "model_registry_status": model_registry["status"],
         "server_issued_model_ids": [
             entry["model_id"] for entry in model_registry.get("available_models", [])
         ],
         "account_mutation_performed": False,
+        "raw_backend_id_exposed": False,
+        "selected_backend_id_redacted": True,
+        "token_burn": 0,
         "selection_not_inference": True,
+        "account_count_claim_scope": accounts_truth["account_count_claim_scope"],
+        "live_account_truth_checked": False,
         "fresh_truth": accounts_truth["fresh_truth"],
         "refresh_packet": accounts_truth,
     }
@@ -358,12 +399,20 @@ def build_account_smoke_dry_run_packet(
             "human_message": "Account smoke dry-run accepts only server-issued model_id.",
             "forbidden_fields": forbidden,
             "model_server_issued": False,
+            "selection_dry_run_proven": False,
+            "live_selection_proven": False,
             "selection_proven": False,
             "inference_proven": False,
             "smoke_admitted": False,
             "runtime_meter_attached": False,
+            "responses_called": False,
+            "chat_completions_called": False,
+            "provider_called": False,
+            "network_calls_made": False,
             "account_mutation_performed": False,
             "browser_selected_backend": False,
+            "selected_backend_id_redacted": True,
+            "token_burn": 0,
             "refresh_packet": selection,
             "next_action": "remove_forbidden_browser_fields",
         }
@@ -380,12 +429,20 @@ def build_account_smoke_dry_run_packet(
             "human_message": "Model id was not present in the current server-issued list.",
             "selected_model": model_id if isinstance(model_id, str) else "",
             "model_server_issued": False,
+            "selection_dry_run_proven": selection["selection_dry_run_proven"],
+            "live_selection_proven": False,
             "selection_proven": selection["selection_proven"],
             "inference_proven": False,
             "smoke_admitted": False,
             "runtime_meter_attached": False,
+            "responses_called": False,
+            "chat_completions_called": False,
+            "provider_called": False,
+            "network_calls_made": False,
             "account_mutation_performed": False,
             "browser_selected_backend": False,
+            "selected_backend_id_redacted": True,
+            "token_burn": 0,
             "refresh_packet": selection,
             "next_action": "select_model_from_server_registry",
         }
@@ -398,17 +455,27 @@ def build_account_smoke_dry_run_packet(
         "dry_run": True,
         "selected_model": model_id or DEFAULT_MODEL,
         "model_server_issued": True,
+        "selection_dry_run_proven": selection["selection_dry_run_proven"],
+        "live_selection_proven": False,
         "selection_proven": selection["selection_proven"],
         "inference_proven": False,
         "selected_source_class": selection["selected_source_class"],
         "selected_backend_id": selection["selected_backend_id"],
+        "selected_backend_ref": selection["selected_backend_ref"],
+        "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection["selected_backend_server_issued"],
+        "selected_backend_source": selection["selected_backend_source"],
         "browser_selected_backend": False,
         "selection_reason": selection["selection_reason"],
         "smoke_admitted": False,
         "smoke_not_admitted_reason": "runtime_meter_not_attached",
         "runtime_meter_attached": False,
+        "responses_called": False,
+        "chat_completions_called": False,
+        "provider_called": False,
+        "network_calls_made": False,
         "account_mutation_performed": False,
+        "raw_backend_id_exposed": False,
         "claim_gate_status": selection["claim_gate_status"],
         "token_burn": 0,
         "negative_claim_basis": "account_smoke_dry_run_static_path_no_inference_adapter",
