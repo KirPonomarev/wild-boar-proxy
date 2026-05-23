@@ -14,7 +14,7 @@ Wire the hardened Codex Operator path into the main Wild Boar Proxy web Overview
 
 - goal: main WBP web Overview can run one bounded Codex Operator prompt through WBP with server-issued model validation and separate process-only isolation proof
 - branch: codex/external-agent-lab-isolated
-- head: 734c5a2 contour commit
+- head: aa195b1 contour implementation commit before closeout git-truth update
 - touched files: wild_boar_proxy/operator_surface.py, wild_boar_proxy/web_design_live_server.py, wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, tests/test_operator_surface.py, tests/test_web_design_live_server.py, tests/test_web_design_command_adapter.py, audit_results/codex_custom_app_operator_surface_main_web_integration_pass_2026-05-23/*
 - tests run: node --check wild_boar_proxy/web_design_ui/scripts/overview.js; python runtime unittest 619 tests OK; git diff --check; targeted operator/web adapter tests OK; browser click proof; process-only isolation proof
 - blocked risks: runtime claim_gate remains blocked for active-only-traffic, pool-participation-correct, stable-15-proved; UI displays prompt ok / gate blocked and does not claim global runtime success
@@ -36,8 +36,8 @@ Wire the hardened Codex Operator path into the main Wild Boar Proxy web Overview
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: 734c5a2 Integrate Codex operator surface into web UI
-- pushed: pending push after closeout git-truth update
+- commit: aa195b1 Integrate Codex operator surface into web UI
+- pushed: pending push of contour commit plus closeout git-truth update
 
 ## Scope Check
 
