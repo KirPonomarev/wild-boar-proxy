@@ -1,0 +1,40 @@
+{
+  "empty_payload": {
+    "browser_payload_allowed_keys": [],
+    "captured_at_utc": "2026-05-23T17:02:10.268726Z",
+    "custom_home_injected": false,
+    "dispatch_plan_safe": true,
+    "dry_run": true,
+    "human_message": "Original Codex dispatch plan is protected and contains no proxy/custom env injection.",
+    "launch_claim_scope": "dry_run_guard_only",
+    "machine_error_code": "OK",
+    "mode_id": "original_codex",
+    "model_override_injected": false,
+    "next_action": "manual_live_dispatch_contour_if_needed",
+    "proxy_env_injected": false,
+    "route_or_backend_injected": false,
+    "schema_version": 1,
+    "status": "ok"
+  },
+  "forbidden_payload": {
+    "captured_at_utc": "2026-05-23T17:02:10.268739Z",
+    "custom_home_injected": false,
+    "dispatch_plan_safe": false,
+    "dry_run": true,
+    "forbidden_fields": [
+      "model_id",
+      "route_id",
+      "CODEX_HOME"
+    ],
+    "human_message": "Original Codex dry-run accepts no browser-controlled fields.",
+    "launch_claim_scope": "dry_run_guard_only",
+    "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+    "mode_id": "original_codex",
+    "model_override_injected": false,
+    "next_action": "remove_browser_payload_fields",
+    "proxy_env_injected": false,
+    "route_or_backend_injected": false,
+    "schema_version": 1,
+    "status": "rejected"
+  }
+}

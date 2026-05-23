@@ -1,0 +1,15 @@
+{
+  "chip": "dry-run safe / gate blocked",
+  "claimGate": "blocked",
+  "customRole": "proxy_enabled_workbench",
+  "customSession": "session_manager_next_contour",
+  "customStatus": "degraded · readonly_readiness_only",
+  "dryRunResponse": "{\n  \"status\": \"ok\",\n  \"machine_error_code\": \"OK\",\n  \"dry_run\": true,\n  \"dispatch_plan_safe\": true,\n  \"proxy_env_injected\": false,\n  \"custom_home_injected\": false,\n  \"model_override_injected\": false,\n  \"route_or_backend_injected\": false,\n  \"launch_claim_scope\": \"dry_run_guard_only\",\n  \"next_action\": \"manual_live_dispatch_contour_if_needed\"\n}",
+  "forbiddenDomFindings": [],
+  "originalClaim": "dry_run_guard_only",
+  "originalProxy": "forbidden",
+  "originalRole": "protected_baseline",
+  "originalStatus": "ok · dry_run_guard_only",
+  "summary": "Original protected_baseline · Custom proxy_enabled_workbench",
+  "url": "http://127.0.0.1:8793/?source=live&screen=overview"
+}

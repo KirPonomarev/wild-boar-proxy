@@ -4913,6 +4913,49 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
         )
 
 
+class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
+    def test_codex_launch_mode_endpoints_are_bounded_and_readonly(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                launch_modes = json.loads(fetch(f"{base}/api/codex/launch-modes"))
+                original_status = json.loads(fetch(f"{base}/api/codex/original/status"))
+                custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
+                dry_run = json.loads(post_json(f"{base}/api/codex/original/launch-dry-run", {}))
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/original/launch-dry-run",
+                        {"model_id": "gpt-5.3-codex", "route_id": "route", "CODEX_HOME": "/tmp/home"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        modes = {mode["id"]: mode for mode in launch_modes["modes"]}
+        self.assertFalse(modes["original_codex"]["proxy_enabled"])
+        self.assertEqual(modes["original_codex"]["launch_claim_scope"], "dry_run_guard_only")
+        self.assertTrue(modes["codex_custom"]["proxy_enabled"])
+        self.assertFalse(modes["codex_custom"]["custom_session_available"])
+        self.assertFalse(original_status["proxy_injection_allowed"])
+        self.assertFalse(original_status["custom_home_allowed"])
+        self.assertEqual(original_status["browser_payload_allowed_keys"], [])
+        self.assertEqual(custom_status["launch_claim_scope"], "readonly_readiness_only")
+        self.assertFalse(custom_status["last_process_isolation_proof"]["fresh_truth"])
+        self.assertEqual(dry_run["status"], "ok")
+        self.assertTrue(dry_run["dry_run"])
+        self.assertTrue(dry_run["dispatch_plan_safe"])
+        self.assertFalse(dry_run["proxy_env_injected"])
+        self.assertFalse(dry_run["custom_home_injected"])
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], ["model_id", "route_id", "CODEX_HOME"])
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

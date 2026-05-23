@@ -24,6 +24,12 @@ from wild_boar_proxy.ui_shell import (
     build_runtime_snapshot,
     external_route_secret_available,
 )
+from wild_boar_proxy.codex_launch_modes import (
+    build_custom_status_packet,
+    build_launch_modes_packet,
+    build_original_launch_dry_run_packet,
+    build_original_status_packet,
+)
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 from wild_boar_proxy.operator_surface import OperatorSurfaceSession
@@ -1715,12 +1721,24 @@ def build_handler(
             if parsed.path == "/api/operator/transcript":
                 self._send_json(operator_surface_session.transcript_payload())
                 return
+            if parsed.path == "/api/codex/launch-modes":
+                self._send_json(build_launch_modes_packet(operator_surface_session.status_payload()))
+                return
+            if parsed.path == "/api/codex/original/status":
+                self._send_json(build_original_status_packet())
+                return
+            if parsed.path == "/api/codex/custom/status":
+                self._send_json(build_custom_status_packet(operator_surface_session.status_payload()))
+                return
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
             if parsed.path == "/api/operator/run":
                 self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+                return
+            if parsed.path == "/api/codex/original/launch-dry-run":
+                self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
                 return
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)

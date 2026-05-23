@@ -473,6 +473,7 @@ let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
+let codexLaunchDryRunInFlight = false;
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -716,10 +717,134 @@ async function fetchOperatorJson(path) {
   return response.json();
 }
 
+async function fetchCodexLaunchJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${path} http ${response.status}`);
+  }
+  return response.json();
+}
+
 function operatorSetText(id, value) {
   const node = document.getElementById(id);
   if (node) {
     node.textContent = String(value ?? "-");
+  }
+}
+
+function codexLaunchSetText(id, value) {
+  operatorSetText(id, value);
+}
+
+function codexLaunchSetChip(visual, label) {
+  const chip = document.getElementById("codexLaunchModesChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function codexLaunchModeById(packet, modeId) {
+  const modes = Array.isArray(packet?.modes) ? packet.modes : [];
+  return modes.find((mode) => mode?.id === modeId) || {};
+}
+
+function renderCodexLaunchModes(launchModes, originalStatus, customStatus) {
+  const original = codexLaunchModeById(launchModes, "original_codex");
+  const custom = codexLaunchModeById(launchModes, "codex_custom");
+  const claimGate = launchModes?.claim_gate_status || customStatus?.claim_gate_status || "not_reported";
+  const claimGateBlocked = String(claimGate).includes("blocked");
+  codexLaunchSetChip(claimGateBlocked ? "amber" : "green", claimGateBlocked ? "split ready / gate blocked" : "split ready");
+  codexLaunchSetText(
+    "codexLaunchModesSummary",
+    `Original ${original.role || "protected_baseline"} · Custom ${custom.role || "proxy_enabled_workbench"}`
+  );
+  codexLaunchSetText("originalCodexRole", original.role || originalStatus?.host_boundary || "-");
+  codexLaunchSetText("originalCodexProxy", originalStatus?.proxy_injection_allowed === false ? "forbidden" : "unknown");
+  codexLaunchSetText("originalCodexClaim", original.launch_claim_scope || originalStatus?.launch_claim_scope || "-");
+  codexLaunchSetText("customCodexRole", custom.role || "proxy_enabled_workbench");
+  codexLaunchSetText(
+    "customCodexSession",
+    customStatus?.custom_session_available ? "available" : (customStatus?.availability_reason || "not admitted")
+  );
+  codexLaunchSetText("codexLaunchClaimGate", claimGate);
+  codexLaunchSetText("originalCodexStatus", `${originalStatus?.status || "unknown"} · ${originalStatus?.launch_claim_scope || "status_only"}`);
+  codexLaunchSetText("customCodexStatus", `${customStatus?.status || "unknown"} · ${customStatus?.launch_claim_scope || "readonly_readiness_only"}`);
+}
+
+async function refreshCodexLaunchModesPanel() {
+  try {
+    const [launchModes, originalStatus, customStatus] = await Promise.all([
+      fetchCodexLaunchJson("api/codex/launch-modes"),
+      fetchCodexLaunchJson("api/codex/original/status"),
+      fetchCodexLaunchJson("api/codex/custom/status")
+    ]);
+    renderCodexLaunchModes(launchModes, originalStatus, customStatus);
+  } catch (error) {
+    codexLaunchSetChip("red", "failed");
+    codexLaunchSetText("codexLaunchModesSummary", `Launch modes fetch failed: ${error.message}`);
+  }
+}
+
+function renderOriginalCodexDryRun(packet) {
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  const ok = packet?.status === "ok" && packet?.dry_run === true && packet?.dispatch_plan_safe === true;
+  const claimGate = document.getElementById("codexLaunchClaimGate")?.textContent || "not_reported";
+  const claimGateBlocked = String(claimGate).includes("blocked");
+  codexLaunchSetChip(
+    ok && !claimGateBlocked ? "green" : (ok ? "amber" : (packet?.status === "rejected" ? "amber" : "red")),
+    ok && claimGateBlocked ? "dry-run safe / gate blocked" : (ok ? "dry-run safe" : (packet?.status || "failed"))
+  );
+  codexLaunchSetText("originalCodexStatus", `${packet?.status || "unknown"} · ${packet?.launch_claim_scope || "dry_run_guard_only"}`);
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      dry_run: packet?.dry_run === true,
+      dispatch_plan_safe: packet?.dispatch_plan_safe === true,
+      proxy_env_injected: packet?.proxy_env_injected === true,
+      custom_home_injected: packet?.custom_home_injected === true,
+      model_override_injected: packet?.model_override_injected === true,
+      route_or_backend_injected: packet?.route_or_backend_injected === true,
+      launch_claim_scope: packet?.launch_claim_scope || "",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
+async function runOriginalCodexDryRun() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("originalCodexDryRunAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/original/launch-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`original dry-run http ${response.status}`);
+    }
+    renderOriginalCodexDryRun(await response.json());
+  } catch (error) {
+    renderOriginalCodexDryRun({
+      status: "failed",
+      machine_error_code: "ORIGINAL_DRY_RUN_FETCH_FAILED",
+      human_message: error.message,
+      dry_run: true,
+      dispatch_plan_safe: false,
+      launch_claim_scope: "dry_run_guard_only"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("originalCodexDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -6801,6 +6926,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
+  document.getElementById("codexLaunchModesRefreshAction")?.addEventListener("click", () => refreshCodexLaunchModesPanel());
+  document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
   document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
@@ -6858,5 +6985,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     setFixtureState(initialState, false);
   }
+  refreshCodexLaunchModesPanel();
   refreshOperatorPanel();
 });

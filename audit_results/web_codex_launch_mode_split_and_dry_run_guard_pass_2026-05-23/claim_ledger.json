@@ -1,0 +1,25 @@
+{
+  "claimed": [
+    "Original Codex and Codex Custom are separate launch modes in backend packets and web UI",
+    "Original Codex dry-run accepts no browser-controlled fields",
+    "Original Codex dry-run reports no proxy env, custom home, model override, route, or backend injection",
+    "Codex Custom status is readonly readiness only and custom session is not admitted",
+    "claim_gate blocked remains visible in UI and packets"
+  ],
+  "contour": "WEB_CODEX_LAUNCH_MODE_SPLIT_AND_DRY_RUN_GUARD_PASS",
+  "known_blocked_truth": {
+    "claim_gate_status": "blocked",
+    "custom_machine_error_code": "CLAIM_GATE_BLOCKED",
+    "custom_status": "degraded"
+  },
+  "not_claimed": [
+    "Original Codex live launched",
+    "Codex Custom live session launched",
+    "GPT accounts route proof",
+    "API route E2E proof",
+    "moderate load proof",
+    "overall runtime claim_gate green",
+    "production app readiness",
+    "design gate ready"
+  ]
+}

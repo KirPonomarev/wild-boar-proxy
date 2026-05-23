@@ -367,6 +367,41 @@
           </section>
         </div>
 
+        <section id="codexLaunchModesPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Launch Modes</div>
+              <div id="codexLaunchModesSummary" class="secondary">Launch modes ещё не загружены.</div>
+            </div>
+            <span id="codexLaunchModesChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Original role</div><div id="originalCodexRole">protected baseline</div>
+            <div>Original proxy</div><div id="originalCodexProxy">forbidden</div>
+            <div>Original claim</div><div id="originalCodexClaim">dry-run guard only</div>
+            <div>Custom role</div><div id="customCodexRole">proxy workbench</div>
+            <div>Custom session</div><div id="customCodexSession">not admitted</div>
+            <div>Claim gate</div><div id="codexLaunchClaimGate">not loaded</div>
+          </div>
+          <div class="action-summary-footer">
+            <div>
+              <span>Original: <strong id="originalCodexStatus">status pending</strong></span>
+              <span>Custom: <strong id="customCodexStatus">status pending</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexLaunchModesRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="originalCodexDryRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Original dry-run</span>
+              </button>
+            </div>
+          </div>
+          <pre id="codexLaunchDryRunResponse" class="mono-value">dry-run packet pending</pre>
+        </section>
+
         <section id="operatorPanel" class="card log-card">
           <div class="log-head">
             <div>
