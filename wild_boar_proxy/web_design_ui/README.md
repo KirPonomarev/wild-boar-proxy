@@ -40,11 +40,17 @@ Then visit:
 http://127.0.0.1:8788/?source=live
 ```
 
-Live read-only mode uses strict JSON command packets through
-`web_design_command_adapter` to hydrate readonly snapshots and action metadata.
-In the current live-readonly phase, mutation and support-artifact action
-buttons remain disabled until the later sandbox admission contours explicitly
-reopen them; only readonly support actions stay available.
+Live mode uses strict JSON command packets through `web_design_command_adapter`
+to hydrate readonly snapshots and action metadata. Mutation and
+support-artifact action buttons remain disabled until sandbox admission contours
+explicitly reopen them.
+
+The Codex Custom session controls are a separate admitted owner surface. They
+may create isolated session state and run the bounded prompt endpoint only
+through server-issued model/backend selection, temporary `HOME`/`CODEX_HOME`,
+stdin prompt transport, and redacted JSON result packets. They must not expose
+browser-supplied model/backend/route/account/path/auth fields or imply general
+runtime mutation.
 
 Available fixture states:
 

@@ -1170,7 +1170,8 @@ function renderCodexCustomSessionPacket(packet) {
     codexCustomSelectedSessionId = sessionId;
   }
   const inference = packet?.inference_proven === true || session?.inference_proven === true;
-  const tokenBurn = packet?.token_burn ?? session?.token_burn ?? 0;
+  const tokenBurn = packet?.token_burn ?? session?.token_burn ?? "unknown";
+  const modelResponsePresent = packet?.model_response_present === true || session?.model_response_present === true;
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
   codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packet?.status || "unknown");
   codexCustomSessionsSetText("codexCustomSessionModel", session?.model_id || packet?.selected_model || "-");
@@ -1179,10 +1180,11 @@ function renderCodexCustomSessionPacket(packet) {
     session?.selection_proven ? `${session?.selected_source_class || "gpt_account"} · server-side` : "not proven"
   );
   codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
-  codexCustomSessionsSetText("codexCustomSessionInference", inference ? "metered proof" : "not claimed");
+  codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
   codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
-  const ok = packet?.status === "ok" && inference === false;
-  codexCustomSessionsSetChip(ok ? "green" : (packet?.status === "rejected" ? "amber" : "red"), ok ? "session ready" : (packet?.status || "unknown"));
+  const ok = packet?.status === "ok";
+  const chipLabel = inference && modelResponsePresent ? "response proven" : "session ready";
+  codexCustomSessionsSetChip(ok ? "green" : (packet?.status === "rejected" ? "amber" : "red"), ok ? chipLabel : (packet?.status || "unknown"));
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
@@ -1199,7 +1201,20 @@ function renderCodexCustomSessionPacket(packet) {
       prompt_sha256: packet?.prompt_sha256 || "",
       prompt_preview_redacted: packet?.prompt_preview_redacted || "",
       transcript_kind: packet?.transcript_kind || "",
-      model_response_present: packet?.model_response_present === true,
+      model_response_present: modelResponsePresent,
+      response_digest: packet?.response_digest || "",
+      response_preview_bounded: packet?.response_preview_bounded || "",
+      token_usage_present: packet?.token_usage_present === true,
+      latency_ms: packet?.latency_ms ?? null,
+      wbp_path_configured: packet?.wbp_path_configured === true,
+      cli_proxy_api_path_configured: packet?.cli_proxy_api_path_configured === true,
+      wbp_path_proven: packet?.wbp_path_proven === true,
+      cli_proxy_api_path_proven: packet?.cli_proxy_api_path_proven === true,
+      independent_wbp_trace_observed: packet?.independent_wbp_trace_observed === true,
+      isolated_engine_home_proven: packet?.isolated_engine_home_proven === true,
+      configured_wire_api: packet?.configured_wire_api || "",
+      path_proof_status: packet?.path_proof_status || "",
+      fallback_attempted: packet?.fallback_attempted === true,
       cleanup_performed: packet?.cleanup_performed === true,
       arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
       process_kill_claimed: packet?.process_kill_claimed === true,
@@ -1282,7 +1297,7 @@ async function postCodexCustomSessionAction(action, payload = {}) {
     }
     const packet = await response.json();
     renderCodexCustomSessionPacket(packet);
-    if (action === "prompt-dry-run" || action === "cancel") {
+    if (action === "prompt-dry-run" || action === "prompt" || action === "cancel") {
       const transcriptUrl = currentCodexCustomSessionUrl("transcript");
       if (transcriptUrl) {
         renderCodexCustomTranscript(await fetchCodexLaunchJson(transcriptUrl));
@@ -1317,6 +1332,11 @@ async function createCodexCustomSession() {
 async function runCodexCustomSessionPromptDryRun() {
   const promptNode = document.getElementById("codexCustomSessionPrompt");
   await postCodexCustomSessionAction("prompt-dry-run", { prompt: promptNode ? promptNode.value : "" });
+}
+
+async function runCodexCustomSessionPrompt() {
+  const promptNode = document.getElementById("codexCustomSessionPrompt");
+  await postCodexCustomSessionAction("prompt", { prompt: promptNode ? promptNode.value : "" });
 }
 
 async function cancelCodexCustomSession() {
@@ -7414,6 +7434,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionsRefreshAction")?.addEventListener("click", () => refreshCodexCustomSessionsPanel());
   document.getElementById("codexCustomSessionCreateAction")?.addEventListener("click", () => createCodexCustomSession());
   document.getElementById("codexCustomSessionPromptDryRunAction")?.addEventListener("click", () => runCodexCustomSessionPromptDryRun());
+  document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

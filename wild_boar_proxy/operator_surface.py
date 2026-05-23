@@ -390,10 +390,8 @@ class OperatorSurfaceSession:
         home.mkdir(parents=True)
         codex_home.mkdir()
         work.mkdir()
-        (codex_home / "config.toml").write_text(
-            build_codex_config(endpoint=self.config.endpoint, model_id=selected_model),
-            encoding="utf-8",
-        )
+        config_text = build_codex_config(endpoint=self.config.endpoint, model_id=selected_model)
+        (codex_home / "config.toml").write_text(config_text, encoding="utf-8")
         last_message = run_root / "last_message.txt"
         env = clean_env()
         env.update(
@@ -416,9 +414,14 @@ class OperatorSurfaceSession:
             "--json",
             "-o",
             str(last_message),
-            "-",
-        ]
+                "-",
+            ]
         started = time.time()
+        current_codex_home = (Path.home() / ".codex").resolve()
+        env_codex_home = Path(env["CODEX_HOME"]).resolve()
+        env_home = Path(env["HOME"]).resolve()
+        temp_root_resolved = tmp_root.resolve()
+        config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
         timed_out = False
         try:
             process = subprocess.run(
@@ -466,6 +469,22 @@ class OperatorSurfaceSession:
             "machine_error_code": "OK" if ok else "ENGINE_PROMPT_FAILED",
             "human_message": "Codex Operator prompt completed." if ok else "Codex Operator prompt failed.",
             "selected_model": selected_model,
+            "configured_base_url": self.config.endpoint,
+            "configured_wire_api": "responses",
+            "configured_provider": "cliproxy",
+            "wbp_endpoint_configured": self.config.endpoint.startswith("http://127.0.0.1:"),
+            "config_sha256": config_sha256,
+            "config_endpoint_matches": f'base_url = "{self.config.endpoint}"' in config_text,
+            "config_provider_matches": 'model_provider = "cliproxy"' in config_text,
+            "config_wire_api_matches": 'wire_api = "responses"' in config_text,
+            "env_codex_home_is_temp": temp_root_resolved in env_codex_home.parents,
+            "env_home_is_temp": temp_root_resolved in env_home.parents,
+            "workdir_is_temp": temp_root_resolved in work.resolve().parents,
+            "command_workdir_is_temp": temp_root_resolved in Path(str(work)).resolve().parents,
+            "command_uses_stdin_dash": command[-1] == "-",
+            "command_json_mode": "--json" in command,
+            "command_output_file_is_temp": temp_root_resolved in last_message.resolve().parents,
+            "current_codex_home_used": env_codex_home == current_codex_home,
             "prompt_hash": prompt_hash,
             "final_message": final_message,
             "exit_code": exit_code,

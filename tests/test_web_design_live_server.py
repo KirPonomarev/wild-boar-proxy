@@ -4847,6 +4847,20 @@ class FakeOperatorSurfaceSession:
             "machine_error_code": "OK",
             "human_message": "Codex Operator prompt completed.",
             "selected_model": payload.get("model_id"),
+            "configured_provider": "cliproxy",
+            "configured_wire_api": "responses",
+            "wbp_endpoint_configured": True,
+            "config_endpoint_matches": True,
+            "config_provider_matches": True,
+            "config_wire_api_matches": True,
+            "command_uses_stdin_dash": True,
+            "command_json_mode": True,
+            "env_codex_home_is_temp": True,
+            "env_home_is_temp": True,
+            "workdir_is_temp": True,
+            "command_workdir_is_temp": True,
+            "command_output_file_is_temp": True,
+            "current_codex_home_used": False,
             "final_message": "MAIN_WEB_OK",
             "stdin_prompt_used": True,
             "temp_root_removed": True,
@@ -5163,6 +5177,12 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         {"prompt": "Reply with exactly SESSION_OK."},
                     )
                 )
+                real_prompt = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "Reply with exactly REAL_SESSION_OK."},
+                    )
+                )
                 transcript = json.loads(
                     fetch(f"{base}/api/codex/custom/sessions/{session_id}/transcript")
                 )
@@ -5199,9 +5219,29 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(prompt["inference_proven"])
         self.assertFalse(prompt["runtime_meter_attached"])
         self.assertEqual(prompt["token_burn"], 0)
+        self.assertEqual(real_prompt["status"], "ok")
+        self.assertTrue(real_prompt["inference_proven"])
+        self.assertTrue(real_prompt["model_response_present"])
+        self.assertEqual(real_prompt["model_id"], "gpt-5.3-codex")
+        self.assertTrue(real_prompt["selected_backend_server_issued"])
+        self.assertFalse(real_prompt["browser_selected_backend"])
+        self.assertTrue(real_prompt["wbp_path_configured"])
+        self.assertTrue(real_prompt["cli_proxy_api_path_configured"])
+        self.assertFalse(real_prompt["wbp_path_proven"])
+        self.assertFalse(real_prompt["cli_proxy_api_path_proven"])
+        self.assertFalse(real_prompt["independent_wbp_trace_observed"])
+        self.assertEqual(real_prompt["path_proof_status"], "configured_not_independently_observed")
+        self.assertTrue(real_prompt["isolated_engine_home_proven"])
+        self.assertEqual(real_prompt["configured_wire_api"], "responses")
+        self.assertFalse(real_prompt["fallback_attempted"])
+        self.assertEqual(real_prompt["response_preview_bounded"], "MAIN_WEB_OK")
+        self.assertNotIn("Reply with exactly REAL_SESSION_OK.", json.dumps(real_prompt))
+        self.assertNotIn("acct-active", json.dumps(real_prompt))
         self.assertEqual(transcript["transcript_kind"], "service_ledger_only")
-        self.assertFalse(transcript["model_response_present"])
+        self.assertTrue(transcript["model_response_present"])
+        self.assertTrue(transcript["inference_proven"])
         self.assertNotIn("Reply with exactly SESSION_OK.", json.dumps(transcript))
+        self.assertNotIn("Reply with exactly REAL_SESSION_OK.", json.dumps(transcript))
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], ["backend_id", "path"])
@@ -5210,7 +5250,10 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(cleanup["arbitrary_path_accepted"])
         self.assertEqual(listed["session_count"], 1)
         self.assertEqual(listed["sessions"][0]["cleanup_state"], "cleaned")
-        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply with exactly REAL_SESSION_OK.", "model_id": "gpt-5.3-codex"}],
+        )
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
@@ -5247,6 +5290,89 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("backend_id", bad_backend["forbidden_fields"])
         self.assertIn("route_id", bad_backend["forbidden_fields"])
         self.assertIn("codex_home", bad_backend["forbidden_fields"])
+
+    def test_codex_custom_prompt_endpoint_rejects_browser_fields_and_does_not_overclaim_failure(self) -> None:
+        class FailingOperatorSurfaceSession(FakeOperatorSurfaceSession):
+            def run_prompt(self, payload: dict[str, object]) -> dict[str, object]:
+                self.run_payloads.append(payload)
+                return {
+                    "status": "failed",
+                    "machine_error_code": "ENGINE_PROMPT_FAILED",
+                    "human_message": "Codex Operator prompt failed.",
+                    "selected_model": payload.get("model_id"),
+                    "secret_value_recorded": False,
+                }
+
+        created_sessions: list[FailingOperatorSurfaceSession] = []
+
+        def factory() -> FailingOperatorSurfaceSession:
+            session = FailingOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "blocked_by_policy_drift"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(payloads)))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {
+                            "prompt": "OK",
+                            "model_id": "browser-model",
+                            "backend_id": "acct-active",
+                            "route_id": "route",
+                            "path": "/tmp/outside",
+                        },
+                    )
+                )
+                failed = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "OK"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("model_id", rejected["forbidden_fields"])
+        self.assertIn("backend_id", rejected["forbidden_fields"])
+        self.assertIn("route_id", rejected["forbidden_fields"])
+        self.assertIn("path", rejected["forbidden_fields"])
+        self.assertFalse(rejected["inference_proven"])
+        self.assertFalse(rejected["model_response_present"])
+        self.assertEqual(created_sessions[0].run_payloads, [{"prompt": "OK", "model_id": "gpt-5.3-codex"}])
+        self.assertEqual(failed["status"], "failed")
+        self.assertFalse(failed["inference_proven"])
+        self.assertFalse(failed["model_response_present"])
+        self.assertFalse(failed["wbp_path_proven"])
+        self.assertFalse(failed["cli_proxy_api_path_proven"])
+        self.assertFalse(failed["fallback_attempted"])
 
 
 def free_port() -> int:

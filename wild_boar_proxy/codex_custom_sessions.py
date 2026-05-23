@@ -12,7 +12,9 @@ import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from wild_boar_proxy.operator_surface import redact_text
 
 from wild_boar_proxy.codex_account_selection import (
     build_account_selection_packet,
@@ -26,7 +28,10 @@ from wild_boar_proxy.codex_model_registry import (
 
 SESSION_CREATE_ALLOWED_FIELDS = {"model_id"}
 PROMPT_DRY_RUN_ALLOWED_FIELDS = {"prompt"}
+PROMPT_RUN_ALLOWED_FIELDS = {"prompt"}
 SESSION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{7,80}$")
+PROMPT_RUN_ALLOWED_STATUSES = {"ready", "prompt_admitted_dry_run"}
+BOUNDED_RESPONSE_PREVIEW_CHARS = 240
 
 
 def utc_now() -> str:
@@ -71,9 +76,30 @@ def forbidden_prompt_dry_run_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, PROMPT_DRY_RUN_ALLOWED_FIELDS)))
 
 
+def forbidden_prompt_run_fields(payload: Any) -> list[str]:
+    return sorted(set(_forbidden_fields(payload, PROMPT_RUN_ALLOWED_FIELDS)))
+
+
 def _model_ids(operator_status: dict[str, Any] | None) -> list[str]:
     registry = build_custom_model_registry_packet(operator_status)
     return [str(entry["model_id"]) for entry in registry.get("available_models", [])]
+
+
+def _response_preview(value: str) -> str:
+    return redact_text(value)[:BOUNDED_RESPONSE_PREVIEW_CHARS]
+
+
+def _token_usage(result: dict[str, Any]) -> tuple[bool, dict[str, Any], int | None]:
+    raw_usage = result.get("token_usage") or result.get("usage")
+    if not isinstance(raw_usage, dict):
+        return False, {}, None
+    usage = {
+        str(key): value
+        for key, value in raw_usage.items()
+        if isinstance(key, str) and isinstance(value, (int, float, str, bool)) and key.lower() != "api_key"
+    }
+    total = usage.get("total_tokens") or usage.get("total")
+    return True, usage, int(total) if isinstance(total, int) else None
 
 
 class CodexCustomSessionManager:
@@ -243,17 +269,173 @@ class CodexCustomSessionManager:
             "next_action": "codex_custom_gpt_api_e2e_pass",
         }
 
+    def prompt_packet(
+        self,
+        session_id: str,
+        payload: dict[str, Any],
+        prompt_runner: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        precondition_failure = self._prompt_precondition_failure(session)
+        if precondition_failure:
+            return precondition_failure
+        forbidden = forbidden_prompt_run_fields(payload)
+        if forbidden:
+            return {
+                **self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden),
+                "session_id": session_id,
+                "model_response_present": False,
+                "fallback_attempted": False,
+            }
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return {
+                **self._base_packet("rejected", "PROMPT_MISSING"),
+                "session_id": session_id,
+                "prompt_present": False,
+                "model_response_present": False,
+                "fallback_attempted": False,
+                "next_action": "enter_prompt",
+            }
+        prompt_hash = _digest(prompt)
+        model_id = str(session.get("model_id") or "")
+        runner_payload = {"prompt": prompt, "model_id": model_id}
+        try:
+            result = prompt_runner(runner_payload)
+        except Exception as exc:  # pragma: no cover - defensive live boundary
+            result = {
+                "status": "failed",
+                "machine_error_code": "PROMPT_RUNNER_EXCEPTION",
+                "error_class": type(exc).__name__,
+                "human_message": "Codex Custom prompt runner failed before returning a packet.",
+            }
+        response_text = str(result.get("final_message") or result.get("response_text") or "")
+        response_digest = _digest(response_text) if response_text else ""
+        token_usage_present, token_usage, token_burn = _token_usage(result)
+        secret_value_recorded = result.get("secret_value_recorded") is True
+        status_ok = result.get("status") == "ok" and bool(response_text) and not secret_value_recorded
+        path_config_proven = (
+            result.get("configured_provider") == "cliproxy"
+            and result.get("configured_wire_api") == "responses"
+            and result.get("wbp_endpoint_configured") is True
+            and result.get("config_endpoint_matches") is True
+            and result.get("config_provider_matches") is True
+            and result.get("config_wire_api_matches") is True
+            and result.get("command_uses_stdin_dash") is True
+            and result.get("command_json_mode") is True
+        )
+        independent_wbp_trace_observed = result.get("independent_wbp_trace_observed") is True
+        wbp_path_configured = status_ok and path_config_proven
+        wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
+        cli_proxy_api_path_configured = wbp_path_configured and result.get("configured_provider") == "cliproxy"
+        isolated_engine_home_proven = (
+            result.get("env_codex_home_is_temp") is True
+            and result.get("env_home_is_temp") is True
+            and result.get("workdir_is_temp") is True
+            and result.get("command_workdir_is_temp") is True
+            and result.get("command_output_file_is_temp") is True
+            and result.get("current_codex_home_used") is False
+        )
+        latency_ms = None
+        duration_seconds = result.get("duration_seconds")
+        if isinstance(duration_seconds, (int, float)):
+            latency_ms = int(float(duration_seconds) * 1000)
+        packet = {
+            "schema_version": 1,
+            "status": "ok" if status_ok else str(result.get("status") or "failed"),
+            "machine_error_code": "OK" if status_ok else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "session_id": session_id,
+            "model_id": model_id,
+            "model_server_issued": True,
+            "selected_source_class": session.get("selected_source_class"),
+            "selected_backend_digest": _digest(str(session.get("selected_backend_id") or "")),
+            "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+            "browser_selected_backend": False,
+            "prompt_present": True,
+            "prompt_length": len(prompt),
+            "prompt_sha256": prompt_hash,
+            "prompt_preview_redacted": _safe_preview(prompt),
+            "model_response_present": status_ok,
+            "inference_proven": status_ok,
+            "response_digest": response_digest,
+            "response_preview_bounded": _response_preview(response_text) if status_ok else "",
+            "token_usage_present": token_usage_present,
+            "token_usage": token_usage,
+            "token_burn": token_burn,
+            "latency_ms": latency_ms,
+            "error_class": "" if status_ok else str(result.get("error_class") or result.get("machine_error_code") or "unknown"),
+            "wbp_path_configured": wbp_path_configured,
+            "cli_proxy_api_path_configured": cli_proxy_api_path_configured,
+            "wbp_path_proven": wbp_path_proven,
+            "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
+            "independent_wbp_trace_observed": independent_wbp_trace_observed,
+            "isolated_engine_home_proven": isolated_engine_home_proven,
+            "configured_wire_api": result.get("configured_wire_api") if status_ok else "",
+            "path_proof_status": "independently_observed" if wbp_path_proven else "configured_not_independently_observed",
+            "path_proof_basis": "operator_surface_isolated_codex_exec_config_requires_independent_trace",
+            "fallback_attempted": False,
+            "raw_backend_id_exposed": False,
+            "raw_auth_ref_exposed": False,
+            "secret_value_recorded": secret_value_recorded,
+            "session": self._public_session(session),
+            "next_action": "inspect_transcript" if status_ok else str(result.get("next_action") or "stop_and_diagnose"),
+        }
+        event = "prompt_completed_e2e" if status_ok else "prompt_failed_e2e"
+        session["status"] = event
+        session["inference_proven"] = status_ok
+        session["model_response_present"] = status_ok
+        session["token_burn"] = token_burn
+        session["updated_at_utc"] = utc_now()
+        self._append_ledger(
+            session,
+            event,
+            {
+                "prompt_present": True,
+                "prompt_length": len(prompt),
+                "prompt_sha256": prompt_hash,
+                "prompt_preview_redacted": _safe_preview(prompt),
+                "model_response_present": status_ok,
+                "inference_proven": status_ok,
+                "response_digest": response_digest,
+                "response_preview_bounded": _response_preview(response_text) if status_ok else "",
+                "selected_source_class": session.get("selected_source_class"),
+                "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+                "token_usage_present": token_usage_present,
+                "token_usage": token_usage,
+                "token_burn": token_burn,
+                "latency_ms": latency_ms,
+                "wbp_path_configured": wbp_path_configured,
+                "cli_proxy_api_path_configured": cli_proxy_api_path_configured,
+                "wbp_path_proven": wbp_path_proven,
+                "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
+                "independent_wbp_trace_observed": independent_wbp_trace_observed,
+                "isolated_engine_home_proven": isolated_engine_home_proven,
+                "fallback_attempted": False,
+            },
+        )
+        self._write_session(session)
+        packet["session"] = self._public_session(session)
+        return packet
+
     def transcript_packet(self, session_id: str) -> dict[str, Any]:
         session = self._sessions.get(session_id)
         if not session:
             return self._unknown_session()
+        entries = list(session.get("ledger") or [])
+        model_response_present = any(entry.get("model_response_present") is True for entry in entries)
+        inference_proven = any(entry.get("inference_proven") is True for entry in entries)
         return {
             **self._base_packet("ok", "OK"),
             "session_id": session_id,
             "transcript_kind": "service_ledger_only",
-            "model_response_present": False,
-            "inference_proven": False,
-            "entries": list(session.get("ledger") or []),
+            "model_response_present": model_response_present,
+            "inference_proven": inference_proven,
+            "token_burn": session.get("token_burn"),
+            "entries": entries,
             "next_action": "none",
         }
 
@@ -383,9 +565,36 @@ class CodexCustomSessionManager:
             "cleanup_state": session.get("cleanup_state"),
             "cancel_state": session.get("cancel_state"),
             "ledger_entry_count": len(session.get("ledger") or []),
-            "inference_proven": False,
+            "model_response_present": session.get("model_response_present") is True,
+            "inference_proven": session.get("inference_proven") is True,
             "runtime_meter_attached": False,
-            "token_burn": 0,
+            "token_burn": session.get("token_burn") if session.get("token_burn") is not None else 0,
+        }
+
+    def _prompt_precondition_failure(self, session: dict[str, Any]) -> dict[str, Any] | None:
+        session_id = str(session.get("session_id") or "")
+        failures: list[str] = []
+        if session.get("cleanup_state") == "cleaned":
+            failures.append("SESSION_ALREADY_CLEANED")
+        if str(session.get("status") or "") not in PROMPT_RUN_ALLOWED_STATUSES:
+            failures.append("SESSION_STATUS_NOT_RUNNABLE")
+        if session.get("model_server_issued") is not True:
+            failures.append("MODEL_NOT_SERVER_ISSUED")
+        if session.get("selection_proven") is not True:
+            failures.append("SELECTION_NOT_PROVEN")
+        if session.get("selected_backend_server_issued") is not True:
+            failures.append("BACKEND_NOT_SERVER_ISSUED")
+        if not failures:
+            return None
+        return {
+            **self._base_packet("rejected", failures[0]),
+            "session_id": session_id,
+            "precondition_failures": failures,
+            "model_response_present": False,
+            "token_usage_present": False,
+            "fallback_attempted": False,
+            "session": self._public_session(session),
+            "next_action": "repair_session_preconditions",
         }
 
     def _selection_summary(self, selection: dict[str, Any]) -> dict[str, Any]:

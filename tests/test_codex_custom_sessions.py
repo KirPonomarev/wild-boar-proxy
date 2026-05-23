@@ -11,6 +11,7 @@ from pathlib import Path
 from wild_boar_proxy.codex_custom_sessions import (
     CodexCustomSessionManager,
     forbidden_prompt_dry_run_fields,
+    forbidden_prompt_run_fields,
     forbidden_session_create_fields,
 )
 
@@ -174,6 +175,118 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["forbidden_fields"], ["backend_id", "nested", "nested.path"])
             self.assertFalse(packet["inference_proven"])
 
+    def test_prompt_run_wraps_runner_response_without_browser_model_or_backend(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            calls.append(payload)
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "final_message": "SESSION_REAL_OK",
+                "duration_seconds": 0.125,
+                "stdin_prompt_used": True,
+                "temp_root_removed": True,
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            packet = manager.prompt_packet(session_id, {"prompt": "Reply real OK."}, runner)
+            transcript = manager.transcript_packet(session_id)
+
+            self.assertEqual(calls, [{"prompt": "Reply real OK.", "model_id": "gpt-5.3-codex"}])
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["inference_proven"])
+            self.assertTrue(packet["model_response_present"])
+            self.assertTrue(packet["model_server_issued"])
+            self.assertTrue(packet["selected_backend_server_issued"])
+            self.assertFalse(packet["browser_selected_backend"])
+            self.assertTrue(packet["wbp_path_configured"])
+            self.assertTrue(packet["cli_proxy_api_path_configured"])
+            self.assertFalse(packet["wbp_path_proven"])
+            self.assertFalse(packet["cli_proxy_api_path_proven"])
+            self.assertFalse(packet["independent_wbp_trace_observed"])
+            self.assertEqual(packet["path_proof_status"], "configured_not_independently_observed")
+            self.assertTrue(packet["isolated_engine_home_proven"])
+            self.assertEqual(packet["configured_wire_api"], "responses")
+            self.assertFalse(packet["fallback_attempted"])
+            self.assertEqual(packet["response_preview_bounded"], "SESSION_REAL_OK")
+            self.assertEqual(len(packet["response_digest"]), 64)
+            self.assertFalse(packet["token_usage_present"])
+            self.assertIsNone(packet["token_burn"])
+            self.assertEqual(packet["latency_ms"], 125)
+            self.assertNotIn("Reply real OK.", json.dumps(packet))
+            self.assertNotIn("acct-a", json.dumps(packet))
+            self.assertTrue(transcript["model_response_present"])
+            self.assertTrue(transcript["inference_proven"])
+            self.assertNotIn("Reply real OK.", json.dumps(transcript))
+
+    def test_prompt_run_rejects_forbidden_fields_and_failed_runner_does_not_overclaim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            rejected = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK", "model_id": "browser-model", "backend_id": "acct-a"},
+                lambda payload: {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+            )
+            failed = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK"},
+                lambda payload: {
+                    "status": "failed",
+                    "machine_error_code": "ENGINE_PROMPT_FAILED",
+                    "error_class": "RuntimeError",
+                    "secret_value_recorded": False,
+                },
+            )
+
+            self.assertEqual(rejected["status"], "rejected")
+            self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("model_id", rejected["forbidden_fields"])
+            self.assertIn("backend_id", rejected["forbidden_fields"])
+            self.assertFalse(rejected["inference_proven"])
+            self.assertFalse(rejected["model_response_present"])
+            self.assertEqual(failed["status"], "failed")
+            self.assertFalse(failed["inference_proven"])
+            self.assertFalse(failed["model_response_present"])
+            self.assertFalse(failed["fallback_attempted"])
+
+    def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            manager.cleanup_packet(session_id)
+            packet = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK"},
+                lambda payload: {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertIn("SESSION_ALREADY_CLEANED", packet["precondition_failures"])
+            self.assertFalse(packet["inference_proven"])
+            self.assertFalse(packet["model_response_present"])
+
     def test_cancel_and_cleanup_are_session_owned_without_process_kill_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
@@ -197,8 +310,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_forbidden_helpers_allow_only_declared_top_level_fields(self) -> None:
         self.assertEqual(forbidden_session_create_fields({"model_id": "gpt-5.3-codex"}), [])
         self.assertEqual(forbidden_prompt_dry_run_fields({"prompt": "OK"}), [])
+        self.assertEqual(forbidden_prompt_run_fields({"prompt": "OK"}), [])
         self.assertEqual(
             forbidden_prompt_dry_run_fields({"prompt": "OK", "items": [{"path": "/tmp/x"}]}),
+            ["items", "items[0].path"],
+        )
+        self.assertEqual(
+            forbidden_prompt_run_fields({"prompt": "OK", "items": [{"path": "/tmp/x"}]}),
             ["items", "items[0].path"],
         )
 
