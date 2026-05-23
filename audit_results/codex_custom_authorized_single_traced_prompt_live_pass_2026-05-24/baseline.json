@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "captured_at_local_date": "2026-05-24",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_before": "5b959cb",
+  "previous_contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_PASS",
+  "previous_contour_status": "blocked_by_operator_authorization",
+  "authorization_phrase_present_as_explicit_owner_grant": false,
+  "live_phase_allowed": false,
+  "live_runtime_preflight_run": false,
+  "live_wbp_commands_run": false,
+  "live_provider_calls": 0,
+  "live_prompt_calls": 0,
+  "token_burn": 0,
+  "current_codex_mutation": false
+}

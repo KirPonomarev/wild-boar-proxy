@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "status": "blocked_by_operator_authorization",
+  "live": {
+    "live_runtime_preflight_commands": 0,
+    "live_wbp_commands": 0,
+    "live_prompt_calls": 0,
+    "provider_calls": 0,
+    "token_burn": 0
+  },
+  "tests": {
+    "node_check_overview_js": "passed",
+    "targeted_unittest_status": "passed",
+    "targeted_unittest_count": 172,
+    "json_validation": "passed",
+    "redaction_scan": "passed",
+    "closeout_resilience": "passed",
+    "git_diff_check": "passed"
+  },
+  "agents": {
+    "independent_auditors": 1,
+    "max_parallel_agents": 1
+  }
+}
