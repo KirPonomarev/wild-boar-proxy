@@ -1,0 +1,42 @@
+{
+  "default_target": {
+    "env": {},
+    "paths": {
+      "evidence_dir": "/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence",
+      "routes_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+      "secrets_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/secrets.env",
+      "state_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json"
+    },
+    "route": null
+  },
+  "path_resolution_code": {
+    "file": "wild_boar_proxy/external_models/paths.py",
+    "rule": "WBP_EXTERNAL_MODELS_DIR wins; else WBP_MANAGED_DIR/external-models; else ~/.wild-boar-proxy/external-models"
+  },
+  "sandbox_target": {
+    "env": {
+      "WBP_EXTERNAL_MODELS_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models",
+      "WBP_MANAGED_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed",
+      "WBP_PROFILE_DIR": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile"
+    },
+    "managed_dir_exists": true,
+    "paths": {
+      "evidence_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence",
+      "routes_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/routes.json",
+      "secrets_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/secrets.env",
+      "state_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json"
+    },
+    "profile_dir_exists": true,
+    "route": {
+      "base_url": "https://api.deepseek.com",
+      "cost_class": "paid_or_free_limited",
+      "enabled": true,
+      "endpoint_path": "/chat/completions",
+      "model": null,
+      "provider": "deepseek",
+      "route_id": "wbp-deepseek-v3",
+      "secret_ref": "DEEPSEEK_API_KEY"
+    }
+  },
+  "schema_version": 1
+}
