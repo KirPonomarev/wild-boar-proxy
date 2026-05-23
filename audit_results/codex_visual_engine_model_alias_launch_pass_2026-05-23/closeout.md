@@ -86,8 +86,9 @@ minimal prompt only if the host boundary stays acceptable.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `23286b6` (visual alias launch packet)
-- pushed: no
+- commit: `23286b6` (visual alias launch packet), `99057a1` (git-truth
+  normalization)
+- pushed: yes
 
 ## Scope Check
 
