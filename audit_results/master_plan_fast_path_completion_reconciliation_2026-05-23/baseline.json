@@ -1,0 +1,29 @@
+{
+  "contour": "MASTER_PLAN_FAST_PATH_COMPLETION_RECONCILIATION",
+  "date": "2026-05-23",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_at_start": "706fc0d15cdfe751092ae21246619b3eb2ac4ffe",
+  "origin_head_at_start": "706fc0d15cdfe751092ae21246619b3eb2ac4ffe",
+  "mode": "post_master_plan_reconciliation",
+  "classification": "fast_path_closure_pass_needed",
+  "final_verdict": "FAST_PATH_1_TO_8_MATERIALLY_SATISFIED_BUT_NOT_YET_CANONICALLY_COMPLETE_DUE_TO_CLOSURE_DRIFT",
+  "master_plan_has_slot_9": false,
+  "write_scope": [
+    "audit_results/master_plan_fast_path_completion_reconciliation_2026-05-23/*"
+  ],
+  "read_scope": [
+    "MASTER_PLAN.md",
+    "CANON.md",
+    "audit_results/runtime_launcher_owner_procedure_serialization_fix_pass_2026-05-16/closeout.md",
+    "audit_results/web_safe_app_copy_launch_pass_2026-05-16/closeout.md",
+    "audit_results/web_safe_account_connect_dry_run_pass_2026-05-16/closeout.md",
+    "audit_results/web_safe_account_connect_dry_run_pass_2026-05-21/closeout.md",
+    "audit_results/web_safe_account_connect_live_pass_reopen_2026-05-21/closeout.md",
+    "audit_results/web_safe_account_connect_live_close_verification_pass_2026-05-21/closeout.md",
+    "audit_results/web_safe_commands_expansion_pass_2026-05-22/closeout.md",
+    "audit_results/web_design_finish_pass_2026-05-22/closeout.md",
+    "audit_results/desktop_app_port_pass_reentry_reconciliation_2026-05-23/closeout.md",
+    "audit_results/desktop_app_package_pass_reentry_reconciliation_2026-05-23/closeout.md"
+  ],
+  "next_recommended_contour": "WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS_REENTRY_RECONCILIATION"
+}
