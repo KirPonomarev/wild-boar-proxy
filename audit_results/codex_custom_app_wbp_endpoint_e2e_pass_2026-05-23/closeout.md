@@ -14,7 +14,7 @@ Prove a disposable `Codex Custom Lab.app` launcher can run an isolated headless 
 
 - goal: disposable `/tmp` app shell -> isolated launcher -> temp HOME/CODEX_HOME -> WBP endpoint -> exact `WBP_OK`
 - branch: codex/external-agent-lab-isolated
-- head: be4fe36
+- head: d33461e
 - touched files: audit_results/codex_custom_app_wbp_endpoint_e2e_pass_2026-05-23/*
 - tests run: direct WBP `/v1/models` probe; direct executable app launch; app-triggered `codex exec --json`; WBP status/healthcheck post reclear; redaction audit; independent audit
 - blocked risks: full GUI Desktop proof not claimed; GPT provider-route proof not claimed; heavy load and account rotation not claimed; persistent LaunchServices not used
@@ -36,7 +36,7 @@ Prove a disposable `Codex Custom Lab.app` launcher can run an isolated headless 
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: be4fe36 (`Add custom app WBP endpoint E2E proof`)
+- commit: be4fe36 (`Add custom app WBP endpoint E2E proof`), d33461e (`Fix custom app E2E closeout git truth`)
 - pushed: yes, `origin/codex/external-agent-lab-isolated`
 
 ## Scope Check
