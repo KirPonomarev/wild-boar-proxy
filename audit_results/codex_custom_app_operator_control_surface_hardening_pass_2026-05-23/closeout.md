@@ -6,19 +6,19 @@ Harden a repeatable localhost-only operator control surface harness for isolated
 
 ## Result
 
-- status: closed_success_pending_commit
+- status: closed_success
 - final verdict: hardened proof passed; not a production app, existing WBP web integration, GUI Desktop proof, provider-route proof, rotation/load proof, or design gate.
-- next action: commit and push, then plan the next contour for integrating the proven flow into the main WBP web UI or production lab shell.
+- next action: plan the next contour for integrating the proven flow into the main WBP web UI or production lab shell.
 
 ## Contour Capsule
 
 - goal: repo-owned harness -> localhost UI -> server-issued model -> arbitrary prompt -> WBP Codex response -> redacted transcript -> process-only isolation proof
 - branch: codex/external-agent-lab-isolated
-- head: pending initial proof commit
+- head: d6da282
 - touched files: `tools/operator_control_surface_harness.py`, `tests/test_operator_control_surface_harness.py`, `audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/*`
-- tests run: `python3 -B -m unittest tests.test_operator_control_surface_harness -q`; `python3 -m py_compile tools/operator_control_surface_harness.py tests/test_operator_control_surface_harness.py`; browser proof; process-only proof; redaction audit; independent audit; git diff/check_closeout pending
+- tests run: `python3 -B -m unittest tests.test_operator_control_surface_harness -q`; `python3 -m py_compile tools/operator_control_surface_harness.py tests/test_operator_control_surface_harness.py`; browser proof; process-only proof; redaction audit; independent audit; git diff/check_closeout passed
 - blocked risks: broad stable/rotation claims remain blocked by claim_gate; browser proof is not isolation proof; no production/desktop/web-integration claim made
-- next exact command: `git add tools/operator_control_surface_harness.py tests/test_operator_control_surface_harness.py audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23 && python3 tools/check_closeout_resilience.py --staged-only`
+- next exact command: `python3 -m wild_boar_proxy status --json`
 
 ## Verification
 
@@ -36,8 +36,8 @@ Harden a repeatable localhost-only operator control surface harness for isolated
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: pending initial proof commit
-- pushed: pending initial proof commit
+- commit: d6da282
+- pushed: yes, `codex/external-agent-lab-isolated`
 
 ## Scope Check
 
@@ -48,4 +48,4 @@ Harden a repeatable localhost-only operator control surface harness for isolated
 
 - blockers encountered: initial process-proof invocation used global `--model` after subcommand and argparse rejected it; corrected invocation. First process cleanup found a transient Codex plugin temp tree race; harness now uses bounded cleanup retry and rerun passed.
 - follow-up contour: `CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS` or production lab shell contour, depending on owner priority
-- resume from here: CLOSED after commit/push repair updates this closeout git section
+- resume from here: CLOSED; next contour is `CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS` or production lab shell contour, depending on owner priority
