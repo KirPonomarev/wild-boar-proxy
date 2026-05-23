@@ -36,8 +36,8 @@ Prove a disposable visible `Codex Custom Lab.app` shell can be staged and dry-la
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending final commit
-- pushed: pending final push
+- commit: `dc14de4` (`Add Codex custom app dry-run isolation pass`)
+- pushed: yes, `origin/codex/external-agent-lab-isolated`
 
 ## Scope Check
 
