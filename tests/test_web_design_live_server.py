@@ -5120,6 +5120,135 @@ class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
         self.assertIn(("rollout", "rotation", "inspect", "--json"), runner.calls)
 
 
+class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
+    def test_codex_custom_session_lifecycle_is_dry_run_and_server_owned(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "blocked_by_policy_drift"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                empty = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                detail = json.loads(fetch(f"{base}/api/codex/custom/sessions/{session_id}"))
+                prompt = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt-dry-run",
+                        {"prompt": "Reply with exactly SESSION_OK."},
+                    )
+                )
+                transcript = json.loads(
+                    fetch(f"{base}/api/codex/custom/sessions/{session_id}/transcript")
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt-dry-run",
+                        {"prompt": "OK", "backend_id": "acct-active", "path": "/tmp/outside"},
+                    )
+                )
+                cancel = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions/{session_id}/cancel", {})
+                )
+                cleanup = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions/{session_id}/cleanup", {})
+                )
+                listed = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(empty["session_count"], 0)
+        self.assertEqual(created["status"], "ok")
+        self.assertTrue(created["session"]["model_server_issued"])
+        self.assertTrue(created["session"]["selection_proven"])
+        self.assertEqual(created["session"]["session_root_scope"], "owned_temp_session_root")
+        self.assertNotIn("/tmp/wbp-auth.json", json.dumps(created))
+        self.assertNotIn("acct-active", json.dumps(created))
+        self.assertEqual(detail["session"]["session_id"], session_id)
+        self.assertTrue(prompt["prompt_admitted"])
+        self.assertEqual(prompt["prompt_length"], len("Reply with exactly SESSION_OK."))
+        self.assertNotIn("Reply with exactly SESSION_OK.", json.dumps(prompt))
+        self.assertFalse(prompt["model_response_present"])
+        self.assertFalse(prompt["inference_proven"])
+        self.assertFalse(prompt["runtime_meter_attached"])
+        self.assertEqual(prompt["token_burn"], 0)
+        self.assertEqual(transcript["transcript_kind"], "service_ledger_only")
+        self.assertFalse(transcript["model_response_present"])
+        self.assertNotIn("Reply with exactly SESSION_OK.", json.dumps(transcript))
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], ["backend_id", "path"])
+        self.assertFalse(cancel["process_kill_claimed"])
+        self.assertTrue(cleanup["cleanup_performed"])
+        self.assertFalse(cleanup["arbitrary_path_accepted"])
+        self.assertEqual(listed["session_count"], 1)
+        self.assertEqual(listed["sessions"][0]["cleanup_state"], "cleaned")
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
+    def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                bad_model = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions", {"model_id": "free-form"})
+                )
+                bad_backend = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {
+                            "model_id": "gpt-5.3-codex",
+                            "account_id": "acct-active",
+                            "backend_id": "acct-active",
+                            "route_id": "route",
+                            "codex_home": "/tmp/home",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(bad_model["status"], "rejected")
+        self.assertEqual(bad_model["machine_error_code"], "MODEL_NOT_SERVER_ISSUED")
+        self.assertEqual(bad_backend["status"], "rejected")
+        self.assertEqual(bad_backend["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertIn("account_id", bad_backend["forbidden_fields"])
+        self.assertIn("backend_id", bad_backend["forbidden_fields"])
+        self.assertIn("route_id", bad_backend["forbidden_fields"])
+        self.assertIn("codex_home", bad_backend["forbidden_fields"])
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))

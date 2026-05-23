@@ -35,6 +35,7 @@ from wild_boar_proxy.codex_account_selection import (
     build_account_smoke_dry_run_packet,
     build_accounts_truth_packet,
 )
+from wild_boar_proxy.codex_custom_sessions import CodexCustomSessionManager
 from wild_boar_proxy.codex_model_registry import (
     build_custom_api_compat_packet,
     build_custom_model_dry_run_packet,
@@ -1669,6 +1670,7 @@ def build_handler(
     api_connections_readonly_runner = command_runner
     action_runner = command_runner
     operator_surface_session = OperatorSurfaceSession()
+    codex_custom_sessions = CodexCustomSessionManager()
     if (
         runner is None
         and action_phase == SANDBOX_ACTION_PHASE
@@ -1761,6 +1763,18 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/sessions":
+                self._send_json(codex_custom_sessions.list_packet())
+                return
+            custom_session = self._custom_session_route(parsed.path)
+            if custom_session is not None:
+                session_id, action = custom_session
+                if action == "":
+                    self._send_json(codex_custom_sessions.get_packet(session_id))
+                    return
+                if action == "transcript":
+                    self._send_json(codex_custom_sessions.transcript_packet(session_id))
+                    return
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
@@ -1788,6 +1802,32 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/codex/custom/sessions":
+                self._send_json(
+                    codex_custom_sessions.create_packet(
+                        self._read_json_body(),
+                        self._codex_account_commands(),
+                        operator_surface_session.status_payload(),
+                    )
+                )
+                return
+            custom_session = self._custom_session_route(parsed.path)
+            if custom_session is not None:
+                session_id, action = custom_session
+                if action == "prompt-dry-run":
+                    self._send_json(
+                        codex_custom_sessions.prompt_dry_run_packet(
+                            session_id,
+                            self._read_json_body(),
+                        )
+                    )
+                    return
+                if action == "cancel":
+                    self._send_json(codex_custom_sessions.cancel_packet(session_id))
+                    return
+                if action == "cleanup":
+                    self._send_json(codex_custom_sessions.cleanup_packet(session_id))
+                    return
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -1822,6 +1862,20 @@ def build_handler(
                     "rollout_rotation_inspect",
                 ),
             }
+
+        def _custom_session_route(self, path: str) -> tuple[str, str] | None:
+            prefix = "/api/codex/custom/sessions/"
+            if not path.startswith(prefix):
+                return None
+            rest = path[len(prefix) :].strip("/")
+            if not rest:
+                return None
+            parts = rest.split("/")
+            if len(parts) == 1:
+                return parts[0], ""
+            if len(parts) == 2:
+                return parts[0], parts[1]
+            return None
 
         def _read_json_body(self) -> dict[str, Any]:
             try:

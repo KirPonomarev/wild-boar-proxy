@@ -283,7 +283,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("responses_called: packet?.responses_called === true", js)
         self.assertIn("chat_completions_called: packet?.chat_completions_called === true", js)
         self.assertIn("token_burn: packet?.token_burn ?? 0", js)
-        self.assertNotIn('fetch("api/codex/custom/session', js)
+        self.assertNotIn('fetch("api/codex/custom/session"', js)
 
     def test_codex_custom_accounts_ui_is_selection_not_inference(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
@@ -300,6 +300,30 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("account_mutation_performed: packet?.account_mutation_performed === true", js)
         self.assertNotIn("JSON.stringify({ model_id: modelId, account_id", js)
         self.assertNotIn('fetch("api/codex/custom/account-smoke"', js)
+
+    def test_codex_custom_sessions_ui_is_lifecycle_not_inference(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexCustomSessionsPanel"', html)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/sessions\")", js)
+        self.assertIn("api/codex/custom/sessions/${encodeURIComponent(codexCustomSelectedSessionId)}", js)
+        self.assertIn("body: JSON.stringify(payload)", js)
+        self.assertIn("createCodexCustomSession()", js)
+        self.assertIn("runCodexCustomSessionPromptDryRun()", js)
+        self.assertIn("cancelCodexCustomSession()", js)
+        self.assertIn("cleanupCodexCustomSession()", js)
+        self.assertIn("postCodexCustomSessionAction(\"create\", { model_id: modelId })", js)
+        self.assertIn("postCodexCustomSessionAction(\"prompt-dry-run\", { prompt: promptNode ? promptNode.value : \"\" })", js)
+        self.assertIn("model_response_present: packet?.model_response_present === true", js)
+        self.assertIn("process_kill_claimed: packet?.process_kill_claimed === true", js)
+        self.assertIn("arbitrary_path_accepted: packet?.arbitrary_path_accepted === true", js)
+        self.assertIn("inference_proven: inference", js)
+        self.assertIn("token_burn: tokenBurn", js)
+        self.assertNotIn("postCodexCustomSessionAction(\"create\", { model_id: modelId, account_id", js)
+        self.assertNotIn("postCodexCustomSessionAction(\"create\", { model_id: modelId, backend_id", js)
+        self.assertNotIn("postCodexCustomSessionAction(\"prompt-dry-run\", { prompt: promptNode ? promptNode.value : \"\", backend_id", js)
+        self.assertNotIn("postCodexCustomSessionAction(\"cleanup\", { path", js)
 
     def test_overview_nav_and_action_hierarchy_are_product_first(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

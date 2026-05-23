@@ -473,6 +473,58 @@
           <pre id="codexCustomAccountDryRunResponse" class="mono-value">account dry-run packet pending</pre>
         </section>
 
+        <section id="codexCustomSessionsPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Custom Sessions</div>
+              <div id="codexCustomSessionsSummary" class="secondary">Session manager ещё не загружен.</div>
+            </div>
+            <span id="codexCustomSessionsChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Sessions</div><div id="codexCustomSessionCount">0</div>
+            <div>Selected</div><div id="codexCustomSelectedSession">none</div>
+            <div>Status</div><div id="codexCustomSessionStatus">not created</div>
+            <div>Model</div><div id="codexCustomSessionModel">-</div>
+            <div>Selection</div><div id="codexCustomSessionSelection">not checked</div>
+            <div>Cleanup</div><div id="codexCustomSessionCleanup">not cleaned</div>
+          </div>
+          <label class="form-field" for="codexCustomSessionPrompt">
+            <span>Prompt dry-run</span>
+            <textarea id="codexCustomSessionPrompt" rows="3" autocomplete="off" spellcheck="false">Reply with exactly SESSION_OK.</textarea>
+          </label>
+          <div class="action-summary-footer">
+            <div>
+              <span>inference: <strong id="codexCustomSessionInference">not claimed</strong></span>
+              <span>token burn: <strong id="codexCustomSessionTokenBurn">0</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexCustomSessionsRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="codexCustomSessionCreateAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/plus.png" alt="" aria-hidden="true">
+                <span>Create</span>
+              </button>
+              <button id="codexCustomSessionPromptDryRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Prompt dry-run</span>
+              </button>
+              <button id="codexCustomSessionCancelAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
+                <span>Cancel</span>
+              </button>
+              <button id="codexCustomSessionCleanupAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+                <span>Cleanup</span>
+              </button>
+            </div>
+          </div>
+          <pre id="codexCustomSessionResponse" class="mono-value">session packet pending</pre>
+          <pre id="codexCustomSessionTranscript" class="mono-value">service ledger pending</pre>
+        </section>
+
         <section id="operatorPanel" class="card log-card">
           <div class="log-head">
             <div>

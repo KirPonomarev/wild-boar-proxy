@@ -1,0 +1,58 @@
+{
+  "create": {
+    "http_status": 200,
+    "packet": {
+      "captured_at_utc": "2026-05-23T18:38:27.767683Z",
+      "forbidden_fields": [
+        "backend_id",
+        "path",
+        "route_id"
+      ],
+      "human_message": "Codex Custom session payload contains forbidden browser fields.",
+      "inference_proven": false,
+      "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+      "mode_id": "codex_custom",
+      "next_action": "remove_forbidden_browser_fields",
+      "runtime_meter_attached": false,
+      "schema_version": 1,
+      "status": "rejected",
+      "token_burn": 0
+    }
+  },
+  "prompt": {
+    "http_status": 200,
+    "packet": {
+      "captured_at_utc": "2026-05-23T18:38:33.315467Z",
+      "forbidden_fields": [
+        "backend_id",
+        "path"
+      ],
+      "human_message": "Codex Custom session payload contains forbidden browser fields.",
+      "inference_proven": false,
+      "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+      "mode_id": "codex_custom",
+      "next_action": "remove_forbidden_browser_fields",
+      "runtime_meter_attached": false,
+      "schema_version": 1,
+      "session_id": "<session-id>",
+      "status": "rejected",
+      "token_burn": 0
+    }
+  },
+  "bad_model": {
+    "http_status": 200,
+    "packet": {
+      "captured_at_utc": "2026-05-23T18:38:33.307522Z",
+      "human_message": "Session create accepts only server-issued model_id.",
+      "inference_proven": false,
+      "machine_error_code": "MODEL_NOT_SERVER_ISSUED",
+      "mode_id": "codex_custom",
+      "model_server_issued": false,
+      "next_action": "select_model_from_server_registry",
+      "runtime_meter_attached": false,
+      "schema_version": 1,
+      "status": "rejected",
+      "token_burn": 0
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "captured_at_utc": "2026-05-23T18:38:33.324Z",
+  "auditor": "orchestrator-machine-cross-check plus independent-auditor-finding-repair",
+  "checks": {
+    "create_binds_server_issued_model": true,
+    "create_has_selection_proof": true,
+    "no_inference_claim": true,
+    "no_model_response_claim": true,
+    "token_burn_zero": true,
+    "prompt_redacted": true,
+    "forbidden_browser_fields_rejected": true,
+    "free_form_model_rejected": true,
+    "selection_missing_reject_guard_covered_by_unit_test": true,
+    "cancel_does_not_claim_process_kill": true,
+    "cleanup_server_owned": true,
+    "browser_click_proof_present": true
+  },
+  "verdict": "pass"
+}

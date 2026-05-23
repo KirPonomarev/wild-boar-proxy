@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-23T18:38:33.325Z",
+  "checked_patterns": [
+    "raw prompt",
+    "session id",
+    "account id",
+    "user paths",
+    "repo paths",
+    "session tmp paths",
+    "sk-*",
+    "authorization bearer token"
+  ],
+  "artifact_json_redacted": true,
+  "raw_prompt_present_in_text_artifacts": false,
+  "raw_secret_present": false,
+  "auth_file_copied": false,
+  "notes": "Text artifacts use redacted packet ids/digests only; screenshots may show non-secret UI controls and packet shape, not auth material."
+}

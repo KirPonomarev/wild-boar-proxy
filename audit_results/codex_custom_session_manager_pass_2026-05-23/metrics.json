@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-23T18:38:33.324Z",
+  "token_burn": 0,
+  "inference_proven": false,
+  "runtime_meter_attached": false,
+  "model_response_present": false,
+  "prompt_raw_stored_in_packet": false,
+  "transcript_raw_prompt_present": false,
+  "cleanup_performed": true
+}

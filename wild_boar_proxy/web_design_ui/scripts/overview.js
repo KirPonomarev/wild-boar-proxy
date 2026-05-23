@@ -476,6 +476,8 @@ let operatorLastPacket = null;
 let codexLaunchDryRunInFlight = false;
 let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
+let codexCustomSessionActionInFlight = false;
+let codexCustomSelectedSessionId = "";
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -1136,6 +1138,193 @@ async function runCodexCustomAccountSmokeDryRun() {
     codexCustomAccountDryRunInFlight = false;
     document.getElementById("codexCustomAccountSmokeDryRunAction")?.removeAttribute("disabled");
   }
+}
+
+function codexCustomSessionsSetText(id, value) {
+  operatorSetText(id, value);
+}
+
+function codexCustomSessionsSetChip(visual, label) {
+  const chip = document.getElementById("codexCustomSessionsChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function currentCodexCustomSessionUrl(action = "") {
+  if (!codexCustomSelectedSessionId) {
+    return "";
+  }
+  const base = `api/codex/custom/sessions/${encodeURIComponent(codexCustomSelectedSessionId)}`;
+  return action ? `${base}/${action}` : base;
+}
+
+function renderCodexCustomSessionPacket(packet) {
+  const session = packet?.session || {};
+  const sessionId = session?.session_id || packet?.session_id || codexCustomSelectedSessionId || "";
+  if (sessionId) {
+    codexCustomSelectedSessionId = sessionId;
+  }
+  const inference = packet?.inference_proven === true || session?.inference_proven === true;
+  const tokenBurn = packet?.token_burn ?? session?.token_burn ?? 0;
+  codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
+  codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packet?.status || "unknown");
+  codexCustomSessionsSetText("codexCustomSessionModel", session?.model_id || packet?.selected_model || "-");
+  codexCustomSessionsSetText(
+    "codexCustomSessionSelection",
+    session?.selection_proven ? `${session?.selected_source_class || "gpt_account"} · server-side` : "not proven"
+  );
+  codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
+  codexCustomSessionsSetText("codexCustomSessionInference", inference ? "metered proof" : "not claimed");
+  codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
+  const ok = packet?.status === "ok" && inference === false;
+  codexCustomSessionsSetChip(ok ? "green" : (packet?.status === "rejected" ? "amber" : "red"), ok ? "session ready" : (packet?.status || "unknown"));
+  const response = document.getElementById("codexCustomSessionResponse");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      session_id: sessionId,
+      model_id: session?.model_id || packet?.selected_model || "",
+      model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
+      selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
+      selected_backend_server_issued: session?.selected_backend_server_issued === true,
+      prompt_admitted: packet?.prompt_admitted === true,
+      prompt_present: packet?.prompt_present === true,
+      prompt_length: packet?.prompt_length ?? 0,
+      prompt_sha256: packet?.prompt_sha256 || "",
+      prompt_preview_redacted: packet?.prompt_preview_redacted || "",
+      transcript_kind: packet?.transcript_kind || "",
+      model_response_present: packet?.model_response_present === true,
+      cleanup_performed: packet?.cleanup_performed === true,
+      arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      inference_proven: inference,
+      runtime_meter_attached: packet?.runtime_meter_attached === true || session?.runtime_meter_attached === true,
+      token_burn: tokenBurn,
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
+function renderCodexCustomSessionList(packet) {
+  const sessions = Array.isArray(packet?.sessions) ? packet.sessions : [];
+  codexCustomSessionsSetText("codexCustomSessionCount", String(packet?.session_count ?? sessions.length));
+  if (!codexCustomSelectedSessionId && sessions.length) {
+    codexCustomSelectedSessionId = sessions[0].session_id || "";
+  }
+  const selected = sessions.find((session) => session.session_id === codexCustomSelectedSessionId) || sessions[0] || null;
+  if (selected) {
+    renderCodexCustomSessionPacket({ status: "ok", machine_error_code: "OK", session: selected });
+    codexCustomSessionsSetText("codexCustomSessionsSummary", `${sessions.length} sessions · selected ${selected.session_id}`);
+  } else {
+    codexCustomSessionsSetChip("neutral", "no sessions");
+    codexCustomSessionsSetText("codexCustomSessionsSummary", "No Codex Custom sessions yet.");
+    codexCustomSessionsSetText("codexCustomSelectedSession", "none");
+    codexCustomSessionsSetText("codexCustomSessionStatus", "not created");
+  }
+}
+
+function renderCodexCustomTranscript(packet) {
+  const transcript = document.getElementById("codexCustomSessionTranscript");
+  if (transcript) {
+    transcript.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      transcript_kind: packet?.transcript_kind || "service_ledger_only",
+      model_response_present: packet?.model_response_present === true,
+      inference_proven: packet?.inference_proven === true,
+      entries: packet?.entries || [],
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomSessionsPanel() {
+  try {
+    const packet = await fetchCodexLaunchJson("api/codex/custom/sessions");
+    renderCodexCustomSessionList(packet);
+  } catch (error) {
+    codexCustomSessionsSetChip("red", "failed");
+    codexCustomSessionsSetText("codexCustomSessionsSummary", `Session fetch failed: ${error.message}`);
+  }
+}
+
+async function postCodexCustomSessionAction(action, payload = {}) {
+  if (codexCustomSessionActionInFlight) {
+    return null;
+  }
+  const url = action === "create" ? "api/codex/custom/sessions" : currentCodexCustomSessionUrl(action);
+  if (!url) {
+    renderCodexCustomSessionPacket({
+      status: "rejected",
+      machine_error_code: "SESSION_NOT_SELECTED",
+      inference_proven: false,
+      runtime_meter_attached: false,
+      token_burn: 0,
+      next_action: "create_session"
+    });
+    return null;
+  }
+  codexCustomSessionActionInFlight = true;
+  codexCustomSessionsSetChip("neutral", "working");
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      throw new Error(`custom session ${action} http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderCodexCustomSessionPacket(packet);
+    if (action === "prompt-dry-run" || action === "cancel") {
+      const transcriptUrl = currentCodexCustomSessionUrl("transcript");
+      if (transcriptUrl) {
+        renderCodexCustomTranscript(await fetchCodexLaunchJson(transcriptUrl));
+      }
+    }
+    return packet;
+  } catch (error) {
+    renderCodexCustomSessionPacket({
+      status: "failed",
+      machine_error_code: "CUSTOM_SESSION_FETCH_FAILED",
+      human_message: error.message,
+      inference_proven: false,
+      runtime_meter_attached: false,
+      token_burn: 0
+    });
+    return null;
+  } finally {
+    codexCustomSessionActionInFlight = false;
+  }
+}
+
+async function createCodexCustomSession() {
+  const modelNode = document.getElementById("codexCustomModelSelect");
+  let modelId = modelNode ? modelNode.value : "";
+  if (!modelId) {
+    await refreshCodexCustomModelsPanel();
+    modelId = modelNode ? modelNode.value : "";
+  }
+  await postCodexCustomSessionAction("create", { model_id: modelId });
+}
+
+async function runCodexCustomSessionPromptDryRun() {
+  const promptNode = document.getElementById("codexCustomSessionPrompt");
+  await postCodexCustomSessionAction("prompt-dry-run", { prompt: promptNode ? promptNode.value : "" });
+}
+
+async function cancelCodexCustomSession() {
+  await postCodexCustomSessionAction("cancel", {});
+}
+
+async function cleanupCodexCustomSession() {
+  await postCodexCustomSessionAction("cleanup", {});
 }
 
 function operatorSetChip(visual, label) {
@@ -7222,6 +7411,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());
   document.getElementById("codexCustomAccountSmokeDryRunAction")?.addEventListener("click", () => runCodexCustomAccountSmokeDryRun());
+  document.getElementById("codexCustomSessionsRefreshAction")?.addEventListener("click", () => refreshCodexCustomSessionsPanel());
+  document.getElementById("codexCustomSessionCreateAction")?.addEventListener("click", () => createCodexCustomSession());
+  document.getElementById("codexCustomSessionPromptDryRunAction")?.addEventListener("click", () => runCodexCustomSessionPromptDryRun());
+  document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
+  document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
   document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
@@ -7282,5 +7476,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   refreshCodexLaunchModesPanel();
   refreshCodexCustomModelsPanel();
   refreshCodexCustomAccountsPanel();
+  refreshCodexCustomSessionsPanel();
   refreshOperatorPanel();
 });

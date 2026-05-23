@@ -1,0 +1,37 @@
+{
+  "http_status": 200,
+  "packet": {
+    "captured_at_utc": "2026-05-23T18:38:33.316709Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T18:38:21.062342Z",
+        "event": "session_created",
+        "session_id": "<session-id>"
+      },
+      {
+        "captured_at_utc": "2026-05-23T18:38:33.311409Z",
+        "event": "prompt_admitted_dry_run",
+        "inference_proven": false,
+        "model_response_present": false,
+        "prompt_length": 31,
+        "prompt_present": true,
+        "prompt_preview_redacted": "<prompt:31:cc72b9e7>",
+        "prompt_sha256": "cc72b9e75840ab29a204fe2762309032272eca7df96c9182bc5255573beeaa26",
+        "runtime_meter_attached": false,
+        "session_id": "<session-id>",
+        "token_burn": 0
+      }
+    ],
+    "inference_proven": false,
+    "machine_error_code": "OK",
+    "mode_id": "codex_custom",
+    "model_response_present": false,
+    "next_action": "none",
+    "runtime_meter_attached": false,
+    "schema_version": 1,
+    "session_id": "<session-id>",
+    "status": "ok",
+    "token_burn": 0,
+    "transcript_kind": "service_ledger_only"
+  }
+}
