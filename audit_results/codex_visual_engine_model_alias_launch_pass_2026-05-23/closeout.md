@@ -21,7 +21,7 @@ minimal prompt only if the host boundary stays acceptable.
 - goal: validate Codex-facing model/API alias and attempt safe visual launch
   without claiming strict GUI Desktop E2E
 - branch: `codex/external-agent-lab-isolated`
-- head: `9a754b1`
+- head: `23286b6`
 - touched files:
   - `audit_results/codex_visual_engine_model_alias_launch_pass_2026-05-23/spec.md`
   - `audit_results/codex_visual_engine_model_alias_launch_pass_2026-05-23/baseline.json`
@@ -86,7 +86,7 @@ minimal prompt only if the host boundary stays acceptable.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
+- commit: `23286b6` (visual alias launch packet)
 - pushed: no
 
 ## Scope Check
