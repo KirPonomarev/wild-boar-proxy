@@ -105,23 +105,35 @@ def command_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
-def credential_status_packet(*, present: bool = True) -> dict[str, object]:
+def credential_status_packet(
+    *,
+    present: bool = True,
+    provider: str = "openrouter",
+    credential_ref: str = "OPENROUTER_API_KEY",
+    expected_refs: list[str] | None = None,
+    provider_dashboard_url: str = "https://openrouter.ai/settings/keys",
+) -> dict[str, object]:
+    refs = (
+        expected_refs
+        if expected_refs is not None
+        else [
+            "OPENROUTER_API_KEY",
+            "WBP_OPENROUTER_API_KEY",
+            "WBP_PROVIDER_OPENROUTER_API_KEY",
+        ]
+    )
     return command_packet(
         human_message="External-models credential status collected from sandbox owner paths.",
         data={
             "credential_result": {
                 "status": "present" if present else "missing",
-                "provider": "openrouter",
+                "provider": provider,
                 "source": "sandbox-managed",
-                "credential_ref": "OPENROUTER_API_KEY",
+                "credential_ref": credential_ref,
                 "credential_present": present,
                 "supported_sources": ["owner-env"],
-                "expected_refs": [
-                    "OPENROUTER_API_KEY",
-                    "WBP_OPENROUTER_API_KEY",
-                    "WBP_PROVIDER_OPENROUTER_API_KEY",
-                ],
-                "provider_dashboard_url": "https://openrouter.ai/settings/keys",
+                "expected_refs": refs,
+                "provider_dashboard_url": provider_dashboard_url,
                 "secret_value_exposed": False,
                 "browser_secret_intake": False,
                 "browser_path_intake": False,
@@ -131,7 +143,22 @@ def credential_status_packet(*, present: bool = True) -> dict[str, object]:
     )
 
 
-def credential_admit_packet() -> dict[str, object]:
+def credential_admit_packet(
+    *,
+    provider: str = "openrouter",
+    credential_ref: str = "OPENROUTER_API_KEY",
+    expected_refs: list[str] | None = None,
+    provider_dashboard_url: str = "https://openrouter.ai/settings/keys",
+) -> dict[str, object]:
+    refs = (
+        expected_refs
+        if expected_refs is not None
+        else [
+            "OPENROUTER_API_KEY",
+            "WBP_OPENROUTER_API_KEY",
+            "WBP_PROVIDER_OPENROUTER_API_KEY",
+        ]
+    )
     return command_packet(
         human_message="External-models credential admitted from owner source.",
         next_action="api_route_connect",
@@ -139,17 +166,13 @@ def credential_admit_packet() -> dict[str, object]:
         data={
             "credential_result": {
                 "status": "admitted",
-                "provider": "openrouter",
+                "provider": provider,
                 "source": "owner-env",
-                "credential_ref": "OPENROUTER_API_KEY",
+                "credential_ref": credential_ref,
                 "credential_present": True,
                 "supported_sources": ["owner-env"],
-                "expected_refs": [
-                    "OPENROUTER_API_KEY",
-                    "WBP_OPENROUTER_API_KEY",
-                    "WBP_PROVIDER_OPENROUTER_API_KEY",
-                ],
-                "provider_dashboard_url": "https://openrouter.ai/settings/keys",
+                "expected_refs": refs,
+                "provider_dashboard_url": provider_dashboard_url,
                 "secret_value_exposed": False,
                 "browser_secret_intake": False,
                 "browser_path_intake": False,
@@ -949,6 +972,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(full_metadata["actions"]["api_route_validate"]["action_role"], "api_route_validation")
         self.assertEqual(full_metadata["actions"]["api_route_connect"]["action_role"], "api_route_admission")
         self.assertEqual(full_metadata["actions"]["api_route_profile"]["action_role"], "api_route_profile_packet")
+        self.assertNotIn(
+            "openrouter",
+            full_metadata["actions"]["api_route_credential_check"]["human_meaning"],
+        )
         self.assertEqual(
             full_metadata["actions"]["quick_start_check_all"]["action_role"],
             "quick_start_verify_bundle",
@@ -1787,6 +1814,106 @@ class WebDesignLiveServerTests(unittest.TestCase):
             ],
         )
 
+    def test_api_route_connect_prefers_primary_route_snapshot_provider(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        )
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                    }
+                ],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+        ] = credential_status_packet(
+            present=True,
+            provider="deepseek",
+            credential_ref="DEEPSEEK_API_KEY",
+            expected_refs=["DEEPSEEK_API_KEY"],
+            provider_dashboard_url="https://platform.deepseek.com/api_keys",
+        )
+        payloads[
+            ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json")
+        ] = command_packet(
+            human_message="External-models route validation captured provider evidence without claiming runtime readiness.",
+            data={
+                "validation_kind": "provider_route_validate",
+                "network_dependent": True,
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "profile_ready": False,
+                "verification_scope": "route_provider_only",
+                "route_state": "model_visible",
+                "requested_model": "wbp-deepseek-v3",
+                "effective_model": "deepseek-chat",
+                "provider": "deepseek",
+            },
+        )
+        runner = MappingRunner(payloads)
+        contract = launch_copy_contract()
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_connect"},
+            launch_copy_contract=contract,
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["result"]["data"]["credential_provider"], "deepseek")
+        self.assertEqual(result["result"]["data"]["credential_ref"], "DEEPSEEK_API_KEY")
+        self.assertEqual(result["result"]["data"]["route_id"], "wbp-deepseek-v3")
+        self.assertIn(
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json"),
+            runner.calls,
+        )
+        self.assertNotIn(
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+            runner.calls,
+        )
+
     def test_api_route_connect_missing_credential_triggers_owner_admit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -2095,6 +2222,137 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(result["result"]["data"]["credential_status"], "present")
         self.assertEqual(result["result"]["data"]["add_status"], "not_run")
         self.assertEqual(result["result"]["data"]["validate_status"], "not_run")
+
+    def test_api_route_credential_check_uses_server_owned_route_provider(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={"count": 0, "routes": []},
+        )
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 0,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+        ] = credential_status_packet(
+            present=True,
+            provider="deepseek",
+            credential_ref="DEEPSEEK_API_KEY",
+            expected_refs=["DEEPSEEK_API_KEY"],
+            provider_dashboard_url="https://platform.deepseek.com/api_keys",
+        )
+        runner = MappingRunner(payloads)
+        runner._env = {
+            "WBP_SERVER_OWNED_API_ROUTE_PROVIDER": "deepseek",
+            "WBP_SERVER_OWNED_API_ROUTE_SECRET_REF": "DEEPSEEK_API_KEY",
+        }
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_credential_check"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["result"]["data"]["credential_provider"], "deepseek")
+        self.assertEqual(result["result"]["data"]["credential_ref"], "DEEPSEEK_API_KEY")
+        self.assertEqual(
+            result["result"]["human_message"],
+            "Owner credential status confirmed for provider: deepseek.",
+        )
+        self.assertIn(
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json"),
+            runner.calls,
+        )
+
+    def test_api_route_credential_check_prefers_primary_route_snapshot_provider(self) -> None:
+        payloads = live_payloads()
+        payloads[("external-models", "models", "--json")] = command_packet(
+            human_message="External-models route models listed from local registry.",
+            data={
+                "count": 1,
+                "source": "local_routes_registry",
+                "listener_proven": False,
+                "runtime_claim_blocked": True,
+                "models": [
+                    {
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "cost_class": "paid_or_free_limited",
+                        "enabled": True,
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "synthetic_adapter_state": "stopped",
+                        "profile_ready": False,
+                    }
+                ],
+            },
+        )
+        payloads[("external-models", "routes", "list", "--json")] = command_packet(
+            human_message="External-models routes listed from local registry.",
+            data={
+                "count": 1,
+                "routes": [
+                    {
+                        "schema_version": 1,
+                        "route_id": "wbp-deepseek-v3",
+                        "display_name": "DeepSeek V3",
+                        "provider": "deepseek",
+                        "base_url": "https://api.deepseek.com",
+                        "endpoint_path": "/chat/completions",
+                        "upstream_model": "deepseek-chat",
+                        "compatibility": "openai_chat_completions",
+                        "auth": {"type": "bearer", "secret_ref": "DEEPSEEK_API_KEY"},
+                        "cost_class": "paid_or_free_limited",
+                        "lane_role": "candidate",
+                        "fallback_eligible": False,
+                        "enabled": True,
+                    }
+                ],
+            },
+        )
+        payloads[
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json")
+        ] = credential_status_packet(
+            present=True,
+            provider="deepseek",
+            credential_ref="DEEPSEEK_API_KEY",
+            expected_refs=["DEEPSEEK_API_KEY"],
+            provider_dashboard_url="https://platform.deepseek.com/api_keys",
+        )
+        runner = MappingRunner(payloads)
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_credential_check"},
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["result"]["data"]["credential_provider"], "deepseek")
+        self.assertEqual(result["result"]["data"]["credential_ref"], "DEEPSEEK_API_KEY")
+        self.assertIn(
+            ("external-models", "credentials", "status", "--provider", "deepseek", "--json"),
+            runner.calls,
+        )
+        self.assertNotIn(
+            ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+            runner.calls,
+        )
 
     def test_api_route_connect_rejects_forbidden_browser_fields(self) -> None:
         runner = MappingRunner(live_payloads())

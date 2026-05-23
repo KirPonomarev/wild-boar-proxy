@@ -296,7 +296,7 @@ UI_ACTION_ALLOWLIST = {
         "human_meaning": "Проверить или принять owner credential, затем добавить или принять server-owned API route без browser api_key, secrets, paths или route_id и обновить подтверждённый список API-подключений.",
     },
     "api_route_credential_check": {
-        "adapter_command_id": "external_models_credentials_status_openrouter",
+        "adapter_command_id": "external_models_credentials_status_provider",
         "action_role": "api_route_credential_status",
         "mutation_class": "api_route_credential_handoff",
         "mutates_runtime": False,
@@ -305,7 +305,7 @@ UI_ACTION_ALLOWLIST = {
         "post_action_refresh_required": False,
         "action_claim_scope": "только owner credential presence proof; browser api_key/secret/path/auth не принимает и route не меняет",
         "display_name": "Проверить credential",
-        "human_meaning": "Проверить видимость owner credential для openrouter без передачи секрета через браузер и без мутации route.",
+        "human_meaning": "Проверить видимость owner credential для текущего server-owned provider без передачи секрета через браузер и без мутации route.",
     },
     "api_route_check": {
         "adapter_command_id": "external_models_check",
@@ -830,6 +830,17 @@ def _server_owned_api_route_spec(runner: CommandRunner) -> dict[str, Any]:
     }
 
 
+def _server_owned_api_route_provider(runner: CommandRunner) -> str:
+    route = _server_owned_api_route_spec(runner)
+    return str(route.get("provider") or "openrouter")
+
+
+def _server_owned_api_route_secret_ref(runner: CommandRunner) -> str:
+    route = _server_owned_api_route_spec(runner)
+    auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+    return str(auth.get("secret_ref") or "")
+
+
 def _server_owned_api_route_spec_path(
     runner: CommandRunner,
     launch_copy_contract: LaunchCopyContract | None,
@@ -1151,6 +1162,30 @@ def _primary_api_route_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]
             return route
     first = routes[0]
     return first if isinstance(first, dict) else None
+
+
+def _api_route_provider_from_snapshot(
+    snapshot: dict[str, Any] | None,
+    runner: CommandRunner,
+) -> str:
+    route = _primary_api_route_from_snapshot(snapshot or {}) if isinstance(snapshot, dict) else None
+    if isinstance(route, dict):
+        provider = str(route.get("provider") or "").strip()
+        if provider:
+            return provider
+    return _server_owned_api_route_provider(runner)
+
+
+def _api_route_secret_ref_from_snapshot(
+    snapshot: dict[str, Any] | None,
+    runner: CommandRunner,
+) -> str:
+    route = _primary_api_route_from_snapshot(snapshot or {}) if isinstance(snapshot, dict) else None
+    if isinstance(route, dict):
+        secret_ref = str(route.get("secret_ref") or "").strip()
+        if secret_ref:
+            return secret_ref
+    return _server_owned_api_route_secret_ref(runner)
 
 
 def _runtime_check_all_component(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -2536,6 +2571,8 @@ def _api_route_credential_bridge_data(
     connect_phase: str,
     admission_mode: str,
     preflight: dict[str, Any],
+    provider_fallback: str,
+    credential_ref_fallback: str,
     credential_status_result: dict[str, Any] | None,
     credential_admit_result: dict[str, Any] | None,
     credential_phase: str,
@@ -2582,11 +2619,13 @@ def _api_route_credential_bridge_data(
         "credential_provider": str(
             credential_status.get("provider")
             or credential_admit.get("provider")
+            or provider_fallback
             or "openrouter"
         ),
         "credential_ref": str(
             credential_status.get("credential_ref")
             or credential_admit.get("credential_ref")
+            or credential_ref_fallback
             or ""
         ),
         "credential_supported_sources": (
@@ -2635,6 +2674,8 @@ def _api_route_connect_result(
     connect_phase: str,
     admission_mode: str,
     preflight: dict[str, Any],
+    provider_fallback: str,
+    credential_ref_fallback: str,
     credential_status_result: dict[str, Any] | None,
     credential_admit_result: dict[str, Any] | None,
     credential_phase: str,
@@ -2652,6 +2693,8 @@ def _api_route_connect_result(
             connect_phase=connect_phase,
             admission_mode=admission_mode,
             preflight=preflight,
+            provider_fallback=provider_fallback,
+            credential_ref_fallback=credential_ref_fallback,
             credential_status_result=credential_status_result,
             credential_admit_result=credential_admit_result,
             credential_phase=credential_phase,
@@ -2670,10 +2713,13 @@ def _api_route_credential_result_status(result: dict[str, Any] | None) -> dict[s
 
 def _run_api_route_credential_bridge(
     runner: CommandRunner,
+    *,
+    provider: str,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str, dict[str, Any] | None]:
     credential_status_result = execute_command(
         runner,
-        "external_models_credentials_status_openrouter",
+        "external_models_credentials_status_provider",
+        structured_args={"provider": provider},
         allow_disabled=True,
     )
     if credential_status_result["status"] != "ok":
@@ -2685,7 +2731,8 @@ def _run_api_route_credential_bridge(
 
     credential_admit_result = execute_command(
         runner,
-        "external_models_credentials_admit_openrouter_owner_env",
+        "external_models_credentials_admit_provider_owner_env",
+        structured_args={"provider": provider},
         allow_disabled=True,
     )
     if credential_admit_result["status"] != "ok":
@@ -2717,10 +2764,13 @@ def _run_api_route_credential_check_action(runner: CommandRunner) -> dict[str, A
     preflight = _api_route_connect_preflight(api_snapshot_before)
     if preflight["status"] != "admitted":
         return _api_route_connect_preflight_denied("api_route_credential_check", preflight)
+    provider = _api_route_provider_from_snapshot(api_snapshot_before, runner)
+    credential_ref = _api_route_secret_ref_from_snapshot(api_snapshot_before, runner)
 
     credential_status_result = execute_command(
         runner,
-        "external_models_credentials_status_openrouter",
+        "external_models_credentials_status_provider",
+        structured_args={"provider": provider},
         allow_disabled=True,
     )
     if credential_status_result["status"] != "ok":
@@ -2735,6 +2785,8 @@ def _run_api_route_credential_check_action(runner: CommandRunner) -> dict[str, A
                 connect_phase="credential_status_failed",
                 admission_mode="status_only",
                 preflight=preflight,
+                provider_fallback=provider,
+                credential_ref_fallback=credential_ref,
                 credential_status_result=credential_status_result,
                 credential_admit_result=None,
                 credential_phase="credential_status_failed",
@@ -2748,9 +2800,9 @@ def _run_api_route_credential_check_action(runner: CommandRunner) -> dict[str, A
     credential_present = status_credential.get("credential_present") is True
     phase = "credential_present" if credential_present else "credential_missing"
     human_message = (
-        "Owner credential status confirmed for provider: openrouter."
+        f"Owner credential status confirmed for provider: {provider}."
         if credential_present
-        else "Owner credential source is missing for provider: openrouter."
+        else f"Owner credential source is missing for provider: {provider}."
     )
     result = {
         "status": "ok" if credential_present else "command_error",
@@ -2763,6 +2815,8 @@ def _run_api_route_credential_check_action(runner: CommandRunner) -> dict[str, A
             connect_phase="credential_status_checked",
             admission_mode="status_only",
             preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
             credential_status_result=credential_status_result,
             credential_admit_result=None,
             credential_phase=phase,
@@ -2781,13 +2835,15 @@ def _run_api_route_connect_action(
     preflight = _api_route_connect_preflight(api_snapshot_before)
     if preflight["status"] != "admitted":
         return _api_route_connect_preflight_denied("api_route_connect", preflight)
+    provider = _api_route_provider_from_snapshot(api_snapshot_before, runner)
+    credential_ref = _api_route_secret_ref_from_snapshot(api_snapshot_before, runner)
 
     (
         credential_status_result,
         credential_admit_result,
         credential_phase,
         credential_failure_result,
-    ) = _run_api_route_credential_bridge(runner)
+    ) = _run_api_route_credential_bridge(runner, provider=provider)
     if credential_failure_result is not None:
         result = _api_route_connect_result(
             status="command_error",
@@ -2798,6 +2854,8 @@ def _run_api_route_connect_action(
             connect_phase=credential_phase,
             admission_mode="credential_bridge",
             preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
             credential_status_result=credential_status_result,
             credential_admit_result=credential_admit_result,
             credential_phase=credential_phase,
@@ -2824,6 +2882,8 @@ def _run_api_route_connect_action(
             connect_phase="adopted_existing_route",
             admission_mode="adopt",
             preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
             credential_status_result=credential_status_result,
             credential_admit_result=credential_admit_result,
             credential_phase=credential_phase,
@@ -2851,6 +2911,8 @@ def _run_api_route_connect_action(
             connect_phase="spec_write_failed",
             admission_mode="create",
             preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
             credential_status_result=credential_status_result,
             credential_admit_result=credential_admit_result,
             credential_phase=credential_phase,
@@ -2875,6 +2937,8 @@ def _run_api_route_connect_action(
             connect_phase="add_failed",
             admission_mode="create",
             preflight=preflight,
+            provider_fallback=provider,
+            credential_ref_fallback=credential_ref,
             credential_status_result=credential_status_result,
             credential_admit_result=credential_admit_result,
             credential_phase=credential_phase,
@@ -2898,6 +2962,8 @@ def _run_api_route_connect_action(
         connect_phase="created_and_validated" if status == "ok" else "created_validate_failed",
         admission_mode="create",
         preflight=preflight,
+        provider_fallback=provider,
+        credential_ref_fallback=credential_ref,
         credential_status_result=credential_status_result,
         credential_admit_result=credential_admit_result,
         credential_phase=credential_phase,
