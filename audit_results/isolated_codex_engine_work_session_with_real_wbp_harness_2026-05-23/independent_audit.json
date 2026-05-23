@@ -1,0 +1,22 @@
+{
+  "answers": {
+    "Did WBP remain acceptable after reclear?": "True",
+    "Did all 3 required prompts return exact machine-backed responses?": "False",
+    "Did isolated Codex use temp HOME/CODEX_HOME?": "yes",
+    "Did main Codex get proxied?": "no",
+    "Did main auth/config change?": "no; baseline and post-run hashes match",
+    "Did plugin sync appear?": "False",
+    "Did plugin sync mutate main profile?": "no evidence; main auth/config hashes unchanged",
+    "Did restart prompt return exact machine-backed response?": "False",
+    "Was WBP only read/check used?": "yes",
+    "Was current auth copied?": "no",
+    "Was prompt phase correctly stopped before unsafe/invalid proof?": "yes; wbp_preflight acceptable=false due route_not_found",
+    "Was sandbox auth removed?": "True",
+    "Were temp dirs removed?": "True"
+  },
+  "residual_risks": [
+    "No isolated work-session response proof yet because default external-models route wbp-deepseek-v3 is absent."
+  ],
+  "schema_version": 1,
+  "verdict": "fail"
+}
