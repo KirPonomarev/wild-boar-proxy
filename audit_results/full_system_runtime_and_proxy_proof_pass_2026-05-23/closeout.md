@@ -18,7 +18,7 @@ keeping the current working Codex untouched.
 - goal: runtime/proxy truth, bounded load, and post-load reclear without
   false-green
 - branch: `codex/external-agent-lab-isolated`
-- head: `98505eb`
+- head: `9071fac`
 - touched files:
   - `audit_results/full_system_runtime_and_proxy_proof_pass_2026-05-23/spec.md`
   - `audit_results/full_system_runtime_and_proxy_proof_pass_2026-05-23/baseline.json`
@@ -78,7 +78,7 @@ keeping the current working Codex untouched.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `98505eb`
+- commit: `98505eb` (packet), `9071fac` (closeout)
 - pushed: `no`
 
 ## Scope Check
