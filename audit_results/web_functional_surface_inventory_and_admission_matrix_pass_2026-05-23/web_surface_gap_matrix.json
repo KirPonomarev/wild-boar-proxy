@@ -1,0 +1,2886 @@
+{
+  "contour": "WEB_FUNCTIONAL_SURFACE_INVENTORY_AND_ADMISSION_MATRIX_PASS",
+  "rows": [
+    {
+      "adapter_command_id": "status",
+      "admission_state": "needs_action_metadata",
+      "api_actions_exposed": false,
+      "command_api_entry": "status --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:18",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:status_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "invariant-check --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:19",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:invariant_check_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "sync",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "sync --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1733, wild_boar_proxy/web_design_ui/index.html:319",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:319"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1733"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:20",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:sync_json:sync_runtime",
+      "tests_present": [],
+      "ui_action": "sync_runtime"
+    },
+    {
+      "adapter_command_id": "launch_client",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": true,
+      "command_api_entry": "launch client --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:107, wild_boar_proxy/web_design_ui/index.html:1436",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:107"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1436"
+        }
+      ],
+      "functional_group": "host_client_launch",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "WEB_HIGH_RISK_ACTIONS_GATING_PASS",
+      "notes": "COMMAND_API.md:21",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "host_client_launch",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:launch_client_json:launch_client_dispatch",
+      "tests_present": [],
+      "ui_action": "launch_client_dispatch"
+    },
+    {
+      "adapter_command_id": "healthcheck",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "healthcheck --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1741, wild_boar_proxy/web_design_ui/index.html:301",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:301"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1741"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:22",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:healthcheck_json:refresh_health_detail",
+      "tests_present": [],
+      "ui_action": "refresh_health_detail"
+    },
+    {
+      "adapter_command_id": "mode_get",
+      "admission_state": "needs_action_metadata",
+      "api_actions_exposed": false,
+      "command_api_entry": "mode get --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:23",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:mode_get_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "mode_stable",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "mode set stable --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1715, wild_boar_proxy/web_design_ui/index.html:331",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:331"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1715"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:24",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:mode_set_stable_json:set_mode_stable",
+      "tests_present": [],
+      "ui_action": "set_mode_stable"
+    },
+    {
+      "adapter_command_id": "mode_managed",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "mode set managed --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1711, wild_boar_proxy/web_design_ui/index.html:313",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:313"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1711"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:25",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:mode_set_managed_json:set_mode_managed",
+      "tests_present": [],
+      "ui_action": "set_mode_managed"
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "policy stage set <10|15|20> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "ROLLOUT_POLICY_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:26",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:policy_stage_set_10_15_20_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "rollout_rotation_inspect",
+      "admission_state": "needs_action_metadata",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout rotation inspect --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:27",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_rotation_inspect_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout posture inspect <15|20> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:28",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_posture_inspect_15_20_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout evidence capture 16 --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:29",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_evidence_capture_16_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout stage prove 10 --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:30",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_stage_prove_10_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout stage prove 15 --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:31",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_stage_prove_15_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout stage advance 15 <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "ROLLOUT_POLICY_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:32",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_stage_advance_15_id_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "rollout stage advance 20 <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "rollout_policy",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "ROLLOUT_POLICY_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:33",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:rollout_stage_advance_20_id_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_list",
+      "admission_state": "needs_action_metadata",
+      "api_actions_exposed": false,
+      "command_api_entry": "accounts list --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:34",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_list_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_validate",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts validate <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6284",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6284"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:35",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_validate_id_json:validate_account",
+      "tests_present": [],
+      "ui_action": "validate_account"
+    },
+    {
+      "adapter_command_id": "accounts_validate",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts validate <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6285",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6285"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:35",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_validate_id_json:recheck_account",
+      "tests_present": [],
+      "ui_action": "recheck_account"
+    },
+    {
+      "adapter_command_id": "accounts_promote",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts promote <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6288",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6288"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:36",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_promote_id_json:promote_account",
+      "tests_present": [],
+      "ui_action": "promote_account"
+    },
+    {
+      "adapter_command_id": "accounts_demote",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts demote <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6289",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6289"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:37",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_demote_id_json:demote_account",
+      "tests_present": [],
+      "ui_action": "demote_account"
+    },
+    {
+      "adapter_command_id": "accounts_hold",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts hold <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6287",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6287"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:38",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_hold_id_json:hold_account",
+      "tests_present": [],
+      "ui_action": "hold_account"
+    },
+    {
+      "adapter_command_id": "accounts_release",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts release <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6286",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6286"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:39",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_release_id_json:release_account",
+      "tests_present": [],
+      "ui_action": "release_account"
+    },
+    {
+      "adapter_command_id": "accounts_retire",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts retire <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:6290",
+      "frontend_location": [
+        {
+          "kind": "uiAction literal",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6290"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "WEB_HIGH_RISK_ACTIONS_GATING_PASS",
+      "notes": "COMMAND_API.md:40",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "destructive",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_retire_id_json:retire_account",
+      "tests_present": [],
+      "ui_action": "retire_account"
+    },
+    {
+      "adapter_command_id": "accounts_onboard",
+      "admission_state": "needs_frontend_wiring",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts onboard --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:41",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_onboard_json:onboard_account",
+      "tests_present": [],
+      "ui_action": "onboard_account"
+    },
+    {
+      "adapter_command_id": "accounts_login_start_sandbox",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "accounts login start --provider sandbox --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:42",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_login_start_provider_sandbox_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_login_start_codex_device",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "accounts login start --provider codex --mode device --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:43",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "command_api:accounts_login_start_provider_codex_mode_device_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_login_status",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts login status --session <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:1061",
+      "frontend_location": [
+        {
+          "kind": "runUiAction",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1061"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:44",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "account_id",
+        "session_id"
+      ],
+      "surface_id": "command_api:accounts_login_status_session_id_json:account_login_status",
+      "tests_present": [],
+      "ui_action": "account_login_status"
+    },
+    {
+      "adapter_command_id": "accounts_login_complete_sandbox",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "accounts login complete --session <id> --state <state> --proof <proof> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:45",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id",
+        "session_id"
+      ],
+      "surface_id": "command_api:accounts_login_complete_session_id_state_state_proof_proof_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_login_complete_sandbox",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "accounts login complete --session <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:46",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id",
+        "session_id"
+      ],
+      "surface_id": "command_api:accounts_login_complete_session_id_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "accounts_login_cancel",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "accounts login cancel --session <id> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:1073",
+      "frontend_location": [
+        {
+          "kind": "runUiAction",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1073"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:47",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [
+        "account_id",
+        "session_id"
+      ],
+      "surface_id": "command_api:accounts_login_cancel_session_id_json:account_login_cancel",
+      "tests_present": [],
+      "ui_action": "account_login_cancel"
+    },
+    {
+      "adapter_command_id": "external_models_credentials_admit_provider_owner_env",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "external-models credentials admit --provider <provider> --source owner-env --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:48",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_credentials_admit_provider_provider_source_owner_env_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_credentials_status_provider",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models credentials status --provider <provider> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:259, wild_boar_proxy/web_design_ui/index.html:810, wild_boar_proxy/web_design_ui/scripts/overview.js:6636, wild_boar_proxy/web_design_ui/scripts/overview.js:6645",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:259"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:810"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6636"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6645"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:49",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_credentials_status_provider_provider_json:api_route_credential_check",
+      "tests_present": [],
+      "ui_action": "api_route_credential_check"
+    },
+    {
+      "adapter_command_id": "diagnostics_export",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "diagnostics export --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:115, wild_boar_proxy/web_design_ui/index.html:1538, wild_boar_proxy/web_design_ui/index.html:305",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:115"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:305"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1538"
+        }
+      ],
+      "functional_group": "diagnostics",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:50",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:diagnostics_export_json:export_diagnostics",
+      "tests_present": [],
+      "ui_action": "export_diagnostics"
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "installer init --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "installer_legacy_companion",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:51",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:installer_init_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "legacy import --source-dir <path> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "installer_legacy_companion",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "COMMAND_API.md:52",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:legacy_import_source_dir_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "companion reset --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "installer_legacy_companion",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_HIGH_RISK_ACTIONS_GATING_PASS",
+      "notes": "COMMAND_API.md:53",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "destructive",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:companion_reset_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "companion uninstall --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "installer_legacy_companion",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_HIGH_RISK_ACTIONS_GATING_PASS",
+      "notes": "COMMAND_API.md:54",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "destructive",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:companion_uninstall_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "package experimental build --output-dir <path> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "package_release",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "PACKAGE_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:55",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "release_package",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:package_experimental_build_output_dir_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "package experimental verify --manifest <path> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "package_release",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "PACKAGE_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:56",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "release_package",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:package_experimental_verify_manifest_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "package launchable build --output-dir <path> [--runtime-executable <path>] --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "package_release",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "PACKAGE_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:57",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "release_package",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:package_launchable_build_output_dir_path_runtime_executable_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "package launchable verify --manifest <path> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "package_release",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "PACKAGE_UI_GATING_PASS",
+      "notes": "COMMAND_API.md:58",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "release_package",
+      "server_issued_ids_required": [],
+      "surface_id": "command_api:package_launchable_verify_manifest_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_routes_validate",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models routes validate --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5661",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5661"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_routes_validate_route_id_json:api_route_validate",
+      "tests_present": [],
+      "ui_action": "api_route_validate"
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_separate_high_risk_contour",
+      "api_actions_exposed": false,
+      "command_api_entry": "external-models routes add/adopt --file <path> --json",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_HIGH_RISK_ACTIONS_GATING_PASS",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "",
+      "refresh_sources": [],
+      "result_packet_fields_supported": [],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_routes_add_adopt_file_path_json",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_routes_enable",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models routes enable --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5664",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5664"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_routes_enable_route_id_json:api_route_allow",
+      "tests_present": [],
+      "ui_action": "api_route_allow"
+    },
+    {
+      "adapter_command_id": "external_models_routes_disable",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models routes disable --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5666",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5666"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_routes_disable_route_id_json:api_route_disable",
+      "tests_present": [],
+      "ui_action": "api_route_disable"
+    },
+    {
+      "adapter_command_id": "external_models_routes_remove",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models routes remove --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5675",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5675"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_routes_remove_route_id_json:api_route_remove",
+      "tests_present": [],
+      "ui_action": "api_route_remove"
+    },
+    {
+      "adapter_command_id": "external_models_check",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models check --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:230, wild_boar_proxy/web_design_ui/scripts/overview.js:5662",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:230"
+        },
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5662"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_check_route_id_json:api_route_check",
+      "tests_present": [],
+      "ui_action": "api_route_check"
+    },
+    {
+      "adapter_command_id": "external_models_profile_codex_desktop",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models profile codex-desktop --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5668",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5668"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_profile_codex_desktop_route_id_json:api_route_profile",
+      "tests_present": [],
+      "ui_action": "api_route_profile"
+    },
+    {
+      "adapter_command_id": "external_models_evidence_capture",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "external-models evidence capture --route <id> --json",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:5669",
+      "frontend_location": [
+        {
+          "kind": "routeActionButton",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:5669"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "COMMAND_API.md:449",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "command_api:external_models_evidence_capture_route_id_json:api_route_evidence_capture",
+      "tests_present": [],
+      "ui_action": "api_route_evidence_capture"
+    },
+    {
+      "adapter_command_id": "accounts_login_complete_codex",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/scripts/overview.js:1067",
+      "frontend_location": [
+        {
+          "kind": "runUiAction",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:1067"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:142",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id",
+        "session_id"
+      ],
+      "surface_id": "adapter:accounts_login_complete_codex:account_login_complete",
+      "tests_present": [],
+      "ui_action": "account_login_complete"
+    },
+    {
+      "adapter_command_id": "accounts_onboard_auth_ref",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:74",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "adapter:accounts_onboard_auth_ref",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_credentials_admit_openrouter_owner_env",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:316",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "adapter:external_models_credentials_admit_openrouter_owner_env",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_credentials_status_openrouter",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:292",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "adapter:external_models_credentials_status_openrouter",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "external_models_routes_add_server_owned",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:226, wild_boar_proxy/web_design_ui/index.html:260, wild_boar_proxy/web_design_ui/index.html:785, wild_boar_proxy/web_design_ui/index.html:811, wild_boar_proxy/web_design_ui/scripts/overview.js:6633, wild_boar_proxy/web_design_ui/scripts/overview.js:6639, wild_boar_proxy/web_design_ui/scripts/overview.js:6642, wild_boar_proxy/web_design_ui/scripts/overview.js:6648",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:226"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:260"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:785"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:811"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6633"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6639"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6642"
+        },
+        {
+          "kind": "maybeConfirmAndRun",
+          "source": "wild_boar_proxy/web_design_ui/scripts/overview.js:6648"
+        }
+      ],
+      "functional_group": "api_external_models",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:275",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [
+        "route_id"
+      ],
+      "surface_id": "adapter:external_models_routes_add_server_owned:api_route_connect",
+      "tests_present": [],
+      "ui_action": "api_route_connect"
+    },
+    {
+      "adapter_command_id": "smoke",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1440, wild_boar_proxy/web_design_ui/index.html:1737, wild_boar_proxy/web_design_ui/index.html:323",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:323"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1440"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1737"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:245",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "adapter:smoke:launch_smoke",
+      "tests_present": [],
+      "ui_action": "launch_smoke"
+    },
+    {
+      "adapter_command_id": "stable_repair_apply",
+      "admission_state": "needs_action_metadata",
+      "api_actions_exposed": false,
+      "command_api_entry": "",
+      "confirmation_required": true,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "owner_surface_mapping_test"
+      ],
+      "next_contour": "WEB_CORE_ACTIONS_WIRING_PASS",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:256",
+      "phase_gate": "",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_runtime",
+      "server_issued_ids_required": [],
+      "surface_id": "adapter:stable_repair_apply",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "stable_repair_dry_run",
+      "admission_state": "wired_usable_now",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:1758, wild_boar_proxy/web_design_ui/index.html:309",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:309"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:1758"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_command_adapter.py:251",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [],
+      "surface_id": "adapter:stable_repair_dry_run:stable_repair_plan",
+      "tests_present": [],
+      "ui_action": "stable_repair_plan"
+    },
+    {
+      "adapter_command_id": "server_owned_account_connect_dry_run",
+      "admission_state": "out_of_scope",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:111, wild_boar_proxy/web_design_ui/index.html:161",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:111"
+        },
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:161"
+        }
+      ],
+      "functional_group": "accounts",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_live_server.py:137",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_account",
+      "server_issued_ids_required": [
+        "account_id"
+      ],
+      "surface_id": "ui_action:onboard_account_dry_run",
+      "tests_present": [],
+      "ui_action": "onboard_account_dry_run"
+    },
+    {
+      "adapter_command_id": "server_owned_quick_start_check_all",
+      "admission_state": "out_of_scope",
+      "api_actions_exposed": true,
+      "command_api_entry": "",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "wild_boar_proxy/web_design_ui/index.html:123",
+      "frontend_location": [
+        {
+          "kind": "data-ui-action",
+          "source": "wild_boar_proxy/web_design_ui/index.html:123"
+        }
+      ],
+      "functional_group": "runtime",
+      "missing_tests": [
+        "targeted_browser_action_contract"
+      ],
+      "next_contour": "already_classified",
+      "notes": "wild_boar_proxy/web_design_live_server.py:382",
+      "phase_gate": "UI_ACTION_ALLOWLIST/_action_available/action_phase",
+      "refresh_sources": [
+        "api/live-readonly",
+        "api/accounts-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [
+        "status",
+        "machine_error_code",
+        "human_message",
+        "changed_files",
+        "next_action",
+        "refresh"
+      ],
+      "risk_class": "mutating_route",
+      "server_issued_ids_required": [],
+      "surface_id": "ui_action:quick_start_check_all",
+      "tests_present": [],
+      "ui_action": "quick_start_check_all"
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_frontend_wiring",
+      "api_actions_exposed": false,
+      "command_api_entry": "available models from /v1/models",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Must not hard-code 5.3 only; dynamic WBP /v1/models should drive display.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:available_from_v1_models",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "configured model",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Needs bounded config/status packet distinct from available models.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:configured_model",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_frontend_wiring",
+      "api_actions_exposed": false,
+      "command_api_entry": "selected UI preview",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Preview must not claim applied model.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:selected_ui_preview",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_backend_owner_surface",
+      "api_actions_exposed": false,
+      "command_api_entry": "actually applied model",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Requires command/result proof; no narrative success.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "safe_action",
+      "server_issued_ids_required": [
+        "backend_id"
+      ],
+      "surface_id": "models:actually_applied_model",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "visible_disabled_with_reason",
+      "api_actions_exposed": false,
+      "command_api_entry": "provider-native/internal model deepseek-chat",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Provider-native route model is not Codex-facing model alias.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:provider_native_deepseek_chat",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_frontend_wiring",
+      "api_actions_exposed": false,
+      "command_api_entry": "isolated engine acceptance status",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Can show prior engine proof token without claiming GUI Desktop success.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:engine_acceptance_status",
+      "tests_present": [],
+      "ui_action": ""
+    },
+    {
+      "adapter_command_id": "",
+      "admission_state": "needs_frontend_wiring",
+      "api_actions_exposed": false,
+      "command_api_entry": "GUI Desktop boundary status",
+      "confirmation_required": false,
+      "forbidden_browser_fields": [
+        "api_key",
+        "secret",
+        "token",
+        "auth",
+        "raw local path",
+        "path"
+      ],
+      "frontend_control_id": "",
+      "frontend_location": [],
+      "functional_group": "models_codex_engine",
+      "missing_tests": [
+        "model_available_configured_selected_applied_contract"
+      ],
+      "next_contour": "MODEL_SELECTION_WIRING_PASS",
+      "notes": "Must remain boundary verdict, not launch success.",
+      "phase_gate": "readonly only until model selection contour",
+      "refresh_sources": [
+        "/v1/models",
+        "api/live-readonly",
+        "api/api-connections-readonly"
+      ],
+      "result_packet_fields_supported": [],
+      "risk_class": "readonly",
+      "server_issued_ids_required": [],
+      "surface_id": "models:gui_desktop_boundary_status",
+      "tests_present": [],
+      "ui_action": ""
+    }
+  ],
+  "schema_version": 1
+}

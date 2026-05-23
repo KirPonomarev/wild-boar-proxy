@@ -1,0 +1,21 @@
+{
+  "checks": {
+    "current_codex_risk": "pass: no launch or profile mutation performed",
+    "dangerous_admission": "pass: release/package/host launch/destructive rows deferred to high-risk contours",
+    "extractor_false_positive_replay": "pass: removed seven false frontend_unmapped label rows and replaced them with exact routeActionButton ui_action refs",
+    "false_green": "pass: matrix requires result packet fields and refresh sources; live server unavailable is not treated as green",
+    "id_injection": "pass_with_note: server validators verify account_id and route_id against command-owned readonly packets; backend_id requires future server-issued handling if exposed",
+    "layer_mixing": "pass: inventory classified runtime/UI/release/destructive but did not implement wiring",
+    "model_provider_confusion": "pass: matrix separates /v1/models available aliases, configured model, selected UI preview, actually applied model, and provider-native deepseek-chat"
+  },
+  "contour": "WEB_FUNCTIONAL_SURFACE_INVENTORY_AND_ADMISSION_MATRIX_PASS",
+  "findings": [],
+  "method": "local replay audit because subagent spawn failed with agent thread limit reached",
+  "residual_risks": [
+    "Live /api/actions could not be captured because 127.0.0.1:8788 was unavailable; static allowlist remains classified.",
+    "Frontend has several existing high-risk controls; next implementation contour must not broaden them without WEB_HIGH_RISK_ACTIONS_GATING_PASS.",
+    "Model selection needs separate contract before UI can claim actually applied model."
+  ],
+  "schema_version": 1,
+  "verdict": "pass"
+}
