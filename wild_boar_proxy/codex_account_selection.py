@@ -338,6 +338,11 @@ def build_account_selection_packet(
         "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection_proven,
         "selected_backend_source": "server" if selection_proven else "none",
+        "selected_route_ref": "",
+        "selected_route_server_issued": False,
+        "route_provenance_required": False,
+        "route_provenance_proven": False,
+        "source_provenance_status": "backend_proven" if selection_proven else "not_proven",
         "browser_selected_backend": False,
         "selection_reason": (
             "dry-run first live_capable active backend by runtime ranking policy"
@@ -465,6 +470,11 @@ def build_account_smoke_dry_run_packet(
         "selected_backend_id_redacted": True,
         "selected_backend_server_issued": selection["selected_backend_server_issued"],
         "selected_backend_source": selection["selected_backend_source"],
+        "selected_route_ref": selection["selected_route_ref"],
+        "selected_route_server_issued": selection["selected_route_server_issued"],
+        "route_provenance_required": selection["route_provenance_required"],
+        "route_provenance_proven": selection["route_provenance_proven"],
+        "source_provenance_status": selection["source_provenance_status"],
         "browser_selected_backend": False,
         "selection_reason": selection["selection_reason"],
         "smoke_admitted": False,

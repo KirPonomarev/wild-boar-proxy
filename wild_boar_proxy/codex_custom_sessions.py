@@ -102,6 +102,23 @@ def _token_usage(result: dict[str, Any]) -> tuple[bool, dict[str, Any], int | No
     return True, usage, int(total) if isinstance(total, int) else None
 
 
+def _source_provenance_status(session: dict[str, Any]) -> str:
+    if session.get("route_provenance_required") is True:
+        if (
+            session.get("selected_route_server_issued") is True
+            and session.get("route_provenance_proven") is True
+        ):
+            return "route_proven"
+        return "route_provenance_missing"
+    if session.get("selected_backend_server_issued") is True:
+        return "backend_proven"
+    return "not_proven"
+
+
+def _source_provenance_satisfied(session: dict[str, Any]) -> bool:
+    return _source_provenance_status(session) in {"backend_proven", "route_proven"}
+
+
 class CodexCustomSessionManager:
     def __init__(self, root: Path | None = None) -> None:
         base = root or Path(tempfile.gettempdir()) / "wbp-codex-custom-sessions"
@@ -179,6 +196,11 @@ class CodexCustomSessionManager:
             "selected_source_class": selection.get("selected_source_class"),
             "selected_backend_ref": selection.get("selected_backend_ref"),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
+            "selected_route_ref": selection.get("selected_route_ref"),
+            "selected_route_server_issued": selection.get("selected_route_server_issued") is True,
+            "route_provenance_required": selection.get("route_provenance_required") is True,
+            "route_provenance_proven": selection.get("route_provenance_proven") is True,
+            "source_provenance_status": str(selection.get("source_provenance_status") or "not_proven"),
             "selection_dry_run_proven": selection.get("selection_dry_run_proven") is True,
             "live_selection_proven": selection.get("live_selection_proven") is True,
             "selection_proven": selection.get("selection_proven") is True,
@@ -377,14 +399,33 @@ class CodexCustomSessionManager:
         trace_observer_packet = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
+        source_provenance_status = _source_provenance_status(session)
+        source_provenance_proven = _source_provenance_satisfied(session)
         cli_proxy_api_path_configured = wbp_path_configured and result.get("configured_provider") == "cliproxy"
         cli_proxy_api_path_proven = wbp_path_proven and result.get("configured_provider") == "cliproxy"
         trace_missing_after_response = status_ok and not wbp_path_proven
-        packet_status = "ok" if status_ok and wbp_path_proven else ("blocked" if trace_missing_after_response else str(result.get("status") or "failed"))
+        route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
+        packet_status = (
+            "ok"
+            if status_ok and wbp_path_proven and source_provenance_proven
+            else (
+                "blocked"
+                if trace_missing_after_response or route_provenance_missing_after_response
+                else str(result.get("status") or "failed")
+            )
+        )
         packet_machine_error_code = (
             "OK"
-            if status_ok and wbp_path_proven
-            else ("WBP_TRACE_PROOF_MISSING" if trace_missing_after_response else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED"))
+            if status_ok and wbp_path_proven and source_provenance_proven
+            else (
+                "WBP_TRACE_PROOF_MISSING"
+                if trace_missing_after_response
+                else (
+                    "ROUTE_PROVENANCE_MISSING"
+                    if route_provenance_missing_after_response
+                    else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                )
+            )
         )
         isolated_engine_home_proven = (
             result.get("env_codex_home_is_temp") is True
@@ -410,6 +451,12 @@ class CodexCustomSessionManager:
             "selected_source_class": session.get("selected_source_class"),
             "selected_backend_digest": str(session.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+            "selected_route_digest": str(session.get("selected_route_ref") or ""),
+            "selected_route_server_issued": session.get("selected_route_server_issued") is True,
+            "route_provenance_required": session.get("route_provenance_required") is True,
+            "route_provenance_proven": session.get("route_provenance_proven") is True,
+            "source_provenance_status": source_provenance_status,
+            "source_provenance_proven": source_provenance_proven,
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
             "browser_selected_backend": False,
@@ -424,7 +471,7 @@ class CodexCustomSessionManager:
             "prompt_preview_redacted": _safe_preview(prompt),
             "model_response_present": status_ok,
             "inference_proven": status_ok,
-            "live_prompt_full_success": status_ok and wbp_path_proven,
+            "live_prompt_full_success": status_ok and wbp_path_proven and source_provenance_proven,
             "response_digest": response_digest,
             "response_preview_bounded": _response_preview(response_text) if status_ok else "",
             "token_usage_present": token_usage_present,
@@ -449,7 +496,19 @@ class CodexCustomSessionManager:
             "raw_auth_ref_exposed": False,
             "secret_value_recorded": secret_value_recorded,
             "session": self._public_session(session),
-            "next_action": "inspect_transcript" if status_ok and wbp_path_proven else ("inspect_trace_observer" if trace_missing_after_response else str(result.get("next_action") or "stop_and_diagnose")),
+            "next_action": (
+                "inspect_transcript"
+                if status_ok and wbp_path_proven and source_provenance_proven
+                else (
+                    "inspect_trace_observer"
+                    if trace_missing_after_response
+                    else (
+                        "repair_route_provenance"
+                        if route_provenance_missing_after_response
+                        else str(result.get("next_action") or "stop_and_diagnose")
+                    )
+                )
+            ),
         }
         event = "prompt_completed_e2e" if status_ok else "prompt_failed_e2e"
         session["status"] = event
@@ -471,6 +530,11 @@ class CodexCustomSessionManager:
                 "response_preview_bounded": _response_preview(response_text) if status_ok else "",
                 "selected_source_class": session.get("selected_source_class"),
                 "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+                "selected_route_server_issued": session.get("selected_route_server_issued") is True,
+                "route_provenance_required": session.get("route_provenance_required") is True,
+                "route_provenance_proven": session.get("route_provenance_proven") is True,
+                "source_provenance_status": source_provenance_status,
+                "source_provenance_proven": source_provenance_proven,
                 "token_usage_present": token_usage_present,
                 "token_usage": token_usage,
                 "token_burn": token_burn,
@@ -640,6 +704,12 @@ class CodexCustomSessionManager:
             "selected_backend_digest": selected_backend_ref,
             "selected_backend_id_redacted": True,
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
+            "selected_route_digest": str(session.get("selected_route_ref") or ""),
+            "selected_route_server_issued": session.get("selected_route_server_issued") is True,
+            "route_provenance_required": session.get("route_provenance_required") is True,
+            "route_provenance_proven": session.get("route_provenance_proven") is True,
+            "source_provenance_status": _source_provenance_status(session),
+            "source_provenance_proven": _source_provenance_satisfied(session),
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
             "selection_proven": session.get("selection_proven") is True,
@@ -671,7 +741,13 @@ class CodexCustomSessionManager:
             failures.append("MODEL_NOT_SERVER_ISSUED")
         if session.get("selection_proven") is not True:
             failures.append("SELECTION_NOT_PROVEN")
-        if session.get("selected_backend_server_issued") is not True:
+        route_required = session.get("route_provenance_required") is True
+        if route_required:
+            if session.get("selected_route_server_issued") is not True:
+                failures.append("ROUTE_NOT_SERVER_ISSUED")
+            if session.get("route_provenance_proven") is not True:
+                failures.append("ROUTE_PROVENANCE_MISSING")
+        elif session.get("selected_backend_server_issued") is not True:
             failures.append("BACKEND_NOT_SERVER_ISSUED")
         if not failures:
             return None
@@ -694,6 +770,11 @@ class CodexCustomSessionManager:
             "selected_source_class": selection.get("selected_source_class"),
             "selected_backend_digest": str(selection.get("selected_backend_ref") or ""),
             "selected_backend_server_issued": selection.get("selected_backend_server_issued") is True,
+            "selected_route_digest": str(selection.get("selected_route_ref") or ""),
+            "selected_route_server_issued": selection.get("selected_route_server_issued") is True,
+            "route_provenance_required": selection.get("route_provenance_required") is True,
+            "route_provenance_proven": selection.get("route_provenance_proven") is True,
+            "source_provenance_status": str(selection.get("source_provenance_status") or "not_proven"),
             "browser_selected_backend": selection.get("browser_selected_backend") is True,
             "machine_error_code": selection.get("machine_error_code"),
             "inference_proven": False,

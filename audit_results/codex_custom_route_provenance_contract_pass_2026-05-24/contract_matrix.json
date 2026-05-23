@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_ROUTE_PROVENANCE_CONTRACT_PASS",
+  "status": "passed",
+  "fields": [
+    "selected_source_class",
+    "selected_backend_server_issued",
+    "selected_route_server_issued",
+    "route_provenance_required",
+    "route_provenance_proven",
+    "source_provenance_status",
+    "source_provenance_proven"
+  ],
+  "semantics": [
+    {
+      "source_class": "gpt_account",
+      "selected_backend_server_issued": true,
+      "selected_route_server_issued": false,
+      "route_provenance_required": false,
+      "route_provenance_proven": false,
+      "source_provenance_status": "backend_proven",
+      "source_provenance_proven": true,
+      "evidence": [
+        "wild_boar_proxy/codex_account_selection.py",
+        "wild_boar_proxy/codex_custom_sessions.py",
+        "tests/test_codex_account_selection.py",
+        "tests/test_codex_custom_sessions.py"
+      ]
+    },
+    {
+      "source_class": "route_backed",
+      "selected_backend_server_issued": false,
+      "selected_route_server_issued": true,
+      "route_provenance_required": true,
+      "route_provenance_proven": true,
+      "source_provenance_status": "route_proven",
+      "source_provenance_proven": true,
+      "evidence": [
+        "tests/test_codex_custom_sessions.py::test_route_backed_session_with_route_provenance_can_satisfy_full_success"
+      ]
+    },
+    {
+      "source_class": "route_backed_missing_proof",
+      "selected_backend_server_issued": false,
+      "selected_route_server_issued": true,
+      "route_provenance_required": true,
+      "route_provenance_proven": false,
+      "source_provenance_status": "route_provenance_missing",
+      "source_provenance_proven": false,
+      "full_prompt_success_allowed": false,
+      "machine_error_code": "ROUTE_PROVENANCE_MISSING",
+      "evidence": [
+        "tests/test_codex_custom_sessions.py::test_route_backed_session_requires_route_provenance_before_prompt_run"
+      ]
+    }
+  ],
+  "routing_behavior_changed": false,
+  "live_commands_run": false,
+  "token_burn": 0
+}

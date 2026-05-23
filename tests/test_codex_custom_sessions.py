@@ -97,6 +97,12 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(session["selection_proven"])
             self.assertTrue(session["selected_backend_id_redacted"])
             self.assertTrue(session["selected_backend_server_issued"])
+            self.assertEqual(session["selected_route_digest"], "")
+            self.assertFalse(session["selected_route_server_issued"])
+            self.assertFalse(session["route_provenance_required"])
+            self.assertFalse(session["route_provenance_proven"])
+            self.assertEqual(session["source_provenance_status"], "backend_proven")
+            self.assertTrue(session["source_provenance_proven"])
             self.assertFalse(session["current_codex_home_used"])
             self.assertEqual(session["session_root_scope"], "owned_temp_session_root")
             self.assertNotIn(temp_dir, json.dumps(packet))
@@ -275,6 +281,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["live_prompt_full_success"])
             self.assertTrue(packet["model_server_issued"])
             self.assertTrue(packet["selected_backend_server_issued"])
+            self.assertFalse(packet["selected_route_server_issued"])
+            self.assertFalse(packet["route_provenance_required"])
+            self.assertFalse(packet["route_provenance_proven"])
+            self.assertEqual(packet["source_provenance_status"], "backend_proven")
+            self.assertTrue(packet["source_provenance_proven"])
             self.assertFalse(packet["browser_selected_backend"])
             self.assertTrue(packet["wbp_path_configured"])
             self.assertTrue(packet["cli_proxy_api_path_configured"])
@@ -395,7 +406,107 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["wbp_path_proven"])
             self.assertTrue(packet["cli_proxy_api_path_proven"])
             self.assertTrue(packet["live_prompt_full_success"])
+            self.assertFalse(packet["route_provenance_required"])
+            self.assertFalse(packet["route_provenance_proven"])
+            self.assertEqual(packet["source_provenance_status"], "backend_proven")
+            self.assertTrue(packet["source_provenance_proven"])
             self.assertEqual(packet["path_proof_status"], "independently_observed")
+
+    def test_route_backed_session_requires_route_provenance_before_prompt_run(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            session = manager._sessions[session_id]
+            session.update(
+                {
+                    "selected_source_class": "route_backed",
+                    "selected_backend_ref": "",
+                    "selected_backend_server_issued": False,
+                    "selected_route_ref": "route-digest",
+                    "selected_route_server_issued": True,
+                    "route_provenance_required": True,
+                    "route_provenance_proven": False,
+                    "source_provenance_status": "route_provenance_missing",
+                }
+            )
+
+            packet = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK"},
+                lambda payload: calls.append(payload) or {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "rejected")
+            self.assertEqual(packet["machine_error_code"], "ROUTE_PROVENANCE_MISSING")
+            self.assertIn("ROUTE_PROVENANCE_MISSING", packet["precondition_failures"])
+            self.assertFalse(packet["model_response_present"])
+            self.assertFalse(packet["fallback_attempted"])
+            self.assertEqual(calls, [])
+
+    def test_route_backed_session_with_route_provenance_can_satisfy_full_success(self) -> None:
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "final_message": "ROUTE_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            session = manager._sessions[session_id]
+            session.update(
+                {
+                    "selected_source_class": "route_backed",
+                    "selected_backend_ref": "",
+                    "selected_backend_server_issued": False,
+                    "selected_route_ref": "route-digest",
+                    "selected_route_server_issued": True,
+                    "route_provenance_required": True,
+                    "route_provenance_proven": True,
+                    "source_provenance_status": "route_proven",
+                }
+            )
+
+            packet = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK"},
+                runner,
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "OK")
+            self.assertEqual(packet["selected_source_class"], "route_backed")
+            self.assertFalse(packet["selected_backend_server_issued"])
+            self.assertEqual(packet["selected_route_digest"], "route-digest")
+            self.assertTrue(packet["selected_route_server_issued"])
+            self.assertTrue(packet["route_provenance_required"])
+            self.assertTrue(packet["route_provenance_proven"])
+            self.assertEqual(packet["source_provenance_status"], "route_proven")
+            self.assertTrue(packet["source_provenance_proven"])
+            self.assertTrue(packet["live_prompt_full_success"])
 
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -173,6 +173,11 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertTrue(packet["selected_backend_id_redacted"])
         self.assertTrue(packet["selected_backend_server_issued"])
         self.assertEqual(packet["selected_backend_source"], "server")
+        self.assertEqual(packet["selected_route_ref"], "")
+        self.assertFalse(packet["selected_route_server_issued"])
+        self.assertFalse(packet["route_provenance_required"])
+        self.assertFalse(packet["route_provenance_proven"])
+        self.assertEqual(packet["source_provenance_status"], "backend_proven")
         self.assertFalse(packet["browser_selected_backend"])
         self.assertEqual(packet["selected_source_class"], "gpt_account")
         self.assertFalse(packet["runtime_meter_attached"])
@@ -247,6 +252,10 @@ class CodexAccountSelectionTests(unittest.TestCase):
         self.assertTrue(packet["selected_backend_id_redacted"])
         self.assertEqual(packet["selected_backend_id"], "")
         self.assertTrue(packet["selected_backend_ref"])
+        self.assertFalse(packet["selected_route_server_issued"])
+        self.assertFalse(packet["route_provenance_required"])
+        self.assertFalse(packet["route_provenance_proven"])
+        self.assertEqual(packet["source_provenance_status"], "backend_proven")
         self.assertEqual(packet["token_burn"], 0)
         self.assertEqual(
             packet["negative_claim_basis"],
