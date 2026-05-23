@@ -30,6 +30,11 @@ from wild_boar_proxy.codex_launch_modes import (
     build_original_launch_dry_run_packet,
     build_original_status_packet,
 )
+from wild_boar_proxy.codex_account_selection import (
+    build_account_selection_packet,
+    build_account_smoke_dry_run_packet,
+    build_accounts_truth_packet,
+)
 from wild_boar_proxy.codex_model_registry import (
     build_custom_api_compat_packet,
     build_custom_model_dry_run_packet,
@@ -1745,6 +1750,17 @@ def build_handler(
                     build_custom_api_compat_packet(operator_surface_session.status_payload())
                 )
                 return
+            if parsed.path == "/api/codex/custom/accounts":
+                self._send_json(build_accounts_truth_packet(self._codex_account_commands()))
+                return
+            if parsed.path == "/api/codex/custom/account-selection":
+                self._send_json(
+                    build_account_selection_packet(
+                        self._codex_account_commands(),
+                        operator_surface_session.status_payload(),
+                    )
+                )
+                return
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
@@ -1759,6 +1775,15 @@ def build_handler(
                 self._send_json(
                     build_custom_model_dry_run_packet(
                         self._read_json_body(),
+                        operator_surface_session.status_payload(),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/account-smoke-dry-run":
+                self._send_json(
+                    build_account_smoke_dry_run_packet(
+                        self._read_json_body(),
+                        self._codex_account_commands(),
                         operator_surface_session.status_payload(),
                     )
                 )
@@ -1787,6 +1812,16 @@ def build_handler(
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _codex_account_commands(self) -> dict[str, dict[str, Any]]:
+            return {
+                "status": execute_command(readonly_runner, "status"),
+                "accounts_list": execute_command(accounts_readonly_runner, "accounts_list"),
+                "rollout_rotation_inspect": execute_command(
+                    readonly_runner,
+                    "rollout_rotation_inspect",
+                ),
+            }
 
         def _read_json_body(self) -> dict[str, Any]:
             try:

@@ -1,0 +1,36 @@
+{
+  "auth_classes": {
+    "auth_invalid": 1,
+    "auth_ref_missing": 0,
+    "auth_ref_present": 25
+  },
+  "captured_at_utc": "2026-05-23T17:55:54.476267+00:00",
+  "claim_gate_status": "blocked",
+  "eligibility_classes": {
+    "auth_invalid": 1,
+    "cooldown_only": 0,
+    "excluded": 8,
+    "live_capable": 15,
+    "quota_exhausted": 1,
+    "unknown_unverified": 0
+  },
+  "expected_managed_total": 25,
+  "forbidden_browser_fields_rejected": true,
+  "inference_proven": false,
+  "launch_capable_count": 15,
+  "managed_total": 25,
+  "pool_classes": {
+    "active": 17,
+    "hold": 0,
+    "problem": 10,
+    "reserve": 0,
+    "retired": 8
+  },
+  "quota_classes": {
+    "quota_exhausted": 9
+  },
+  "runtime_meter_attached": false,
+  "selection_proven": true,
+  "tests_targeted_passed": 178,
+  "token_burn": 0
+}

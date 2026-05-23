@@ -285,6 +285,22 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("token_burn: packet?.token_burn ?? 0", js)
         self.assertNotIn('fetch("api/codex/custom/session', js)
 
+    def test_codex_custom_accounts_ui_is_selection_not_inference(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexCustomAccountsPanel"', html)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/accounts\")", js)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/account-selection\")", js)
+        self.assertIn('fetch("api/codex/custom/account-smoke-dry-run"', js)
+        self.assertIn("body: JSON.stringify({ model_id: modelId })", js)
+        self.assertIn("selection_proven: packet?.selection_proven === true", js)
+        self.assertIn("inference_proven: packet?.inference_proven === true", js)
+        self.assertIn("browser_selected_backend: packet?.browser_selected_backend === true", js)
+        self.assertIn("account_mutation_performed: packet?.account_mutation_performed === true", js)
+        self.assertNotIn("JSON.stringify({ model_id: modelId, account_id", js)
+        self.assertNotIn('fetch("api/codex/custom/account-smoke"', js)
+
     def test_overview_nav_and_action_hierarchy_are_product_first(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()

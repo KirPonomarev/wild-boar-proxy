@@ -439,6 +439,40 @@
           <pre id="codexCustomModelDryRunResponse" class="mono-value">model dry-run packet pending</pre>
         </section>
 
+        <section id="codexCustomAccountsPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Custom Accounts</div>
+              <div id="codexCustomAccountsSummary" class="secondary">Account pool truth ещё не загружен.</div>
+            </div>
+            <span id="codexCustomAccountsChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Managed</div><div id="codexCustomAccountsManaged">-</div>
+            <div>Launch capable</div><div id="codexCustomAccountsLaunchCapable">-</div>
+            <div>Pool classes</div><div id="codexCustomAccountsPools">-</div>
+            <div>Selection</div><div id="codexCustomAccountsSelection">not checked</div>
+            <div>Claim gate</div><div id="codexCustomAccountsClaimGate">not loaded</div>
+          </div>
+          <div class="action-summary-footer">
+            <div>
+              <span>selection: <strong id="codexCustomSelectionState">not proven</strong></span>
+              <span>inference: <strong id="codexCustomInferenceState">not claimed</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexCustomAccountsRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="codexCustomAccountSmokeDryRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Account dry-run</span>
+              </button>
+            </div>
+          </div>
+          <pre id="codexCustomAccountDryRunResponse" class="mono-value">account dry-run packet pending</pre>
+        </section>
+
         <section id="operatorPanel" class="card log-card">
           <div class="log-head">
             <div>

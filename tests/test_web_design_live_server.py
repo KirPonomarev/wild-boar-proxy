@@ -5024,6 +5024,102 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertGreaterEqual(created_sessions[0].status_payload_calls, 1)
 
 
+class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
+    def test_codex_custom_account_selection_endpoints_are_readonly_and_no_inference(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "blocked_by_policy_drift"},
+            pool_summary={
+                "active": 2,
+                "reserve": 1,
+                "retired": 1,
+                "healthy": 3,
+                "degraded": 0,
+                "down": 1,
+                "selected_backend_ids": ["acct-active"],
+            },
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+                "launch_capable_backend_count": 1,
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[
+                account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-redacted-auth.json"),
+                account("acct-reserve", "reserve", "healthy", auth_ref="/tmp/wbp-reserve-auth.json"),
+                account("acct-hold", "reserve", "healthy", manual_hold=True, auth_ref="/tmp/wbp-hold-auth.json"),
+                account("acct-problem", "retired", "down", last_error="auth failed"),
+            ]
+        )
+        runner = MappingRunner(payloads)
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                accounts = json.loads(fetch(f"{base}/api/codex/custom/accounts"))
+                selection = json.loads(fetch(f"{base}/api/codex/custom/account-selection"))
+                dry_run = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/account-smoke-dry-run",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/account-smoke-dry-run",
+                        {
+                            "model_id": "gpt-5.3-codex",
+                            "account_id": "acct-active",
+                            "backend_id": "acct-active",
+                            "route_id": "route",
+                        },
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(accounts["status"], "degraded")
+        self.assertEqual(accounts["machine_error_code"], "CLAIM_GATE_BLOCKED")
+        self.assertEqual(accounts["managed_total"], 4)
+        self.assertEqual(accounts["launch_capable_count"], 1)
+        self.assertFalse(accounts["account_mutation_performed"])
+        self.assertFalse(accounts["raw_auth_refs_exposed"])
+        self.assertNotIn(TEST_SANDBOX_AUTH_REF, json.dumps(accounts))
+        self.assertTrue(selection["selection_proven"])
+        self.assertFalse(selection["inference_proven"])
+        self.assertEqual(selection["selected_source_class"], "gpt_account")
+        self.assertTrue(selection["selected_backend_server_issued"])
+        self.assertFalse(selection["browser_selected_backend"])
+        self.assertFalse(selection["runtime_meter_attached"])
+        self.assertFalse(selection["smoke_admitted"])
+        self.assertTrue(selection["selection_not_inference"])
+        self.assertTrue(dry_run["dry_run"])
+        self.assertTrue(dry_run["model_server_issued"])
+        self.assertTrue(dry_run["selection_proven"])
+        self.assertFalse(dry_run["inference_proven"])
+        self.assertFalse(dry_run["smoke_admitted"])
+        self.assertFalse(dry_run["account_mutation_performed"])
+        self.assertEqual(dry_run["token_burn"], 0)
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], ["account_id", "backend_id", "route_id"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertIn(("accounts", "list", "--json"), runner.calls)
+        self.assertIn(("rollout", "rotation", "inspect", "--json"), runner.calls)
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
