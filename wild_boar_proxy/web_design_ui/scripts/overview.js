@@ -471,6 +471,8 @@ let activeOnboardLoginSession = null;
 let onboardLoginWindowRef = null;
 let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
+let operatorRunInFlight = false;
+let operatorLastPacket = null;
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -703,6 +705,194 @@ async function loadActionMetadata() {
     actionMetadata = {};
     actionPhase = "live_readonly";
     sandboxActionPreflight = null;
+  }
+}
+
+async function fetchOperatorJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${path} http ${response.status}`);
+  }
+  return response.json();
+}
+
+function operatorSetText(id, value) {
+  const node = document.getElementById(id);
+  if (node) {
+    node.textContent = String(value ?? "-");
+  }
+}
+
+function operatorSetChip(visual, label) {
+  const chip = document.getElementById("operatorStatusChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function operatorRenderModels(payload) {
+  const select = document.getElementById("operatorModelSelect");
+  if (!select) {
+    return;
+  }
+  const previous = select.value;
+  const modelIds = Array.isArray(payload?.model_ids) ? payload.model_ids : [];
+  select.replaceChildren();
+  for (const modelId of modelIds) {
+    const option = document.createElement("option");
+    option.value = String(modelId);
+    option.textContent = String(modelId);
+    select.append(option);
+  }
+  if (modelIds.includes(previous)) {
+    select.value = previous;
+  } else if (modelIds.includes("gpt-5.3-codex")) {
+    select.value = "gpt-5.3-codex";
+  }
+  operatorSetText("operatorTruthSource", payload?.server_issued ? "server-issued model list" : "models unavailable");
+}
+
+function operatorRenderTranscript(payload) {
+  const list = document.getElementById("operatorTranscript");
+  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
+  operatorSetText("operatorTranscriptCount", String(entries.length));
+  if (!list) {
+    return;
+  }
+  list.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "action-ledger-empty";
+    empty.textContent = "Operator transcript пуст.";
+    list.append(empty);
+    return;
+  }
+  for (const entry of entries.slice(-5).reverse()) {
+    const item = document.createElement("div");
+    item.className = "action-ledger-item";
+    const head = document.createElement("div");
+    head.className = "action-ledger-entry-head";
+    const title = document.createElement("strong");
+    title.textContent = `${entry.prompt_id || "operator_prompt"} · ${entry.selected_model || "-"}`;
+    const chip = document.createElement("span");
+    chip.className = `chip ${Number(entry.exit_code) === 0 ? "green" : "red"}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const chipText = document.createElement("span");
+    chipText.textContent = Number(entry.exit_code) === 0 ? "ok" : "failed";
+    chip.append(dot, chipText);
+    head.append(title, chip);
+    const message = document.createElement("p");
+    message.textContent = entry.final_message || "-";
+    const meta = document.createElement("div");
+    meta.className = "secondary";
+    meta.textContent = `hash ${String(entry.prompt_hash || "").slice(0, 12)} · ${entry.captured_at_utc || "-"}`;
+    item.append(head, message, meta);
+    list.append(item);
+  }
+}
+
+function operatorRenderStatus(payload) {
+  const status = payload?.status?.status || payload?.health?.status || "unknown";
+  const machineCode = payload?.status?.machine_error_code || payload?.health?.machine_error_code || "-";
+  const modelCount = Array.isArray(payload?.models?.model_ids) ? payload.models.model_ids.length : 0;
+  operatorSetText("operatorStatusLine", `${status} · ${modelCount} server-issued models · claim gate ${payload?.claim_gate?.status || "not_reported"}`);
+  operatorSetText("operatorMachineCode", machineCode);
+  operatorSetChip(status === "ok" ? "green" : (status === "degraded" ? "amber" : "neutral"), status);
+}
+
+function operatorRenderResult(packet) {
+  operatorLastPacket = packet;
+  const okWithRefresh = packet?.status === "ok" && packet?.final_message && packet?.refresh_packet;
+  const claimGateStatus = packet?.refresh_packet?.claim_gate?.status || "not_reported";
+  const claimGateBlocked = String(claimGateStatus).includes("blocked");
+  operatorSetChip(
+    okWithRefresh && !claimGateBlocked ? "green" : (okWithRefresh ? "amber" : (packet?.status === "rejected" ? "amber" : "red")),
+    okWithRefresh && claimGateBlocked ? "prompt ok / gate blocked" : (okWithRefresh ? "prompt ok" : (packet?.status || "failed"))
+  );
+  operatorSetText("operatorMachineCode", packet?.machine_error_code || "-");
+  operatorSetText(
+    "operatorRefreshState",
+    packet?.refresh_packet
+      ? `refresh packet included · claim gate ${claimGateStatus}`
+      : "refresh packet missing"
+  );
+  operatorSetText("operatorStdinState", packet?.stdin_prompt_used ? "used" : "not proven");
+  const response = document.getElementById("operatorResponse");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      selected_model: packet?.selected_model || "",
+      final_message: packet?.final_message || "",
+      exit_code: packet?.exit_code,
+      stdin_prompt_used: packet?.stdin_prompt_used === true,
+      refresh_packet: Boolean(packet?.refresh_packet),
+      claim_gate_status: claimGateStatus,
+      temp_root_removed: packet?.temp_root_removed === true,
+    }, null, 2);
+  }
+  operatorRenderTranscript(packet?.transcript || { entries: [] });
+}
+
+async function refreshOperatorPanel() {
+  try {
+    const [status, models, transcript] = await Promise.all([
+      fetchOperatorJson("api/operator/status"),
+      fetchOperatorJson("api/operator/models"),
+      fetchOperatorJson("api/operator/transcript")
+    ]);
+    operatorRenderStatus(status);
+    operatorRenderModels(models);
+    operatorRenderTranscript(transcript);
+    operatorSetText("operatorRefreshState", "readonly refresh complete");
+  } catch (error) {
+    operatorSetChip("red", "failed");
+    operatorSetText("operatorStatusLine", `Operator surface fetch failed: ${error.message}`);
+    operatorSetText("operatorMachineCode", "OPERATOR_SURFACE_FETCH_FAILED");
+  }
+}
+
+async function runOperatorPrompt() {
+  if (operatorRunInFlight) {
+    return;
+  }
+  const promptNode = document.getElementById("operatorPrompt");
+  const modelNode = document.getElementById("operatorModelSelect");
+  const prompt = promptNode ? promptNode.value : "";
+  const modelId = modelNode ? modelNode.value : "";
+  operatorRunInFlight = true;
+  document.getElementById("operatorRunAction")?.setAttribute("disabled", "disabled");
+  operatorSetChip("neutral", "running");
+  operatorSetText("operatorRefreshState", "running");
+  try {
+    const response = await fetch("api/operator/run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, model_id: modelId })
+    });
+    if (!response.ok) {
+      throw new Error(`operator run http ${response.status}`);
+    }
+    const packet = await response.json();
+    operatorRenderResult(packet);
+  } catch (error) {
+    operatorRenderResult({
+      status: "failed",
+      machine_error_code: "OPERATOR_RUN_FETCH_FAILED",
+      human_message: error.message,
+      final_message: "",
+      refresh_packet: null,
+      transcript: { entries: [] }
+    });
+  } finally {
+    operatorRunInFlight = false;
+    document.getElementById("operatorRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -6611,6 +6801,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("accountDetailClose").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("accountDetailBackdrop").addEventListener("click", () => closeAccountDrawer());
   document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
+  document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
+  document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
   document.getElementById("actionLedgerBackdrop")?.addEventListener("click", () => closeActionLedgerPanel());
   document.getElementById("actionLedgerClear")?.addEventListener("click", () => clearActionLedger());
@@ -6666,4 +6858,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   } else {
     setFixtureState(initialState, false);
   }
+  refreshOperatorPanel();
 });

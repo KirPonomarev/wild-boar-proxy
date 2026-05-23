@@ -1,0 +1,20 @@
+{
+  "browser_transcript_redacted": "operator_prompt_2 · gpt-5.3-codexokMAIN_WEB_OKhash 18a1ffccc0f7 · 2026-05-23T16:35:01.484469Zoperator_prompt_1 · gpt-5.3-codexokMAIN_WEB_OKhash 18a1ffccc0f7 · 2026-05-23T16:25:05.149362Z",
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS",
+  "process_transcript_redacted": {
+    "captured_at_utc": "2026-05-23T16:25:33.532909Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:25:29.098224Z",
+        "exit_code": 0,
+        "final_message": "MAIN_WEB_PROCESS_OK",
+        "prompt_hash": "b3258f1ee47b237bb7d55b2c3ed78d58062cd407df34a413caf98ffd0b5f0408",
+        "prompt_id": "operator_prompt_1",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  },
+  "secret_value_recorded": false
+}

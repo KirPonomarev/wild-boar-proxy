@@ -1,0 +1,56 @@
+{
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS",
+  "endpoints": [
+    {
+      "claim_scope": "readonly operator status + WBP readiness",
+      "method": "GET",
+      "path": "/api/operator/status"
+    },
+    {
+      "claim_scope": "server-issued model list",
+      "method": "GET",
+      "path": "/api/operator/models"
+    },
+    {
+      "claim_scope": "redacted in-memory transcript",
+      "method": "GET",
+      "path": "/api/operator/transcript"
+    },
+    {
+      "allowed_browser_payload_keys": [
+        "prompt",
+        "model_id"
+      ],
+      "claim_scope": "single isolated Codex engine prompt run",
+      "method": "POST",
+      "path": "/api/operator/run"
+    }
+  ],
+  "forbidden_browser_payload_keys": [
+    "api_key",
+    "apikey",
+    "secret",
+    "token",
+    "auth",
+    "auth_path",
+    "path",
+    "backend_id",
+    "route_id",
+    "runtime_config"
+  ],
+  "out_of_scope_claims": [
+    "production app ready",
+    "GUI Desktop ready",
+    "package ready",
+    "rotation/load proof",
+    "account lifecycle mutation",
+    "design gate ready"
+  ],
+  "server_issued_id_binding": {
+    "backend_id": "not accepted",
+    "model_id": "must be present in current /api/operator/models list",
+    "route_id": "not accepted"
+  },
+  "success_display_rule": "prompt success only; claim_gate blocked keeps UI amber with prompt ok / gate blocked",
+  "surface": "main WBP web overview Codex Operator panel"
+}

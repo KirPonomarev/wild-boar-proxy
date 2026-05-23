@@ -83,7 +83,9 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
             "diagnostics_export",
             "external_models_routes_validate",
             "external_models_routes_add_server_owned",
+            "external_models_credentials_status_provider",
             "external_models_credentials_status_openrouter",
+            "external_models_credentials_admit_provider_owner_env",
             "external_models_credentials_admit_openrouter_owner_env",
             "external_models_routes_enable",
             "external_models_routes_disable",
@@ -104,7 +106,9 @@ class WebDesignCommandAdapterTests(unittest.TestCase):
         self.assertFalse(ALLOWLIST["accounts_login_complete_codex"].ui_enabled)
         self.assertFalse(ALLOWLIST["accounts_login_cancel"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_routes_add_server_owned"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_status_provider"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_credentials_status_openrouter"].ui_enabled)
+        self.assertFalse(ALLOWLIST["external_models_credentials_admit_provider_owner_env"].ui_enabled)
         self.assertFalse(ALLOWLIST["external_models_credentials_admit_openrouter_owner_env"].ui_enabled)
         self.assertTrue(ALLOWLIST["launch_client"].confirmation_required)
         self.assertFalse(ALLOWLIST["smoke"].confirmation_required)

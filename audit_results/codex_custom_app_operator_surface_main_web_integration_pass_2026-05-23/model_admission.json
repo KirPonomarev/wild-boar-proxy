@@ -1,0 +1,28 @@
+{
+  "browser_backend_id_allowed": false,
+  "browser_route_id_allowed": false,
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_SURFACE_MAIN_WEB_INTEGRATION_PASS",
+  "default_model": "gpt-5.3-codex",
+  "default_model_visible": true,
+  "free_form_model_allowed": false,
+  "models_packet": {
+    "captured_at_utc": "2026-05-23T16:35:44.709102Z",
+    "chosen_model_visible": true,
+    "error": "",
+    "model_ids": [
+      "gpt-5.5",
+      "codex-auto-review",
+      "gpt-image-2",
+      "gpt-5.3-codex-spark",
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.4",
+      "gpt-5.4-mini"
+    ],
+    "ok": true,
+    "server_issued": true,
+    "status_code": 200
+  },
+  "server_issued": true,
+  "source": "/api/operator/models -> OperatorSurfaceSession.probe_models"
+}

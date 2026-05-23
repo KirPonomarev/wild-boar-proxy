@@ -1,0 +1,231 @@
+{
+  "captured_at_utc": "2026-05-23T16:25:33.532901Z",
+  "comparisons": {
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true,
+      "size_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": null,
+      "size_unchanged": true
+    }
+  },
+  "protected_post_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779552332933574205,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "c0f65cfc4f583abc56bc9e8d5fffa24261a91e0c0ac114a728c3a43793d74446",
+      "size": 4982
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779553503442570863,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_pre_snapshot": {
+    "codex_auth": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779424645682385204,
+      "path_label": "~/.codex/auth.json",
+      "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+      "size": 4697
+    },
+    "codex_config": {
+      "exists": true,
+      "is_dir": false,
+      "mtime_ns": 1779552332933574205,
+      "path_label": "~/.codex/config.toml",
+      "sha256": "c0f65cfc4f583abc56bc9e8d5fffa24261a91e0c0ac114a728c3a43793d74446",
+      "size": 4982
+    },
+    "default_app_support_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1779553503442570863,
+      "path_label": "~/Library/Application Support/Codex",
+      "size": 864
+    },
+    "default_cache_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1777494309271487332,
+      "path_label": "~/Library/Caches/com.openai.codex",
+      "size": 224
+    },
+    "default_httpstorage_codex": {
+      "exists": true,
+      "is_dir": true,
+      "mtime_ns": 1770122166948253653,
+      "path_label": "~/Library/HTTPStorages/com.openai.codex",
+      "size": 160
+    }
+  },
+  "protected_surfaces_unchanged": true,
+  "run_result": {
+    "cleanup_error": "",
+    "command_surface": {
+      "args_shape": [
+        "exec",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--ignore-rules",
+        "--sandbox",
+        "read-only",
+        "-C",
+        "<temp-work>",
+        "--json",
+        "-o",
+        "<temp-last-message>",
+        "-"
+      ],
+      "binary": "<codex>"
+    },
+    "duration_seconds": 2.516,
+    "exit_code": 0,
+    "final_message": "MAIN_WEB_PROCESS_OK",
+    "human_message": "Codex Operator prompt completed.",
+    "machine_error_code": "OK",
+    "prompt_hash": "b3258f1ee47b237bb7d55b2c3ed78d58062cd407df34a413caf98ffd0b5f0408",
+    "refresh_packet": {
+      "captured_at_utc": "2026-05-23T16:25:33.531992Z",
+      "claim_gate": {
+        "blocked_claims": [
+          "active-only-traffic",
+          "pool-participation-correct",
+          "stable-15-proved"
+        ],
+        "machine_error_code": "CLAIM_GATE_BLOCKED",
+        "next_action": "inspect_claim_gate",
+        "sources": [
+          "policy_drift"
+        ],
+        "status": "blocked"
+      },
+      "control_surface": {
+        "browser_secret_fields": false,
+        "localhost_only": true,
+        "raw_path_fields": false
+      },
+      "health": {
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "status": "ok"
+      },
+      "models": {
+        "captured_at_utc": "2026-05-23T16:25:33.521438Z",
+        "chosen_model_visible": true,
+        "error": "",
+        "model_ids": [
+          "gpt-5.4-mini",
+          "gpt-5.5",
+          "codex-auto-review",
+          "gpt-image-2",
+          "gpt-5.3-codex-spark",
+          "gpt-5.2",
+          "gpt-5.3-codex",
+          "gpt-5.4"
+        ],
+        "ok": true,
+        "server_issued": true,
+        "status_code": 200
+      },
+      "status": {
+        "configured_model": "gpt-5.5",
+        "effective_mode": "stable",
+        "endpoint": "http://127.0.0.1:8318/v1",
+        "liveness": "healthy",
+        "machine_error_code": "OK",
+        "status": "ok"
+      }
+    },
+    "secret_value_recorded": false,
+    "selected_model": "gpt-5.3-codex",
+    "status": "ok",
+    "stdin_prompt_used": true,
+    "temp_root_removed": true,
+    "timed_out": false,
+    "transcript": {
+      "captured_at_utc": "2026-05-23T16:25:33.532104Z",
+      "entries": [
+        {
+          "captured_at_utc": "2026-05-23T16:25:29.098224Z",
+          "exit_code": 0,
+          "final_message": "MAIN_WEB_PROCESS_OK",
+          "prompt_hash": "b3258f1ee47b237bb7d55b2c3ed78d58062cd407df34a413caf98ffd0b5f0408",
+          "prompt_id": "operator_prompt_1",
+          "selected_model": "gpt-5.3-codex",
+          "warning_classes": []
+        }
+      ],
+      "secret_value_recorded": false
+    },
+    "warning_classes": []
+  },
+  "secret_value_recorded": false,
+  "tmp_root_removed": true,
+  "transcript": {
+    "captured_at_utc": "2026-05-23T16:25:33.532909Z",
+    "entries": [
+      {
+        "captured_at_utc": "2026-05-23T16:25:29.098224Z",
+        "exit_code": 0,
+        "final_message": "MAIN_WEB_PROCESS_OK",
+        "prompt_hash": "b3258f1ee47b237bb7d55b2c3ed78d58062cd407df34a413caf98ffd0b5f0408",
+        "prompt_id": "operator_prompt_1",
+        "selected_model": "gpt-5.3-codex",
+        "warning_classes": []
+      }
+    ],
+    "secret_value_recorded": false
+  }
+}

@@ -367,6 +367,47 @@
           </section>
         </div>
 
+        <section id="operatorPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Operator</div>
+              <div id="operatorStatusLine" class="secondary">Operator surface ещё не загружен.</div>
+            </div>
+            <span id="operatorStatusChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Model</div>
+            <div>
+              <select id="operatorModelSelect" aria-label="Codex Operator model"></select>
+            </div>
+            <div>Truth source</div><div id="operatorTruthSource">server-issued model list</div>
+            <div>Machine code</div><div id="operatorMachineCode">-</div>
+            <div>Refresh packet</div><div id="operatorRefreshState">not requested</div>
+          </div>
+          <label class="form-field" for="operatorPrompt">
+            <span>Prompt</span>
+            <textarea id="operatorPrompt" rows="3" autocomplete="off" spellcheck="false">Reply with exactly MAIN_WEB_OK.</textarea>
+          </label>
+          <div class="action-summary-footer">
+            <div>
+              <span>stdin: <strong id="operatorStdinState">not run</strong></span>
+              <span>transcript: <strong id="operatorTranscriptCount">0</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="operatorRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="operatorRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/play.png" alt="" aria-hidden="true">
+                <span>Запустить</span>
+              </button>
+            </div>
+          </div>
+          <pre id="operatorResponse" class="mono-value">response packet pending</pre>
+          <div id="operatorTranscript" class="action-ledger-list" aria-label="Codex Operator transcript"></div>
+        </section>
+
         <div class="overview-bottom">
         <section class="card log-card">
           <div class="log-head">

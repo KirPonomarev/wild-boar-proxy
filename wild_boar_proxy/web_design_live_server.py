@@ -26,6 +26,7 @@ from wild_boar_proxy.ui_shell import (
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
+from wild_boar_proxy.operator_surface import OperatorSurfaceSession
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1651,6 +1652,7 @@ def build_handler(
     accounts_readonly_runner = command_runner
     api_connections_readonly_runner = command_runner
     action_runner = command_runner
+    operator_surface_session = OperatorSurfaceSession()
     if (
         runner is None
         and action_phase == SANDBOX_ACTION_PHASE
@@ -1693,10 +1695,33 @@ def build_handler(
                     )
                 )
                 return
+            if parsed.path == "/api/operator/status":
+                self._send_json(operator_surface_session.status_payload())
+                return
+            if parsed.path == "/api/operator/models":
+                models = operator_surface_session.probe_models()
+                self._send_json(
+                    {
+                        "schema_version": 1,
+                        "status": "ok" if models.get("ok") else "degraded",
+                        "source": "operator_surface",
+                        "captured_at_utc": models.get("captured_at_utc", ""),
+                        "model_ids": models.get("model_ids", []),
+                        "server_issued": True,
+                        "machine_error_code": "OK" if models.get("ok") else "OPERATOR_MODELS_UNAVAILABLE",
+                    }
+                )
+                return
+            if parsed.path == "/api/operator/transcript":
+                self._send_json(operator_surface_session.transcript_payload())
+                return
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
             parsed = urlparse(self.path)
+            if parsed.path == "/api/operator/run":
+                self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+                return
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return

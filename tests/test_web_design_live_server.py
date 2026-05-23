@@ -4800,6 +4800,119 @@ def codex_login_complete_packet(**overrides: object) -> dict[str, object]:
     return payload
 
 
+class FakeOperatorSurfaceSession:
+    def __init__(self) -> None:
+        self.run_payloads: list[dict[str, object]] = []
+        self.transcript = {
+            "captured_at_utc": "2026-05-23T00:00:00Z",
+            "entries": [],
+            "secret_value_recorded": False,
+        }
+
+    def status_payload(self) -> dict[str, object]:
+        return {
+            "captured_at_utc": "2026-05-23T00:00:00Z",
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "health": {"status": "ok", "machine_error_code": "OK"},
+            "claim_gate": {"status": "blocked_by_policy_drift"},
+            "models": {
+                "ok": True,
+                "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+                "server_issued": True,
+            },
+            "control_surface": {
+                "localhost_only": True,
+                "browser_secret_fields": False,
+                "raw_path_fields": False,
+            },
+        }
+
+    def probe_models(self) -> dict[str, object]:
+        return {
+            "ok": True,
+            "captured_at_utc": "2026-05-23T00:00:00Z",
+            "model_ids": ["gpt-5.3-codex", "gpt-5.4"],
+            "server_issued": True,
+        }
+
+    def transcript_payload(self) -> dict[str, object]:
+        return self.transcript
+
+    def run_prompt(self, payload: dict[str, object]) -> dict[str, object]:
+        self.run_payloads.append(payload)
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "human_message": "Codex Operator prompt completed.",
+            "selected_model": payload.get("model_id"),
+            "final_message": "MAIN_WEB_OK",
+            "stdin_prompt_used": True,
+            "temp_root_removed": True,
+            "refresh_packet": self.status_payload(),
+            "transcript": {
+                "entries": [
+                    {
+                        "prompt_id": "operator_prompt_1",
+                        "prompt_hash": "hash",
+                        "selected_model": payload.get("model_id"),
+                        "final_message": "MAIN_WEB_OK",
+                        "exit_code": 0,
+                        "captured_at_utc": "2026-05-23T00:00:00Z",
+                    }
+                ],
+                "secret_value_recorded": False,
+            },
+            "secret_value_recorded": False,
+        }
+
+
+class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
+    def test_operator_endpoints_expose_status_models_transcript_and_run(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                models = json.loads(fetch(f"{base}/api/operator/models"))
+                self.assertTrue(models["server_issued"])
+                self.assertEqual(models["model_ids"], ["gpt-5.3-codex", "gpt-5.4"])
+
+                status = json.loads(fetch(f"{base}/api/operator/status"))
+                self.assertEqual(status["status"]["status"], "ok")
+                self.assertFalse(status["control_surface"]["browser_secret_fields"])
+
+                transcript = json.loads(fetch(f"{base}/api/operator/transcript"))
+                self.assertFalse(transcript["secret_value_recorded"])
+
+                result = json.loads(
+                    post_json(
+                        f"{base}/api/operator/run",
+                        {"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["final_message"], "MAIN_WEB_OK")
+        self.assertTrue(result["stdin_prompt_used"])
+        self.assertTrue(result["refresh_packet"])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply MAIN_WEB_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
