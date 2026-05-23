@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "status": "not_applicable",
+  "reason": "No before/after live snapshot was collected because live execution was blocked at authorization gate.",
+  "current_codex_mutation_claimed": false
+}

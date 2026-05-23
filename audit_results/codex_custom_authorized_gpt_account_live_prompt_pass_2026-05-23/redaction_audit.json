@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_AUTHORIZED_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "passed",
+  "checks": [
+    {
+      "id": "no_live_secret_used",
+      "status": "pass",
+      "evidence": "Live prompt was not executed."
+    },
+    {
+      "id": "no_prompt_body_recorded",
+      "status": "pass",
+      "evidence": "No live prompt was sent or stored."
+    },
+    {
+      "id": "no_auth_header_recorded",
+      "status": "pass",
+      "evidence": "Trace observer was not started."
+    },
+    {
+      "id": "token_burn_zero",
+      "status": "pass",
+      "evidence": "Authorization gate blocked before account/API request."
+    }
+  ]
+}
