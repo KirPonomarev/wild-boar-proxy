@@ -1,0 +1,39 @@
+{
+  "contour": "WEB_API_ROUTE_CREATE_OR_ADOPT_SERVER_OWNED_PASS",
+  "date": "2026-05-23",
+  "status": "pass",
+  "checks": [
+    {
+      "id": "browser_secret_intake_absent",
+      "status": "pass",
+      "evidence": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-action-packet.json"
+    },
+    {
+      "id": "browser_path_intake_absent",
+      "status": "pass",
+      "evidence": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-action-packet.json"
+    },
+    {
+      "id": "browser_route_id_intake_absent",
+      "status": "pass",
+      "evidence": "/Volumes/Work/wild-boar-proxy/audit_results/web_api_route_connect_server_owned_pass_2026-05-22/evidence/browser-action-packet.json"
+    },
+    {
+      "id": "route_spec_path_redacted_from_action_result",
+      "status": "pass",
+      "evidence": "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py"
+    },
+    {
+      "id": "secret_value_not_exposed",
+      "status": "pass",
+      "evidence": "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py"
+    }
+  ],
+  "summary": {
+    "browser_secret_intake": false,
+    "browser_path_intake": false,
+    "browser_route_id_intake": false,
+    "secret_value_exposed": false,
+    "route_spec_path_exposed": false
+  }
+}

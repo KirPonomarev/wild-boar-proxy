@@ -1743,6 +1743,50 @@ class WebDesignLiveServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_api_route_connect_adopts_existing_primary_route_without_add(self) -> None:
+        payloads = live_payloads()
+        runner = MappingRunner(payloads)
+        contract = launch_copy_contract()
+
+        result = run_ui_action(
+            runner,
+            {"ui_action": "api_route_connect"},
+            launch_copy_contract=contract,
+            action_phase=SANDBOX_ACTION_PHASE,
+        )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["action_role"], "api_route_admission")
+        self.assertEqual(result["mutation_class"], "api_route_registry_admission")
+        self.assertEqual(result["result"]["machine_error_code"], "OK")
+        self.assertEqual(result["result"]["changed_files"], ["api_route_connect_artifact"])
+        self.assertEqual(result["result"]["data"]["route_id"], "wbp-deepseek-v3")
+        self.assertEqual(result["result"]["data"]["api_route_connect_phase"], "adopted_existing_route")
+        self.assertEqual(result["result"]["data"]["admission_mode"], "adopt")
+        self.assertEqual(result["result"]["data"]["credential_phase"], "credential_present")
+        self.assertTrue(result["result"]["data"]["credential_present"])
+        self.assertFalse(result["result"]["data"]["credential_admitted"])
+        self.assertEqual(result["result"]["data"]["add_status"], "not_run")
+        self.assertEqual(result["result"]["data"]["add_machine_error_code"], "NOT_RUN")
+        self.assertEqual(result["result"]["data"]["validate_status"], "ok")
+        self.assertEqual(result["result"]["data"]["validate_machine_error_code"], "OK")
+        self.assertFalse(result["result"]["data"]["browser_secret_intake"])
+        self.assertFalse(result["result"]["data"]["browser_path_intake"])
+        self.assertFalse(result["result"]["data"]["browser_route_id_intake"])
+        self.assertFalse(result["result"]["data"]["browser_api_key_intake"])
+        self.assertFalse(result["result"]["data"]["secret_value_exposed"])
+        self.assertFalse(result["result"]["data"]["route_spec_path_exposed"])
+        self.assertEqual(
+            runner.calls,
+            [
+                ("external-models", "status", "--json"),
+                ("external-models", "models", "--json"),
+                ("external-models", "routes", "list", "--json"),
+                ("external-models", "credentials", "status", "--provider", "openrouter", "--json"),
+                ("external-models", "routes", "validate", "--route", "wbp-deepseek-v3", "--json"),
+            ],
+        )
+
     def test_api_route_connect_missing_credential_triggers_owner_admit(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
