@@ -87,8 +87,8 @@ through-app request with machine-backed evidence.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `fbd9835` (packet + closeout)
-- pushed: no
+- commit: `fbd9835` (packet + closeout), `20cd62b` (git-truth normalization)
+- pushed: yes
 
 ## Scope Check
 
