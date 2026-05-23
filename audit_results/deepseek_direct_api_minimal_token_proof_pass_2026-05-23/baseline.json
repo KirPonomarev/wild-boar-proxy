@@ -1,0 +1,727 @@
+{
+  "contour": "DEEPSEEK_DIRECT_API_MINIMAL_TOKEN_PROOF_PASS",
+  "captured_at_utc": "2026-05-23T02:23:43Z",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "067af15f0b508c7e96f2b79cf0f9922c0b23f94e",
+  "web_listener": {
+    "cmd": [
+      "ps",
+      "-fp",
+      "55486",
+      "-o",
+      "pid,ppid,command"
+    ],
+    "returncode": 0,
+    "stdout": "UID   PID  PPID   C STIME   TTY           TIME CMD                PID  PPID COMMAND\n  501 55486 78298   0 12:33AM ttys001    0:02.05 /Users/kirillpon 55486 78298 /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m wild_boar_proxy.web_design_live_server --port 8788 --action-phase sandbox_actions --launch-client-path /bin/sh --launch-copy-profile-dir /private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile --launch-copy-data-dir /private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed --launch-copy-port 9347"
+  },
+  "default_lane": {
+    "routes_list": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "routes",
+        "list",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models routes listed from local registry.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "routes": [],
+          "count": 0
+        },
+        "timestamp_utc": "2026-05-23T02:23:43Z"
+      }
+    },
+    "status": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "status",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "foundation_phase": "C3",
+          "adapter_runtime_available": false,
+          "lifecycle_mode": "synthetic",
+          "adapter_state": "stopped",
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "profile_ready": false,
+          "routes_count": 0,
+          "observed_routes_count": 0,
+          "observed_routes": {},
+          "available_secret_refs": [],
+          "paths": {
+            "routes_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/routes.json",
+            "state_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/state.json",
+            "secrets_file": "/Users/kirillponomarev/.wild-boar-proxy/external-models/secrets.env",
+            "evidence_dir": "/Users/kirillponomarev/.wild-boar-proxy/external-models/evidence"
+          },
+          "adapter": {
+            "lifecycle_mode": "synthetic",
+            "state": "stopped",
+            "host": "127.0.0.1",
+            "port": null,
+            "base_url": null,
+            "listener_proven": false,
+            "runtime_claim_blocked": true,
+            "started_at_utc": null,
+            "last_transition": "init"
+          },
+          "local_auth": {
+            "token_ref": "managed_local_token",
+            "token_present": false,
+            "token_created_at_utc": null
+          }
+        },
+        "timestamp_utc": "2026-05-23T02:23:43Z"
+      }
+    }
+  },
+  "sandbox_lane_initial": {
+    "routes_list": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "routes",
+        "list",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models routes listed from local registry.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "routes": [
+            {
+              "auth": {
+                "secret_ref": "DEEPSEEK_API_KEY",
+                "type": "bearer"
+              },
+              "base_url": "https://api.deepseek.com",
+              "compatibility": "openai_chat_completions",
+              "cost_class": "paid_or_free_limited",
+              "display_name": "DeepSeek direct",
+              "enabled": true,
+              "endpoint_path": "/chat/completions",
+              "fallback_eligible": false,
+              "lane_role": "candidate",
+              "provider": "deepseek",
+              "route_id": "wbp-deepseek-v3",
+              "schema_version": 1,
+              "upstream_model": "deepseek-chat"
+            }
+          ],
+          "count": 1
+        },
+        "timestamp_utc": "2026-05-23T02:23:43Z"
+      }
+    },
+    "credentials_status": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "credentials",
+        "status",
+        "--provider",
+        "deepseek",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models credential status collected from sandbox owner paths.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "credential_result": {
+            "status": "present",
+            "provider": "deepseek",
+            "source": "sandbox-managed",
+            "credential_ref": "DEEPSEEK_API_KEY",
+            "credential_present": true,
+            "supported_sources": [
+              "owner-env"
+            ],
+            "expected_refs": [
+              "DEEPSEEK_API_KEY",
+              "WBP_DEEPSEEK_API_KEY",
+              "WBP_PROVIDER_DEEPSEEK_API_KEY"
+            ],
+            "provider_dashboard_url": "https://platform.deepseek.com/api_keys",
+            "secret_value_exposed": false,
+            "browser_secret_intake": false,
+            "browser_path_intake": false,
+            "scope": "sandbox"
+          }
+        },
+        "timestamp_utc": "2026-05-23T02:23:43Z"
+      }
+    },
+    "status": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "status",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "foundation_phase": "C3",
+          "adapter_runtime_available": false,
+          "lifecycle_mode": "synthetic",
+          "adapter_state": "stopped",
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "profile_ready": false,
+          "routes_count": 1,
+          "observed_routes_count": 1,
+          "observed_routes": {
+            "wbp-deepseek-v3": {
+              "last_verified_at": "2026-05-23T02:19:40Z",
+              "last_check": "2026-05-23T02:19:40Z",
+              "last_validate": "2026-05-23T02:20:02Z",
+              "evidence_level": "network_route_check",
+              "availability_state": "model_not_available",
+              "effective_model": "deepseek-chat",
+              "last_error": "model_not_available",
+              "fallback_used": false,
+              "latency_ms": 1242
+            }
+          },
+          "available_secret_refs": [
+            "DEEPSEEK_API_KEY"
+          ],
+          "paths": {
+            "routes_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/routes.json",
+            "state_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json",
+            "secrets_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/secrets.env",
+            "evidence_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence"
+          },
+          "adapter": {
+            "base_url": null,
+            "host": "127.0.0.1",
+            "last_transition": "init",
+            "lifecycle_mode": "synthetic",
+            "listener_proven": false,
+            "port": null,
+            "runtime_claim_blocked": true,
+            "started_at_utc": null,
+            "state": "stopped"
+          },
+          "local_auth": {
+            "token_ref": "managed_local_token",
+            "token_present": true,
+            "token_created_at_utc": null
+          }
+        },
+        "timestamp_utc": "2026-05-23T02:23:43Z"
+      }
+    },
+    "web_api_connections_readonly_before": {
+      "url": "http://127.0.0.1:8788/api/api-connections-readonly",
+      "returncode": 0,
+      "json": {
+        "adapter": {
+          "adapter_runtime_available": false,
+          "adapter_state": "stopped",
+          "foundation_phase": "C3",
+          "lifecycle_mode": "synthetic",
+          "listener_proven": false,
+          "local_token_present": true,
+          "models_source": "local_routes_registry",
+          "observed_routes_count": 1,
+          "profile_ready": false,
+          "runtime_claim_blocked": true
+        },
+        "commands": {
+          "external_models_models": {
+            "exit_code": 0,
+            "human_message": "External-models route models listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_routes_list": {
+            "exit_code": 0,
+            "human_message": "External-models routes listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_status": {
+            "exit_code": 0,
+            "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          }
+        },
+        "primary_truth_ok": true,
+        "privacy": {
+          "forbidden_fields_excluded": [
+            "secret_references",
+            "tokens",
+            "raw_paths",
+            "raw_logs"
+          ],
+          "raw_command_packet_included": false,
+          "redacted": true
+        },
+        "routes": [
+          {
+            "display_name": "DeepSeek direct",
+            "enabled": true,
+            "is_primary": true,
+            "last_checked": "2026-05-23T02:19:40Z",
+            "note": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f provider-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0430\u0441\u044c \u043e\u0448\u0438\u0431\u043a\u043e\u0439.",
+            "primary": true,
+            "provider": "deepseek",
+            "role_label": "main route",
+            "route_id": "wbp-deepseek-v3",
+            "secret_ref": "DEEPSEEK_API_KEY",
+            "secret_status_label": "available",
+            "secret_visual_state": "green",
+            "status_code": "enabled",
+            "status_label": "\u0420\u0430\u0437\u0440\u0435\u0448\u0451\u043d",
+            "upstream_model": "deepseek-chat",
+            "validation_label": "validate failed",
+            "validation_visual_state": "red",
+            "visual_state": "blue"
+          }
+        ],
+        "schema_version": 1,
+        "source": "api_connections_readonly",
+        "status": "ok",
+        "summary": {
+          "attention_count": 0,
+          "enabled_count": 1,
+          "human_message": "\u0421\u043f\u0438\u0441\u043e\u043a API-\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0439 \u0441\u043e\u0431\u0440\u0430\u043d \u0438\u0437 \u043f\u0430\u043a\u0435\u0442\u043e\u0432 \u043a\u043e\u043c\u0430\u043d\u0434.",
+          "last_error": "",
+          "latest_check": "2026-05-23T02:19:40Z",
+          "machine_error_code": "OK",
+          "routes_count": 1
+        }
+      }
+    }
+  },
+  "sequence": {
+    "check_packet": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "check",
+        "--route",
+        "wbp-deepseek-v3",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models route smoke check captured provider evidence without claiming runtime readiness.",
+        "machine_error_code": "OK",
+        "changed_files": [
+          "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json",
+          "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence/wbp-deepseek-v3-external-models_check-20260523T022345Z.json"
+        ],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "check_kind": "provider_route_smoke",
+          "network_dependent": true,
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "profile_ready": false,
+          "verification_scope": "route_provider_only",
+          "route_state": "verified",
+          "requested_model": "wbp-deepseek-v3",
+          "effective_model": "deepseek-chat",
+          "provider": "deepseek",
+          "fallback_used": false,
+          "fallback_chain": [
+            "wbp-deepseek-v3"
+          ],
+          "evidence_path": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence/wbp-deepseek-v3-external-models_check-20260523T022345Z.json",
+          "latency_ms": 1503,
+          "request_count": 1,
+          "transform_profile": "openai_chat_passthrough",
+          "response_profile": "openai_chat_choices_message",
+          "transform_declared": false,
+          "response_profile_declared": false,
+          "request_shape": "openai_chat_messages",
+          "response_shape": "choices_message"
+        },
+        "timestamp_utc": "2026-05-23T02:23:45Z"
+      }
+    },
+    "web_after_check": {
+      "url": "http://127.0.0.1:8788/api/api-connections-readonly",
+      "returncode": 0,
+      "json": {
+        "adapter": {
+          "adapter_runtime_available": false,
+          "adapter_state": "stopped",
+          "foundation_phase": "C3",
+          "lifecycle_mode": "synthetic",
+          "listener_proven": false,
+          "local_token_present": true,
+          "models_source": "local_routes_registry",
+          "observed_routes_count": 1,
+          "profile_ready": false,
+          "runtime_claim_blocked": true
+        },
+        "commands": {
+          "external_models_models": {
+            "exit_code": 0,
+            "human_message": "External-models route models listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_routes_list": {
+            "exit_code": 0,
+            "human_message": "External-models routes listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_status": {
+            "exit_code": 0,
+            "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          }
+        },
+        "primary_truth_ok": true,
+        "privacy": {
+          "forbidden_fields_excluded": [
+            "secret_references",
+            "tokens",
+            "raw_paths",
+            "raw_logs"
+          ],
+          "raw_command_packet_included": false,
+          "redacted": true
+        },
+        "routes": [
+          {
+            "display_name": "DeepSeek direct",
+            "enabled": true,
+            "is_primary": true,
+            "last_checked": "2026-05-23T02:23:45Z",
+            "note": "\u041f\u0440\u043e\u0432\u0435\u0440\u043e\u0447\u043d\u044b\u0439 \u0437\u0430\u043f\u0440\u043e\u0441 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0437\u0430\u0444\u0438\u043a\u0441\u0438\u0440\u043e\u0432\u0430\u043d bounded packet \u0438 refresh truth.",
+            "primary": true,
+            "provider": "deepseek",
+            "role_label": "main route",
+            "route_id": "wbp-deepseek-v3",
+            "secret_ref": "DEEPSEEK_API_KEY",
+            "secret_status_label": "available",
+            "secret_visual_state": "green",
+            "status_code": "enabled",
+            "status_label": "\u0420\u0430\u0437\u0440\u0435\u0448\u0451\u043d",
+            "upstream_model": "deepseek-chat",
+            "validation_label": "ok",
+            "validation_visual_state": "green",
+            "visual_state": "blue"
+          }
+        ],
+        "schema_version": 1,
+        "source": "api_connections_readonly",
+        "status": "ok",
+        "summary": {
+          "attention_count": 0,
+          "enabled_count": 1,
+          "human_message": "\u0421\u043f\u0438\u0441\u043e\u043a API-\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0439 \u0441\u043e\u0431\u0440\u0430\u043d \u0438\u0437 \u043f\u0430\u043a\u0435\u0442\u043e\u0432 \u043a\u043e\u043c\u0430\u043d\u0434.",
+          "last_error": "",
+          "latest_check": "2026-05-23T02:23:45Z",
+          "machine_error_code": "OK",
+          "routes_count": 1
+        }
+      }
+    },
+    "validate_packet": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "routes",
+        "validate",
+        "--route",
+        "wbp-deepseek-v3",
+        "--json"
+      ],
+      "returncode": 1,
+      "json": {
+        "status": "error",
+        "exit_code": 1,
+        "human_message": "Provider does not expose route model: deepseek-chat",
+        "machine_error_code": "model_not_available",
+        "changed_files": [
+          "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json"
+        ],
+        "next_action": "user_action",
+        "liveness": "unknown",
+        "severity": "fatal",
+        "operator_action": "user_action",
+        "data": {
+          "validation_kind": "provider_route_validate",
+          "network_dependent": true,
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "profile_ready": false,
+          "verification_scope": "route_provider_only",
+          "route_state": "model_not_available",
+          "requested_model": "wbp-deepseek-v3",
+          "provider": "deepseek",
+          "transform_profile": "openai_chat_passthrough",
+          "response_profile": "openai_chat_choices_message",
+          "transform_declared": false,
+          "response_profile_declared": false
+        },
+        "timestamp_utc": "2026-05-23T02:23:46Z"
+      }
+    },
+    "status_after_validate": {
+      "cmd": [
+        "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "-m",
+        "wild_boar_proxy",
+        "external-models",
+        "status",
+        "--json"
+      ],
+      "returncode": 0,
+      "json": {
+        "status": "ok",
+        "exit_code": 0,
+        "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+        "machine_error_code": "OK",
+        "changed_files": [],
+        "next_action": "none",
+        "liveness": "not_applicable",
+        "severity": "recoverable",
+        "operator_action": "none",
+        "data": {
+          "foundation_phase": "C3",
+          "adapter_runtime_available": false,
+          "lifecycle_mode": "synthetic",
+          "adapter_state": "stopped",
+          "listener_proven": false,
+          "runtime_claim_blocked": true,
+          "profile_ready": false,
+          "routes_count": 1,
+          "observed_routes_count": 1,
+          "observed_routes": {
+            "wbp-deepseek-v3": {
+              "last_error": "model_not_available",
+              "latency_ms": 1503,
+              "last_validate": "2026-05-23T02:23:46Z",
+              "availability_state": "model_not_available",
+              "last_check": "2026-05-23T02:23:45Z",
+              "evidence_level": "network_route_check",
+              "effective_model": "deepseek-chat",
+              "fallback_used": false,
+              "last_verified_at": "2026-05-23T02:23:45Z"
+            }
+          },
+          "available_secret_refs": [
+            "DEEPSEEK_API_KEY"
+          ],
+          "paths": {
+            "routes_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/routes.json",
+            "state_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/state.json",
+            "secrets_file": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/secrets.env",
+            "evidence_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed/external-models/evidence"
+          },
+          "adapter": {
+            "base_url": null,
+            "host": "127.0.0.1",
+            "last_transition": "init",
+            "lifecycle_mode": "synthetic",
+            "listener_proven": false,
+            "port": null,
+            "runtime_claim_blocked": true,
+            "started_at_utc": null,
+            "state": "stopped"
+          },
+          "local_auth": {
+            "token_ref": "managed_local_token",
+            "token_present": true,
+            "token_created_at_utc": null
+          }
+        },
+        "timestamp_utc": "2026-05-23T02:23:46Z"
+      }
+    },
+    "web_after_validate": {
+      "url": "http://127.0.0.1:8788/api/api-connections-readonly",
+      "returncode": 0,
+      "json": {
+        "adapter": {
+          "adapter_runtime_available": false,
+          "adapter_state": "stopped",
+          "foundation_phase": "C3",
+          "lifecycle_mode": "synthetic",
+          "listener_proven": false,
+          "local_token_present": true,
+          "models_source": "local_routes_registry",
+          "observed_routes_count": 1,
+          "profile_ready": false,
+          "runtime_claim_blocked": true
+        },
+        "commands": {
+          "external_models_models": {
+            "exit_code": 0,
+            "human_message": "External-models route models listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_routes_list": {
+            "exit_code": 0,
+            "human_message": "External-models routes listed from local registry.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          },
+          "external_models_status": {
+            "exit_code": 0,
+            "human_message": "External-models synthetic lifecycle status collected without live runtime claims.",
+            "machine_error_code": "OK",
+            "next_action": "none",
+            "role": "unknown",
+            "status": "ok",
+            "ui_state": "success"
+          }
+        },
+        "primary_truth_ok": true,
+        "privacy": {
+          "forbidden_fields_excluded": [
+            "secret_references",
+            "tokens",
+            "raw_paths",
+            "raw_logs"
+          ],
+          "raw_command_packet_included": false,
+          "redacted": true
+        },
+        "routes": [
+          {
+            "display_name": "DeepSeek direct",
+            "enabled": true,
+            "is_primary": true,
+            "last_checked": "2026-05-23T02:23:45Z",
+            "note": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u044f\u044f provider-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0430\u0441\u044c \u043e\u0448\u0438\u0431\u043a\u043e\u0439.",
+            "primary": true,
+            "provider": "deepseek",
+            "role_label": "main route",
+            "route_id": "wbp-deepseek-v3",
+            "secret_ref": "DEEPSEEK_API_KEY",
+            "secret_status_label": "available",
+            "secret_visual_state": "green",
+            "status_code": "enabled",
+            "status_label": "\u0420\u0430\u0437\u0440\u0435\u0448\u0451\u043d",
+            "upstream_model": "deepseek-chat",
+            "validation_label": "validate failed",
+            "validation_visual_state": "red",
+            "visual_state": "blue"
+          }
+        ],
+        "schema_version": 1,
+        "source": "api_connections_readonly",
+        "status": "ok",
+        "summary": {
+          "attention_count": 0,
+          "enabled_count": 1,
+          "human_message": "\u0421\u043f\u0438\u0441\u043e\u043a API-\u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0439 \u0441\u043e\u0431\u0440\u0430\u043d \u0438\u0437 \u043f\u0430\u043a\u0435\u0442\u043e\u0432 \u043a\u043e\u043c\u0430\u043d\u0434.",
+          "last_error": "",
+          "latest_check": "2026-05-23T02:23:45Z",
+          "machine_error_code": "OK",
+          "routes_count": 1
+        }
+      }
+    },
+    "direct_provider_probe": {
+      "status": "ok",
+      "http_status": 200,
+      "has_id": true,
+      "model": "deepseek-v4-flash",
+      "choices_count": 1
+    }
+  }
+}

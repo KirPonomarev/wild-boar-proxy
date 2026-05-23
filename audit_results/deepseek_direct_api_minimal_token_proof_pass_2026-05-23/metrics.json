@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "command_metrics": {
+    "check_latency_ms": 1503,
+    "check_request_count": 1,
+    "validate_latency_ms": null
+  },
+  "direct_provider_probe": {
+    "status": "ok",
+    "http_status": 200,
+    "has_id": true,
+    "model": "deepseek-v4-flash",
+    "choices_count": 1
+  },
+  "web_refresh_times": {
+    "after_check_last_checked": "2026-05-23T02:23:45Z",
+    "after_validate_last_checked": "2026-05-23T02:23:45Z"
+  }
+}

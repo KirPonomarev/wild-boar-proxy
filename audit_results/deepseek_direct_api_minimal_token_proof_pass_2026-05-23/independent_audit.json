@@ -1,0 +1,19 @@
+{
+  "status": "pass",
+  "issues": [],
+  "checks": {
+    "sandbox_route_present": true,
+    "sandbox_credential_present": true,
+    "check_ok": true,
+    "validate_model_not_available": true,
+    "status_after_validate_matches": true,
+    "web_after_validate_red": true,
+    "direct_probe_ok": true
+  },
+  "summary": "DeepSeek direct proof is supported; validate failure is bounded to alias/model visibility and does not contradict route smoke success.",
+  "agent_audit": {
+    "model_class": "gpt-5.4-mini",
+    "verdict": "pass",
+    "issues": []
+  }
+}
