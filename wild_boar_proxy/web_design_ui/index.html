@@ -402,6 +402,43 @@
           <pre id="codexLaunchDryRunResponse" class="mono-value">dry-run packet pending</pre>
         </section>
 
+        <section id="codexCustomModelsPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Custom Models</div>
+              <div id="codexCustomModelsSummary" class="secondary">Model registry ещё не загружен.</div>
+            </div>
+            <span id="codexCustomModelsChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Model</div>
+            <div>
+              <select id="codexCustomModelSelect" aria-label="Codex Custom model"></select>
+            </div>
+            <div>Recommended</div><div id="codexCustomRecommendedModel">-</div>
+            <div>Configured</div><div id="codexCustomConfiguredModel">-</div>
+            <div>Compatibility</div><div id="codexCustomApiCompat">not checked</div>
+            <div>Claim gate</div><div id="codexCustomModelsClaimGate">not loaded</div>
+          </div>
+          <div class="action-summary-footer">
+            <div>
+              <span>models: <strong id="codexCustomModelCount">0</strong></span>
+              <span>token burn: <strong id="codexCustomModelTokenBurn">0</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexCustomModelsRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="codexCustomModelDryRunAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Model dry-run</span>
+              </button>
+            </div>
+          </div>
+          <pre id="codexCustomModelDryRunResponse" class="mono-value">model dry-run packet pending</pre>
+        </section>
+
         <section id="operatorPanel" class="card log-card">
           <div class="log-head">
             <div>

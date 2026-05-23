@@ -4803,6 +4803,7 @@ def codex_login_complete_packet(**overrides: object) -> dict[str, object]:
 class FakeOperatorSurfaceSession:
     def __init__(self) -> None:
         self.run_payloads: list[dict[str, object]] = []
+        self.status_payload_calls = 0
         self.transcript = {
             "captured_at_utc": "2026-05-23T00:00:00Z",
             "entries": [],
@@ -4810,6 +4811,7 @@ class FakeOperatorSurfaceSession:
         }
 
     def status_payload(self) -> dict[str, object]:
+        self.status_payload_calls += 1
         return {
             "captured_at_utc": "2026-05-23T00:00:00Z",
             "status": {"status": "ok", "machine_error_code": "OK"},
@@ -4954,6 +4956,72 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], ["model_id", "route_id", "CODEX_HOME"])
+
+
+class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
+    def test_codex_custom_model_registry_endpoints_are_readonly_and_zero_token(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                registry = json.loads(fetch(f"{base}/api/codex/custom/models"))
+                compat = json.loads(fetch(f"{base}/api/codex/custom/api-compat"))
+                dry_run = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/model-dry-run",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/model-dry-run",
+                        {"model_id": "gpt-5.3-codex", "route_id": "route", "backend_id": "backend"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(registry["status"], "degraded")
+        self.assertEqual(registry["machine_error_code"], "CLAIM_GATE_BLOCKED")
+        self.assertTrue(registry["server_issued"])
+        self.assertEqual(registry["model_count"], 2)
+        self.assertFalse(registry["route_or_backend_exposed"])
+        self.assertEqual(registry["token_burn"], 0)
+        self.assertTrue(registry["models_endpoint_called"])
+        self.assertFalse(registry["inference_called"])
+        self.assertFalse(registry["provider_called"])
+        self.assertFalse(registry["independent_runtime_meter_attached"])
+        self.assertTrue(compat["compat_surfaces"]["/v1/models"]["called"])
+        self.assertFalse(compat["compat_surfaces"]["/v1/responses"]["called"])
+        self.assertFalse(compat["compat_surfaces"]["/v1/chat/completions"]["called"])
+        self.assertEqual(compat["network_call_summary"]["forbidden_calls_made"], [])
+        self.assertEqual(dry_run["status"], "degraded")
+        self.assertTrue(dry_run["dry_run"])
+        self.assertTrue(dry_run["model_server_issued"])
+        self.assertFalse(dry_run["responses_called"])
+        self.assertFalse(dry_run["chat_completions_called"])
+        self.assertEqual(dry_run["token_burn"], 0)
+        self.assertEqual(
+            dry_run["negative_claim_basis"],
+            "dry_run_static_code_path_no_inference_adapter",
+        )
+        self.assertFalse(dry_run["independent_runtime_meter_attached"])
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(rejected["forbidden_fields"], ["route_id", "backend_id"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+        self.assertGreaterEqual(created_sessions[0].status_payload_calls, 1)
 
 
 def free_port() -> int:

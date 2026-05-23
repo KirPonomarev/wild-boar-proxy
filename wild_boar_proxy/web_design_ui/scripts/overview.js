@@ -474,6 +474,7 @@ let onboardLoginWindowBlobUrl = "";
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
 let codexLaunchDryRunInFlight = false;
+let codexCustomModelDryRunInFlight = false;
 let snapshotCommandLedgerState = {
   surface: "not loaded",
   status: "missing",
@@ -845,6 +846,156 @@ async function runOriginalCodexDryRun() {
   } finally {
     codexLaunchDryRunInFlight = false;
     document.getElementById("originalCodexDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+function codexCustomModelsSetText(id, value) {
+  operatorSetText(id, value);
+}
+
+function codexCustomModelsSetChip(visual, label) {
+  const chip = document.getElementById("codexCustomModelsChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function codexCustomAvailableModelIds(packet) {
+  return (Array.isArray(packet?.available_models) ? packet.available_models : [])
+    .map((entry) => entry?.model_id)
+    .filter((modelId) => typeof modelId === "string" && modelId);
+}
+
+function renderCodexCustomModels(registry, compat) {
+  const select = document.getElementById("codexCustomModelSelect");
+  const modelIds = codexCustomAvailableModelIds(registry);
+  const previous = select?.value || "";
+  if (select) {
+    select.replaceChildren();
+    for (const modelId of modelIds) {
+      const option = document.createElement("option");
+      option.value = modelId;
+      option.textContent = modelId;
+      select.append(option);
+    }
+    if (modelIds.includes(previous)) {
+      select.value = previous;
+    } else if (modelIds.includes(registry?.recommended_default_model)) {
+      select.value = registry.recommended_default_model;
+    }
+  }
+  const claimGate = registry?.claim_gate_status || compat?.claim_gate_status || "not_reported";
+  const claimGateBlocked = String(claimGate).includes("blocked");
+  const status = registry?.status || "unknown";
+  codexCustomModelsSetChip(
+    status === "ok" && !claimGateBlocked ? "green" : (status === "degraded" || claimGateBlocked ? "amber" : "red"),
+    status === "degraded" && claimGateBlocked ? "registry ready / gate blocked" : status
+  );
+  codexCustomModelsSetText(
+    "codexCustomModelsSummary",
+    `${modelIds.length} server-issued models · ${registry?.launch_claim_scope || "model_registry_only"}`
+  );
+  codexCustomModelsSetText("codexCustomRecommendedModel", registry?.recommended_default_model || "-");
+  codexCustomModelsSetText(
+    "codexCustomConfiguredModel",
+    `${registry?.reported_configured_model || "-"} · visible ${registry?.configured_model_visible === true ? "yes" : "no"}`
+  );
+  codexCustomModelsSetText(
+    "codexCustomApiCompat",
+    `/v1/models ${compat?.compat_surfaces?.["/v1/models"]?.status || "unknown"} · responses ${compat?.compat_surfaces?.["/v1/responses"]?.status || "not_called"}`
+  );
+  codexCustomModelsSetText("codexCustomModelsClaimGate", claimGate);
+  codexCustomModelsSetText("codexCustomModelCount", String(modelIds.length));
+  codexCustomModelsSetText("codexCustomModelTokenBurn", String(registry?.token_burn ?? 0));
+}
+
+function renderCodexCustomModelDryRun(packet) {
+  const response = document.getElementById("codexCustomModelDryRunResponse");
+  const ok = packet?.dry_run === true && packet?.model_server_issued === true && packet?.inference_called === false;
+  const claimGateBlocked = String(packet?.claim_gate_status || packet?.refresh_packet?.claim_gate_status || "").includes("blocked");
+  codexCustomModelsSetChip(
+    ok && !claimGateBlocked ? "green" : (ok ? "amber" : (packet?.status === "rejected" ? "amber" : "red")),
+    ok && claimGateBlocked ? "dry-run ok / gate blocked" : (ok ? "dry-run ok" : (packet?.status || "failed"))
+  );
+  codexCustomModelsSetText("codexCustomModelTokenBurn", String(packet?.token_burn ?? 0));
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      selected_model: packet?.selected_model || "",
+      dry_run: packet?.dry_run === true,
+      model_server_issued: packet?.model_server_issued === true,
+      codex_config_compatible: packet?.codex_config_compatible === true,
+      route_or_backend_exposed: packet?.route_or_backend_exposed === true,
+      inference_called: packet?.inference_called === true,
+      provider_called: packet?.provider_called === true,
+      responses_called: packet?.responses_called === true,
+      chat_completions_called: packet?.chat_completions_called === true,
+      token_burn: packet?.token_burn ?? 0,
+      negative_claim_basis: packet?.negative_claim_basis || "",
+      independent_runtime_meter_attached: packet?.independent_runtime_meter_attached === true,
+      claim_gate_status: packet?.claim_gate_status || packet?.refresh_packet?.claim_gate_status || "not_reported",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomModelsPanel() {
+  try {
+    const [registry, compat] = await Promise.all([
+      fetchCodexLaunchJson("api/codex/custom/models"),
+      fetchCodexLaunchJson("api/codex/custom/api-compat")
+    ]);
+    renderCodexCustomModels(registry, compat);
+  } catch (error) {
+    codexCustomModelsSetChip("red", "failed");
+    codexCustomModelsSetText("codexCustomModelsSummary", `Model registry fetch failed: ${error.message}`);
+    codexCustomModelsSetText("codexCustomApiCompat", "fetch failed");
+  }
+}
+
+async function runCodexCustomModelDryRun() {
+  if (codexCustomModelDryRunInFlight) {
+    return;
+  }
+  const modelNode = document.getElementById("codexCustomModelSelect");
+  const modelId = modelNode ? modelNode.value : "";
+  codexCustomModelDryRunInFlight = true;
+  document.getElementById("codexCustomModelDryRunAction")?.setAttribute("disabled", "disabled");
+  codexCustomModelsSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/custom/model-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId })
+    });
+    if (!response.ok) {
+      throw new Error(`custom model dry-run http ${response.status}`);
+    }
+    renderCodexCustomModelDryRun(await response.json());
+  } catch (error) {
+    renderCodexCustomModelDryRun({
+      status: "failed",
+      machine_error_code: "CUSTOM_MODEL_DRY_RUN_FETCH_FAILED",
+      human_message: error.message,
+      dry_run: true,
+      model_server_issued: false,
+      codex_config_compatible: false,
+      route_or_backend_exposed: false,
+      inference_called: false,
+      provider_called: false,
+      responses_called: false,
+      chat_completions_called: false,
+      token_burn: 0
+    });
+  } finally {
+    codexCustomModelDryRunInFlight = false;
+    document.getElementById("codexCustomModelDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -6928,6 +7079,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
   document.getElementById("codexLaunchModesRefreshAction")?.addEventListener("click", () => refreshCodexLaunchModesPanel());
   document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
+  document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
+  document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
   document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
@@ -6986,5 +7139,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     setFixtureState(initialState, false);
   }
   refreshCodexLaunchModesPanel();
+  refreshCodexCustomModelsPanel();
   refreshOperatorPanel();
 });

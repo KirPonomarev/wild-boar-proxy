@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "status": "passed_with_limitations",
+  "auditor": "orchestrator_independent_check_plus_readonly_subagent_scan",
+  "findings": [
+    {
+      "severity": "info",
+      "code": "CLAIM_GATE_BLOCKED_REMAINS",
+      "message": "Claim gate remains blocked, so UI correctly renders degraded / gate blocked instead of green."
+    },
+    {
+      "severity": "accepted_medium_repaired",
+      "code": "NEGATIVE_CLAIM_PROVEN_BY_STATIC_DRY_RUN_PATH",
+      "message": "Auditor noted that no independent runtime meter is attached. Packets and tests now expose negative_claim_basis and independent_runtime_meter_attached=false; endpoint tests verify model dry-run does not call run_prompt."
+    },
+    {
+      "severity": "info",
+      "code": "NO_INFERENCE_CLAIM",
+      "message": "This contour intentionally proves only /v1/models and model dry-run by code-path guard; GPT/API inference and runtime token metering remain a next contour."
+    }
+  ],
+  "false_green_check": "passed",
+  "forbidden_browser_fields_check": "passed",
+  "secret_redaction_check": "passed",
+  "scope_check": "passed"
+}

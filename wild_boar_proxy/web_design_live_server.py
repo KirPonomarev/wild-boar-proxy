@@ -30,6 +30,11 @@ from wild_boar_proxy.codex_launch_modes import (
     build_original_launch_dry_run_packet,
     build_original_status_packet,
 )
+from wild_boar_proxy.codex_model_registry import (
+    build_custom_api_compat_packet,
+    build_custom_model_dry_run_packet,
+    build_custom_model_registry_packet,
+)
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 from wild_boar_proxy.operator_surface import OperatorSurfaceSession
@@ -1730,6 +1735,16 @@ def build_handler(
             if parsed.path == "/api/codex/custom/status":
                 self._send_json(build_custom_status_packet(operator_surface_session.status_payload()))
                 return
+            if parsed.path == "/api/codex/custom/models":
+                self._send_json(
+                    build_custom_model_registry_packet(operator_surface_session.status_payload())
+                )
+                return
+            if parsed.path == "/api/codex/custom/api-compat":
+                self._send_json(
+                    build_custom_api_compat_packet(operator_surface_session.status_payload())
+                )
+                return
             self._send_static(parsed.path)
 
         def do_POST(self) -> None:
@@ -1739,6 +1754,14 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/original/launch-dry-run":
                 self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
+                return
+            if parsed.path == "/api/codex/custom/model-dry-run":
+                self._send_json(
+                    build_custom_model_dry_run_packet(
+                        self._read_json_body(),
+                        operator_surface_session.status_payload(),
+                    )
+                )
                 return
             if parsed.path != "/api/action":
                 self.send_error(HTTPStatus.NOT_FOUND)

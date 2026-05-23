@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "model_count": 8,
+  "dry_run_requests": 1,
+  "forbidden_field_rejection_requests": 1,
+  "allowed_network_calls_made": [
+    "/v1/models"
+  ],
+  "forbidden_network_calls_made": [],
+  "provider_direct_calls_made": false,
+  "inference_calls_made": 0,
+  "token_burn": 0,
+  "negative_claim_basis": "dry_run_static_code_path_no_inference_adapter",
+  "independent_runtime_meter_attached": false,
+  "browser_screenshot_count": 1,
+  "test_groups_passed_before_closeout": 6
+}

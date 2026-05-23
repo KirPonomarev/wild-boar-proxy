@@ -270,6 +270,21 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("command_id", js)
         self.assertNotIn("client_path", js)
 
+    def test_codex_custom_model_registry_ui_is_dry_run_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexCustomModelsPanel"', html)
+        self.assertIn('id="codexCustomModelSelect"', html)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/models\")", js)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/api-compat\")", js)
+        self.assertIn('fetch("api/codex/custom/model-dry-run"', js)
+        self.assertIn("body: JSON.stringify({ model_id: modelId })", js)
+        self.assertIn("responses_called: packet?.responses_called === true", js)
+        self.assertIn("chat_completions_called: packet?.chat_completions_called === true", js)
+        self.assertIn("token_burn: packet?.token_burn ?? 0", js)
+        self.assertNotIn('fetch("api/codex/custom/session', js)
+
     def test_overview_nav_and_action_hierarchy_are_product_first(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()
