@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-23T15:50:27.276932Z",
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_PROTOTYPE_PASS",
+  "models_status_code": 200,
+  "process_only_rerun_prompt_count": 2,
+  "process_only_rerun_storage_unchanged": true,
+  "process_only_rerun_tmp_removed": true,
+  "prompt_1_duration_seconds": 6.066,
+  "prompt_1_stdout_size": 318,
+  "prompt_2_duration_seconds": 2.847,
+  "prompt_2_stdout_size": 318,
+  "prompt_count": 2,
+  "transcript_entries": 2
+}

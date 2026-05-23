@@ -1,0 +1,28 @@
+{
+  "blocked_claims_preserved": "claim_gate blocked displayed honestly; no stable-15, rotation, active-only traffic, or pool participation claim made.",
+  "browser_instrumentation_boundary": "Initial browser screenshot proof changed current Codex app browser/cache storage, so it is retained only as visual/UI evidence. Authoritative isolation acceptance comes from process_only_safety_rerun.json, which avoided Browser instrumentation and showed protected surfaces unchanged.",
+  "captured_at_utc": "2026-05-23T15:54:15.496360Z",
+  "checks": {
+    "browser_dom_secret_findings_empty": true,
+    "browser_status_honest_about_claim_gate": true,
+    "browser_visual_proof_present": true,
+    "chosen_model_visible": true,
+    "deepseek_only_success_path_false": true,
+    "gui_desktop_claim_not_made": true,
+    "heavy_load_claim_not_made": true,
+    "models_200": true,
+    "persistent_session_claim_not_made": true,
+    "process_rerun_current_codex_auth_config_unchanged": true,
+    "process_rerun_default_storage_unchanged": true,
+    "process_rerun_prompt_1_exact_ui_one": true,
+    "process_rerun_prompt_2_exact_ui_two": true,
+    "process_rerun_tmp_removed": true,
+    "process_rerun_transcript_has_two_entries": true,
+    "provider_route_claim_not_made": true,
+    "redaction_clean": true,
+    "static_safety_gate_pass": true
+  },
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_PROTOTYPE_PASS",
+  "passed": true,
+  "subagent_audit_summary": "Ampere/gpt-5.4-mini hard-stop and overclaim checklist integrated: no browser secret fields, exact prompt proof, post reclear, redaction, isolation rerun, no GUI/provider/load claims."
+}

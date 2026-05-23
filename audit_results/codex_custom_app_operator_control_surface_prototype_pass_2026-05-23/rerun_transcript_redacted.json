@@ -1,0 +1,20 @@
+{
+  "captured_at_utc": "2026-05-23T15:53:12.331242Z",
+  "entries": [
+    {
+      "exact_match": true,
+      "exit_code": 0,
+      "expected_exact": "UI_ONE",
+      "final_message": "UI_ONE",
+      "prompt_id": "rerun_prompt_1"
+    },
+    {
+      "exact_match": true,
+      "exit_code": 0,
+      "expected_exact": "UI_TWO",
+      "final_message": "UI_TWO",
+      "prompt_id": "rerun_prompt_2"
+    }
+  ],
+  "secret_value_recorded": false
+}
