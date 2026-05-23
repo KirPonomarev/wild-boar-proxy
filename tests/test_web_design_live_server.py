@@ -5258,7 +5258,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         {"prompt": "Reply with exactly SESSION_OK."},
                     )
                 )
-                real_prompt = json.loads(
+                live_prompt = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions/{session_id}/prompt",
                         {"prompt": "Reply with exactly REAL_SESSION_OK."},
@@ -5287,8 +5287,13 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
 
         self.assertEqual(empty["session_count"], 0)
         self.assertEqual(created["status"], "ok")
+        self.assertTrue(created["session_created"])
+        self.assertFalse(created["live_prompt_admitted"])
         self.assertTrue(created["session"]["model_server_issued"])
+        self.assertTrue(created["session"]["selection_dry_run_proven"])
+        self.assertFalse(created["session"]["live_selection_proven"])
         self.assertTrue(created["session"]["selection_proven"])
+        self.assertTrue(created["session"]["selected_backend_id_redacted"])
         self.assertEqual(created["session"]["session_root_scope"], "owned_temp_session_root")
         self.assertNotIn("/tmp/wbp-auth.json", json.dumps(created))
         self.assertNotIn("acct-active", json.dumps(created))
@@ -5299,28 +5304,26 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(prompt["model_response_present"])
         self.assertFalse(prompt["inference_proven"])
         self.assertFalse(prompt["runtime_meter_attached"])
+        self.assertFalse(prompt["network_calls_made"])
+        self.assertFalse(prompt["provider_called"])
+        self.assertTrue(prompt["raw_prompt_not_stored"])
         self.assertEqual(prompt["token_burn"], 0)
-        self.assertEqual(real_prompt["status"], "ok")
-        self.assertTrue(real_prompt["inference_proven"])
-        self.assertTrue(real_prompt["model_response_present"])
-        self.assertEqual(real_prompt["model_id"], "gpt-5.3-codex")
-        self.assertTrue(real_prompt["selected_backend_server_issued"])
-        self.assertFalse(real_prompt["browser_selected_backend"])
-        self.assertTrue(real_prompt["wbp_path_configured"])
-        self.assertTrue(real_prompt["cli_proxy_api_path_configured"])
-        self.assertTrue(real_prompt["wbp_path_proven"])
-        self.assertTrue(real_prompt["cli_proxy_api_path_proven"])
-        self.assertTrue(real_prompt["independent_wbp_trace_observed"])
-        self.assertEqual(real_prompt["path_proof_status"], "independently_observed")
-        self.assertTrue(real_prompt["isolated_engine_home_proven"])
-        self.assertEqual(real_prompt["configured_wire_api"], "responses")
-        self.assertFalse(real_prompt["fallback_attempted"])
-        self.assertEqual(real_prompt["response_preview_bounded"], "MAIN_WEB_OK")
-        self.assertNotIn("Reply with exactly REAL_SESSION_OK.", json.dumps(real_prompt))
-        self.assertNotIn("acct-active", json.dumps(real_prompt))
+        self.assertEqual(live_prompt["status"], "rejected")
+        self.assertEqual(live_prompt["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+        self.assertFalse(live_prompt["live_prompt_admitted"])
+        self.assertFalse(live_prompt["prompt_runner_called"])
+        self.assertFalse(live_prompt["inference_proven"])
+        self.assertFalse(live_prompt["model_response_present"])
+        self.assertFalse(live_prompt["network_calls_made"])
+        self.assertFalse(live_prompt["provider_called"])
+        self.assertFalse(live_prompt["fallback_attempted"])
+        self.assertNotIn("Reply with exactly REAL_SESSION_OK.", json.dumps(live_prompt))
+        self.assertNotIn("acct-active", json.dumps(live_prompt))
         self.assertEqual(transcript["transcript_kind"], "service_ledger_only")
-        self.assertTrue(transcript["model_response_present"])
-        self.assertTrue(transcript["inference_proven"])
+        self.assertFalse(transcript["model_response_present"])
+        self.assertFalse(transcript["inference_proven"])
+        self.assertTrue(transcript["raw_prompt_not_stored"])
+        self.assertTrue(transcript["raw_response_not_stored"])
         self.assertNotIn("Reply with exactly SESSION_OK.", json.dumps(transcript))
         self.assertNotIn("Reply with exactly REAL_SESSION_OK.", json.dumps(transcript))
         self.assertEqual(rejected["status"], "rejected")
@@ -5328,12 +5331,14 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(rejected["forbidden_fields"], ["backend_id", "path"])
         self.assertFalse(cancel["process_kill_claimed"])
         self.assertTrue(cleanup["cleanup_performed"])
+        self.assertTrue(cleanup["owned_session_root_only"])
+        self.assertFalse(cleanup["current_codex_home_touched"])
         self.assertFalse(cleanup["arbitrary_path_accepted"])
         self.assertEqual(listed["session_count"], 1)
         self.assertEqual(listed["sessions"][0]["cleanup_state"], "cleaned")
         self.assertEqual(
             created_sessions[0].run_payloads,
-            [{"prompt": "Reply with exactly REAL_SESSION_OK.", "model_id": "gpt-5.3-codex"}],
+            [],
         )
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
@@ -5372,7 +5377,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("route_id", bad_backend["forbidden_fields"])
         self.assertIn("codex_home", bad_backend["forbidden_fields"])
 
-    def test_codex_custom_prompt_endpoint_rejects_browser_fields_and_does_not_overclaim_failure(self) -> None:
+    def test_codex_custom_prompt_endpoint_is_not_admitted_and_never_runs_prompt(self) -> None:
         class FailingOperatorSurfaceSession(FakeOperatorSurfaceSession):
             def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
                 self.run_payloads.append(payload)
@@ -5428,7 +5433,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         },
                     )
                 )
-                failed = json.loads(
+                blocked = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions/{session_id}/prompt",
                         {"prompt": "OK"},
@@ -5447,13 +5452,19 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("path", rejected["forbidden_fields"])
         self.assertFalse(rejected["inference_proven"])
         self.assertFalse(rejected["model_response_present"])
-        self.assertEqual(created_sessions[0].run_payloads, [{"prompt": "OK", "model_id": "gpt-5.3-codex"}])
-        self.assertEqual(failed["status"], "failed")
-        self.assertFalse(failed["inference_proven"])
-        self.assertFalse(failed["model_response_present"])
-        self.assertFalse(failed["wbp_path_proven"])
-        self.assertFalse(failed["cli_proxy_api_path_proven"])
-        self.assertFalse(failed["fallback_attempted"])
+        self.assertFalse(rejected["prompt_runner_called"])
+        self.assertFalse(rejected["network_calls_made"])
+        self.assertFalse(rejected["provider_called"])
+        self.assertEqual(blocked["status"], "rejected")
+        self.assertEqual(blocked["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+        self.assertFalse(blocked["live_prompt_admitted"])
+        self.assertFalse(blocked["prompt_runner_called"])
+        self.assertFalse(blocked["inference_proven"])
+        self.assertFalse(blocked["model_response_present"])
+        self.assertFalse(blocked["network_calls_made"])
+        self.assertFalse(blocked["provider_called"])
+        self.assertFalse(blocked["fallback_attempted"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
 
 
 def free_port() -> int:

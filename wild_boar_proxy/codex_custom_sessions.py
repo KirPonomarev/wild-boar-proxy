@@ -197,6 +197,10 @@ class CodexCustomSessionManager:
         return {
             **self._base_packet("ok", "OK"),
             "human_message": "Codex Custom session created.",
+            "session_created": True,
+            "live_prompt_admitted": False,
+            "current_codex_home_used": False,
+            "selected_backend_id_redacted": True,
             "session": self._public_session(session),
             "selection_packet": self._selection_summary(selection),
             "next_action": "prompt_dry_run",
@@ -243,9 +247,12 @@ class CodexCustomSessionManager:
             "prompt_length": len(prompt),
             "prompt_sha256": prompt_hash,
             "prompt_preview_redacted": _safe_preview(prompt),
+            "raw_prompt_not_stored": True,
             "model_response_present": False,
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
         }
         session["prompt_admission_count"] = int(session.get("prompt_admission_count") or 0) + 1
@@ -262,14 +269,42 @@ class CodexCustomSessionManager:
             "prompt_length": len(prompt),
             "prompt_sha256": prompt_hash,
             "prompt_preview_redacted": _safe_preview(prompt),
+            "raw_prompt_not_stored": True,
             "model_response_present": False,
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
             "negative_claim_basis": "prompt_admission_dry_run_no_inference_adapter",
             "session": self._public_session(session),
             "next_action": "codex_custom_gpt_api_e2e_pass",
         }
+
+    def prompt_not_admitted_packet(self, session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        session = self._sessions.get(session_id)
+        if not session:
+            return self._unknown_session()
+        forbidden = forbidden_prompt_run_fields(payload)
+        packet = {
+            **self._base_packet("rejected", "LIVE_PROMPT_NOT_ADMITTED"),
+            "human_message": "Live Codex Custom prompt is not admitted in this contour.",
+            "session_id": session_id,
+            "live_prompt_admitted": False,
+            "prompt_runner_called": False,
+            "raw_prompt_not_stored": True,
+            "model_response_present": False,
+            "network_calls_made": False,
+            "provider_called": False,
+            "fallback_attempted": False,
+            "session": self._public_session(session),
+            "next_action": "codex_custom_gpt_api_e2e_pass",
+        }
+        if forbidden:
+            packet["machine_error_code"] = "FORBIDDEN_BROWSER_FIELD"
+            packet["forbidden_fields"] = forbidden
+            packet["next_action"] = "remove_forbidden_browser_fields"
+        return packet
 
     def prompt_packet(
         self,
@@ -441,7 +476,13 @@ class CodexCustomSessionManager:
             "transcript_kind": "service_ledger_only",
             "model_response_present": model_response_present,
             "inference_proven": inference_proven,
-            "token_burn": session.get("token_burn"),
+            "raw_prompt_not_stored": True,
+            "raw_response_not_stored": True,
+            "raw_backend_id_exposed": False,
+            "raw_auth_ref_exposed": False,
+            "network_calls_made": inference_proven,
+            "provider_called": inference_proven,
+            "token_burn": session.get("token_burn") if session.get("token_burn") is not None else 0,
             "entries": entries,
             "next_action": "none",
         }
@@ -469,6 +510,8 @@ class CodexCustomSessionManager:
             "process_kill_claimed": False,
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
             "session": self._public_session(session),
             "next_action": "cleanup_session",
@@ -503,10 +546,15 @@ class CodexCustomSessionManager:
             "cleanup_performed": True,
             "session_root_existed_before": existed_before,
             "session_root_exists_after": session_root.exists(),
+            "session_root_removed_or_marked_cleaned": True,
+            "owned_session_root_only": True,
             "deleted_path_scope": "owned_temp_session_root",
             "arbitrary_path_accepted": False,
+            "current_codex_home_touched": False,
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
             "session": self._public_session(session),
             "next_action": "none",
@@ -562,6 +610,7 @@ class CodexCustomSessionManager:
             "model_server_issued": session.get("model_server_issued") is True,
             "selected_source_class": session.get("selected_source_class"),
             "selected_backend_digest": selected_backend_ref,
+            "selected_backend_id_redacted": True,
             "selected_backend_server_issued": session.get("selected_backend_server_issued") is True,
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
@@ -570,6 +619,7 @@ class CodexCustomSessionManager:
             "session_root_digest": _digest(session_root) if session_root else "",
             "codex_home_digest": _digest(codex_home) if codex_home else "",
             "session_root_scope": "owned_temp_session_root",
+            "current_codex_home_used": False,
             "prompt_admission_count": int(session.get("prompt_admission_count") or 0),
             "cleanup_state": session.get("cleanup_state"),
             "cancel_state": session.get("cancel_state"),
@@ -577,6 +627,8 @@ class CodexCustomSessionManager:
             "model_response_present": session.get("model_response_present") is True,
             "inference_proven": session.get("inference_proven") is True,
             "runtime_meter_attached": False,
+            "network_calls_made": session.get("inference_proven") is True,
+            "provider_called": session.get("inference_proven") is True,
             "token_burn": session.get("token_burn") if session.get("token_burn") is not None else 0,
         }
 
@@ -618,6 +670,8 @@ class CodexCustomSessionManager:
             "machine_error_code": selection.get("machine_error_code"),
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
         }
 
@@ -638,6 +692,8 @@ class CodexCustomSessionManager:
             "mode_id": "codex_custom",
             "inference_proven": False,
             "runtime_meter_attached": False,
+            "network_calls_made": False,
+            "provider_called": False,
             "token_burn": 0,
         }
 

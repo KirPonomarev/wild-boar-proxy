@@ -1250,12 +1250,14 @@ function renderCodexCustomSessionPacket(packet) {
   const inference = packet?.inference_proven === true || session?.inference_proven === true;
   const tokenBurn = packet?.token_burn ?? session?.token_burn ?? "unknown";
   const modelResponsePresent = packet?.model_response_present === true || session?.model_response_present === true;
+  const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true || session?.selection_proven === true || packet?.selection_proven === true;
+  const liveSelection = session?.live_selection_proven === true || packet?.live_selection_proven === true;
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
   codexCustomSessionsSetText("codexCustomSessionStatus", session?.status || packet?.status || "unknown");
   codexCustomSessionsSetText("codexCustomSessionModel", session?.model_id || packet?.selected_model || "-");
   codexCustomSessionsSetText(
     "codexCustomSessionSelection",
-    session?.selection_proven ? `${session?.selected_source_class || "gpt_account"} · server-side` : "not proven"
+    selectionDryRun ? `${session?.selected_source_class || packet?.selected_source_class || "gpt_account"} · ${liveSelection ? "live proven" : "selection dry-run"}` : "not proven"
   );
   codexCustomSessionsSetText("codexCustomSessionCleanup", session?.cleanup_state || "not_cleaned");
   codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
@@ -1271,13 +1273,19 @@ function renderCodexCustomSessionPacket(packet) {
       session_id: sessionId,
       model_id: session?.model_id || packet?.selected_model || "",
       model_server_issued: session?.model_server_issued === true || packet?.model_server_issued === true,
+      selection_dry_run_proven: selectionDryRun,
+      live_selection_proven: liveSelection,
       selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
+      selected_backend_id_redacted: session?.selected_backend_id_redacted === true || packet?.selected_backend_id_redacted === true,
       selected_backend_server_issued: session?.selected_backend_server_issued === true,
+      live_prompt_admitted: packet?.live_prompt_admitted === true,
+      prompt_runner_called: packet?.prompt_runner_called === true,
       prompt_admitted: packet?.prompt_admitted === true,
       prompt_present: packet?.prompt_present === true,
       prompt_length: packet?.prompt_length ?? 0,
       prompt_sha256: packet?.prompt_sha256 || "",
       prompt_preview_redacted: packet?.prompt_preview_redacted || "",
+      raw_prompt_not_stored: packet?.raw_prompt_not_stored === true,
       transcript_kind: packet?.transcript_kind || "",
       model_response_present: modelResponsePresent,
       response_digest: packet?.response_digest || "",
@@ -1294,10 +1302,14 @@ function renderCodexCustomSessionPacket(packet) {
       path_proof_status: packet?.path_proof_status || "",
       fallback_attempted: packet?.fallback_attempted === true,
       cleanup_performed: packet?.cleanup_performed === true,
+      owned_session_root_only: packet?.owned_session_root_only === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
       arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
       process_kill_claimed: packet?.process_kill_claimed === true,
       inference_proven: inference,
       runtime_meter_attached: packet?.runtime_meter_attached === true || session?.runtime_meter_attached === true,
+      network_calls_made: packet?.network_calls_made === true || session?.network_calls_made === true,
+      provider_called: packet?.provider_called === true || session?.provider_called === true,
       token_burn: tokenBurn,
       next_action: packet?.next_action || "",
     }, null, 2);
@@ -1375,7 +1387,7 @@ async function postCodexCustomSessionAction(action, payload = {}) {
     }
     const packet = await response.json();
     renderCodexCustomSessionPacket(packet);
-    if (action === "prompt-dry-run" || action === "prompt" || action === "cancel") {
+    if (action === "prompt-dry-run" || action === "cancel") {
       const transcriptUrl = currentCodexCustomSessionUrl("transcript");
       if (transcriptUrl) {
         renderCodexCustomTranscript(await fetchCodexLaunchJson(transcriptUrl));
@@ -1410,11 +1422,6 @@ async function createCodexCustomSession() {
 async function runCodexCustomSessionPromptDryRun() {
   const promptNode = document.getElementById("codexCustomSessionPrompt");
   await postCodexCustomSessionAction("prompt-dry-run", { prompt: promptNode ? promptNode.value : "" });
-}
-
-async function runCodexCustomSessionPrompt() {
-  const promptNode = document.getElementById("codexCustomSessionPrompt");
-  await postCodexCustomSessionAction("prompt", { prompt: promptNode ? promptNode.value : "" });
 }
 
 async function cancelCodexCustomSession() {
@@ -7513,7 +7520,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionsRefreshAction")?.addEventListener("click", () => refreshCodexCustomSessionsPanel());
   document.getElementById("codexCustomSessionCreateAction")?.addEventListener("click", () => createCodexCustomSession());
   document.getElementById("codexCustomSessionPromptDryRunAction")?.addEventListener("click", () => runCodexCustomSessionPromptDryRun());
-  document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

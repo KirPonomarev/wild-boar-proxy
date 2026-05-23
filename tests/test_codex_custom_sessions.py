@@ -86,15 +86,25 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             )
 
             self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["session_created"])
+            self.assertFalse(packet["live_prompt_admitted"])
+            self.assertFalse(packet["current_codex_home_used"])
+            self.assertTrue(packet["selected_backend_id_redacted"])
             session = packet["session"]
             self.assertTrue(session["model_server_issued"])
+            self.assertTrue(session["selection_dry_run_proven"])
+            self.assertFalse(session["live_selection_proven"])
             self.assertTrue(session["selection_proven"])
+            self.assertTrue(session["selected_backend_id_redacted"])
             self.assertTrue(session["selected_backend_server_issued"])
+            self.assertFalse(session["current_codex_home_used"])
             self.assertEqual(session["session_root_scope"], "owned_temp_session_root")
             self.assertNotIn(temp_dir, json.dumps(packet))
             self.assertNotIn("acct-a", json.dumps(packet))
             self.assertFalse(packet["inference_proven"])
             self.assertFalse(packet["runtime_meter_attached"])
+            self.assertFalse(packet["network_calls_made"])
+            self.assertFalse(packet["provider_called"])
             self.assertEqual(packet["token_burn"], 0)
 
     def test_create_session_rejects_free_form_model_and_browser_backend_fields(self) -> None:
@@ -155,10 +165,18 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["model_response_present"])
             self.assertFalse(packet["inference_proven"])
             self.assertFalse(packet["runtime_meter_attached"])
+            self.assertFalse(packet["network_calls_made"])
+            self.assertFalse(packet["provider_called"])
+            self.assertTrue(packet["raw_prompt_not_stored"])
             self.assertEqual(packet["token_burn"], 0)
             self.assertNotIn("Reply with exactly OK.", json.dumps(transcript))
             self.assertEqual(transcript["transcript_kind"], "service_ledger_only")
             self.assertFalse(transcript["model_response_present"])
+            self.assertFalse(transcript["inference_proven"])
+            self.assertTrue(transcript["raw_prompt_not_stored"])
+            self.assertTrue(transcript["raw_response_not_stored"])
+            self.assertFalse(transcript["raw_backend_id_exposed"])
+            self.assertEqual(transcript["token_burn"], 0)
 
     def test_prompt_dry_run_rejects_forbidden_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -174,6 +192,33 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
             self.assertEqual(packet["forbidden_fields"], ["backend_id", "nested", "nested.path"])
             self.assertFalse(packet["inference_proven"])
+
+    def test_live_prompt_not_admitted_packet_never_calls_runner_or_claims_inference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            rejected = manager.prompt_not_admitted_packet(
+                session_id,
+                {"prompt": "OK", "backend_id": "acct-a", "path": "/tmp/outside"},
+            )
+            blocked = manager.prompt_not_admitted_packet(session_id, {"prompt": "OK"})
+
+            self.assertEqual(rejected["status"], "rejected")
+            self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+            self.assertIn("backend_id", rejected["forbidden_fields"])
+            self.assertIn("path", rejected["forbidden_fields"])
+            self.assertFalse(rejected["live_prompt_admitted"])
+            self.assertFalse(rejected["prompt_runner_called"])
+            self.assertFalse(rejected["inference_proven"])
+            self.assertFalse(rejected["model_response_present"])
+            self.assertFalse(rejected["network_calls_made"])
+            self.assertFalse(rejected["provider_called"])
+            self.assertTrue(rejected["raw_prompt_not_stored"])
+            self.assertEqual(rejected["token_burn"], 0)
+            self.assertEqual(blocked["status"], "rejected")
+            self.assertEqual(blocked["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+            self.assertFalse(blocked["prompt_runner_called"])
 
     def test_prompt_run_wraps_runner_response_without_browser_model_or_backend(self) -> None:
         calls: list[dict[str, object]] = []
@@ -337,10 +382,17 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertEqual(cancel["status"], "ok")
             self.assertTrue(cancel["cancelled"])
             self.assertFalse(cancel["process_kill_claimed"])
+            self.assertFalse(cancel["network_calls_made"])
+            self.assertFalse(cancel["provider_called"])
             self.assertEqual(cleanup["status"], "ok")
             self.assertTrue(cleanup["cleanup_performed"])
+            self.assertTrue(cleanup["owned_session_root_only"])
+            self.assertTrue(cleanup["session_root_removed_or_marked_cleaned"])
+            self.assertFalse(cleanup["current_codex_home_touched"])
             self.assertFalse(cleanup["session_root_exists_after"])
             self.assertFalse(cleanup["arbitrary_path_accepted"])
+            self.assertFalse(cleanup["network_calls_made"])
+            self.assertFalse(cleanup["provider_called"])
             self.assertEqual(list(Path(temp_dir).iterdir()), [])
 
     def test_forbidden_helpers_allow_only_declared_top_level_fields(self) -> None:

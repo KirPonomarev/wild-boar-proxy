@@ -1828,10 +1828,9 @@ def build_handler(
                     return
                 if action == "prompt":
                     self._send_json(
-                        codex_custom_sessions.prompt_packet(
+                        codex_custom_sessions.prompt_not_admitted_packet(
                             session_id,
                             self._read_json_body(),
-                            lambda payload: operator_surface_session.run_prompt(payload, trace_wbp=True),
                         )
                     )
                     return

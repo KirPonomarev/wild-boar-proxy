@@ -1,10 +1,28 @@
 {
-  "captured_at_utc": "2026-05-23T18:38:33.324Z",
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_SESSION_MANAGER_PASS",
+  "files_changed": 6,
+  "audit_files_added": 7,
+  "browser_screenshots_added": 1,
+  "live_provider_calls": 0,
+  "live_prompt_calls": 0,
   "token_burn": 0,
-  "inference_proven": false,
-  "runtime_meter_attached": false,
-  "model_response_present": false,
-  "prompt_raw_stored_in_packet": false,
-  "transcript_raw_prompt_present": false,
-  "cleanup_performed": true
+  "browser_fake_server_payloads": [
+    {
+      "path": "/api/codex/custom/sessions",
+      "body_fields": ["model_id"]
+    },
+    {
+      "path": "/api/codex/custom/sessions/ccs-browserproof0001/prompt-dry-run",
+      "body_fields": ["prompt"]
+    },
+    {
+      "path": "/api/codex/custom/sessions/ccs-browserproof0001/cancel",
+      "body_fields": []
+    },
+    {
+      "path": "/api/codex/custom/sessions/ccs-browserproof0001/cleanup",
+      "body_fields": []
+    }
+  ]
 }

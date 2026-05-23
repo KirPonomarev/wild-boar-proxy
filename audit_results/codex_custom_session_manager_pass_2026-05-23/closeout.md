@@ -1,51 +1,49 @@
 # CODEX_CUSTOM_SESSION_MANAGER_PASS Closeout
 
-## Goal
-
-Add a safe Codex Custom session manager to the WBP web interface, with machine-backed lifecycle packets and no inference claim.
-
-## Result
-
-- status: closed_success
-- final verdict: session lifecycle, dry-run prompt admission, transcript, cancel, cleanup, forbidden-field rejection, and UI wiring are implemented and verified.
-- next action: start `CODEX_CUSTOM_GPT_API_E2E_PASS`.
-
 ## Contour Capsule
 
-- goal: server-owned Codex Custom sessions with prompt dry-run and cleanup, without inference or current Codex mutation.
-- branch: codex/external-agent-lab-isolated
-- head: contour started at 9a1603b; exact final head is produced by the post-commit `git rev-parse --short HEAD` check and reported in the final response because a commit cannot contain its own hash.
-- touched files: wild_boar_proxy/codex_custom_sessions.py; wild_boar_proxy/web_design_live_server.py; wild_boar_proxy/web_design_ui/index.html; wild_boar_proxy/web_design_ui/scripts/overview.js; tests/test_codex_custom_sessions.py; tests/test_web_design_live_server.py; tests/test_web_design_ui.py; audit_results/codex_custom_session_manager_pass_2026-05-23/*
-- tests run: node --check overview.js; unittest tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui; full gate of 649 tests passed before selection-proof repair, and final full gate is required after this closeout update.
-- blocked risks: real Codex process launch, provider inference, token burn, arbitrary path cleanup, browser-forged backend/route/path, raw prompt transcript storage, false model-response claim.
-- next exact command: start contour `CODEX_CUSTOM_GPT_API_E2E_PASS` after this commit is pushed.
+- Program: `EXECUTION_CORE_FULL_SYSTEM_TO_ISOLATED_CODEX_APP_PASS`
+- Contour: `CODEX_CUSTOM_SESSION_MANAGER_PASS`
+- Status: `closed_success_non_live`
+- Branch: `codex/external-agent-lab-isolated`
+- Head before closeout: `a04a150`
+- Live WBP/account/API commands: not run
+- Token burn: `0`
+- goal: prove non-live Codex Custom session lifecycle through WBP web UI.
+- head: final commit self-hash is recorded in the operator final note; this file records `a04a150` as the pre-contour head.
+- touched files: `wild_boar_proxy/codex_custom_sessions.py`, `wild_boar_proxy/web_design_live_server.py`, `wild_boar_proxy/web_design_ui/index.html`, `wild_boar_proxy/web_design_ui/scripts/overview.js`, related tests, this audit directory.
+- tests run: `node --check`, targeted unittest set, browser fake-server click proof, redaction scan, closeout resilience, extended relevant suite.
+- blocked risks: live prompt remains intentionally not admitted until `CODEX_CUSTOM_GPT_API_E2E_PASS`.
+- next exact command: `/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q`
+
+## What Changed
+
+- `POST /api/codex/custom/sessions/:id/prompt` now returns a not-admitted packet instead of calling `operator_surface_session.run_prompt`.
+- WBP web UI no longer renders or binds the Codex Custom `Run prompt` button in this non-live contour.
+- Session create/dry-run/transcript/cancel/cleanup packets carry explicit negative claims for live prompt, provider calls, network calls, inference, and token burn.
+- Prompt dry-run and transcript packets assert `raw_prompt_not_stored=true`.
+- Cleanup packets assert owned-root-only cleanup and no current Codex home touch.
 
 ## Verification
 
-- tests: targeted session/web/UI suite passed; full gate passed before commit.
-- build: `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`.
-- manual: browser click proof captured session create, prompt dry-run, cancel, and cleanup.
-- live verification: `audit_results/codex_custom_session_manager_pass_2026-05-23/proof.json`.
+- `node --check wild_boar_proxy/web_design_ui/scripts/overview.js`
+- targeted unittest set
+- browser fake-server click proof
+- redaction scan
+- closeout resilience
+- extended relevant suite
 
-## Artifacts
+## Browser Evidence
 
-- spec: `audit_results/codex_custom_session_manager_pass_2026-05-23/spec.md`
-- packet: `audit_results/codex_custom_session_manager_pass_2026-05-23/proof.json`
-- report: `audit_results/codex_custom_session_manager_pass_2026-05-23/independent_audit.json`
+```text
+audit_results/codex_custom_session_manager_pass_2026-05-23/evidence/browser_session_manager_panel.png
+```
 
-## Git
+## Resume From Here
 
-- branch: codex/external-agent-lab-isolated
-- commit: exact hash is reported in the final response after commit creation.
-- pushed: push result is reported in the final response after `git push`.
+resume from here: start `CODEX_CUSTOM_GPT_API_E2E_PASS` only after re-verifying that non-live session manager still blocks `/prompt` by default and UI still has no live prompt button. The next contour may admit live prompt only with explicit authorization, trace proof, redaction hardening, and machine-backed WBP/CLIProxyAPI response evidence.
 
-## Scope Check
+## Commit And Push
 
-- unrelated work mixed in: no; unrelated untracked files were left untouched.
-- private-data risk reviewed: yes; text artifacts are redacted, auth files were not copied, and screenshots contain no auth material.
-
-## Notes
-
-- blockers encountered: independent audit found session create could return ok without selection proof; fixed by rejecting missing selection proof and adding a negative test. The dry-run packet also initially omitted explicit top-level `model_response_present=false`; fixed and covered with tests.
-- follow-up contour: `CODEX_CUSTOM_GPT_API_E2E_PASS`
-- resume from here: start contour `CODEX_CUSTOM_GPT_API_E2E_PASS`
+- Commit hash: recorded in operator final note because a commit cannot truthfully embed its own final hash before hashing.
+- Push status: recorded in operator final note after remote push completes; this artifact is committed before that remote operation can truthfully be observed.
