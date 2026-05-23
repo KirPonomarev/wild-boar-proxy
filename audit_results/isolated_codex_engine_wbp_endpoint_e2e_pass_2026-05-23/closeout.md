@@ -14,7 +14,7 @@ Prove a temporary isolated headless Codex engine can call WBP at `http://127.0.0
 
 - goal: isolated temp HOME/CODEX_HOME + WBP endpoint + one GPT-facing Codex engine request + no current Codex mutation
 - branch: codex/external-agent-lab-isolated
-- head: 353ca75
+- head: 7ca5a9f
 - touched files: audit_results/isolated_codex_engine_wbp_endpoint_e2e_pass_2026-05-23/*
 - tests run: live codex exec smoke; WBP status/healthcheck pre and post; authenticated /v1/models probe with local proxy handling disabled; redaction scan
 - blocked risks: GPT provider-route proof intentionally not claimed; rotation participation not claimed because rotation inspect evidence may be stale; ambient proxy poisoning diagnosed and guarded; unsupported minimal reasoning config corrected to low
@@ -23,7 +23,7 @@ Prove a temporary isolated headless Codex engine can call WBP at `http://127.0.0
 ## Verification
 
 - tests: redaction audit pass; independent audit pass
-- build: git diff --check pending after staging
+- build: git diff --check passed before commit
 - manual: current Codex profile hash/mtime compared before and after
 - live verification: `codex exec --json` returned `WBP_OK` with exit code `0`
 
@@ -36,8 +36,8 @@ Prove a temporary isolated headless Codex engine can call WBP at `http://127.0.0
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: pending
-- pushed: pending
+- commit: 7ca5a9f (`Add isolated Codex engine WBP endpoint proof`)
+- pushed: yes, `origin/codex/external-agent-lab-isolated`
 
 ## Scope Check
 
