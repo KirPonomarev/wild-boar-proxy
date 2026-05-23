@@ -79,8 +79,10 @@ reconciliation instead of reopening onboarding implementation work.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
-- pushed: pending
+- commit:
+  `0ad869c398ef4ee6436b6d2aaaad62808b2b9a20` contains the slot-3 reconciliation
+  packet; this follow-up metadata commit records final git truth
+- pushed: `yes`
 
 ## Scope Check
 
@@ -99,7 +101,7 @@ reconciliation instead of reopening onboarding implementation work.
     behavior gap was proven
   - the independent auditor supported the contour classification but required
     git normalization for this contour's own closeout before treating it as
-    final
+    final; that normalization now points at pushed packet commit `0ad869c`
 - follow-up contour:
   - slot-4 or slots-4-6 closure normalization only after slot 3 is reconciled
 - resume from here:
