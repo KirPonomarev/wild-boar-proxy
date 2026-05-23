@@ -1,0 +1,43 @@
+{
+  "agent_orchestration": {
+    "attempts": [
+      {
+        "model": "gpt-5.4-mini",
+        "reason": "agent thread limit reached",
+        "role": "explorer",
+        "status": "failed"
+      },
+      {
+        "model": "gpt-5.4-mini",
+        "reason": "agent thread limit reached",
+        "role": "explorer",
+        "status": "failed"
+      }
+    ],
+    "fallback": "local replay audit",
+    "requested": true
+  },
+  "branch": "codex/external-agent-lab-isolated",
+  "contour": "CODEX_PROXY_MOCK_HANDSHAKE_REPAIR_PASS",
+  "current_auth_copied": false,
+  "failure_modes_ran": false,
+  "head_before_commit": "028e07b",
+  "main_auth_hash_unchanged": true,
+  "main_config_hash_unchanged": true,
+  "next_action": "use real WBP as canonical harness for work-session; do not spend more variants on private Connection: Upgrade handshake without separate approval",
+  "plugin_sync_observation": "No successful mock run, plugin sync not solved; any previous real-WBP plugin sync remains observation-only",
+  "real_wbp_executed": false,
+  "redaction_audit": "pass",
+  "request_trace_key_observation": "Codex CLI GET /v1/responses includes Connection: Upgrade; three plain JSON/SSE/session-shape variants timed out, so local mock is classified as private/upgrade handshake blocked.",
+  "sandbox_auth_copied": false,
+  "schema_version": 1,
+  "status": "closed_blocked_by_codex_private_handshake",
+  "success_variant": null,
+  "temp_root_removed": true,
+  "variant_count": 3,
+  "variants_attempted": [
+    "variant_1_json_list_or_empty_response",
+    "variant_2_sse_streamable_http_handshake",
+    "variant_3_minimal_codex_response_session_shape"
+  ]
+}

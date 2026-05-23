@@ -1,0 +1,327 @@
+{
+  "port": 51480,
+  "schema_version": 1,
+  "traces_by_variant": [
+    {
+      "request_count": 7,
+      "success": false,
+      "trace": [
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:54.712192+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:54.765615+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:54.963590+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:55.373149+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:56.204662+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:49:57.714355+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:01.140857+00:00",
+          "variant": "variant_1_json_list_or_empty_response"
+        }
+      ],
+      "variant": "variant_1_json_list_or_empty_response"
+    },
+    {
+      "request_count": 7,
+      "success": false,
+      "trace": [
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:07.000939+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:07.034739+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:07.226520+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:07.591766+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:08.469230+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:10.088203+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:13.369372+00:00",
+          "variant": "variant_2_sse_streamable_http_handshake"
+        }
+      ],
+      "variant": "variant_2_sse_streamable_http_handshake"
+    },
+    {
+      "request_count": 7,
+      "success": false,
+      "trace": [
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:19.334089+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:19.369053+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:19.588358+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:20.022603+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:20.772729+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:22.333827+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        },
+        {
+          "authorization_present": true,
+          "body_prefix": "",
+          "headers": {
+            "Connection": "Upgrade",
+            "authorization": "[redacted]",
+            "user-agent": "Codex Desktop/0.133.0-alpha.1 (Mac OS 26.5.0; arm64) dumb (codex_exec; 0.133.0-alpha.1)"
+          },
+          "method": "GET",
+          "mode": "success",
+          "path": "/v1/responses",
+          "ts": "2026-05-23T11:50:25.694777+00:00",
+          "variant": "variant_3_minimal_codex_response_session_shape"
+        }
+      ],
+      "variant": "variant_3_minimal_codex_response_session_shape"
+    }
+  ],
+  "variant_limit": 3,
+  "variants_attempted": [
+    "variant_1_json_list_or_empty_response",
+    "variant_2_sse_streamable_http_handshake",
+    "variant_3_minimal_codex_response_session_shape"
+  ]
+}
