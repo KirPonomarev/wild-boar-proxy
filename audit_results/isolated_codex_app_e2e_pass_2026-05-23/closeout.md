@@ -22,7 +22,7 @@ through-app request with machine-backed evidence.
 - goal: prove isolated launch, isolation boundaries, and one machine-backed
   through-app smoke for the Codex Desktop copy running through the WBP stack
 - branch: `codex/external-agent-lab-isolated`
-- head: `3c81122`
+- head: `fbd9835`
 - touched files:
   - `audit_results/isolated_codex_app_e2e_pass_2026-05-23/spec.md`
   - `audit_results/isolated_codex_app_e2e_pass_2026-05-23/baseline.json`
@@ -43,6 +43,7 @@ through-app request with machine-backed evidence.
   - same-home `debug app-server send-message-v2` could not be truthfully tied to
     the already-launched GUI child
 - next exact command: `git add audit_results/isolated_codex_app_e2e_pass_2026-05-23 && git commit -m "Close isolated Codex app E2E contour with protection-boundary verdict"`
+- next exact command: `git push origin codex/external-agent-lab-isolated`
 
 ## Verification
 
@@ -86,7 +87,7 @@ through-app request with machine-backed evidence.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
+- commit: `fbd9835` (packet + closeout)
 - pushed: no
 
 ## Scope Check
@@ -104,6 +105,9 @@ through-app request with machine-backed evidence.
     shared default cache/storage files
   - no machine-backed path was found to prove that the launched GUI child, not a
     sibling ephemeral app-server, serviced the smoke request
+  - independent subagent replay was requested but unavailable because the
+    session hit the agent thread limit; the audit packet therefore records a
+    local replay audit instead of inventing a separate subagent report
 - follow-up contour:
   - owner-admitted only if we intentionally investigate Codex Desktop
     host-surface/control-socket behavior beyond current repo-owned WBP surfaces
