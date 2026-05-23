@@ -819,6 +819,30 @@ function renderOriginalCodexDryRun(packet) {
   }
 }
 
+function renderCodexCustomLaunchDryRun(packet) {
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  const ok = packet?.status === "ok" && packet?.dry_run === true && packet?.custom_launch_plan_safe === true;
+  codexLaunchSetChip(ok ? "amber" : (packet?.status === "rejected" ? "amber" : "red"), ok ? "custom dry-run safe" : (packet?.status || "failed"));
+  codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${packet?.launch_claim_scope || "dry_run_readiness_only"}`);
+  codexLaunchSetText("customCodexSession", packet?.real_launch_attempted ? "unexpected launch attempted" : "dry-run only");
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      dry_run: packet?.dry_run === true,
+      custom_launch_plan_safe: packet?.custom_launch_plan_safe === true,
+      real_launch_attempted: packet?.real_launch_attempted === true,
+      prompt_attempted: packet?.prompt_attempted === true,
+      token_burn: packet?.token_burn ?? 0,
+      wbp_endpoint_configured: packet?.wbp_endpoint_configured || "",
+      current_codex_home_allowed: packet?.current_codex_home_allowed === true,
+      current_codex_touch_risk: packet?.current_codex_touch_risk || "unknown",
+      launch_claim_scope: packet?.launch_claim_scope || "",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
 async function runOriginalCodexDryRun() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -849,6 +873,41 @@ async function runOriginalCodexDryRun() {
   } finally {
     codexLaunchDryRunInFlight = false;
     document.getElementById("originalCodexDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runCodexCustomLaunchDryRun() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchDryRunAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/custom/launch-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`custom dry-run http ${response.status}`);
+    }
+    renderCodexCustomLaunchDryRun(await response.json());
+  } catch (error) {
+    renderCodexCustomLaunchDryRun({
+      status: "failed",
+      machine_error_code: "CUSTOM_DRY_RUN_FETCH_FAILED",
+      human_message: error.message,
+      dry_run: true,
+      custom_launch_plan_safe: false,
+      real_launch_attempted: false,
+      prompt_attempted: false,
+      launch_claim_scope: "dry_run_readiness_only"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchDryRunAction")?.removeAttribute("disabled");
   }
 }
 
@@ -7427,6 +7486,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
   document.getElementById("codexLaunchModesRefreshAction")?.addEventListener("click", () => refreshCodexLaunchModesPanel());
   document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
+  document.getElementById("codexCustomLaunchDryRunAction")?.addEventListener("click", () => runCodexCustomLaunchDryRun());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());

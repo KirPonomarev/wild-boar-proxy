@@ -9,10 +9,12 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.codex_launch_modes import (
+    build_custom_launch_dry_run_packet,
     build_custom_status_packet,
     build_launch_modes_packet,
     build_original_launch_dry_run_packet,
     build_original_status_packet,
+    forbidden_custom_launch_fields,
     forbidden_original_fields,
 )
 
@@ -25,9 +27,15 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertEqual(packet["claim_gate_status"], "blocked")
         modes = {mode["id"]: mode for mode in packet["modes"]}
         self.assertFalse(modes["original_codex"]["proxy_enabled"])
+        self.assertFalse(modes["original_codex"]["proxy_allowed"])
         self.assertFalse(modes["original_codex"]["custom_home"])
+        self.assertFalse(modes["original_codex"]["custom_codex_home_allowed"])
         self.assertEqual(modes["original_codex"]["launch_claim_scope"], "dry_run_guard_only")
         self.assertTrue(modes["codex_custom"]["proxy_enabled"])
+        self.assertTrue(modes["codex_custom"]["proxy_allowed"])
+        self.assertTrue(modes["codex_custom"]["custom_codex_home_required"])
+        self.assertFalse(modes["codex_custom"]["current_codex_home_allowed"])
+        self.assertTrue(modes["codex_custom"]["launch_dry_run_available"])
         self.assertFalse(modes["codex_custom"]["custom_session_available"])
         self.assertEqual(modes["codex_custom"]["launch_claim_scope"], "readonly_readiness_only")
 
@@ -36,7 +44,9 @@ class CodexLaunchModesTests(unittest.TestCase):
 
         self.assertEqual(packet["mode_id"], "original_codex")
         self.assertFalse(packet["proxy_injection_allowed"])
+        self.assertFalse(packet["proxy_allowed"])
         self.assertFalse(packet["custom_home_allowed"])
+        self.assertFalse(packet["custom_codex_home_allowed"])
         self.assertFalse(packet["mutation_allowed"])
         self.assertEqual(packet["browser_payload_allowed_keys"], [])
         self.assertEqual(packet["launch_claim_scope"], "status_only")
@@ -74,6 +84,48 @@ class CodexLaunchModesTests(unittest.TestCase):
     def test_forbidden_original_fields_rejects_unknown_keys_too(self) -> None:
         self.assertEqual(forbidden_original_fields({"dry_run": True}), ["dry_run"])
 
+    def test_custom_launch_dry_run_is_isolated_zero_token_readiness_only(self) -> None:
+        packet = build_custom_launch_dry_run_packet({})
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "OK")
+        self.assertTrue(packet["dry_run"])
+        self.assertTrue(packet["custom_launch_plan_safe"])
+        self.assertFalse(packet["real_launch_attempted"])
+        self.assertFalse(packet["prompt_attempted"])
+        self.assertEqual(packet["token_burn"], 0)
+        self.assertEqual(packet["launch_claim_scope"], "dry_run_readiness_only")
+        self.assertTrue(packet["custom_codex_home_required"])
+        self.assertFalse(packet["current_codex_home_allowed"])
+        self.assertFalse(packet["isolation_plan"]["current_codex_home_allowed"])
+        self.assertEqual(packet["current_codex_touch_risk"], "blocked_by_contract")
+
+    def test_custom_launch_dry_run_rejects_browser_controlled_model_route_home_and_base_url(self) -> None:
+        packet = build_custom_launch_dry_run_packet(
+            {
+                "model": "gpt-5.3-codex",
+                "route_id": "route",
+                "backend_id": "backend",
+                "openai_base_url": "http://127.0.0.1:8318/v1",
+                "codex_home": "/tmp/home",
+                "nested": {"path": "/tmp/path"},
+            }
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertEqual(packet["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertFalse(packet["custom_launch_plan_safe"])
+        self.assertFalse(packet["real_launch_attempted"])
+        self.assertFalse(packet["prompt_attempted"])
+        self.assertEqual(packet["token_burn"], 0)
+        self.assertEqual(
+            packet["forbidden_fields"],
+            ["model", "route_id", "backend_id", "openai_base_url", "codex_home", "nested", "nested.path"],
+        )
+
+    def test_forbidden_custom_launch_fields_rejects_unknown_keys_too(self) -> None:
+        self.assertEqual(forbidden_custom_launch_fields({"dry_run": True}), ["dry_run"])
+
     def test_custom_status_treats_previous_isolation_proof_as_not_fresh_truth(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             proof_path = Path(temp_dir) / "process_isolation_proof.json"
@@ -101,6 +153,8 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertTrue(packet["operator_surface_ready"])
         self.assertTrue(packet["server_issued_models_visible"])
         self.assertEqual(packet["claim_gate_status"], "blocked")
+        self.assertFalse(packet["current_codex_home_allowed"])
+        self.assertEqual(packet["current_codex_touch_risk"], "blocked_by_contract")
         self.assertFalse(packet["custom_session_available"])
         self.assertEqual(packet["last_process_isolation_proof"]["status"], "passed")
         self.assertFalse(packet["last_process_isolation_proof"]["fresh_truth"])

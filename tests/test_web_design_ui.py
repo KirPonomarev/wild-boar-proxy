@@ -285,6 +285,25 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("token_burn: packet?.token_burn ?? 0", js)
         self.assertNotIn('fetch("api/codex/custom/session"', js)
 
+    def test_codex_launch_mode_split_ui_has_original_and_custom_dry_run_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexLaunchModesPanel"', html)
+        self.assertIn('id="originalCodexDryRunAction"', html)
+        self.assertIn('id="codexCustomLaunchDryRunAction"', html)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/launch-modes\")", js)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/original/status\")", js)
+        self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/status\")", js)
+        self.assertIn('fetch("api/codex/original/launch-dry-run"', js)
+        self.assertIn('fetch("api/codex/custom/launch-dry-run"', js)
+        self.assertIn("body: JSON.stringify({})", js)
+        self.assertIn("current_codex_home_allowed: packet?.current_codex_home_allowed === true", js)
+        self.assertIn("real_launch_attempted: packet?.real_launch_attempted === true", js)
+        self.assertIn("prompt_attempted: packet?.prompt_attempted === true", js)
+        self.assertNotIn('fetch("api/codex/original/launch",', js)
+        self.assertNotIn('fetch("api/codex/custom/launch",', js)
+
     def test_codex_custom_accounts_ui_is_selection_not_inference(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()

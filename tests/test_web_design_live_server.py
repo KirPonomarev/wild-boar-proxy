@@ -4954,10 +4954,17 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 original_status = json.loads(fetch(f"{base}/api/codex/original/status"))
                 custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
                 dry_run = json.loads(post_json(f"{base}/api/codex/original/launch-dry-run", {}))
+                custom_dry_run = json.loads(post_json(f"{base}/api/codex/custom/launch-dry-run", {}))
                 rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/original/launch-dry-run",
                         {"model_id": "gpt-5.3-codex", "route_id": "route", "CODEX_HOME": "/tmp/home"},
+                    )
+                )
+                custom_rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/launch-dry-run",
+                        {"model": "gpt-5.3-codex", "route_id": "route", "codex_home": "/tmp/home"},
                     )
                 )
             finally:
@@ -4967,22 +4974,37 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
 
         modes = {mode["id"]: mode for mode in launch_modes["modes"]}
         self.assertFalse(modes["original_codex"]["proxy_enabled"])
+        self.assertFalse(modes["original_codex"]["proxy_allowed"])
         self.assertEqual(modes["original_codex"]["launch_claim_scope"], "dry_run_guard_only")
         self.assertTrue(modes["codex_custom"]["proxy_enabled"])
+        self.assertTrue(modes["codex_custom"]["custom_codex_home_required"])
+        self.assertFalse(modes["codex_custom"]["current_codex_home_allowed"])
         self.assertFalse(modes["codex_custom"]["custom_session_available"])
         self.assertFalse(original_status["proxy_injection_allowed"])
+        self.assertFalse(original_status["proxy_allowed"])
         self.assertFalse(original_status["custom_home_allowed"])
         self.assertEqual(original_status["browser_payload_allowed_keys"], [])
         self.assertEqual(custom_status["launch_claim_scope"], "readonly_readiness_only")
+        self.assertFalse(custom_status["current_codex_home_allowed"])
         self.assertFalse(custom_status["last_process_isolation_proof"]["fresh_truth"])
         self.assertEqual(dry_run["status"], "ok")
         self.assertTrue(dry_run["dry_run"])
         self.assertTrue(dry_run["dispatch_plan_safe"])
         self.assertFalse(dry_run["proxy_env_injected"])
         self.assertFalse(dry_run["custom_home_injected"])
+        self.assertEqual(custom_dry_run["status"], "ok")
+        self.assertTrue(custom_dry_run["dry_run"])
+        self.assertTrue(custom_dry_run["custom_launch_plan_safe"])
+        self.assertFalse(custom_dry_run["current_codex_home_allowed"])
+        self.assertFalse(custom_dry_run["real_launch_attempted"])
+        self.assertFalse(custom_dry_run["prompt_attempted"])
+        self.assertEqual(custom_dry_run["token_burn"], 0)
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], ["model_id", "route_id", "CODEX_HOME"])
+        self.assertEqual(custom_rejected["status"], "rejected")
+        self.assertEqual(custom_rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
+        self.assertEqual(custom_rejected["forbidden_fields"], ["model", "route_id", "codex_home"])
 
 
 class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):

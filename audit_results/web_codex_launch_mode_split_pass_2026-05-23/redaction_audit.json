@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_CODEX_LAUNCH_MODE_SPLIT_PASS",
+  "status": "passed",
+  "raw_secret_recorded": false,
+  "auth_file_content_recorded": false,
+  "raw_backend_id_recorded": false,
+  "raw_route_id_recorded": false,
+  "raw_local_secret_path_recorded": false,
+  "browser_secret_fields_accepted": false,
+  "notes": [
+    "Artifacts contain only repo paths and localhost endpoint literals.",
+    "No live auth, runtime, account, or API command output was captured."
+  ]
+}

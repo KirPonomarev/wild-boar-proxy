@@ -25,6 +25,7 @@ from wild_boar_proxy.ui_shell import (
     external_route_secret_available,
 )
 from wild_boar_proxy.codex_launch_modes import (
+    build_custom_launch_dry_run_packet,
     build_custom_status_packet,
     build_launch_modes_packet,
     build_original_launch_dry_run_packet,
@@ -1784,6 +1785,9 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/original/launch-dry-run":
                 self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
+                return
+            if parsed.path == "/api/codex/custom/launch-dry-run":
+                self._send_json(build_custom_launch_dry_run_packet(self._read_json_body()))
                 return
             if parsed.path == "/api/codex/custom/model-dry-run":
                 self._send_json(

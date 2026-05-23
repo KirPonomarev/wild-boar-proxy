@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_CODEX_LAUNCH_MODE_SPLIT_PASS",
+  "status": "passed",
+  "machine_error_code": "OK",
+  "implemented": {
+    "custom_launch_dry_run_packet": true,
+    "custom_launch_dry_run_endpoint": "/api/codex/custom/launch-dry-run",
+    "custom_launch_dry_run_button": "codexCustomLaunchDryRunAction",
+    "original_packet_proxy_allowed_false": true,
+    "custom_packet_current_codex_home_allowed_false": true,
+    "forbidden_browser_fields_rejected": true
+  },
+  "dry_run_guards": {
+    "real_launch_attempted": false,
+    "prompt_attempted": false,
+    "token_burn": 0,
+    "current_codex_touch_risk": "blocked_by_contract"
+  },
+  "tests": {
+    "node_check_overview_js": "passed",
+    "targeted_project_python_unittest": "passed",
+    "extended_project_python_unittest": {
+      "status": "passed",
+      "tests_run": 661,
+      "duration_seconds": 207.326
+    },
+    "git_diff_check": "passed"
+  },
+  "live_runtime_commands_run": false,
+  "live_account_commands_run": false,
+  "live_api_commands_run": false
+}
