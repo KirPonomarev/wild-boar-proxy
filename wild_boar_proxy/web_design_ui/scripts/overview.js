@@ -1250,6 +1250,8 @@ function renderCodexCustomSessionPacket(packet) {
   const inference = packet?.inference_proven === true || session?.inference_proven === true;
   const tokenBurn = packet?.token_burn ?? session?.token_burn ?? "unknown";
   const modelResponsePresent = packet?.model_response_present === true || session?.model_response_present === true;
+  const wbpPathProven = packet?.wbp_path_proven === true;
+  const traceMissingAfterResponse = inference && modelResponsePresent && !wbpPathProven;
   const selectionDryRun = session?.selection_dry_run_proven === true || packet?.selection_dry_run_proven === true || session?.selection_proven === true || packet?.selection_proven === true;
   const liveSelection = session?.live_selection_proven === true || packet?.live_selection_proven === true;
   codexCustomSessionsSetText("codexCustomSelectedSession", sessionId || "none");
@@ -1263,8 +1265,9 @@ function renderCodexCustomSessionPacket(packet) {
   codexCustomSessionsSetText("codexCustomSessionInference", inference ? "response proof" : "not claimed");
   codexCustomSessionsSetText("codexCustomSessionTokenBurn", String(tokenBurn));
   const ok = packet?.status === "ok";
-  const chipLabel = inference && modelResponsePresent ? "response proven" : "session ready";
-  codexCustomSessionsSetChip(ok ? "green" : (packet?.status === "rejected" ? "amber" : "red"), ok ? chipLabel : (packet?.status || "unknown"));
+  const chipLabel = inference && modelResponsePresent ? (wbpPathProven ? "trace proven" : "trace missing") : "session ready";
+  const chipVisual = ok && !traceMissingAfterResponse ? "green" : ((packet?.status === "rejected" || packet?.status === "blocked" || traceMissingAfterResponse) ? "amber" : "red");
+  codexCustomSessionsSetChip(chipVisual, ok ? chipLabel : (packet?.status || "unknown"));
   const response = document.getElementById("codexCustomSessionResponse");
   if (response) {
     response.textContent = JSON.stringify({
@@ -1278,7 +1281,11 @@ function renderCodexCustomSessionPacket(packet) {
       selection_proven: session?.selection_proven === true || packet?.selection_proven === true,
       selected_backend_id_redacted: session?.selected_backend_id_redacted === true || packet?.selected_backend_id_redacted === true,
       selected_backend_server_issued: session?.selected_backend_server_issued === true,
+      authorization_status: packet?.authorization_status || "",
+      owner_authorization_phrase_present: packet?.owner_authorization_phrase_present === true,
       live_prompt_admitted: packet?.live_prompt_admitted === true,
+      live_prompt_executed: packet?.live_prompt_executed === true,
+      live_prompt_full_success: packet?.live_prompt_full_success === true,
       prompt_runner_called: packet?.prompt_runner_called === true,
       prompt_admitted: packet?.prompt_admitted === true,
       prompt_present: packet?.prompt_present === true,
@@ -1294,6 +1301,8 @@ function renderCodexCustomSessionPacket(packet) {
       latency_ms: packet?.latency_ms ?? null,
       wbp_path_configured: packet?.wbp_path_configured === true,
       cli_proxy_api_path_configured: packet?.cli_proxy_api_path_configured === true,
+      wbp_path_observed: packet?.wbp_path_observed === true,
+      cli_proxy_api_path_observed: packet?.cli_proxy_api_path_observed === true,
       wbp_path_proven: packet?.wbp_path_proven === true,
       cli_proxy_api_path_proven: packet?.cli_proxy_api_path_proven === true,
       independent_wbp_trace_observed: packet?.independent_wbp_trace_observed === true,
@@ -1387,7 +1396,7 @@ async function postCodexCustomSessionAction(action, payload = {}) {
     }
     const packet = await response.json();
     renderCodexCustomSessionPacket(packet);
-    if (action === "prompt-dry-run" || action === "cancel") {
+    if (action === "prompt-dry-run" || action === "prompt" || action === "cancel") {
       const transcriptUrl = currentCodexCustomSessionUrl("transcript");
       if (transcriptUrl) {
         renderCodexCustomTranscript(await fetchCodexLaunchJson(transcriptUrl));
@@ -1422,6 +1431,11 @@ async function createCodexCustomSession() {
 async function runCodexCustomSessionPromptDryRun() {
   const promptNode = document.getElementById("codexCustomSessionPrompt");
   await postCodexCustomSessionAction("prompt-dry-run", { prompt: promptNode ? promptNode.value : "" });
+}
+
+async function runCodexCustomSessionPrompt() {
+  const promptNode = document.getElementById("codexCustomSessionPrompt");
+  await postCodexCustomSessionAction("prompt", { prompt: promptNode ? promptNode.value : "" });
 }
 
 async function cancelCodexCustomSession() {
@@ -7520,6 +7534,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionsRefreshAction")?.addEventListener("click", () => refreshCodexCustomSessionsPanel());
   document.getElementById("codexCustomSessionCreateAction")?.addEventListener("click", () => createCodexCustomSession());
   document.getElementById("codexCustomSessionPromptDryRunAction")?.addEventListener("click", () => runCodexCustomSessionPromptDryRun());
+  document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

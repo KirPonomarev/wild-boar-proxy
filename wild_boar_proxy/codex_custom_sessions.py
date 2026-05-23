@@ -287,20 +287,26 @@ class CodexCustomSessionManager:
             return self._unknown_session()
         forbidden = forbidden_prompt_run_fields(payload)
         packet = {
-            **self._base_packet("rejected", "LIVE_PROMPT_NOT_ADMITTED"),
-            "human_message": "Live Codex Custom prompt is not admitted in this contour.",
+            **self._base_packet("blocked", "OWNER_AUTHORIZATION_REQUIRED"),
+            "human_message": "Live Codex Custom prompt requires exact owner authorization in the active thread.",
             "session_id": session_id,
+            "authorization_status": "blocked_by_operator_authorization",
+            "owner_authorization_phrase_present": False,
             "live_prompt_admitted": False,
+            "live_prompt_executed": False,
             "prompt_runner_called": False,
             "raw_prompt_not_stored": True,
+            "inference_proven": False,
             "model_response_present": False,
             "network_calls_made": False,
             "provider_called": False,
             "fallback_attempted": False,
+            "token_burn": 0,
             "session": self._public_session(session),
-            "next_action": "codex_custom_gpt_api_e2e_pass",
+            "next_action": "provide_exact_owner_authorization_phrase",
         }
         if forbidden:
+            packet["status"] = "rejected"
             packet["machine_error_code"] = "FORBIDDEN_BROWSER_FIELD"
             packet["forbidden_fields"] = forbidden
             packet["next_action"] = "remove_forbidden_browser_fields"
@@ -311,6 +317,8 @@ class CodexCustomSessionManager:
         session_id: str,
         payload: dict[str, Any],
         prompt_runner: Callable[[dict[str, Any]], dict[str, Any]],
+        *,
+        owner_authorized: bool = False,
     ) -> dict[str, Any]:
         session = self._sessions.get(session_id)
         if not session:
@@ -336,6 +344,8 @@ class CodexCustomSessionManager:
                 "fallback_attempted": False,
                 "next_action": "enter_prompt",
             }
+        if not owner_authorized:
+            return self.prompt_not_admitted_packet(session_id, {"prompt": prompt})
         prompt_hash = _digest(prompt)
         model_id = str(session.get("model_id") or "")
         runner_payload = {"prompt": prompt, "model_id": model_id}
@@ -368,6 +378,14 @@ class CodexCustomSessionManager:
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
         cli_proxy_api_path_configured = wbp_path_configured and result.get("configured_provider") == "cliproxy"
+        cli_proxy_api_path_proven = wbp_path_proven and result.get("configured_provider") == "cliproxy"
+        trace_missing_after_response = status_ok and not wbp_path_proven
+        packet_status = "ok" if status_ok and wbp_path_proven else ("blocked" if trace_missing_after_response else str(result.get("status") or "failed"))
+        packet_machine_error_code = (
+            "OK"
+            if status_ok and wbp_path_proven
+            else ("WBP_TRACE_PROOF_MISSING" if trace_missing_after_response else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED"))
+        )
         isolated_engine_home_proven = (
             result.get("env_codex_home_is_temp") is True
             and result.get("env_home_is_temp") is True
@@ -382,8 +400,8 @@ class CodexCustomSessionManager:
             latency_ms = int(float(duration_seconds) * 1000)
         packet = {
             "schema_version": 1,
-            "status": "ok" if status_ok else str(result.get("status") or "failed"),
-            "machine_error_code": "OK" if status_ok else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED"),
+            "status": packet_status,
+            "machine_error_code": packet_machine_error_code,
             "captured_at_utc": utc_now(),
             "mode_id": "codex_custom",
             "session_id": session_id,
@@ -395,12 +413,18 @@ class CodexCustomSessionManager:
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
             "browser_selected_backend": False,
+            "authorization_status": "authorized_by_owner_gate",
+            "owner_authorization_phrase_present": True,
+            "live_prompt_admitted": True,
+            "live_prompt_executed": status_ok,
+            "prompt_runner_called": True,
             "prompt_present": True,
             "prompt_length": len(prompt),
             "prompt_sha256": prompt_hash,
             "prompt_preview_redacted": _safe_preview(prompt),
             "model_response_present": status_ok,
             "inference_proven": status_ok,
+            "live_prompt_full_success": status_ok and wbp_path_proven,
             "response_digest": response_digest,
             "response_preview_bounded": _response_preview(response_text) if status_ok else "",
             "token_usage_present": token_usage_present,
@@ -410,8 +434,10 @@ class CodexCustomSessionManager:
             "error_class": "" if status_ok else str(result.get("error_class") or result.get("machine_error_code") or "unknown"),
             "wbp_path_configured": wbp_path_configured,
             "cli_proxy_api_path_configured": cli_proxy_api_path_configured,
+            "wbp_path_observed": independent_wbp_trace_observed,
+            "cli_proxy_api_path_observed": independent_wbp_trace_observed,
             "wbp_path_proven": wbp_path_proven,
-            "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
+            "cli_proxy_api_path_proven": cli_proxy_api_path_proven,
             "independent_wbp_trace_observed": independent_wbp_trace_observed,
             "trace_observer_packet": trace_observer_packet,
             "isolated_engine_home_proven": isolated_engine_home_proven,
@@ -423,7 +449,7 @@ class CodexCustomSessionManager:
             "raw_auth_ref_exposed": False,
             "secret_value_recorded": secret_value_recorded,
             "session": self._public_session(session),
-            "next_action": "inspect_transcript" if status_ok else str(result.get("next_action") or "stop_and_diagnose"),
+            "next_action": "inspect_transcript" if status_ok and wbp_path_proven else ("inspect_trace_observer" if trace_missing_after_response else str(result.get("next_action") or "stop_and_diagnose")),
         }
         event = "prompt_completed_e2e" if status_ok else "prompt_failed_e2e"
         session["status"] = event
@@ -451,8 +477,10 @@ class CodexCustomSessionManager:
                 "latency_ms": latency_ms,
                 "wbp_path_configured": wbp_path_configured,
                 "cli_proxy_api_path_configured": cli_proxy_api_path_configured,
+                "wbp_path_observed": independent_wbp_trace_observed,
+                "cli_proxy_api_path_observed": independent_wbp_trace_observed,
                 "wbp_path_proven": wbp_path_proven,
-                "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
+                "cli_proxy_api_path_proven": cli_proxy_api_path_proven,
                 "independent_wbp_trace_observed": independent_wbp_trace_observed,
                 "trace_observer_packet_present": bool(trace_observer_packet),
                 "isolated_engine_home_proven": isolated_engine_home_proven,

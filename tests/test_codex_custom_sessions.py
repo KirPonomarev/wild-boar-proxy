@@ -209,6 +209,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertIn("backend_id", rejected["forbidden_fields"])
             self.assertIn("path", rejected["forbidden_fields"])
             self.assertFalse(rejected["live_prompt_admitted"])
+            self.assertFalse(rejected["live_prompt_executed"])
             self.assertFalse(rejected["prompt_runner_called"])
             self.assertFalse(rejected["inference_proven"])
             self.assertFalse(rejected["model_response_present"])
@@ -216,8 +217,10 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(rejected["provider_called"])
             self.assertTrue(rejected["raw_prompt_not_stored"])
             self.assertEqual(rejected["token_burn"], 0)
-            self.assertEqual(blocked["status"], "rejected")
-            self.assertEqual(blocked["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertEqual(blocked["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+            self.assertEqual(blocked["authorization_status"], "blocked_by_operator_authorization")
+            self.assertFalse(blocked["owner_authorization_phrase_present"])
             self.assertFalse(blocked["prompt_runner_called"])
 
     def test_prompt_run_wraps_runner_response_without_browser_model_or_backend(self) -> None:
@@ -253,22 +256,35 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
             session_id = created["session"]["session_id"]
-            packet = manager.prompt_packet(session_id, {"prompt": "Reply real OK."}, runner)
+            packet = manager.prompt_packet(
+                session_id,
+                {"prompt": "Reply real OK."},
+                runner,
+                owner_authorized=True,
+            )
             transcript = manager.transcript_packet(session_id)
 
             self.assertEqual(calls, [{"prompt": "Reply real OK.", "model_id": "gpt-5.3-codex"}])
-            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "WBP_TRACE_PROOF_MISSING")
             self.assertTrue(packet["inference_proven"])
             self.assertTrue(packet["model_response_present"])
+            self.assertTrue(packet["live_prompt_admitted"])
+            self.assertTrue(packet["live_prompt_executed"])
+            self.assertTrue(packet["prompt_runner_called"])
+            self.assertFalse(packet["live_prompt_full_success"])
             self.assertTrue(packet["model_server_issued"])
             self.assertTrue(packet["selected_backend_server_issued"])
             self.assertFalse(packet["browser_selected_backend"])
             self.assertTrue(packet["wbp_path_configured"])
             self.assertTrue(packet["cli_proxy_api_path_configured"])
+            self.assertFalse(packet["wbp_path_observed"])
+            self.assertFalse(packet["cli_proxy_api_path_observed"])
             self.assertFalse(packet["wbp_path_proven"])
             self.assertFalse(packet["cli_proxy_api_path_proven"])
             self.assertFalse(packet["independent_wbp_trace_observed"])
             self.assertEqual(packet["path_proof_status"], "configured_not_independently_observed")
+            self.assertEqual(packet["next_action"], "inspect_trace_observer")
             self.assertTrue(packet["isolated_engine_home_proven"])
             self.assertEqual(packet["configured_wire_api"], "responses")
             self.assertFalse(packet["fallback_attempted"])
@@ -283,6 +299,26 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(transcript["inference_proven"])
             self.assertNotIn("Reply real OK.", json.dumps(transcript))
 
+    def test_prompt_run_defaults_to_owner_authorization_block(self) -> None:
+        calls: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            session_id = created["session"]["session_id"]
+            packet = manager.prompt_packet(
+                session_id,
+                {"prompt": "OK"},
+                lambda payload: calls.append(payload) or {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+            self.assertEqual(packet["authorization_status"], "blocked_by_operator_authorization")
+            self.assertFalse(packet["owner_authorization_phrase_present"])
+            self.assertFalse(packet["live_prompt_executed"])
+            self.assertFalse(packet["prompt_runner_called"])
+            self.assertEqual(calls, [])
+
     def test_prompt_run_rejects_forbidden_fields_and_failed_runner_does_not_overclaim(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
@@ -292,6 +328,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 session_id,
                 {"prompt": "OK", "model_id": "browser-model", "backend_id": "acct-a"},
                 lambda payload: {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+                owner_authorized=True,
             )
             failed = manager.prompt_packet(
                 session_id,
@@ -302,6 +339,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                     "error_class": "RuntimeError",
                     "secret_value_recorded": False,
                 },
+                owner_authorized=True,
             )
 
             self.assertEqual(rejected["status"], "rejected")
@@ -342,13 +380,21 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
             created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
-            packet = manager.prompt_packet(created["session"]["session_id"], {"prompt": "OK"}, runner)
+            packet = manager.prompt_packet(
+                created["session"]["session_id"],
+                {"prompt": "OK"},
+                runner,
+                owner_authorized=True,
+            )
 
             self.assertTrue(packet["wbp_path_configured"])
             self.assertTrue(packet["cli_proxy_api_path_configured"])
             self.assertTrue(packet["independent_wbp_trace_observed"])
+            self.assertTrue(packet["wbp_path_observed"])
+            self.assertTrue(packet["cli_proxy_api_path_observed"])
             self.assertTrue(packet["wbp_path_proven"])
             self.assertTrue(packet["cli_proxy_api_path_proven"])
+            self.assertTrue(packet["live_prompt_full_success"])
             self.assertEqual(packet["path_proof_status"], "independently_observed")
 
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
@@ -361,6 +407,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 session_id,
                 {"prompt": "OK"},
                 lambda payload: {"status": "ok", "final_message": "SHOULD_NOT_RUN"},
+                owner_authorized=True,
             )
 
             self.assertEqual(packet["status"], "rejected")

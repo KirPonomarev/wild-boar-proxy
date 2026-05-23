@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_OBSERVER_AND_LIVE_PROMPT_PASS",
+  "status": "passed",
+  "raw_secret_findings": [],
+  "raw_auth_file_findings": [],
+  "raw_backend_id_findings_in_new_artifacts": [],
+  "browser_dom_raw_leak": false,
+  "notes": [
+    "No live prompt was executed.",
+    "Fake-server browser proof reported rawDomLeak=false.",
+    "Trace observer packet design records digests and booleans, not prompt body or auth header."
+  ]
+}

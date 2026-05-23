@@ -119,6 +119,11 @@ SESSION_ID_UI_ACTIONS = frozenset(
         "account_login_cancel",
     }
 )
+OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые законные действия в рамках разработки проекта"
+
+
+def owner_authorization_phrase_present(value: str | None) -> bool:
+    return isinstance(value, str) and value.strip() == OWNER_STANDING_AUTHORIZATION_PHRASE
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -1664,6 +1669,7 @@ def build_handler(
     launch_client_path: str | None = None,
     launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    owner_authorization_phrase: str | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -1672,6 +1678,9 @@ def build_handler(
     action_runner = command_runner
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
+    codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
+        owner_authorization_phrase
+    )
     if (
         runner is None
         and action_phase == SANDBOX_ACTION_PHASE
@@ -1827,6 +1836,19 @@ def build_handler(
                     )
                     return
                 if action == "prompt":
+                    if codex_custom_live_prompt_authorized:
+                        self._send_json(
+                            codex_custom_sessions.prompt_packet(
+                                session_id,
+                                self._read_json_body(),
+                                lambda payload: operator_surface_session.run_prompt(
+                                    payload,
+                                    trace_wbp=True,
+                                ),
+                                owner_authorized=codex_custom_live_prompt_authorized,
+                            )
+                        )
+                        return
                     self._send_json(
                         codex_custom_sessions.prompt_not_admitted_packet(
                             session_id,

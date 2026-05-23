@@ -5308,9 +5308,12 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(prompt["provider_called"])
         self.assertTrue(prompt["raw_prompt_not_stored"])
         self.assertEqual(prompt["token_burn"], 0)
-        self.assertEqual(live_prompt["status"], "rejected")
-        self.assertEqual(live_prompt["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+        self.assertEqual(live_prompt["status"], "blocked")
+        self.assertEqual(live_prompt["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(live_prompt["authorization_status"], "blocked_by_operator_authorization")
+        self.assertFalse(live_prompt["owner_authorization_phrase_present"])
         self.assertFalse(live_prompt["live_prompt_admitted"])
+        self.assertFalse(live_prompt["live_prompt_executed"])
         self.assertFalse(live_prompt["prompt_runner_called"])
         self.assertFalse(live_prompt["inference_proven"])
         self.assertFalse(live_prompt["model_response_present"])
@@ -5455,15 +5458,143 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(rejected["prompt_runner_called"])
         self.assertFalse(rejected["network_calls_made"])
         self.assertFalse(rejected["provider_called"])
-        self.assertEqual(blocked["status"], "rejected")
-        self.assertEqual(blocked["machine_error_code"], "LIVE_PROMPT_NOT_ADMITTED")
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertEqual(blocked["authorization_status"], "blocked_by_operator_authorization")
         self.assertFalse(blocked["live_prompt_admitted"])
+        self.assertFalse(blocked["live_prompt_executed"])
         self.assertFalse(blocked["prompt_runner_called"])
         self.assertFalse(blocked["inference_proven"])
         self.assertFalse(blocked["model_response_present"])
         self.assertFalse(blocked["network_calls_made"])
         self.assertFalse(blocked["provider_called"])
         self.assertFalse(blocked["fallback_attempted"])
+        self.assertEqual(created_sessions[0].run_payloads, [])
+
+    def test_codex_custom_prompt_endpoint_authorized_path_requires_trace_observer(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "blocked_by_policy_drift"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                proof = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "Reply with exactly WBP_LIVE_OK."},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(proof["status"], "ok")
+        self.assertEqual(proof["machine_error_code"], "OK")
+        self.assertTrue(proof["owner_authorization_phrase_present"])
+        self.assertTrue(proof["live_prompt_admitted"])
+        self.assertTrue(proof["live_prompt_executed"])
+        self.assertTrue(proof["prompt_runner_called"])
+        self.assertTrue(proof["model_response_present"])
+        self.assertTrue(proof["inference_proven"])
+        self.assertTrue(proof["independent_wbp_trace_observed"])
+        self.assertTrue(proof["wbp_path_observed"])
+        self.assertTrue(proof["cli_proxy_api_path_observed"])
+        self.assertTrue(proof["wbp_path_proven"])
+        self.assertTrue(proof["cli_proxy_api_path_proven"])
+        self.assertTrue(proof["live_prompt_full_success"])
+        self.assertFalse(proof["browser_selected_backend"])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply with exactly WBP_LIVE_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+    def test_codex_custom_prompt_endpoint_rejects_near_miss_authorization_phrase(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = FakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "blocked_by_policy_drift"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="начинай работу по данному контуру",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                session_id = created["session"]["session_id"]
+                blocked = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "OK"},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertFalse(blocked["owner_authorization_phrase_present"])
+        self.assertFalse(blocked["prompt_runner_called"])
         self.assertEqual(created_sessions[0].run_payloads, [])
 
 
