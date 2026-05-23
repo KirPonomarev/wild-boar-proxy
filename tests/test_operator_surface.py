@@ -19,6 +19,7 @@ from wild_boar_proxy.operator_surface import (
     WbpTraceObserver,
     build_codex_config,
     forbidden_browser_fields,
+    run_process_isolation_proof,
     select_server_issued_model,
 )
 
@@ -261,6 +262,49 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(trace["auth_header_recorded"])
         self.assertNotIn("Reply with exactly WBP_TRACE_OK.", json.dumps(trace))
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
+
+    def test_process_isolation_proof_reports_protected_surfaces_unchanged(self) -> None:
+        snapshot = {
+            "codex_config": {
+                "path_label": "~/.codex/config.toml",
+                "exists": True,
+                "is_dir": False,
+                "size": 12,
+                "mtime_ns": 100,
+                "sha256": "a" * 64,
+            },
+            "default_cache_codex": {
+                "path_label": "~/Library/Caches/com.openai.codex",
+                "exists": True,
+                "is_dir": True,
+                "size": 64,
+                "mtime_ns": 200,
+            },
+        }
+
+        with (
+            mock.patch(
+                "wild_boar_proxy.operator_surface.protected_snapshot",
+                side_effect=[snapshot, json.loads(json.dumps(snapshot))],
+            ),
+            mock.patch.object(
+                OperatorSurfaceSession,
+                "run_prompt",
+                return_value={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "temp_root_removed": True,
+                    "secret_value_recorded": False,
+                },
+            ),
+        ):
+            proof = run_process_isolation_proof("Reply OK.")
+
+        self.assertTrue(proof["protected_surfaces_unchanged"])
+        self.assertTrue(proof["tmp_root_removed"])
+        self.assertEqual(proof["comparisons"]["codex_config"]["exists_unchanged"], True)
+        self.assertEqual(proof["comparisons"]["codex_config"]["mtime_ns_unchanged"], True)
+        self.assertEqual(proof["comparisons"]["codex_config"]["sha256_unchanged"], True)
 
 
 if __name__ == "__main__":

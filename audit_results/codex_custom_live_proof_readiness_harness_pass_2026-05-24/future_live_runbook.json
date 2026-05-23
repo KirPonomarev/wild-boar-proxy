@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_LIVE_PROOF_READINESS_HARNESS_PASS",
+  "future_contour": "CODEX_CUSTOM_SINGLE_TRACED_PROMPT_LIVE_PASS",
+  "status": "ready",
+  "precondition": {
+    "exact_owner_phrase_required": "разрешаю тебе любые законные действия в рамках разработки проекта",
+    "if_absent": "do_not_start_live_contour"
+  },
+  "steps": [
+    {
+      "order": 1,
+      "name": "authorization_gate",
+      "action": "verify exact owner phrase before any live command"
+    },
+    {
+      "order": 2,
+      "name": "safety_baseline",
+      "action": "capture branch/head and bounded current Codex untouched baseline"
+    },
+    {
+      "order": 3,
+      "name": "runtime_truth",
+      "action": "run status/accounts only after authorization; healthcheck only if admitted and needed"
+    },
+    {
+      "order": 4,
+      "name": "session_readiness",
+      "action": "create or select Codex Custom session with server-issued model and selection proof"
+    },
+    {
+      "order": 5,
+      "name": "single_prompt",
+      "action": "send exactly one prompt: Reply with exactly WBP_LIVE_OK.",
+      "prompt_count": 1,
+      "retry_count": 0
+    },
+    {
+      "order": 6,
+      "name": "response_proof",
+      "action": "require machine-readable response containing WBP_LIVE_OK"
+    },
+    {
+      "order": 7,
+      "name": "trace_proof",
+      "action": "require independent WBP trace proof and server-selected backend/source evidence; if route-backed source is selected, require route provenance packet too"
+    },
+    {
+      "order": 8,
+      "name": "postcheck",
+      "action": "rerun admitted runtime truth checks and classify any degradation"
+    },
+    {
+      "order": 9,
+      "name": "current_codex_untouched",
+      "action": "compare bounded pre/post evidence"
+    },
+    {
+      "order": 10,
+      "name": "redaction_and_audit",
+      "action": "run redaction scan, independent audit, tests, closeout, commit, push"
+    }
+  ],
+  "stop_conditions": [
+    "owner phrase absent",
+    "runtime truth contradictory",
+    "session readiness touches current Codex",
+    "browser can inject forbidden fields",
+    "prompt response missing",
+    "response exists but WBP trace missing",
+    "selected backend/source not server-proven",
+    "route-backed source selected without route provenance packet",
+    "secret appears in artifact",
+    "current Codex touched",
+    "more than one prompt would be needed",
+    "provider/account failure unclassified"
+  ],
+  "expected_artifacts": [
+    "spec.md",
+    "baseline.json",
+    "runtime_truth.json",
+    "session_readiness.json",
+    "live_prompt_proof.json",
+    "trace_observer_proof.json",
+    "postcheck.json",
+    "current_codex_untouched.json",
+    "metrics.json",
+    "redaction_audit.json",
+    "independent_audit.json",
+    "closeout.md"
+  ]
+}

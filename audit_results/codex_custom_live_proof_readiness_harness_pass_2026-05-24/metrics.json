@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_LIVE_PROOF_READINESS_HARNESS_PASS",
+  "status": "passed_with_classified_partial_route_provenance",
+  "live": {
+    "live_runtime_preflight_commands": 0,
+    "healthcheck_commands": 0,
+    "accounts_live_checks": 0,
+    "provider_calls": 0,
+    "api_requests": 0,
+    "prompt_calls": 0,
+    "token_burn": 0
+  },
+  "readiness": {
+    "matrix_rows": 8,
+    "covered": 7,
+    "partial": 1,
+    "missing": 0
+  },
+  "tests": {
+    "node_check_overview_js": "passed",
+    "targeted_unittest_status": "passed",
+    "targeted_unittest_count": 173,
+    "json_validation": "passed",
+    "redaction_scan": "passed",
+    "closeout_resilience": "passed",
+    "git_diff_check": "passed"
+  },
+  "agents": {
+    "independent_auditors": 1,
+    "max_parallel_agents": 1
+  }
+}
