@@ -87,8 +87,8 @@ next safe path toward a visible isolated Codex Custom through WBP.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
-- pushed: pending
+- commit: `9a2b33f` (forensic packet)
+- pushed: yes
 
 ## Scope Check
 
