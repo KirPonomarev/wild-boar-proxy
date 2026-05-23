@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "artifact_file_count": 5,
+  "artifact_file_count": 10,
   "secret_pattern_scan_returncode": 1,
   "secret_pattern_matches_present": false,
   "secret_pattern_matches": [],

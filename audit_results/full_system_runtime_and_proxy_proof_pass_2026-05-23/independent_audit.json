@@ -10,7 +10,9 @@
     "bounded_load_concurrency_bounded": true,
     "post_load_status_ok": true,
     "post_load_healthcheck_ok": true,
-    "post_load_rotation_ok": true
+    "post_load_rotation_ok": true,
+    "closeout_has_resume_from_here": true,
+    "closeout_has_contour_capsule": true
   },
   "owner_lane_lock_probe_codes": [
     "LOCK_HELD",
