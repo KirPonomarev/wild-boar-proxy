@@ -14,7 +14,7 @@ Separate Original Codex and Codex Custom in the WBP web UI and backend packets, 
 
 - goal: separate Original Codex protected baseline from Codex Custom proxy workbench without launching either path live
 - branch: codex/external-agent-lab-isolated
-- head: 3cd22be contour commit
+- head: 813bf43 contour implementation commit before closeout git-truth update
 - touched files: wild_boar_proxy/codex_launch_modes.py, wild_boar_proxy/web_design_live_server.py, wild_boar_proxy/web_design_ui/index.html, wild_boar_proxy/web_design_ui/scripts/overview.js, tests/test_codex_launch_modes.py, tests/test_web_design_live_server.py, audit_results/web_codex_launch_mode_split_and_dry_run_guard_pass_2026-05-23/*
 - tests run: node --check wild_boar_proxy/web_design_ui/scripts/overview.js; python runtime unittest full web/custom gate; git diff --check; browser dry-run proof
 - blocked risks: claim_gate remains blocked; no live Original launch; no live Custom launch; Custom status degraded with CLAIM_GATE_BLOCKED
@@ -36,8 +36,8 @@ Separate Original Codex and Codex Custom in the WBP web UI and backend packets, 
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: 3cd22be Split Codex launch modes in web UI
-- pushed: pending push after closeout git-truth update
+- commit: 813bf43 Split Codex launch modes in web UI
+- pushed: pending push of contour commit plus closeout git-truth update
 
 ## Scope Check
 
