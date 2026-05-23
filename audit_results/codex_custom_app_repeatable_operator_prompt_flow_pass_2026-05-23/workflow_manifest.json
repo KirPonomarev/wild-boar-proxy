@@ -1,0 +1,37 @@
+{
+  "ambient_proxy_stripped": true,
+  "app_path": "/tmp/wbp-codex-custom-repeatable-flow-xujpuyup/Codex Custom Lab.app",
+  "auth_json_copied": false,
+  "bundle_id": "local.wbp.codex-custom.lab",
+  "captured_at_utc": "2026-05-23T15:27:13.203109+00:00",
+  "contour": "CODEX_CUSTOM_APP_REPEATABLE_OPERATOR_PROMPT_FLOW_PASS",
+  "direct_executable_launch_only": true,
+  "display_name": "Codex Custom Lab",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "executable": "/tmp/wbp-codex-custom-repeatable-flow-xujpuyup/Codex Custom Lab.app/Contents/MacOS/CodexCustomLab",
+  "model": "gpt-5.3-codex",
+  "no_proxy_for_localhost": true,
+  "open_a_forbidden": true,
+  "persistent_launchservices_registration": false,
+  "persistent_session_daemon": false,
+  "prompt_contract": [
+    {
+      "expected_exact": "WBP_ONE",
+      "prompt_id": "prompt_1",
+      "prompt_text_sha256": "ad28e057df03824cad79ecf97bda9b22075ad550a34e688a823a918292090626"
+    },
+    {
+      "expected_exact": "WBP_TWO",
+      "prompt_id": "prompt_2",
+      "prompt_text_sha256": "61af56045fdf4b27b7f5c02b328010b2dfe9fe76c3e7c49dc1f2991ac9b8f3d9"
+    }
+  ],
+  "prompt_count": 2,
+  "prompt_ids": [
+    "prompt_1",
+    "prompt_2"
+  ],
+  "same_temp_codex_home_for_both_runs": true,
+  "secret_value_recorded": false,
+  "tmp_root": "/tmp/wbp-codex-custom-repeatable-flow-xujpuyup"
+}
