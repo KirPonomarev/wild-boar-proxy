@@ -1,0 +1,23 @@
+{
+  "admission_decision": "admitted_for_disposable_app_engine_smoke",
+  "available_gpt_models_observed": [
+    "gpt-5.2",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "gpt-image-2",
+    "gpt-5.3-codex-spark"
+  ],
+  "chosen_model_visible": true,
+  "codex_facing_model": "gpt-5.3-codex",
+  "configured_model": "gpt-5.5",
+  "configured_model_visible": true,
+  "contour": "CODEX_CUSTOM_APP_WBP_ENDPOINT_E2E_PASS",
+  "does_not_restrict_future_catalog": true,
+  "engine_final_message_exact_wbp_ok": true,
+  "not_deepseek_provider_route_proof": true,
+  "notes": [
+    "This matrix admits a GPT-facing Codex runtime model for one disposable app launcher smoke only. It is not provider-route proof."
+  ]
+}
