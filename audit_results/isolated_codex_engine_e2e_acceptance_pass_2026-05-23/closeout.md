@@ -23,7 +23,7 @@ profile, or claiming GUI Desktop E2E success.
 - goal: prove isolated headless Codex engine E2E acceptance through WBP without
   claiming GUI Desktop success
 - branch: `codex/external-agent-lab-isolated`
-- head: `74310e6`
+- head: `3566aa5`
 - touched files:
   - `audit_results/isolated_codex_app_e2e_pass_2026-05-23/closeout.md`
   - `audit_results/isolated_codex_engine_e2e_acceptance_pass_2026-05-23/spec.md`
@@ -85,7 +85,7 @@ profile, or claiming GUI Desktop E2E success.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
+- commit: `3566aa5` (packet + prior GUI closeout git-truth normalization)
 - pushed: no
 
 ## Scope Check
