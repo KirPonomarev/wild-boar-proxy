@@ -83,8 +83,10 @@ chain honestly instead of inventing an unadmitted post-plan feature contour.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending
-- pushed: pending
+- commit:
+  `2824d1f1a6a18f7dbb402a531fd99e4a30892353` contains the reconciliation
+  packet; this follow-up metadata commit records final git truth
+- pushed: `yes`
 
 ## Scope Check
 
@@ -102,7 +104,8 @@ chain honestly instead of inventing an unadmitted post-plan feature contour.
   - slots 4-6 each preserve positive behavior evidence but still retain stale
     git placeholders in their closeouts
   - the independent auditor supported the contour verdict but required git
-    normalization for this contour's own closeout before treating it as final
+    normalization for this contour's own closeout before treating it as final;
+    that normalization now points at pushed packet commit `2824d1f`
 - follow-up contour:
   - `WEB_SAFE_ACCOUNT_CONNECT_DRY_RUN_PASS_REENTRY_RECONCILIATION`
 - resume from here:
