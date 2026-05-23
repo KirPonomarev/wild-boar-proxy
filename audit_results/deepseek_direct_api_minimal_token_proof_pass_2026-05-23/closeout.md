@@ -20,7 +20,7 @@ without leaking secrets or overstating runtime readiness.
 - goal: direct DeepSeek route proof with minimal token burn and truthful web
   alignment
 - branch: `codex/external-agent-lab-isolated`
-- head: `d391d91`
+- head: `14327d5`
 - touched files:
   - `audit_results/deepseek_direct_api_minimal_token_proof_pass_2026-05-23/spec.md`
   - `audit_results/deepseek_direct_api_minimal_token_proof_pass_2026-05-23/baseline.json`
@@ -75,7 +75,7 @@ without leaking secrets or overstating runtime readiness.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `d391d91`
+- commit: `d391d91` (packet), `14327d5` (closeout)
 - pushed: `no`
 
 ## Scope Check
