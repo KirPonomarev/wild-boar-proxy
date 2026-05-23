@@ -1,0 +1,32 @@
+{
+  "source": "audit_results/isolated_codex_app_e2e_pass_2026-05-23",
+  "prior_status": "closed_blocked_by_current_codex_protection_boundary",
+  "prior_goal": "prove isolated Codex app copy launch through WBP stack and one through-app request",
+  "passed": {
+    "bounded_owner_surface_launch": true,
+    "separate_gui_process": true,
+    "separate_user_data_dir_in_command_line": true,
+    "headless_engine_replay_through_wbp": true
+  },
+  "failed_or_unproven": {
+    "strict_current_codex_non_touch": false,
+    "gui_owned_request_tied_to_launched_child": false,
+    "isolated_gui_control_socket_under_temp_codex_home": false
+  },
+  "machine_evidence": {
+    "launched_gui_command": "/Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/wbp-codex-e2e.G9FQ7g/user-data /Volumes/Work/wild-boar-proxy",
+    "child_app_server_command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+    "shared_surface_examples": [
+      "/Users/kirillponomarev/Library/Application Support/Codex/GPUCache/*",
+      "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex/httpstorages.sqlite*",
+      "/Users/kirillponomarev/Library/Caches/com.openai.codex/Cache.db*"
+    ],
+    "doctor_reported_control_socket_path": "/private/tmp/wbp-codex-socket.KOHXSV/codex-home/app-server-control/app-server-control.sock",
+    "doctor_app_server_status": "background server is not running"
+  },
+  "reclassification": {
+    "official_wrapper": "unsafe_until_proven_otherwise",
+    "reason": "Prior wrapper could pass CODEX_HOME and --user-data-dir but still touched bundle-id-derived shared macOS/Electron storage and exposed no repo-usable GUI child control socket.",
+    "headless_engine_acceptance": "useful_engine_proof_not_gui_proof"
+  }
+}

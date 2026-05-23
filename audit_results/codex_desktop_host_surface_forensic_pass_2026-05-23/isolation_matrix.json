@@ -1,0 +1,141 @@
+{
+  "columns": [
+    "surface",
+    "official_wrapper",
+    "copied_app",
+    "custom_wrapper",
+    "proof_required",
+    "risk"
+  ],
+  "rows": [
+    {
+      "surface": "CODEX_HOME",
+      "official_wrapper": "controllable by env, proven for headless and attempted GUI",
+      "copied_app": "controllable by launcher env",
+      "custom_wrapper": "controllable by launcher env",
+      "proof_required": "hash/stat of current ~/.codex before/after; child env or app-server packet tied to process",
+      "risk": "medium: CODEX_HOME does not cover all Electron/macOS storage"
+    },
+    {
+      "surface": "Electron userData",
+      "official_wrapper": "--user-data-dir worked in command line but not sufficient",
+      "copied_app": "likely controllable if bundle identity also differs",
+      "custom_wrapper": "controllable if wrapper owns identity and userData path",
+      "proof_required": "ps command, lsof open files, fs diff of default Codex storage",
+      "risk": "high"
+    },
+    {
+      "surface": "macOS bundle id",
+      "official_wrapper": "fixed com.openai.codex",
+      "copied_app": "must be changed or proven isolated",
+      "custom_wrapper": "must use distinct id",
+      "proof_required": "Info.plist, LaunchServices behavior, storage path diff",
+      "risk": "high"
+    },
+    {
+      "surface": "URL scheme",
+      "official_wrapper": "fixed codex",
+      "copied_app": "must avoid stealing or colliding with codex scheme",
+      "custom_wrapper": "use no scheme or a distinct scheme",
+      "proof_required": "Info.plist and no LaunchServices mutation in dry-run",
+      "risk": "high"
+    },
+    {
+      "surface": "app-server socket",
+      "official_wrapper": "not observed under isolated CODEX_HOME in prior GUI proof",
+      "copied_app": "unknown until dry-run",
+      "custom_wrapper": "can be explicit if app-server is started separately",
+      "proof_required": "socket path observed and tied to GUI/app-server child PID",
+      "risk": "high"
+    },
+    {
+      "surface": "app-server daemon state",
+      "official_wrapper": "daemon commands are mutating and not safe by default",
+      "copied_app": "must be isolated before daemon tests",
+      "custom_wrapper": "can use temp CODEX_HOME only",
+      "proof_required": "doctor/app-server version/socket under isolated home",
+      "risk": "high"
+    },
+    {
+      "surface": "current ~/.codex",
+      "official_wrapper": "must remain untouched; previous strong proof failed for GUI path",
+      "copied_app": "must remain untouched",
+      "custom_wrapper": "must remain untouched",
+      "proof_required": "pre/post hashes or stat-only proof of auth/config/state directories",
+      "risk": "critical"
+    },
+    {
+      "surface": "Application Support/Codex",
+      "official_wrapper": "prior shared touch observed",
+      "copied_app": "must not touch default path",
+      "custom_wrapper": "must not touch default path",
+      "proof_required": "lsof and fs diff",
+      "risk": "critical"
+    },
+    {
+      "surface": "Caches/com.openai.codex",
+      "official_wrapper": "prior shared touch observed",
+      "copied_app": "should move if bundle id/name differ; must prove",
+      "custom_wrapper": "should own distinct cache path; must prove",
+      "proof_required": "lsof and fs diff",
+      "risk": "critical"
+    },
+    {
+      "surface": "HTTPStorages/com.openai.codex",
+      "official_wrapper": "prior shared touch observed",
+      "copied_app": "must not touch default path",
+      "custom_wrapper": "must not touch default path",
+      "proof_required": "lsof and fs diff",
+      "risk": "critical"
+    },
+    {
+      "surface": "process tree",
+      "official_wrapper": "separate PID possible but insufficient",
+      "copied_app": "separate PID required",
+      "custom_wrapper": "separate PID required",
+      "proof_required": "ps/lsof tree plus parent/child attribution",
+      "risk": "medium"
+    },
+    {
+      "surface": "WBP endpoint",
+      "official_wrapper": "possible in headless config, GUI tie unproven",
+      "copied_app": "must be config-bound after dry-run",
+      "custom_wrapper": "launcher can write isolated config",
+      "proof_required": "Codex config under isolated CODEX_HOME and WBP packet after smoke",
+      "risk": "medium"
+    },
+    {
+      "surface": "auth source",
+      "official_wrapper": "must not use current Codex auth",
+      "copied_app": "must use sandbox/custom auth copy only",
+      "custom_wrapper": "must use sandbox/custom auth copy only",
+      "proof_required": "redacted auth source path and current auth hash unchanged",
+      "risk": "critical"
+    },
+    {
+      "surface": "model catalog",
+      "official_wrapper": "must show WBP-backed catalog, not hard-coded provider only",
+      "copied_app": "must show WBP-backed catalog",
+      "custom_wrapper": "must show WBP-backed catalog",
+      "proof_required": "/v1/models through WBP and GUI-visible configured/effective model proof",
+      "risk": "medium"
+    },
+    {
+      "surface": "update mechanism",
+      "official_wrapper": "Sparkle/update tied to official bundle",
+      "copied_app": "must disable or prove inert in dry-run",
+      "custom_wrapper": "must not self-update official app",
+      "proof_required": "no update process, no appcast mutation, no app bundle write",
+      "risk": "high"
+    },
+    {
+      "surface": "LaunchServices registration",
+      "official_wrapper": "existing official identity",
+      "copied_app": "must avoid registering over official scheme/id",
+      "custom_wrapper": "must avoid persistent registration during dry-run",
+      "proof_required": "no lsregister/system state mutation or bounded reversible registration",
+      "risk": "high"
+    }
+  ],
+  "matrix_verdict": "official_wrapper_rejected_for_next_experiment; copied_or_custom_app_dry_run_admitted_if_no_prompt_and_no_persistent_registration"
+}
