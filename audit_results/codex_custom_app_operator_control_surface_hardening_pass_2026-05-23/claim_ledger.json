@@ -1,0 +1,66 @@
+{
+  "blocked_or_deferred": [
+    {
+      "claim": "broad stable/rotation claims",
+      "evidence": "browser_proof.json runtime claim_gate=blocked",
+      "status": "blocked_by_claim_gate"
+    }
+  ],
+  "browser_proof_scope": "UI behavior only, not isolation proof",
+  "captured_at_utc": "2026-05-23T16:07:53.794538Z",
+  "claimed": [
+    {
+      "claim": "temp operator surface works",
+      "evidence": [
+        "browser_proof.json",
+        "browser_server_status_action_proof.json"
+      ],
+      "status": "proved"
+    },
+    {
+      "claim": "WBP-backed isolated engine prompt works",
+      "evidence": [
+        "browser_proof.json",
+        "process_isolation_proof.json"
+      ],
+      "status": "proved"
+    },
+    {
+      "claim": "server-issued model selection works",
+      "evidence": [
+        "model_admission.json",
+        "browser_proof.json"
+      ],
+      "status": "proved"
+    },
+    {
+      "claim": "transcript redaction works",
+      "evidence": [
+        "transcript_redacted.json",
+        "redaction_audit.json"
+      ],
+      "status": "proved_after_redaction_audit"
+    },
+    {
+      "claim": "process-only isolation proof clean",
+      "evidence": [
+        "process_isolation_proof.json"
+      ],
+      "status": "proved"
+    }
+  ],
+  "contour": "CODEX_CUSTOM_APP_OPERATOR_CONTROL_SURFACE_HARDENING_PASS",
+  "isolation_proof_scope": "process_isolation_proof.json only",
+  "not_claimed": [
+    "production app ready",
+    "GUI Desktop ready",
+    "existing WBP web UI integrated",
+    "provider-route proof",
+    "rotation/load proof",
+    "account lifecycle mutation",
+    "design gate ready",
+    "stable-15-proved",
+    "active-only-traffic",
+    "pool-participation-correct"
+  ]
+}

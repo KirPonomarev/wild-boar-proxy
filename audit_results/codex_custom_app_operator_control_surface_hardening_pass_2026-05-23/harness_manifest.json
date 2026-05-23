@@ -1,0 +1,19 @@
+{
+  "browser_server_packets_copied": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/browser_server_prompt_1_proof.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/browser_server_server_listen.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/browser_server_status_action_proof.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_app_operator_control_surface_hardening_pass_2026-05-23/browser_server_transcript_redacted.json"
+  ],
+  "captured_at_utc": "2026-05-23T16:05:25.452591Z",
+  "cleanup": {
+    "error": "",
+    "removed": true,
+    "server_tmp_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-operator-surface-hardened-k7ix5mxr"
+  },
+  "harness_script": "tools/operator_control_surface_harness.py",
+  "localhost_only": true,
+  "persistent_daemon": false,
+  "production_app": false,
+  "server_tmp_root": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-operator-surface-hardened-k7ix5mxr"
+}

@@ -1,0 +1,24 @@
+{
+  "browser_free_form_model_forbidden": true,
+  "captured_at_utc": "2026-05-23T16:04:21.594724Z",
+  "deepseek_only_success_path": false,
+  "default_model": "gpt-5.3-codex",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "models_probe": {
+    "chosen_model_visible": true,
+    "error": "",
+    "model_ids": [
+      "gpt-5.5",
+      "codex-auto-review",
+      "gpt-image-2",
+      "gpt-5.3-codex-spark",
+      "gpt-5.2",
+      "gpt-5.3-codex",
+      "gpt-5.4",
+      "gpt-5.4-mini"
+    ],
+    "ok": true,
+    "status_code": 200
+  },
+  "server_issued_model_selection_required": true
+}
