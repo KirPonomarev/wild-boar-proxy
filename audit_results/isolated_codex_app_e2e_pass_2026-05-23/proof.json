@@ -1,0 +1,87 @@
+{
+  "preflight": {
+    "runtime_healthcheck": {
+      "status": "ok",
+      "machine_error_code": "OK",
+      "endpoint": "http://127.0.0.1:8318/v1",
+      "launch_readiness": "ready",
+      "auth_pool_launch_capable_backend_count": 15
+    },
+    "external_models_check": {
+      "status": "ok",
+      "route_id": "wbp-deepseek-v3",
+      "provider": "deepseek",
+      "effective_model": "deepseek-chat",
+      "route_state": "verified",
+      "latency_ms": 1661
+    }
+  },
+  "owner_launch_packet": {
+    "status": "ok",
+    "machine_error_code": "OK",
+    "human_message": "Host-client dispatch request completed.",
+    "client_launch_result": {
+      "client_path_kind": "executable",
+      "runtime_precondition_status": "ready",
+      "dispatch_method": "detached_executable_spawn",
+      "dispatch_attempted": true,
+      "dispatch_observed": true,
+      "launch_claim_scope": "os_dispatch_only",
+      "final_outcome": "dispatch_requested"
+    },
+    "profile_context": {
+      "profile_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/profile",
+      "managed_dir": "/private/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp_codex_login_live_tz983sfx/managed"
+    }
+  },
+  "launched_gui_process": {
+    "observed": true,
+    "pid": 64497,
+    "ppid": 1,
+    "command": "/Applications/Codex.app/Contents/MacOS/Codex --user-data-dir=/tmp/wbp-codex-e2e.G9FQ7g/user-data /Volumes/Work/wild-boar-proxy",
+    "child_app_server_pid": 64554,
+    "child_app_server_command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled"
+  },
+  "isolation_positive_evidence": {
+    "separate_process": true,
+    "separate_user_data_dir_in_command_line": true,
+    "separate_codex_home_for_child_state": true,
+    "separate_workspace_process_tree": true
+  },
+  "isolation_negative_evidence": {
+    "shared_current_app_surfaces_observed": true,
+    "shared_surface_examples": [
+      "/Users/kirillponomarev/Library/Application Support/Codex/GPUCache/*",
+      "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex/httpstorages.sqlite*",
+      "/Users/kirillponomarev/Library/Caches/com.openai.codex/Cache.db*"
+    ],
+    "current_gui_child_exposed_control_socket": false,
+    "isolated_codex_home_app_server_control_socket_found": false
+  },
+  "headless_control_replay": {
+    "same_isolated_codex_home": "/tmp/wbp-codex-e2e.G9FQ7g/codex-home",
+    "command": "/Applications/Codex.app/Contents/Resources/codex debug app-server send-message-v2 'Reply with exactly OK.'",
+    "result": "OK",
+    "important_note": "This proof succeeded, but the command reported `codex app-server exited: exit status: 0`, so it does not prove that the already-launched GUI child serviced the request."
+  },
+  "routing_contract_diagnosis": {
+    "base_url_key_attempted_first": "base_url",
+    "result": "ignored_for_codex_desktop_cli_and_app_server",
+    "working_key": "openai_base_url",
+    "no_auth_result": "Missing API key",
+    "copied_default_codex_auth_result": "Invalid API key",
+    "copied_sandbox_wbp_auth_result": "OK"
+  },
+  "boundary_verdict": {
+    "status": "blocked",
+    "machine_classification": "blocked_by_current_codex_protection_boundary",
+    "reason": "Repo-owned owner surface can prove bounded launch and a separate GUI process, and the Codex engine can complete a headless request through the WBP stack with sandbox-scoped auth. But the launched GUI child does not expose a machine-backed control socket under the isolated home, while also touching shared current-app cache surfaces. A truthful through-app GUI smoke therefore cannot be tied to the launched GUI process with the current repo-owned surfaces."
+  },
+  "post_smoke_runtime_truth": {
+    "status": "ok",
+    "healthcheck": "ok",
+    "external_models_status": "ok",
+    "route_state": "verified",
+    "current_proxy_url": "http://127.0.0.1:10808"
+  }
+}
