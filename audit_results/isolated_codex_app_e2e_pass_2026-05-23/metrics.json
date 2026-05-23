@@ -24,6 +24,14 @@
     "output_tokens": 5,
     "reasoning_output_tokens": 0
   },
+  "followup_control_surface_probe": {
+    "gui_pid": 82582,
+    "app_server_pid": 82614,
+    "doctor_control_socket_declared": "/private/tmp/wbp-codex-socket.KOHXSV/codex-home/app-server-control/app-server-control.sock",
+    "doctor_app_server_status": "not running",
+    "isolated_socket_found": false,
+    "child_tcp_udp_listener_found": false
+  },
   "cleanup": {
     "isolated_gui_process_killed": true,
     "temporary_auth_copies_removed": true,

@@ -67,6 +67,8 @@ through-app request with machine-backed evidence.
   - isolated headless Codex replay with sandbox-scoped `auth.json` and
     `openai_base_url`
   - same-home `debug app-server send-message-v2`
+  - follow-up `doctor --json` on the launched GUI child's `CODEX_HOME`
+  - follow-up child app-server socket/listener probe
   - post-cleanup sandbox `status --json`
   - post-cleanup sandbox `healthcheck --json`
   - post-cleanup sandbox `external-models status --json`
@@ -105,6 +107,10 @@ through-app request with machine-backed evidence.
     shared default cache/storage files
   - no machine-backed path was found to prove that the launched GUI child, not a
     sibling ephemeral app-server, serviced the smoke request
+  - follow-up probe strengthened that boundary: the GUI child ran as
+    `codex app-server --analytics-default-enabled`, while `doctor --json` for
+    the same isolated `CODEX_HOME` still reported the app-server daemon as not
+    running and no isolated control socket or TCP/UDP listener was exposed
   - independent subagent replay was requested but unavailable because the
     session hit the agent thread limit; the audit packet therefore records a
     local replay audit instead of inventing a separate subagent report

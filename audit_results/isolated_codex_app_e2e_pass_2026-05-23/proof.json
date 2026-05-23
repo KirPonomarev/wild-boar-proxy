@@ -64,6 +64,18 @@
     "result": "OK",
     "important_note": "This proof succeeded, but the command reported `codex app-server exited: exit status: 0`, so it does not prove that the already-launched GUI child serviced the request."
   },
+  "followup_control_surface_probe": {
+    "isolated_codex_home": "/tmp/wbp-codex-socket.KOHXSV/codex-home",
+    "launched_gui_pid": 82582,
+    "child_app_server_pid": 82614,
+    "child_app_server_command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+    "doctor_app_server_status": "background server is not running",
+    "doctor_control_socket_path": "/private/tmp/wbp-codex-socket.KOHXSV/codex-home/app-server-control/app-server-control.sock",
+    "doctor_mode": "ephemeral",
+    "isolated_codex_home_socket_found": false,
+    "child_tcp_or_udp_listener_found": false,
+    "important_note": "The launched GUI child was not started as a managed daemon and exposed neither the declared control socket nor a visible network listener, which strengthens the conclusion that the GUI child does not offer a repo-usable machine-backed request surface."
+  },
   "routing_contract_diagnosis": {
     "base_url_key_attempted_first": "base_url",
     "result": "ignored_for_codex_desktop_cli_and_app_server",

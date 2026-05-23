@@ -21,6 +21,11 @@
       "fact": "no isolated app-server control socket was observed for the launched GUI child, while debug app-server replay reported its own app-server exit"
     },
     {
+      "name": "gui_child_control_surface_probe",
+      "result": "supported",
+      "fact": "follow-up probe showed the launched GUI child running as `codex app-server --analytics-default-enabled`, while `doctor --json` for the same CODEX_HOME still reported the daemon as not running and no isolated control socket or TCP/UDP listener was found"
+    },
+    {
       "name": "stack_reaches_boundary",
       "result": "supported",
       "fact": "isolated Codex engine replay using sandbox WBP auth plus openai_base_url returned agent_message=OK through the local 127.0.0.1:8318 endpoint"
