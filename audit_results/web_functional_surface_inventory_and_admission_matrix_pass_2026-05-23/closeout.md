@@ -14,7 +14,7 @@ Create a machine-readable admission matrix for WBP command-owner surfaces and we
 
 - goal: classify WBP command surfaces, web action allowlist, frontend controls, model surfaces, and high-risk deferrals before implementation wiring
 - branch: codex/external-agent-lab-isolated
-- head: dae8336
+- head: 78df65d
 - touched files: audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/spec.md; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/surface_inventory.json; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/web_surface_gap_matrix.json; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/proof.json; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/independent_audit.json; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/redaction_audit.json; audit_results/web_functional_surface_inventory_and_admission_matrix_pass_2026-05-23/closeout.md
 - tests run: static extraction by Python AST/regex; curl/live endpoint check; git diff --check; python3 tools/check_closeout_resilience.py --staged-only
 - blocked risks: no backend behavior changed; no frontend behavior changed; no runtime mutation; no current Codex mutation; high-risk surfaces deferred
@@ -37,7 +37,7 @@ Create a machine-readable admission matrix for WBP command-owner surfaces and we
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: dae8336
+- commit: 78df65d
 - pushed: pending-current-contour-push
 
 ## Scope Check
