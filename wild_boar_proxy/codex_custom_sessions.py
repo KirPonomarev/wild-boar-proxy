@@ -327,6 +327,7 @@ class CodexCustomSessionManager:
             and result.get("command_json_mode") is True
         )
         independent_wbp_trace_observed = result.get("independent_wbp_trace_observed") is True
+        trace_observer_packet = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
         cli_proxy_api_path_configured = wbp_path_configured and result.get("configured_provider") == "cliproxy"
@@ -373,6 +374,7 @@ class CodexCustomSessionManager:
             "wbp_path_proven": wbp_path_proven,
             "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
             "independent_wbp_trace_observed": independent_wbp_trace_observed,
+            "trace_observer_packet": trace_observer_packet,
             "isolated_engine_home_proven": isolated_engine_home_proven,
             "configured_wire_api": result.get("configured_wire_api") if status_ok else "",
             "path_proof_status": "independently_observed" if wbp_path_proven else "configured_not_independently_observed",
@@ -413,6 +415,7 @@ class CodexCustomSessionManager:
                 "wbp_path_proven": wbp_path_proven,
                 "cli_proxy_api_path_proven": wbp_path_proven and result.get("configured_provider") == "cliproxy",
                 "independent_wbp_trace_observed": independent_wbp_trace_observed,
+                "trace_observer_packet_present": bool(trace_observer_packet),
                 "isolated_engine_home_proven": isolated_engine_home_proven,
                 "fallback_attempted": False,
             },

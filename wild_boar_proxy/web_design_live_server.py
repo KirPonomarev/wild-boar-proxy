@@ -1827,7 +1827,7 @@ def build_handler(
                         codex_custom_sessions.prompt_packet(
                             session_id,
                             self._read_json_body(),
-                            operator_surface_session.run_prompt,
+                            lambda payload: operator_surface_session.run_prompt(payload, trace_wbp=True),
                         )
                     )
                     return

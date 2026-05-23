@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 import hashlib
+import http.server
 import json
 import os
 import re
 import shutil
+import socket
+import threading
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -36,6 +40,8 @@ FORBIDDEN_BROWSER_FIELD_NAMES = {
     "backend_id",
     "route_id",
     "runtime_config",
+    "trace_wbp",
+    "trace_observer",
 }
 SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{8,}"),
@@ -119,6 +125,160 @@ def build_codex_config(*, endpoint: str, model_id: str) -> str:
         'env_key = "OPENAI_API_KEY"\n'
         'wire_api = "responses"\n'
     )
+
+
+def _body_digest(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
+
+
+def _empty_trace_packet() -> dict[str, Any]:
+    return {
+        "request_observed": False,
+        "response_observed": False,
+        "forwarded_to_wbp": False,
+        "forwarded_endpoint": "",
+        "method": "",
+        "path": "",
+        "request_body_sha256": "",
+        "response_body_sha256": "",
+        "upstream_status": None,
+        "prompt_body_recorded": False,
+        "auth_header_recorded": False,
+        "secret_value_recorded": False,
+        "raw_account_id_recorded": False,
+        "raw_backend_id_recorded": False,
+        "machine_error_code": "TRACE_NOT_STARTED",
+    }
+
+
+class _TraceObserverServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+
+    def __init__(self, server_address: tuple[str, int], handler: type[http.server.BaseHTTPRequestHandler], observer: "WbpTraceObserver") -> None:
+        super().__init__(server_address, handler)
+        self.observer = observer
+
+
+class _TraceObserverHandler(http.server.BaseHTTPRequestHandler):
+    server: _TraceObserverServer
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        return
+
+    def do_GET(self) -> None:
+        self._handle()
+
+    def do_POST(self) -> None:
+        self._handle()
+
+    def _handle(self) -> None:
+        status, body, headers = self.server.observer.forward(
+            method=self.command,
+            path=self.path,
+            headers={key: value for key, value in self.headers.items()},
+            body=self.rfile.read(int(self.headers.get("Content-Length", "0") or "0")),
+        )
+        self.send_response(status)
+        for key, value in headers.items():
+            if key.lower() not in {"connection", "transfer-encoding", "content-length"}:
+                self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class WbpTraceObserver:
+    """Temporary localhost proxy that records redacted WBP path evidence."""
+
+    def __init__(self, *, downstream_endpoint: str) -> None:
+        self.downstream_endpoint = downstream_endpoint.rstrip("/")
+        self._httpd: _TraceObserverServer | None = None
+        self._thread: threading.Thread | None = None
+        self.listen_endpoint = ""
+        self._packet = _empty_trace_packet()
+
+    def __enter__(self) -> "WbpTraceObserver":
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+        self._httpd = _TraceObserverServer(("127.0.0.1", port), _TraceObserverHandler, self)
+        self.listen_endpoint = f"http://127.0.0.1:{port}/v1"
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        self._packet = {
+            **_empty_trace_packet(),
+            "machine_error_code": "TRACE_READY",
+            "listen_endpoint": self.listen_endpoint,
+            "downstream_endpoint": self.downstream_endpoint,
+        }
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        if self._httpd:
+            self._httpd.shutdown()
+            self._httpd.server_close()
+            self._httpd = None
+        if self._thread:
+            self._thread.join(timeout=2)
+            self._thread = None
+
+    def forward(self, *, method: str, path: str, headers: dict[str, str], body: bytes) -> tuple[int, bytes, dict[str, str]]:
+        allowed = method == "GET" and path in {"/v1/models", "/models"}
+        allowed = allowed or method == "POST" and path in {"/v1/responses", "/responses", "/v1/chat/completions", "/chat/completions"}
+        forwarded_url = f"{self.downstream_endpoint}{path[3:] if path.startswith('/v1/') else path}"
+        request_digest = _body_digest(body) if body else ""
+        self._packet.update(
+            {
+                "request_observed": True,
+                "method": method,
+                "path": path,
+                "request_body_sha256": request_digest,
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+                "raw_account_id_recorded": False,
+                "raw_backend_id_recorded": False,
+            }
+        )
+        if not allowed:
+            response_body = json.dumps({"error": {"message": "trace observer path not allowed"}}).encode("utf-8")
+            self._packet.update({"machine_error_code": "TRACE_PATH_NOT_ALLOWED", "upstream_status": 403})
+            return 403, response_body, {"Content-Type": "application/json"}
+        request_headers = {"Content-Type": headers.get("Content-Type", "application/json")}
+        if "Authorization" in headers:
+            request_headers["Authorization"] = headers["Authorization"]
+        request = urllib.request.Request(forwarded_url, data=body if method != "GET" else None, headers=request_headers, method=method)
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(request, timeout=60) as response:
+                response_body = response.read()
+                status = int(response.status)
+                response_headers = {"Content-Type": response.headers.get("Content-Type", "application/json")}
+        except urllib.error.HTTPError as exc:
+            response_body = exc.read()
+            status = int(exc.code)
+            response_headers = {"Content-Type": exc.headers.get("Content-Type", "application/json")}
+        except Exception as exc:
+            response_body = json.dumps({"error": {"message": "trace observer upstream request failed"}}).encode("utf-8")
+            status = 502
+            response_headers = {"Content-Type": "application/json"}
+            self._packet.update({"machine_error_code": type(exc).__name__})
+        self._packet.update(
+            {
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "forwarded_endpoint": self.downstream_endpoint,
+                "upstream_status": status,
+                "response_body_sha256": _body_digest(response_body) if response_body else "",
+                "machine_error_code": "OK" if status < 500 else self._packet.get("machine_error_code") or "TRACE_UPSTREAM_FAILED",
+            }
+        )
+        return status, response_body, response_headers
+
+    def packet(self) -> dict[str, Any]:
+        packet = dict(self._packet)
+        packet["observer_closed"] = self._httpd is None
+        return packet
 
 
 def stat_hash(path: str) -> dict[str, Any]:
@@ -318,7 +478,7 @@ class OperatorSurfaceSession:
             "secret_value_recorded": False,
         }
 
-    def run_prompt(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def run_prompt(self, payload: dict[str, Any], *, trace_wbp: bool = False) -> dict[str, Any]:
         forbidden = forbidden_browser_fields(payload)
         if forbidden:
             return {
@@ -390,7 +550,12 @@ class OperatorSurfaceSession:
         home.mkdir(parents=True)
         codex_home.mkdir()
         work.mkdir()
-        config_text = build_codex_config(endpoint=self.config.endpoint, model_id=selected_model)
+        trace_observer = WbpTraceObserver(downstream_endpoint=self.config.endpoint) if trace_wbp else None
+        effective_endpoint = self.config.endpoint
+        if trace_observer:
+            trace_observer.__enter__()
+            effective_endpoint = trace_observer.listen_endpoint
+        config_text = build_codex_config(endpoint=effective_endpoint, model_id=selected_model)
         (codex_home / "config.toml").write_text(config_text, encoding="utf-8")
         last_message = run_root / "last_message.txt"
         env = clean_env()
@@ -423,6 +588,7 @@ class OperatorSurfaceSession:
         temp_root_resolved = tmp_root.resolve()
         config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
         timed_out = False
+        trace_packet = _empty_trace_packet()
         try:
             process = subprocess.run(
                 command,
@@ -442,6 +608,10 @@ class OperatorSurfaceSession:
             timed_out = True
             exit_code = 124
             stderr = exc.stderr or ""
+        finally:
+            if trace_observer:
+                trace_packet = trace_observer.packet()
+                trace_observer.__exit__(None, None, None)
         final_message = (
             redact_text(last_message.read_text(encoding="utf-8", errors="replace"), [secret]).strip()
             if last_message.exists()
@@ -469,14 +639,28 @@ class OperatorSurfaceSession:
             "machine_error_code": "OK" if ok else "ENGINE_PROMPT_FAILED",
             "human_message": "Codex Operator prompt completed." if ok else "Codex Operator prompt failed.",
             "selected_model": selected_model,
-            "configured_base_url": self.config.endpoint,
+            "configured_base_url": effective_endpoint,
+            "downstream_wbp_endpoint": self.config.endpoint,
             "configured_wire_api": "responses",
             "configured_provider": "cliproxy",
-            "wbp_endpoint_configured": self.config.endpoint.startswith("http://127.0.0.1:"),
+            "wbp_endpoint_configured": effective_endpoint.startswith("http://127.0.0.1:"),
             "config_sha256": config_sha256,
-            "config_endpoint_matches": f'base_url = "{self.config.endpoint}"' in config_text,
+            "config_endpoint_matches": f'base_url = "{effective_endpoint}"' in config_text,
             "config_provider_matches": 'model_provider = "cliproxy"' in config_text,
             "config_wire_api_matches": 'wire_api = "responses"' in config_text,
+            "trace_observer_enabled": trace_wbp,
+            "trace_observer_packet": trace_packet,
+            "independent_wbp_trace_observed": (
+                trace_packet.get("request_observed") is True
+                and trace_packet.get("response_observed") is True
+                and trace_packet.get("forwarded_to_wbp") is True
+                and trace_packet.get("forwarded_endpoint") == self.config.endpoint
+                and isinstance(trace_packet.get("upstream_status"), int)
+                and 200 <= int(trace_packet.get("upstream_status")) < 400
+                and trace_packet.get("secret_value_recorded") is False
+                and trace_packet.get("prompt_body_recorded") is False
+                and trace_packet.get("auth_header_recorded") is False
+            ),
             "env_codex_home_is_temp": temp_root_resolved in env_codex_home.parents,
             "env_home_is_temp": temp_root_resolved in env_home.parents,
             "workdir_is_temp": temp_root_resolved in work.resolve().parents,

@@ -4840,8 +4840,18 @@ class FakeOperatorSurfaceSession:
     def transcript_payload(self) -> dict[str, object]:
         return self.transcript
 
-    def run_prompt(self, payload: dict[str, object]) -> dict[str, object]:
+    def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
         self.run_payloads.append(payload)
+        trace_packet = {
+            "request_observed": trace_wbp,
+            "response_observed": trace_wbp,
+            "forwarded_to_wbp": trace_wbp,
+            "forwarded_endpoint": "http://127.0.0.1:8318/v1" if trace_wbp else "",
+            "path": "/v1/responses" if trace_wbp else "",
+            "prompt_body_recorded": False,
+            "auth_header_recorded": False,
+            "secret_value_recorded": False,
+        }
         return {
             "status": "ok",
             "machine_error_code": "OK",
@@ -4861,6 +4871,9 @@ class FakeOperatorSurfaceSession:
             "command_workdir_is_temp": True,
             "command_output_file_is_temp": True,
             "current_codex_home_used": False,
+            "trace_observer_enabled": trace_wbp,
+            "trace_observer_packet": trace_packet,
+            "independent_wbp_trace_observed": trace_wbp,
             "final_message": "MAIN_WEB_OK",
             "stdin_prompt_used": True,
             "temp_root_removed": True,
@@ -5227,10 +5240,10 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(real_prompt["browser_selected_backend"])
         self.assertTrue(real_prompt["wbp_path_configured"])
         self.assertTrue(real_prompt["cli_proxy_api_path_configured"])
-        self.assertFalse(real_prompt["wbp_path_proven"])
-        self.assertFalse(real_prompt["cli_proxy_api_path_proven"])
-        self.assertFalse(real_prompt["independent_wbp_trace_observed"])
-        self.assertEqual(real_prompt["path_proof_status"], "configured_not_independently_observed")
+        self.assertTrue(real_prompt["wbp_path_proven"])
+        self.assertTrue(real_prompt["cli_proxy_api_path_proven"])
+        self.assertTrue(real_prompt["independent_wbp_trace_observed"])
+        self.assertEqual(real_prompt["path_proof_status"], "independently_observed")
         self.assertTrue(real_prompt["isolated_engine_home_proven"])
         self.assertEqual(real_prompt["configured_wire_api"], "responses")
         self.assertFalse(real_prompt["fallback_attempted"])
@@ -5293,7 +5306,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
 
     def test_codex_custom_prompt_endpoint_rejects_browser_fields_and_does_not_overclaim_failure(self) -> None:
         class FailingOperatorSurfaceSession(FakeOperatorSurfaceSession):
-            def run_prompt(self, payload: dict[str, object]) -> dict[str, object]:
+            def run_prompt(self, payload: dict[str, object], *, trace_wbp: bool = False) -> dict[str, object]:
                 self.run_payloads.append(payload)
                 return {
                     "status": "failed",

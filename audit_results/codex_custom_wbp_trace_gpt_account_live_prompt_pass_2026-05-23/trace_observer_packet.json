@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contour": "CODEX_CUSTOM_WBP_TRACE_GPT_ACCOUNT_LIVE_PROMPT_PASS",
+  "status": "implemented_tested_not_live",
+  "observer_surface": "wild_boar_proxy.operator_surface.WbpTraceObserver",
+  "allowed_paths": [
+    "GET /v1/models",
+    "GET /models",
+    "POST /v1/responses",
+    "POST /responses",
+    "POST /v1/chat/completions",
+    "POST /chat/completions"
+  ],
+  "records": [
+    "method",
+    "path",
+    "request_body_sha256",
+    "response_body_sha256",
+    "upstream_status",
+    "forwarded_endpoint",
+    "redaction_flags"
+  ],
+  "does_not_record": [
+    "raw_prompt",
+    "authorization_header",
+    "openai_api_key",
+    "account_id",
+    "backend_id",
+    "auth_ref",
+    "full_response_body"
+  ],
+  "live_trace_observed": false,
+  "reason": "owner authorization phrase absent"
+}

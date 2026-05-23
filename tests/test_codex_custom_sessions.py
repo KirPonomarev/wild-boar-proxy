@@ -270,6 +270,42 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(failed["model_response_present"])
             self.assertFalse(failed["fallback_attempted"])
 
+    def test_prompt_run_marks_path_proven_only_with_independent_trace(self) -> None:
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "final_message": "TRACE_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": True,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": False,
+                "independent_wbp_trace_observed": True,
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            packet = manager.prompt_packet(created["session"]["session_id"], {"prompt": "OK"}, runner)
+
+            self.assertTrue(packet["wbp_path_configured"])
+            self.assertTrue(packet["cli_proxy_api_path_configured"])
+            self.assertTrue(packet["independent_wbp_trace_observed"])
+            self.assertTrue(packet["wbp_path_proven"])
+            self.assertTrue(packet["cli_proxy_api_path_proven"])
+            self.assertEqual(packet["path_proof_status"], "independently_observed")
+
     def test_prompt_run_rejects_cleaned_session_precondition(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             manager = CodexCustomSessionManager(Path(temp_dir))
