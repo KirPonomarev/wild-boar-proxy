@@ -85,8 +85,9 @@ profile, or claiming GUI Desktop E2E success.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `3566aa5` (packet + prior GUI closeout git-truth normalization)
-- pushed: no
+- commit: `3566aa5` (packet + prior GUI closeout git-truth normalization),
+  `bf4503b` (git-truth normalization)
+- pushed: yes
 
 ## Scope Check
 
