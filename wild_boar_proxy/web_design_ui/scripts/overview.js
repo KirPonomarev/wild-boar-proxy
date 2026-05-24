@@ -871,14 +871,25 @@ function renderSafeAppCopyLaunchPacket(packet) {
     && packet?.pid_not_exposed_to_browser === true
     && packet?.bounded_live_launch_execution_ready === false
     && packet?.launch_ready_claimed === false;
-  const launchReady = packet?.status === "ok"
-    && packet?.machine_error_code === "WEB_SAFE_APP_COPY_LAUNCH_READY"
-    && packet?.final_verdict === "WEB_SAFE_APP_COPY_LAUNCH_READY"
+  const helperExecutionReady = packet?.status === "ok"
+    && packet?.machine_error_code === "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY"
+    && packet?.final_verdict === "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY"
     && packet?.launch_performed === true
-    && packet?.current_codex_touched === false;
+    && packet?.bounded_helper_execution === true
+    && packet?.real_codex_app_launched === false
+    && packet?.process_started === true
+    && packet?.cleanup_or_stop_completed === true
+    && packet?.receipt_redacted === true
+    && packet?.current_codex_touched === false
+    && packet?.uses_current_home === false
+    && packet?.uses_current_codex_home === false
+    && packet?.raw_path_exposed === false
+    && packet?.raw_pid_exposed === false
+    && packet?.raw_env_exposed === false
+    && packet?.pid_not_exposed_to_browser === true;
   codexLaunchSetChip(
-    dryRunReady || admissionReady ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
-    dryRunReady ? "app copy dry-run ready" : (admissionReady ? "app copy admission ready" : (packet?.status || "failed"))
+    dryRunReady || admissionReady || helperExecutionReady ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
+    dryRunReady ? "app copy dry-run ready" : (admissionReady ? "app copy admission ready" : (helperExecutionReady ? "bounded helper ready" : (packet?.status || "failed")))
   );
   codexLaunchSetText(
     "safeAppCopyStatus",
@@ -898,8 +909,8 @@ function renderSafeAppCopyLaunchPacket(packet) {
   );
   const liveButton = document.getElementById("safeAppCopyLaunchAction");
   if (liveButton) {
-    liveButton.disabled = !launchReady;
-    if (launchReady) {
+    liveButton.disabled = !(admissionReady || helperExecutionReady);
+    if (admissionReady || helperExecutionReady) {
       liveButton.classList.remove("disabled");
     } else {
       liveButton.classList.add("disabled");
@@ -938,6 +949,17 @@ function renderSafeAppCopyLaunchPacket(packet) {
       owner_preflight_current_session_untouched: packet?.owner_preflight_current_session_untouched === true,
       bounded_live_launch_execution_ready: packet?.bounded_live_launch_execution_ready === true,
       launch_ready_claimed: packet?.launch_ready_claimed === true,
+      bounded_helper_execution: packet?.bounded_helper_execution === true,
+      real_codex_app_launched: packet?.real_codex_app_launched === true,
+      helper_target_safe: packet?.helper_target_safe === true,
+      helper_execution_attempted: packet?.helper_execution_attempted === true,
+      process_started: packet?.process_started === true,
+      cleanup_or_stop_completed: packet?.cleanup_or_stop_completed === true,
+      receipt_redacted: packet?.receipt_redacted === true,
+      helper_receipt_ref: packet?.helper_receipt_ref || "",
+      helper_stdout_omitted: packet?.helper_stdout_omitted === true,
+      helper_stderr_omitted: packet?.helper_stderr_omitted === true,
+      helper_exit_code_zero: packet?.helper_exit_code_zero === true,
       block_reason_code: packet?.block_reason_code || "",
       raw_path_exposed: packet?.raw_path_exposed === true,
       raw_pid_exposed: packet?.raw_pid_exposed === true,

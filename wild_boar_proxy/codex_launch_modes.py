@@ -394,6 +394,46 @@ def _safe_app_copy_browser_rejected_packet(
     }
 
 
+def _safe_app_copy_admission_base(
+    *,
+    owner_preflight: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], bool, str]:
+    owner_preflight = owner_preflight if isinstance(owner_preflight, dict) else {}
+    owner_status = str(owner_preflight.get("status", "denied"))
+    owner_machine_error_code = str(
+        owner_preflight.get("machine_error_code", "WEB_SAFE_APP_COPY_OWNER_CONTRACT_MISSING")
+    )
+    owner_admitted = owner_status == "admitted" and owner_machine_error_code == "OK"
+    return (
+        {
+            **_app_copy_plan_base(),
+            "dry_run": False,
+            "live_admission_check": True,
+            "live_launch_admitted": owner_admitted,
+            "owner_contract_status": "admitted" if owner_admitted else "blocked",
+            "owner_preflight_machine_error_code": owner_machine_error_code,
+            "owner_preflight_target_exists": owner_preflight.get("target_exists") is True,
+            "owner_preflight_target_kind": str(owner_preflight.get("target_kind", "unknown")),
+            "owner_preflight_separate_profile": owner_preflight.get("separate_profile") is True,
+            "owner_preflight_separate_data_dir": owner_preflight.get("separate_data_dir") is True,
+            "owner_preflight_separate_port": owner_preflight.get("separate_port") is True,
+            "owner_preflight_process_confirmation_possible": (
+                owner_preflight.get("process_confirmation_possible") is True
+            ),
+            "owner_preflight_current_session_untouched": (
+                owner_preflight.get("current_session_untouched") is True
+            ),
+            "block_reason_code": "" if owner_admitted else owner_machine_error_code,
+            "dry_run_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+            "cleanup_or_stop_instruction": "no_process_launched",
+            "bounded_live_launch_execution_ready": False,
+            "launch_ready_claimed": False,
+        },
+        owner_admitted,
+        owner_machine_error_code,
+    )
+
+
 def build_safe_app_copy_launch_dry_run_packet(payload: dict[str, Any]) -> dict[str, Any]:
     forbidden = forbidden_app_copy_launch_fields(payload)
     base = {
@@ -422,40 +462,16 @@ def build_safe_app_copy_live_admission_packet(
     owner_preflight: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     forbidden = forbidden_app_copy_launch_fields(payload)
-    owner_preflight = owner_preflight if isinstance(owner_preflight, dict) else {}
-    owner_status = str(owner_preflight.get("status", "denied"))
-    owner_machine_error_code = str(
-        owner_preflight.get("machine_error_code", "WEB_SAFE_APP_COPY_OWNER_CONTRACT_MISSING")
+    base, owner_admitted, owner_machine_error_code = _safe_app_copy_admission_base(
+        owner_preflight=owner_preflight
     )
-    owner_admitted = owner_status == "admitted" and owner_machine_error_code == "OK"
     base = {
-        **_app_copy_plan_base(),
-        "dry_run": False,
-        "live_admission_check": True,
-        "live_launch_admitted": owner_admitted,
-        "owner_contract_status": "admitted" if owner_admitted else "blocked",
-        "owner_preflight_machine_error_code": owner_machine_error_code,
-        "owner_preflight_target_exists": owner_preflight.get("target_exists") is True,
-        "owner_preflight_target_kind": str(owner_preflight.get("target_kind", "unknown")),
-        "owner_preflight_separate_profile": owner_preflight.get("separate_profile") is True,
-        "owner_preflight_separate_data_dir": owner_preflight.get("separate_data_dir") is True,
-        "owner_preflight_separate_port": owner_preflight.get("separate_port") is True,
-        "owner_preflight_process_confirmation_possible": (
-            owner_preflight.get("process_confirmation_possible") is True
-        ),
-        "owner_preflight_current_session_untouched": (
-            owner_preflight.get("current_session_untouched") is True
-        ),
-        "block_reason_code": "" if owner_admitted else owner_machine_error_code,
+        **base,
         "final_verdict": (
             "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY"
             if owner_admitted
             else "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED"
         ),
-        "dry_run_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
-        "cleanup_or_stop_instruction": "no_process_launched",
-        "bounded_live_launch_execution_ready": False,
-        "launch_ready_claimed": False,
     }
     if forbidden:
         return _safe_app_copy_browser_rejected_packet(base=base, forbidden=forbidden)
@@ -484,10 +500,139 @@ def build_safe_app_copy_live_admission_packet(
     }
 
 
+def build_safe_app_copy_bounded_helper_execution_packet(
+    payload: dict[str, Any],
+    owner_preflight: dict[str, Any] | None = None,
+    execution_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_app_copy_launch_fields(payload)
+    base, owner_admitted, owner_machine_error_code = _safe_app_copy_admission_base(
+        owner_preflight=owner_preflight
+    )
+    base = {
+        **base,
+        "bounded_helper_execution": False,
+        "real_codex_app_launched": False,
+        "helper_target_safe": False,
+        "helper_execution_attempted": False,
+        "process_started": False,
+        "cleanup_or_stop_completed": False,
+        "receipt_redacted": True,
+        "helper_receipt_ref": "redacted_helper_execution_receipt",
+        "helper_stdout_omitted": True,
+        "helper_stderr_omitted": True,
+        "helper_exit_code_zero": False,
+        "cleanup_or_stop_instruction": "no_process_launched",
+        "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+    }
+    if forbidden:
+        return _safe_app_copy_browser_rejected_packet(base=base, forbidden=forbidden)
+    if not owner_admitted:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+            "browser_forbidden_fields_rejected": False,
+            "browser_forbidden_fields_absent": True,
+            "forbidden_fields": [],
+            "block_reason_code": owner_machine_error_code,
+            "human_message": "Bounded helper execution is blocked until live admission is proven.",
+            "next_action": "prove_app_copy_owner_contract",
+        }
+    execution_result = execution_result if isinstance(execution_result, dict) else {}
+    helper_target_safe = execution_result.get("helper_target_safe") is True
+    process_started = execution_result.get("process_started") is True
+    cleanup_completed = execution_result.get("cleanup_or_stop_completed") is True
+    exit_code_zero = execution_result.get("helper_exit_code_zero") is True
+    execution_attempted = execution_result.get("helper_execution_attempted") is True
+    machine_error_code = str(
+        execution_result.get("machine_error_code") or "WEB_SAFE_APP_COPY_HELPER_START_FAILED"
+    )
+    if not helper_target_safe:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+            "browser_forbidden_fields_rejected": False,
+            "browser_forbidden_fields_absent": True,
+            "forbidden_fields": [],
+            "live_launch_admitted": False,
+            "block_reason_code": "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+            "human_message": "Bounded helper execution target is unsafe or resembles Codex.",
+            "next_action": "provide_server_owned_helper_target",
+        }
+    if not execution_attempted or not process_started or not exit_code_zero:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": machine_error_code,
+            "browser_forbidden_fields_rejected": False,
+            "browser_forbidden_fields_absent": True,
+            "forbidden_fields": [],
+            "helper_target_safe": True,
+            "helper_execution_attempted": execution_attempted,
+            "process_started": process_started,
+            "helper_exit_code_zero": exit_code_zero,
+            "block_reason_code": machine_error_code,
+            "cleanup_or_stop_instruction": "no_process_remaining" if cleanup_completed else "cleanup_not_proven",
+            "cleanup_or_stop_completed": cleanup_completed,
+            "human_message": "Bounded helper execution did not produce a successful process proof.",
+            "next_action": "inspect_helper_execution_failure",
+        }
+    if not cleanup_completed:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_CLEANUP_FAILED",
+            "browser_forbidden_fields_rejected": False,
+            "browser_forbidden_fields_absent": True,
+            "forbidden_fields": [],
+            "helper_target_safe": True,
+            "helper_execution_attempted": True,
+            "process_started": True,
+            "helper_exit_code_zero": True,
+            "block_reason_code": "WEB_SAFE_APP_COPY_HELPER_CLEANUP_FAILED",
+            "cleanup_or_stop_instruction": "cleanup_not_proven",
+            "cleanup_or_stop_completed": False,
+            "human_message": "Bounded helper execution started, but cleanup was not proven.",
+            "next_action": "stop_and_diagnose_helper_cleanup",
+        }
+    return {
+        **base,
+        "status": "ok",
+        "machine_error_code": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+        "browser_forbidden_fields_rejected": False,
+        "browser_forbidden_fields_absent": True,
+        "forbidden_fields": [],
+        "launch_performed": True,
+        "bounded_live_launch_execution_ready": True,
+        "launch_ready_claimed": True,
+        "bounded_helper_execution": True,
+        "real_codex_app_launched": False,
+        "helper_target_safe": True,
+        "helper_execution_attempted": True,
+        "process_started": True,
+        "cleanup_or_stop_completed": True,
+        "cleanup_or_stop_instruction": "no_process_remaining",
+        "helper_exit_code_zero": True,
+        "block_reason_code": "",
+        "final_verdict": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+        "human_message": "Bounded helper execution succeeded and cleanup was proven.",
+        "next_action": "return_to_master_plan_account_connect_dry_run",
+    }
+
+
 def build_safe_app_copy_launch_live_packet(
     payload: dict[str, Any],
     owner_preflight: dict[str, Any] | None = None,
+    execution_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if execution_result is not None:
+        return build_safe_app_copy_bounded_helper_execution_packet(
+            payload,
+            owner_preflight,
+            execution_result,
+        )
     packet = build_safe_app_copy_live_admission_packet(payload, owner_preflight)
     if packet.get("status") == "ok":
         return {

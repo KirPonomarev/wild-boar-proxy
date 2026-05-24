@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.codex_launch_modes import (
+    build_safe_app_copy_bounded_helper_execution_packet,
     build_custom_launch_dry_run_packet,
     build_custom_status_packet,
     build_launch_modes_packet,
@@ -274,6 +275,121 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertFalse(packet["launch_performed"])
         self.assertEqual(packet["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
         self.assertFalse(packet["launch_ready_claimed"])
+
+    def test_safe_app_copy_bounded_helper_execution_ready_requires_cleanup(self) -> None:
+        packet = build_safe_app_copy_bounded_helper_execution_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+            {
+                "machine_error_code": "OK",
+                "helper_target_safe": True,
+                "helper_execution_attempted": True,
+                "process_started": True,
+                "helper_exit_code_zero": True,
+                "cleanup_or_stop_completed": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+        )
+        self.assertEqual(
+            packet["final_verdict"],
+            "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
+        )
+        self.assertTrue(packet["launch_performed"])
+        self.assertTrue(packet["bounded_live_launch_execution_ready"])
+        self.assertTrue(packet["launch_ready_claimed"])
+        self.assertTrue(packet["bounded_helper_execution"])
+        self.assertFalse(packet["real_codex_app_launched"])
+        self.assertTrue(packet["helper_target_safe"])
+        self.assertTrue(packet["helper_execution_attempted"])
+        self.assertTrue(packet["process_started"])
+        self.assertTrue(packet["cleanup_or_stop_completed"])
+        self.assertTrue(packet["receipt_redacted"])
+        self.assertTrue(packet["helper_stdout_omitted"])
+        self.assertTrue(packet["helper_stderr_omitted"])
+        self.assertFalse(packet["raw_path_exposed"])
+        self.assertFalse(packet["raw_pid_exposed"])
+        self.assertFalse(packet["raw_env_exposed"])
+
+    def test_safe_app_copy_bounded_helper_blocks_cleanup_failure(self) -> None:
+        packet = build_safe_app_copy_bounded_helper_execution_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+            {
+                "machine_error_code": "OK",
+                "helper_target_safe": True,
+                "helper_execution_attempted": True,
+                "process_started": True,
+                "helper_exit_code_zero": True,
+                "cleanup_or_stop_completed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_CLEANUP_FAILED",
+        )
+        self.assertFalse(packet["launch_performed"])
+        self.assertFalse(packet["bounded_live_launch_execution_ready"])
+        self.assertFalse(packet["launch_ready_claimed"])
+        self.assertFalse(packet["cleanup_or_stop_completed"])
+
+    def test_safe_app_copy_bounded_helper_blocks_unsafe_target(self) -> None:
+        packet = build_safe_app_copy_bounded_helper_execution_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+            {
+                "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+                "helper_target_safe": False,
+                "helper_execution_attempted": False,
+                "process_started": False,
+                "helper_exit_code_zero": False,
+                "cleanup_or_stop_completed": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+        )
+        self.assertFalse(packet["live_launch_admitted"])
+        self.assertFalse(packet["launch_performed"])
 
     def test_safe_app_copy_live_launch_rejects_browser_fields(self) -> None:
         packet = build_safe_app_copy_launch_live_packet(

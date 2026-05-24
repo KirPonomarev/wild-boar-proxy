@@ -5069,15 +5069,24 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
         self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
 
-    def test_app_copy_live_admission_uses_server_owned_contract_without_launching(self) -> None:
+    def test_app_copy_live_admission_and_bounded_helper_launch_use_server_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
+            helper_path = temp_path / "helper.sh"
+            helper_path.write_text(
+                "#!/bin/sh\n"
+                "mkdir -p \"$WBP_MANAGED_DIR\"\n"
+                "printf helper-ran > \"$WBP_MANAGED_DIR/helper-marker\"\n",
+                encoding="utf-8",
+            )
+            helper_path.chmod(0o755)
             contract = LaunchCopyContract(
-                client_path="/bin/sh",
+                client_path=str(helper_path),
                 profile_dir=str(temp_path / "profile"),
                 data_dir=str(temp_path / "data"),
                 copy_port=9321,
                 action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
             )
             server = ThreadingHTTPServer(
                 ("127.0.0.1", 0),
@@ -5093,10 +5102,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 live = json.loads(post_json(f"{base}/api/codex/app-copy/launch", {}))
                 rejected = json.loads(
                     post_json(
-                        f"{base}/api/codex/app-copy/live-admission",
+                        f"{base}/api/codex/app-copy/launch",
                         {"path": "/tmp/app", "pid": 123, "env": {"HOME": "/tmp/home"}},
                     )
                 )
+                marker_written = (temp_path / "data" / "helper-marker").exists()
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -5119,13 +5129,25 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(admission["bounded_live_launch_execution_ready"])
         self.assertFalse(admission["raw_path_exposed"])
         self.assertFalse(admission["raw_pid_exposed"])
-        self.assertEqual(live["status"], "blocked")
+        self.assertEqual(live["status"], "ok")
         self.assertEqual(
             live["machine_error_code"],
-            "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+            "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
         )
+        self.assertEqual(live["final_verdict"], "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY")
         self.assertTrue(live["live_launch_admitted"])
-        self.assertFalse(live["launch_performed"])
+        self.assertTrue(live["launch_performed"])
+        self.assertTrue(live["bounded_helper_execution"])
+        self.assertFalse(live["real_codex_app_launched"])
+        self.assertTrue(live["process_started"])
+        self.assertTrue(live["cleanup_or_stop_completed"])
+        self.assertTrue(live["receipt_redacted"])
+        self.assertFalse(live["raw_path_exposed"])
+        self.assertFalse(live["raw_pid_exposed"])
+        self.assertFalse(live["raw_env_exposed"])
+        self.assertNotIn(str(helper_path), json.dumps(live))
+        self.assertNotIn(str(temp_path), json.dumps(live))
+        self.assertTrue(marker_written)
         self.assertEqual(rejected["status"], "blocked")
         self.assertEqual(
             rejected["machine_error_code"],
@@ -5133,10 +5155,231 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         )
         self.assertEqual(rejected["forbidden_fields"], ["path", "pid", "env", "env.HOME"])
         self.assertFalse(rejected["live_launch_admitted"])
+        self.assertFalse(rejected["launch_performed"])
         self.assertEqual(
             rejected["block_reason_code"],
             "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
         )
+
+    def test_app_copy_launch_forbidden_payload_does_not_execute_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            marker_path = temp_path / "data" / "helper-marker"
+            helper_path = temp_path / "helper.sh"
+            helper_path.write_text(
+                "#!/bin/sh\n"
+                "mkdir -p \"$WBP_MANAGED_DIR\"\n"
+                "printf unsafe > \"$WBP_MANAGED_DIR/helper-marker\"\n",
+                encoding="utf-8",
+            )
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/app-copy/launch",
+                        {"command": "run", "env": {"HOME": "/tmp/home"}},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        )
+        self.assertFalse(rejected["live_launch_admitted"])
+        self.assertFalse(rejected["launch_performed"])
+        self.assertFalse(marker_path.exists())
+
+    def test_app_copy_launch_blocks_helper_target_that_resembles_codex(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            helper_path = temp_path / "CodexHelper"
+            helper_path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                blocked = json.loads(post_json(f"{base}/api/codex/app-copy/launch", {}))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(
+            blocked["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+        )
+        self.assertFalse(blocked["live_launch_admitted"])
+        self.assertFalse(blocked["launch_performed"])
+        self.assertFalse(blocked["raw_path_exposed"])
+
+    def test_app_copy_launch_invalid_json_does_not_execute_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            marker_path = temp_path / "data" / "helper-marker"
+            helper_path = temp_path / "helper.sh"
+            helper_path.write_text(
+                "#!/bin/sh\n"
+                "mkdir -p \"$WBP_MANAGED_DIR\"\n"
+                "printf invalid-body > \"$WBP_MANAGED_DIR/helper-marker\"\n",
+                encoding="utf-8",
+            )
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                invalid_json = json.loads(
+                    post_body(f"{base}/api/codex/app-copy/launch", b"{not-json")
+                )
+                non_object = json.loads(
+                    post_body(f"{base}/api/codex/app-copy/launch", b'["run"]')
+                )
+                no_body = json.loads(post_body(f"{base}/api/codex/app-copy/launch", b""))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        for rejected in (invalid_json, non_object, no_body):
+            self.assertEqual(rejected["status"], "blocked")
+            self.assertEqual(
+                rejected["machine_error_code"],
+                "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+            )
+            self.assertEqual(rejected["forbidden_fields"], ["invalid_body"])
+            self.assertFalse(rejected["launch_performed"])
+        self.assertFalse(marker_path.exists())
+
+    def test_app_copy_launch_blocks_helper_without_server_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            marker_path = temp_path / "data" / "helper-marker"
+            helper_path = temp_path / "helper.sh"
+            helper_path.write_text(
+                "#!/bin/sh\n"
+                "mkdir -p \"$WBP_MANAGED_DIR\"\n"
+                "printf no-provenance > \"$WBP_MANAGED_DIR/helper-marker\"\n",
+                encoding="utf-8",
+            )
+            helper_path.chmod(0o755)
+            contract = LaunchCopyContract(
+                client_path=str(helper_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                blocked = json.loads(post_json(f"{base}/api/codex/app-copy/launch", {}))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(
+            blocked["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+        )
+        self.assertFalse(blocked["launch_performed"])
+        self.assertFalse(marker_path.exists())
+
+    def test_app_copy_launch_blocks_symlinked_helper_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            marker_path = temp_path / "data" / "helper-marker"
+            real_helper_path = temp_path / "real-helper.sh"
+            real_helper_path.write_text(
+                "#!/bin/sh\n"
+                "mkdir -p \"$WBP_MANAGED_DIR\"\n"
+                "printf symlink > \"$WBP_MANAGED_DIR/helper-marker\"\n",
+                encoding="utf-8",
+            )
+            real_helper_path.chmod(0o755)
+            symlink_path = temp_path / "safe-helper"
+            symlink_path.symlink_to(real_helper_path)
+            contract = LaunchCopyContract(
+                client_path=str(symlink_path),
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+                helper_execution_provenance="server_owned_bounded_helper",
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                blocked = json.loads(post_json(f"{base}/api/codex/app-copy/launch", {}))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(
+            blocked["machine_error_code"],
+            "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+        )
+        self.assertFalse(blocked["launch_performed"])
+        self.assertFalse(marker_path.exists())
 
 
 class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
@@ -7183,6 +7426,17 @@ def post_json(url: str, payload: dict[str, object]) -> str:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with NO_PROXY_OPENER.open(request, timeout=10) as response:
+        return response.read().decode("utf-8")
+
+
+def post_body(url: str, body: bytes) -> str:
+    request = urllib.request.Request(
+        url,
+        data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
     )

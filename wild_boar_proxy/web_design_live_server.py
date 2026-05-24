@@ -13,6 +13,7 @@ import json
 import mimetypes
 import os
 from pathlib import Path
+import subprocess
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -563,6 +564,7 @@ SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE = (
 )
 SANDBOX_ACTION_PHASE_DISABLED_REASON_CODE = "UI_ACTION_PHASE_NOT_ADMITTED"
 SANDBOX_ACTION_PHASE_DISABLED_REASONS = ("sandbox_phase_limited",)
+SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
 @dataclass(frozen=True)
@@ -572,6 +574,7 @@ class LaunchCopyContract:
     data_dir: str | None = None
     copy_port: int | None = None
     action_server_port: int | None = None
+    helper_execution_provenance: str | None = None
 
 
 def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any]:
@@ -664,6 +667,112 @@ def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any
         "separate_port": True,
         "process_confirmation_possible": True,
         "current_session_untouched": True,
+    }
+
+
+def _safe_app_copy_target_resembles_codex(contract: LaunchCopyContract) -> bool:
+    client_path = Path(contract.client_path or "").expanduser()
+    try:
+        resolved_path = client_path.resolve(strict=False)
+    except OSError:
+        resolved_path = client_path
+    name = f"{client_path.name} {resolved_path.name}".lower()
+    parts = {part.lower() for part in (*client_path.parts, *resolved_path.parts)}
+    return (
+        "codex" in name
+        or "codex.app" in parts
+        or any(part.endswith(".app") for part in parts)
+        or client_path.suffix.lower() == ".app"
+        or resolved_path.suffix.lower() == ".app"
+    )
+
+
+def _safe_app_copy_helper_target_allowed(contract: LaunchCopyContract) -> bool:
+    client_path = Path(contract.client_path or "").expanduser()
+    return bool(
+        contract.helper_execution_provenance == SAFE_APP_COPY_HELPER_PROVENANCE
+        and not client_path.is_symlink()
+        and not _safe_app_copy_target_resembles_codex(contract)
+    )
+
+
+def _safe_app_copy_helper_env(contract: LaunchCopyContract) -> dict[str, str]:
+    profile_dir = str(Path(contract.profile_dir or "").expanduser())
+    data_dir = str(Path(contract.data_dir or "").expanduser())
+    env: dict[str, str] = {}
+    if os.environ.get("PATH"):
+        env["PATH"] = str(os.environ["PATH"])
+    env["HOME"] = profile_dir
+    env["CODEX_HOME"] = str(Path(profile_dir) / "codex-home")
+    env["WBP_PROFILE_DIR"] = profile_dir
+    env["WBP_MANAGED_DIR"] = data_dir
+    env["WBP_APP_COPY_HELPER"] = "1"
+    return env
+
+
+def _run_safe_app_copy_bounded_helper(
+    contract: LaunchCopyContract | None,
+    preflight: dict[str, Any],
+) -> dict[str, Any]:
+    if contract is None or preflight.get("status") != "admitted":
+        return {
+            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+            "helper_target_safe": False,
+            "helper_execution_attempted": False,
+            "process_started": False,
+            "helper_exit_code_zero": False,
+            "cleanup_or_stop_completed": False,
+        }
+    if not _safe_app_copy_helper_target_allowed(contract):
+        return {
+            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_TARGET_UNSAFE",
+            "helper_target_safe": False,
+            "helper_execution_attempted": False,
+            "process_started": False,
+            "helper_exit_code_zero": False,
+            "cleanup_or_stop_completed": False,
+        }
+    try:
+        completed = subprocess.run(
+            [str(Path(contract.client_path or "").expanduser())],
+            check=False,
+            env=_safe_app_copy_helper_env(contract),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            text=True,
+            timeout=2,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
+            "helper_target_safe": True,
+            "helper_execution_attempted": True,
+            "process_started": True,
+            "helper_exit_code_zero": False,
+            "cleanup_or_stop_completed": True,
+        }
+    except (OSError, ValueError):
+        return {
+            "machine_error_code": "WEB_SAFE_APP_COPY_HELPER_START_FAILED",
+            "helper_target_safe": True,
+            "helper_execution_attempted": True,
+            "process_started": False,
+            "helper_exit_code_zero": False,
+            "cleanup_or_stop_completed": False,
+        }
+    return {
+        "machine_error_code": (
+            "OK"
+            if completed.returncode == 0
+            else "WEB_SAFE_APP_COPY_HELPER_START_FAILED"
+        ),
+        "helper_target_safe": True,
+        "helper_execution_attempted": True,
+        "process_started": True,
+        "helper_exit_code_zero": completed.returncode == 0,
+        "cleanup_or_stop_completed": True,
     }
 
 
@@ -2234,10 +2343,18 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/app-copy/launch":
+                launch_payload = self._read_app_copy_launch_body()
+                launch_preflight = _launch_copy_preflight(launch_copy_contract)
+                helper_result = (
+                    _run_safe_app_copy_bounded_helper(launch_copy_contract, launch_preflight)
+                    if launch_payload == {}
+                    else None
+                )
                 self._send_json(
                     build_safe_app_copy_launch_live_packet(
-                        self._read_json_body(),
-                        _launch_copy_preflight(launch_copy_contract),
+                        launch_payload,
+                        launch_preflight,
+                        helper_result,
                     )
                 )
                 return
@@ -2390,6 +2507,19 @@ def build_handler(
             except (UnicodeDecodeError, json.JSONDecodeError):
                 return {}
             return payload if isinstance(payload, dict) else {}
+
+        def _read_app_copy_launch_body(self) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return {"invalid_body": True}
+            if length <= 0:
+                return {"invalid_body": True}
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return {"invalid_body": True}
+            return payload if isinstance(payload, dict) else {"invalid_body": True}
 
         def _read_rollback_point_create_body(self) -> dict[str, Any]:
             try:
@@ -4507,6 +4637,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--launch-copy-profile-dir", default=None)
     parser.add_argument("--launch-copy-data-dir", default=None)
     parser.add_argument("--launch-copy-port", type=int, default=None)
+    parser.add_argument(
+        "--launch-copy-helper-provenance",
+        default=None,
+        choices=(SAFE_APP_COPY_HELPER_PROVENANCE,),
+    )
     args = parser.parse_args(argv)
     launch_copy_contract = LaunchCopyContract(
         client_path=args.launch_client_path,
@@ -4514,6 +4649,7 @@ def main(argv: list[str] | None = None) -> int:
         data_dir=args.launch_copy_data_dir,
         copy_port=args.launch_copy_port,
         action_server_port=args.port,
+        helper_execution_provenance=args.launch_copy_helper_provenance,
     )
 
     server = ThreadingHTTPServer(
