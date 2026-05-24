@@ -1,0 +1,46 @@
+{
+  "contour": "WEB_DESIGN_FINISH_PASS_REENTRY_RECONCILIATION",
+  "environment": {
+    "design_server_url": "http://127.0.0.1:8796",
+    "desktop_viewport": "1440x1080",
+    "narrow_viewport": "390x844"
+  },
+  "screens": {
+    "quick_start_desktop": {
+      "body_overflow_x": false,
+      "desktop_screen": "quick-start",
+      "local_table_scroll_only": true,
+      "contains_summary_control_panel": true
+    },
+    "quick_start_narrow": {
+      "body_overflow_x": false,
+      "sidebar_above_main": true,
+      "local_table_scroll_only": true,
+      "contains_summary_control_panel": true
+    },
+    "accounts_narrow": {
+      "body_overflow_x": false,
+      "sidebar_above_main": true,
+      "local_table_scroll_only": true,
+      "contains_readonly_redacted_copy": true
+    },
+    "api_narrow": {
+      "body_overflow_x": false,
+      "sidebar_above_main": true,
+      "local_table_scroll_only": true,
+      "contains_server_owned_route_copy": true
+    },
+    "diagnostics_desktop": {
+      "body_overflow_x": false,
+      "contains_support_artifact_boundary": true,
+      "contains_deferred_history_copy": true,
+      "action_panel_visible": true
+    },
+    "settings_client_desktop": {
+      "body_overflow_x": false,
+      "contains_bounded_dispatch_copy": true,
+      "contains_finder_deferred_copy": true,
+      "contains_last_command_compact_copy": true
+    }
+  }
+}
