@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
+    build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
 )
@@ -22,6 +25,24 @@ def ok_readonly(source: str) -> dict[str, object]:
         "primary_truth_ok": True,
         "summary": {"machine_error_code": "OK"},
     }
+
+
+def rollback_point_create_admission_packet() -> dict[str, object]:
+    contract = build_custom_recovery_contract_packet(
+        original_status={"status": "ok"},
+        custom_status={"status": "ok"},
+        accounts_readonly=ok_readonly("accounts_readonly"),
+        api_readonly=ok_readonly("api_connections_readonly"),
+    )
+    process_owner = build_custom_recovery_rollback_process_owner_contract_packet(
+        contract_packet=contract,
+    )
+    dry_run = build_custom_recovery_rollback_point_dry_run_packet(
+        rollback_process_owner_contract=process_owner,
+    )
+    return build_custom_recovery_rollback_point_create_admission_packet(
+        rollback_point_dry_run_contract=dry_run,
+    )
 
 
 class CodexRecoveryContractTests(unittest.TestCase):
@@ -669,6 +690,123 @@ class CodexRecoveryContractTests(unittest.TestCase):
         self.assertIn("current_codex_home", forbidden)
         self.assertFalse(forbidden["current_codex_home"]["current_codex_excluded"])
         self.assertFalse(forbidden["current_codex_home"]["eligible_for_next_contour"])
+
+    def test_rollback_point_create_live_creates_redacted_owned_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_CREATE_LIVE_READY")
+            self.assertEqual(
+                packet["claim_scope"],
+                "custom_codex_recovery_rollback_point_create_live_only",
+            )
+            self.assertEqual(
+                packet["result_token"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_LIVE_READY",
+            )
+            self.assertTrue(packet["rollback_point_create_admission_valid"])
+            self.assertTrue(packet["rollback_point_create_admitted"])
+            self.assertTrue(packet["rollback_point_create_admitted_for_current_contour"])
+            self.assertTrue(packet["rollback_point_create_performed"])
+            self.assertTrue(packet["rollback_point_created"])
+            self.assertTrue(packet["filesystem_write_performed"])
+            self.assertEqual(packet["filesystem_write_scope"], "owned_generated_recovery_artifact")
+            self.assertEqual(packet["selected_write_surface_id"], "owned_generated_recovery_artifact")
+            self.assertTrue(packet["rollback_point_artifact_path_redacted"])
+            self.assertTrue(packet["rollback_point_artifact_digest_present"])
+            self.assertRegex(packet["rollback_point_artifact_sha256"], r"^[0-9a-f]{64}$")
+            self.assertNotIn(str(tmp), str(packet))
+            self.assertFalse(packet["snapshot_file_created"])
+            self.assertFalse(packet["rollback_apply_admitted"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["rollback_completed"])
+            self.assertFalse(packet["rollback_live_ready"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["current_codex_touched"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["auth_material_touched"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertEqual(len(list(Path(tmp).glob("*.json"))), 1)
+            actions = {action["id"]: action for action in packet["actions"]}
+            self.assertTrue(actions["rollback_point_create"]["performed"])
+            self.assertFalse(actions["rollback_apply"]["performed"])
+            self.assertFalse(actions["process_kill"]["performed"])
+            selected_surfaces = [
+                surface
+                for surface in packet["allowed_write_surfaces"]
+                if surface["surface_id"] == "owned_generated_recovery_artifact"
+            ]
+            self.assertEqual(len(selected_surfaces), 1)
+            self.assertTrue(selected_surfaces[0]["filesystem_write_performed"])
+            self.assertTrue(selected_surfaces[0]["write_admitted_for_current_contour"])
+
+    def test_rollback_point_create_live_rejects_browser_payload_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={"path": "/tmp/forbidden", "session_id": "ccs-forbidden"},
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+            )
+            self.assertIn("path", packet["forbidden_fields"])
+            self.assertIn("session_id", packet["forbidden_fields"])
+            self.assertFalse(packet["rollback_point_create_admission_valid"])
+            self.assertFalse(packet["rollback_point_create_performed"])
+            self.assertFalse(packet["rollback_point_created"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertEqual(list(Path(tmp).glob("*.json")), [])
+
+    def test_rollback_point_create_live_rejects_shallow_admission_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission={
+                    "status": "ok",
+                    "machine_error_code": "ROLLBACK_POINT_CREATE_ADMISSION_READY",
+                },
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_CREATE_ADMISSION_INVALID",
+            )
+            self.assertFalse(packet["rollback_point_create_admission_valid"])
+            self.assertFalse(packet["rollback_point_create_performed"])
+            self.assertFalse(packet["rollback_point_created"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertEqual(list(Path(tmp).glob("*.json")), [])
+
+    def test_rollback_point_create_live_rejects_non_object_payload_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload=[],  # type: ignore[arg-type]
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+            )
+            self.assertEqual(packet["forbidden_fields"], ["invalid_body"])
+            self.assertFalse(packet["rollback_point_create_admission_valid"])
+            self.assertFalse(packet["rollback_point_create_performed"])
+            self.assertFalse(packet["rollback_point_created"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertEqual(list(Path(tmp).glob("*.json")), [])
 
 
 if __name__ == "__main__":

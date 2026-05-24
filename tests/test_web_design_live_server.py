@@ -5620,7 +5620,6 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 forbidden_posts: dict[str, int] = {}
                 for suffix in (
                     "rollback-point-dry-run",
-                    "rollback-point",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5714,7 +5713,6 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             forbidden_posts,
             {
                 "rollback-point-dry-run": HTTPStatus.NOT_FOUND,
-                "rollback-point": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -5723,7 +5721,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             },
         )
 
-    def test_codex_custom_recovery_rollback_point_create_admission_endpoint_is_get_only(self) -> None:
+    def test_codex_custom_recovery_rollback_point_create_admission_endpoint_allows_bounded_create(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
             server = ThreadingHTTPServer(
                 ("127.0.0.1", free_port()),
@@ -5739,7 +5737,6 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 forbidden_posts: dict[str, int] = {}
                 for suffix in (
                     "rollback-point-create-admission",
-                    "rollback-point",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5752,6 +5749,26 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         forbidden_posts[suffix] = exc.code
                     else:  # pragma: no cover - defensive assertion branch
                         forbidden_posts[suffix] = HTTPStatus.OK
+                create_packet = json.loads(
+                    post_json(f"{base}/api/codex/custom/recovery/rollback-point", {})
+                )
+                rejected_create = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/recovery/rollback-point",
+                        {"path": "/tmp/forbidden", "session_id": "ccs-forbidden"},
+                    )
+                )
+                non_object_request = urllib.request.Request(
+                    f"{base}/api/codex/custom/recovery/rollback-point",
+                    data=b"[]",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                non_object_create = json.loads(
+                    NO_PROXY_OPENER.open(non_object_request, timeout=10)
+                    .read()
+                    .decode("utf-8")
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -5819,7 +5836,6 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             forbidden_posts,
             {
                 "rollback-point-create-admission": HTTPStatus.NOT_FOUND,
-                "rollback-point": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -5827,6 +5843,51 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 "kill": HTTPStatus.NOT_FOUND,
             },
         )
+        self.assertEqual(create_packet["status"], "ok")
+        self.assertEqual(create_packet["machine_error_code"], "ROLLBACK_POINT_CREATE_LIVE_READY")
+        self.assertEqual(
+            create_packet["claim_scope"],
+            "custom_codex_recovery_rollback_point_create_live_only",
+        )
+        self.assertEqual(
+            create_packet["result_token"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_LIVE_READY",
+        )
+        self.assertTrue(create_packet["rollback_point_create_admission_valid"])
+        self.assertTrue(create_packet["rollback_point_create_admitted_for_current_contour"])
+        self.assertTrue(create_packet["rollback_point_create_performed"])
+        self.assertTrue(create_packet["rollback_point_created"])
+        self.assertTrue(create_packet["filesystem_write_performed"])
+        self.assertEqual(create_packet["filesystem_write_scope"], "owned_generated_recovery_artifact")
+        self.assertTrue(create_packet["rollback_point_artifact_path_redacted"])
+        self.assertTrue(create_packet["rollback_point_artifact_digest_present"])
+        self.assertRegex(create_packet["rollback_point_artifact_sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("/tmp/", json.dumps(create_packet))
+        self.assertFalse(create_packet["snapshot_file_created"])
+        self.assertFalse(create_packet["rollback_apply_admitted"])
+        self.assertFalse(create_packet["rollback_apply_performed"])
+        self.assertFalse(create_packet["rollback_completed"])
+        self.assertFalse(create_packet["rollback_live_ready"])
+        self.assertFalse(create_packet["recovery_operator_ready"])
+        self.assertFalse(create_packet["current_codex_touched"])
+        self.assertFalse(create_packet["original_codex_touched"])
+        self.assertFalse(create_packet["auth_material_touched"])
+        self.assertFalse(create_packet["secret_value_recorded"])
+        self.assertEqual(rejected_create["status"], "blocked")
+        self.assertEqual(
+            rejected_create["machine_error_code"],
+            "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+        )
+        self.assertIn("path", rejected_create["forbidden_fields"])
+        self.assertIn("session_id", rejected_create["forbidden_fields"])
+        self.assertFalse(rejected_create["filesystem_write_performed"])
+        self.assertEqual(non_object_create["status"], "blocked")
+        self.assertEqual(
+            non_object_create["machine_error_code"],
+            "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+        )
+        self.assertIn("invalid_body", non_object_create["forbidden_fields"])
+        self.assertFalse(non_object_create["filesystem_write_performed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

@@ -46,6 +46,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
+    build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
 )
@@ -1704,6 +1705,29 @@ def build_handler(
         action_runner = sandbox_runner
     static_root = static_dir.resolve()
 
+    def build_rollback_point_create_admission_packet() -> dict[str, Any]:
+        original_status = build_original_status_packet()
+        custom_status = build_custom_status_packet(operator_surface_session.status_payload())
+        accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+        api_readonly = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+        contract_packet = build_custom_recovery_contract_packet(
+            original_status=original_status,
+            custom_status=custom_status,
+            accounts_readonly=accounts_readonly,
+            api_readonly=api_readonly,
+        )
+        rollback_process_owner_contract = (
+            build_custom_recovery_rollback_process_owner_contract_packet(
+                contract_packet=contract_packet,
+            )
+        )
+        rollback_point_dry_run_contract = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract=rollback_process_owner_contract,
+        )
+        return build_custom_recovery_rollback_point_create_admission_packet(
+            rollback_point_dry_run_contract=rollback_point_dry_run_contract,
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -1871,35 +1895,7 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/custom/recovery/rollback-point-create-admission":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
-                )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                contract_packet = build_custom_recovery_contract_packet(
-                    original_status=original_status,
-                    custom_status=custom_status,
-                    accounts_readonly=accounts_readonly,
-                    api_readonly=api_readonly,
-                )
-                rollback_process_owner_contract = (
-                    build_custom_recovery_rollback_process_owner_contract_packet(
-                        contract_packet=contract_packet,
-                    )
-                )
-                rollback_point_dry_run_contract = (
-                    build_custom_recovery_rollback_point_dry_run_packet(
-                        rollback_process_owner_contract=rollback_process_owner_contract,
-                    )
-                )
-                self._send_json(
-                    build_custom_recovery_rollback_point_create_admission_packet(
-                        rollback_point_dry_run_contract=rollback_point_dry_run_contract,
-                    )
-                )
+                self._send_json(build_rollback_point_create_admission_packet())
                 return
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:
@@ -1946,6 +1942,16 @@ def build_handler(
                         self._read_json_body(),
                         self._codex_account_commands(),
                         operator_surface_session.status_payload(),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/rollback-point":
+                self._send_json(
+                    build_custom_recovery_rollback_point_create_live_packet(
+                        rollback_point_create_admission=(
+                            build_rollback_point_create_admission_packet()
+                        ),
+                        browser_payload=self._read_rollback_point_create_body(),
                     )
                 )
                 return
@@ -2048,6 +2054,19 @@ def build_handler(
             except (UnicodeDecodeError, json.JSONDecodeError):
                 return {}
             return payload if isinstance(payload, dict) else {}
+
+        def _read_rollback_point_create_body(self) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return {"invalid_body": True}
+            if length <= 0:
+                return {}
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return {"invalid_body": True}
+            return payload if isinstance(payload, dict) else {"invalid_body": True}
 
         def _send_static(self, request_path: str) -> None:
             relative = "index.html" if request_path in {"", "/"} else request_path.lstrip("/")

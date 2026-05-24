@@ -1,0 +1,36 @@
+{
+  "admission_result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_ADMISSION_READY",
+  "admission_status": "ok",
+  "artifact_digest_present": true,
+  "artifact_path_redacted": true,
+  "artifact_sha256_len": 64,
+  "auth_material_touched": false,
+  "claim_scope": "custom_codex_recovery_rollback_point_create_live_only",
+  "create_result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_LIVE_READY",
+  "create_status": "ok",
+  "current_codex_touched": false,
+  "filesystem_write_performed": true,
+  "filesystem_write_scope": "owned_generated_recovery_artifact",
+  "non_object_filesystem_write_performed": false,
+  "non_object_forbidden_fields": [
+    "invalid_body"
+  ],
+  "non_object_machine_error_code": "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+  "non_object_status": "blocked",
+  "original_codex_touched": false,
+  "raw_tmp_path_in_create_packet": false,
+  "recovery_operator_ready": false,
+  "reject_filesystem_write_performed": false,
+  "reject_forbidden_fields": [
+    "path",
+    "session_id"
+  ],
+  "reject_machine_error_code": "ROLLBACK_POINT_CREATE_FORBIDDEN_BROWSER_FIELD",
+  "reject_status": "blocked",
+  "rollback_apply_admitted": false,
+  "rollback_apply_performed": false,
+  "rollback_live_ready": false,
+  "rollback_point_created": true,
+  "secret_value_recorded": false,
+  "server_kind": "local_http_with_admitted_test_runner"
+}

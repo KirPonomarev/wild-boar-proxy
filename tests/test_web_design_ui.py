@@ -493,6 +493,13 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("refreshCodexCustomRecoveryRollbackPointCreateAdmission()", js)
         self.assertIn('fetchCodexLaunchJson("api/codex/custom/recovery/rollback-point-create-admission")', js)
         self.assertIn("renderCodexCustomRecoveryRollbackPointCreateAdmission", js)
+        self.assertIn("createCodexCustomRecoveryRollbackPoint()", js)
+        self.assertIn('fetch("api/codex/custom/recovery/rollback-point", {', js)
+        self.assertIn('body: JSON.stringify({})', js)
+        self.assertIn("renderCodexCustomRecoveryRollbackPointCreate", js)
+        self.assertIn('"claim_scope": "custom_codex_recovery_rollback_point_create_live_only"', html)
+        self.assertIn('"rollback_point_artifact_path_redacted": true', html)
+        self.assertIn('"rollback_point_artifact_digest_present": false', html)
         self.assertIn("rollback_contract_defined: rollbackDefined", js)
         self.assertIn("rollback_live_ready: packet?.rollback_live_ready === true", js)
         self.assertIn("rollback_apply_admitted: packet?.rollback_apply_admitted === true", js)
@@ -549,6 +556,7 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('document.getElementById("codexCustomRecoveryRollbackProcessOwnerAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackProcessOwnerContract())', js)
         self.assertIn('document.getElementById("codexCustomRecoveryRollbackPointAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackPointDryRun())', js)
         self.assertIn('document.getElementById("codexCustomRecoveryRollbackPointAdmissionAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackPointCreateAdmission())', js)
+        self.assertIn('document.getElementById("codexCustomRecoveryRollbackPointCreateAction")?.addEventListener("click", () => createCodexCustomRecoveryRollbackPoint())', js)
         self.assertIn("runCodexCustomRecoveryChecks()", js)
         self.assertIn('fetchCodexLaunchJson("api/codex/original/status")', js)
         self.assertIn('fetchCodexLaunchJson("api/codex/custom/status")', js)
@@ -580,7 +588,6 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn('data-ui-action="global_reset"', html)
         self.assertNotIn('data-ui-action="credentials_mutate"', html)
         self.assertNotIn('data-ui-action="route_remove"', html)
-        self.assertNotIn('fetch("api/codex/custom/recovery"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/contract"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/contract", { method: "POST"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/admitted-session-actions"', js)
@@ -589,7 +596,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn('fetch("api/codex/custom/recovery/rollback-process-owner-contract", { method: "POST"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/rollback-point-dry-run"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/rollback-point-create-admission"', js)
-        self.assertNotIn('fetch("api/codex/custom/recovery/rollback-point"', js)
+        self.assertNotIn('path: "/tmp', js)
+        self.assertNotIn("session_id: codexCustomSelectedSessionId", js)
         self.assertNotIn('fetch("api/codex/custom/recovery/snapshot"', js)
         self.assertNotIn('fetch("api/codex/custom/recovery/apply"', js)
         self.assertNotIn('fetch("api/codex/custom/kill"', js)
@@ -755,7 +763,7 @@ const packet = {
   browser_forbidden_fields_rejected: true,
   browser_payload_allowed: false,
   browser_payload_allowed_keys: [],
-  forbidden_browser_fields: ["backend_id", "route_id", "path", "snapshot_path", "rollback_target", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+  forbidden_browser_fields: ["backend_id", "route_id", "path", "snapshot_path", "rollback_target", "session_id", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
   fresh_truth: false,
   historical_isolation_proof_only: true,
   dangerous_actions_disabled: true,
