@@ -557,6 +557,7 @@
             <div>Rollback point admission</div><div id="codexCustomRecoveryRollbackPointAdmission">create admission pending</div>
             <div>Rollback point create</div><div id="codexCustomRecoveryRollbackPointCreate">live create not run</div>
             <div>Rollback point verify</div><div id="codexCustomRecoveryRollbackPointVerify">verify not run</div>
+            <div>Rollback apply admission</div><div id="codexCustomRecoveryRollbackApplyAdmission">dry-run not evaluated</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -597,6 +598,10 @@
               <button id="codexCustomRecoveryRollbackPointVerifyAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
                 <span>Verify rollback point</span>
+              </button>
+              <button id="codexCustomRecoveryRollbackApplyAdmissionAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Apply admission dry-run</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -761,6 +766,42 @@
   "rollback_apply_performed": false,
   "rollback_completed": false,
   "rollback_live_ready": false,
+  "recovery_operator_ready": false,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "browser_payload_allowed": false,
+  "dangerous_actions_disabled": true
+}</pre>
+          <pre id="codexCustomRecoveryRollbackApplyAdmissionPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ROLLBACK_APPLY_ADMISSION_DRY_RUN_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_rollback_apply_admission_dry_run_only",
+  "rollback_apply_admission_evaluated": false,
+  "rollback_apply_admission_result": "not_evaluated",
+  "rollback_apply_admission_eligible_for_next_contour": false,
+  "rollback_point_verify_required": true,
+  "rollback_point_verify_valid": false,
+  "rollback_point_verified": false,
+  "rollback_point_artifact_path_redacted": true,
+  "rollback_point_manifest_verified": false,
+  "rollback_point_provenance_verified": false,
+  "rollback_point_digest_verified": false,
+  "rollback_point_surface_verified": false,
+  "recovery_contract_readonly_sources_ok": false,
+  "rollback_process_owner_contract_ok": false,
+  "session_state_read_performed": false,
+  "write_surface_machine_check_performed": false,
+  "write_surfaces_all_eligible": false,
+  "filesystem_read_performed": false,
+  "filesystem_write_performed": false,
+  "rollback_apply_admitted": false,
+  "rollback_apply_ready": false,
+  "rollback_apply_performed": false,
+  "rollback_completed": false,
+  "rollback_live_ready": false,
+  "process_kill_performed": false,
   "recovery_operator_ready": false,
   "current_codex_touched": false,
   "original_codex_touched": false,

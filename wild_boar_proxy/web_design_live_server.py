@@ -45,6 +45,7 @@ from wild_boar_proxy.codex_model_registry import (
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
+    build_custom_recovery_rollback_apply_admission_dry_run_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
@@ -1729,6 +1730,36 @@ def build_handler(
             rollback_point_dry_run_contract=rollback_point_dry_run_contract,
         )
 
+    def build_rollback_apply_admission_dry_run_packet(
+        browser_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if browser_payload:
+            return build_custom_recovery_rollback_apply_admission_dry_run_packet(
+                browser_payload=browser_payload,
+            )
+        original_status = build_original_status_packet()
+        custom_status = build_custom_status_packet(operator_surface_session.status_payload())
+        accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+        api_readonly = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+        contract_packet = build_custom_recovery_contract_packet(
+            original_status=original_status,
+            custom_status=custom_status,
+            accounts_readonly=accounts_readonly,
+            api_readonly=api_readonly,
+        )
+        rollback_process_owner_contract = (
+            build_custom_recovery_rollback_process_owner_contract_packet(
+                contract_packet=contract_packet,
+            )
+        )
+        rollback_point_verify = build_custom_recovery_rollback_point_verify_packet()
+        return build_custom_recovery_rollback_apply_admission_dry_run_packet(
+            rollback_point_verify=rollback_point_verify,
+            recovery_contract=contract_packet,
+            rollback_process_owner_contract=rollback_process_owner_contract,
+            sessions_packet=codex_custom_sessions.list_packet(),
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -1901,6 +1932,13 @@ def build_handler(
             if parsed.path == "/api/codex/custom/recovery/rollback-point/verify":
                 self._send_json(
                     build_custom_recovery_rollback_point_verify_packet(
+                        browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/rollback-apply/admission-dry-run":
+                self._send_json(
+                    build_rollback_apply_admission_dry_run_packet(
                         browser_payload=parse_qs(parsed.query) if parsed.query else None,
                     )
                 )

@@ -5738,6 +5738,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 for suffix in (
                     "rollback-point-create-admission",
                     "rollback-point/verify",
+                    "rollback-apply/admission-dry-run",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5776,6 +5777,19 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 verify_with_query = json.loads(
                     fetch(
                         f"{base}/api/codex/custom/recovery/rollback-point/verify"
+                        "?artifact_id=browser&path=/tmp/forbidden&digest=browser"
+                    )
+                )
+                apply_admission_packet = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/admission-dry-run"
+                    )
+                )
+                apply_admission_with_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/admission-dry-run"
                         "?artifact_id=browser&path=/tmp/forbidden&digest=browser"
                     )
                 )
@@ -5847,6 +5861,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             {
                 "rollback-point-create-admission": HTTPStatus.NOT_FOUND,
                 "rollback-point/verify": HTTPStatus.NOT_FOUND,
+                "rollback-apply/admission-dry-run": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -5947,6 +5962,53 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("path", verify_with_query["forbidden_fields"])
         self.assertIn("digest", verify_with_query["forbidden_fields"])
         self.assertFalse(verify_with_query["filesystem_read_performed"])
+        self.assertEqual(apply_admission_packet["status"], "ok")
+        self.assertEqual(
+            apply_admission_packet["machine_error_code"],
+            "ROLLBACK_APPLY_ADMISSION_DRY_RUN_EVALUATED",
+        )
+        self.assertEqual(
+            apply_admission_packet["claim_scope"],
+            "custom_codex_recovery_rollback_apply_admission_dry_run_only",
+        )
+        self.assertTrue(apply_admission_packet["rollback_apply_admission_evaluated"])
+        self.assertEqual(
+            apply_admission_packet["rollback_apply_admission_result"],
+            "eligible_for_next_contour",
+        )
+        self.assertTrue(apply_admission_packet["rollback_point_verify_valid"])
+        self.assertTrue(apply_admission_packet["rollback_point_verified"])
+        self.assertTrue(apply_admission_packet["rollback_point_manifest_verified"])
+        self.assertTrue(apply_admission_packet["rollback_point_provenance_verified"])
+        self.assertTrue(apply_admission_packet["rollback_point_digest_verified"])
+        self.assertTrue(apply_admission_packet["rollback_point_surface_verified"])
+        self.assertTrue(apply_admission_packet["recovery_contract_readonly_sources_ok"])
+        self.assertTrue(apply_admission_packet["rollback_process_owner_contract_ok"])
+        self.assertTrue(apply_admission_packet["session_state_read_performed"])
+        self.assertFalse(apply_admission_packet["filesystem_read_performed"])
+        self.assertFalse(apply_admission_packet["filesystem_write_performed"])
+        self.assertFalse(apply_admission_packet["rollback_apply_admitted"])
+        self.assertFalse(apply_admission_packet["rollback_apply_ready"])
+        self.assertFalse(apply_admission_packet["rollback_apply_performed"])
+        self.assertFalse(apply_admission_packet["rollback_completed"])
+        self.assertFalse(apply_admission_packet["rollback_live_ready"])
+        self.assertFalse(apply_admission_packet["process_kill_performed"])
+        self.assertFalse(apply_admission_packet["recovery_operator_ready"])
+        self.assertFalse(apply_admission_packet["current_codex_touched"])
+        self.assertFalse(apply_admission_packet["original_codex_touched"])
+        self.assertFalse(apply_admission_packet["auth_material_touched"])
+        self.assertFalse(apply_admission_packet["secret_value_recorded"])
+        self.assertNotIn("/tmp/", json.dumps(apply_admission_packet))
+        self.assertEqual(apply_admission_with_query["status"], "blocked")
+        self.assertEqual(
+            apply_admission_with_query["machine_error_code"],
+            "ROLLBACK_APPLY_ADMISSION_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("artifact_id", apply_admission_with_query["forbidden_fields"])
+        self.assertIn("path", apply_admission_with_query["forbidden_fields"])
+        self.assertIn("digest", apply_admission_with_query["forbidden_fields"])
+        self.assertFalse(apply_admission_with_query["filesystem_read_performed"])
+        self.assertFalse(apply_admission_with_query["filesystem_write_performed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
