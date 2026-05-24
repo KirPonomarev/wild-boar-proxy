@@ -70,6 +70,7 @@ from wild_boar_proxy.runtime import (
     DEFAULT_LAUNCHER_SCRIPT_NAME,
     RuntimePaths,
     build_command_payload,
+    run_legacy_import,
 )
 from wild_boar_proxy.review_bridge_apply_admission import (
     ReviewApplyContext,
@@ -542,13 +543,13 @@ UI_ACTION_ALLOWLIST = {
         "adapter_command_id": "legacy_import",
         "action_role": "setup_import_import_capable_foundation",
         "mutation_class": "setup_import_admission",
-        "mutates_runtime": False,
+        "mutates_runtime": True,
         "affects_primary_truth": False,
         "confirmation_required": True,
-        "post_action_refresh_required": False,
-        "action_claim_scope": "только packet-owned foundation truth для import-capable lane; confirm, collision handling и final import execution остаются вне этого контура",
-        "display_name": "Показать import-capable lane",
-        "human_meaning": "Показать admitted packet path для import-capable lane без final confirm semantics и без выполнения legacy import.",
+        "post_action_refresh_required": True,
+        "action_claim_scope": "token-only вызов остаётся packet-owned reference truth; final legacy import write допускается только через explicit confirm и server-owned token binding",
+        "display_name": "Импортировать найденную setup",
+        "human_meaning": "Показать token-bound import lane и выполнить legacy import только после explicit confirm без browser-owned path truth.",
     },
 }
 
@@ -649,6 +650,7 @@ LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_LEGACY_IMPORT_DISCOVERY_SOURCE
 LEGACY_IMPORT_TOKEN_REQUIRED_CODE = "UI_LEGACY_IMPORT_TOKEN_REQUIRED"
 LEGACY_IMPORT_TOKEN_INVALID_CODE = "UI_LEGACY_IMPORT_TOKEN_INVALID"
 LEGACY_IMPORT_TOKEN_UNKNOWN_CODE = "UI_LEGACY_IMPORT_TOKEN_UNKNOWN"
+LEGACY_IMPORT_CONFIRM_INVALID_CODE = "UI_LEGACY_IMPORT_CONFIRM_INVALID"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
@@ -1198,6 +1200,129 @@ def _legacy_import_reference_packet(
                 "filesystem_mutation_performed": False,
                 "import_execution_claimed": False,
                 "confirm_semantics_claimed": False,
+            }
+        },
+    )
+
+
+def _sanitize_legacy_import_result(payload: dict[str, Any]) -> dict[str, Any]:
+    legacy_import_result = payload.get("legacy_import_result")
+    if not isinstance(legacy_import_result, dict):
+        return {}
+    return {
+        key: value
+        for key, value in legacy_import_result.items()
+        if key != "source_dir"
+    }
+
+
+def _sanitize_external_models_result(payload: dict[str, Any]) -> dict[str, Any]:
+    external_models_result = payload.get("external_models_result")
+    if not isinstance(external_models_result, dict):
+        return {}
+    imported_files = external_models_result.get("imported_files")
+    sanitized = {
+        key: value
+        for key, value in external_models_result.items()
+        if key != "imported_files"
+    }
+    sanitized["imported_files_count"] = (
+        len(imported_files) if isinstance(imported_files, list) else 0
+    )
+    return sanitized
+
+
+def _sanitize_legacy_import_human_message(message: str, source_dir: Path) -> str:
+    sanitized = message
+    for candidate in {
+        str(source_dir),
+        str(source_dir.expanduser()),
+        str(source_dir.resolve(strict=False)),
+        str(source_dir.expanduser().resolve(strict=False)),
+    }:
+        if candidate:
+            sanitized = sanitized.replace(candidate, "<server-owned-legacy-source>")
+    return sanitized
+
+
+def _legacy_import_confirmed_packet(
+    token_store: LegacyImportTokenStore | None,
+    *,
+    token_ref: str,
+) -> dict[str, Any]:
+    record = token_store.resolve(token_ref) if token_store is not None else None
+    if record is None:
+        return build_command_payload(
+            ok=False,
+            human_message="Legacy import reference token is missing or no longer active.",
+            machine_error_code=LEGACY_IMPORT_TOKEN_UNKNOWN_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "reference_state": "blocked",
+                    "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "session_token_materialized": False,
+                    "token_server_owned": False,
+                    "token_status": "missing",
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "confirm_semantics_claimed": True,
+                    "explicit_confirm_observed": True,
+                    "receipt_state": "write_blocked",
+                }
+            },
+        )
+    try:
+        runtime_packet = run_legacy_import(RuntimePaths.from_env(), str(record.source_dir))
+    finally:
+        if token_store is not None:
+            token_store.clear()
+    changed_files = list(runtime_packet.get("changed_files", []))
+    ok = (
+        runtime_packet.get("status") == "ok"
+        and runtime_packet.get("exit_code") == 0
+        and runtime_packet.get("machine_error_code") == "OK"
+    )
+    return build_command_payload(
+        ok=ok,
+        human_message=_sanitize_legacy_import_human_message(
+            str(runtime_packet.get("human_message", "")),
+            record.source_dir,
+        ),
+        machine_error_code=str(runtime_packet.get("machine_error_code", "")),
+        liveness=str(runtime_packet.get("liveness", "unknown")),
+        severity=str(runtime_packet.get("severity", "recoverable")),
+        operator_action=str(
+            runtime_packet.get("operator_action")
+            or runtime_packet.get("next_action")
+            or "none"
+        ),
+        changed_files=changed_files,
+        exit_code=(
+            int(runtime_packet["exit_code"])
+            if isinstance(runtime_packet.get("exit_code"), int)
+            else None
+        ),
+        extra={
+            "data": {
+                "reference_state": "import_completed" if ok else "write_failed",
+                "source_kind": record.source_kind,
+                "browser_path_intake": False,
+                "session_token_materialized": False,
+                "token_ref": record.token_ref,
+                "token_server_owned": True,
+                "token_status": "consumed",
+                "filesystem_mutation_performed": bool(changed_files),
+                "import_execution_claimed": True,
+                "confirm_semantics_claimed": True,
+                "explicit_confirm_observed": True,
+                "receipt_state": "write_completed" if ok else "write_failed",
+                "legacy_import_result": _sanitize_legacy_import_result(runtime_packet),
+                "external_models_result": _sanitize_external_models_result(runtime_packet),
             }
         },
     )
@@ -2058,7 +2183,7 @@ def run_ui_action(
         forbidden_browser_fields = tuple(
             field
             for field in payload
-            if field not in {"ui_action", "token_ref"}
+            if field not in {"ui_action", "token_ref", "confirmed"}
         )
         if forbidden_browser_fields:
             return _unavailable_action(
@@ -2088,6 +2213,15 @@ def run_ui_action(
                 LEGACY_IMPORT_TOKEN_INVALID_CODE,
                 availability_state="token_required",
                 disabled_reasons=("token_invalid",),
+            )
+        confirmed = payload.get("confirmed")
+        if confirmed is not None and not isinstance(confirmed, bool):
+            return _unavailable_action(
+                ui_action,
+                "Legacy import confirmed flag must be boolean.",
+                LEGACY_IMPORT_CONFIRM_INVALID_CODE,
+                availability_state="token_required",
+                disabled_reasons=("confirm_invalid",),
             )
 
     action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
@@ -2123,9 +2257,16 @@ def run_ui_action(
         return _direct_ui_action_packet_response(
             ui_action,
             action_spec=action_spec,
-            packet=_legacy_import_reference_packet(
-                legacy_import_token_store,
-                token_ref=str(payload.get("token_ref") or ""),
+            packet=(
+                _legacy_import_confirmed_packet(
+                    legacy_import_token_store,
+                    token_ref=str(payload.get("token_ref") or ""),
+                )
+                if payload.get("confirmed") is True
+                else _legacy_import_reference_packet(
+                    legacy_import_token_store,
+                    token_ref=str(payload.get("token_ref") or ""),
+                )
             ),
         )
     if not _action_available(
