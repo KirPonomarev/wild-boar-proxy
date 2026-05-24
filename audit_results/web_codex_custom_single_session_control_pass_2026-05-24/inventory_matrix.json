@@ -1,0 +1,40 @@
+{
+  "captured_at_utc": "2026-05-24T07:33:00Z",
+  "endpoints": {
+    "GET /api/codex/custom/sessions": "present",
+    "POST /api/codex/custom/sessions": "present",
+    "GET /api/codex/custom/sessions/:id": "present",
+    "POST /api/codex/custom/sessions/:id/prompt-dry-run": "present",
+    "POST /api/codex/custom/sessions/:id/prompt": "present",
+    "GET /api/codex/custom/sessions/:id/transcript": "present",
+    "POST /api/codex/custom/sessions/:id/cancel": "present_dry_run_cancel_only",
+    "POST /api/codex/custom/sessions/:id/cleanup": "present_owned_temp_root_only"
+  },
+  "ui_controls": {
+    "models_refresh": "present",
+    "accounts_refresh": "present",
+    "sessions_refresh": "present",
+    "session_create": "present",
+    "prompt_dry_run": "present",
+    "live_prompt": "present",
+    "cancel": "present_no_process_kill_claim",
+    "cleanup": "present",
+    "response_packet_panel": "present",
+    "transcript_panel": "present"
+  },
+  "gaps_closed_in_this_contour": [
+    "top-level trace_path exposed in session prompt packet",
+    "top-level upstream_status exposed in session prompt packet",
+    "top-level forwarded_to_wbp exposed in session prompt packet",
+    "selected_source_provenance exposed in packet/UI",
+    "current_codex_touched exposed in packet/UI",
+    "live success now requires isolated_engine_home_proven",
+    "trace_observer_packet is now whitelisted before browser exposure"
+  ],
+  "deferred": [
+    "account rotation/load proof",
+    "full multi-session UX",
+    "desktop GUI launch",
+    "destructive/admin actions"
+  ]
+}

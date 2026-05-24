@@ -386,6 +386,13 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 "command_output_file_is_temp": True,
                 "current_codex_home_used": False,
                 "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                    "authorization": "forbidden",
+                    "raw_body": "forbidden",
+                },
             }
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -403,6 +410,11 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertTrue(packet["independent_wbp_trace_observed"])
             self.assertTrue(packet["wbp_path_observed"])
             self.assertTrue(packet["cli_proxy_api_path_observed"])
+            self.assertEqual(packet["trace_path"], "/v1/responses")
+            self.assertEqual(packet["upstream_status"], 200)
+            self.assertTrue(packet["forwarded_to_wbp"])
+            self.assertNotIn("authorization", packet["trace_observer_packet"])
+            self.assertNotIn("raw_body", packet["trace_observer_packet"])
             self.assertTrue(packet["wbp_path_proven"])
             self.assertTrue(packet["cli_proxy_api_path_proven"])
             self.assertTrue(packet["live_prompt_full_success"])
@@ -410,7 +422,58 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertFalse(packet["route_provenance_proven"])
             self.assertEqual(packet["source_provenance_status"], "backend_proven")
             self.assertTrue(packet["source_provenance_proven"])
+            self.assertEqual(packet["selected_source_provenance"], "backend_proven")
+            self.assertFalse(packet["current_codex_touched"])
             self.assertEqual(packet["path_proof_status"], "independently_observed")
+
+    def test_prompt_run_blocks_success_when_current_codex_home_is_used(self) -> None:
+        def runner(payload: dict[str, object]) -> dict[str, object]:
+            return {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "final_message": "TRACE_OK",
+                "secret_value_recorded": False,
+                "configured_provider": "cliproxy",
+                "configured_wire_api": "responses",
+                "wbp_endpoint_configured": True,
+                "config_endpoint_matches": True,
+                "config_provider_matches": True,
+                "config_wire_api_matches": True,
+                "command_uses_stdin_dash": True,
+                "command_json_mode": True,
+                "env_codex_home_is_temp": False,
+                "env_home_is_temp": True,
+                "workdir_is_temp": True,
+                "command_workdir_is_temp": True,
+                "command_output_file_is_temp": True,
+                "current_codex_home_used": True,
+                "independent_wbp_trace_observed": True,
+                "trace_observer_packet": {
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "forwarded_to_wbp": True,
+                },
+            }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            created = manager.create_packet({"model_id": "gpt-5.3-codex"}, commands(), operator_status())
+            packet = manager.prompt_packet(
+                created["session"]["session_id"],
+                {"prompt": "OK"},
+                runner,
+                owner_authorized=True,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "CURRENT_CODEX_TOUCHED")
+            self.assertTrue(packet["model_response_present"])
+            self.assertTrue(packet["inference_proven"])
+            self.assertTrue(packet["wbp_path_proven"])
+            self.assertFalse(packet["isolated_engine_home_proven"])
+            self.assertTrue(packet["current_codex_touched"])
+            self.assertFalse(packet["live_prompt_full_success"])
+            self.assertEqual(packet["next_action"], "stop_and_diagnose_current_codex_touch")
 
     def test_route_backed_session_requires_route_provenance_before_prompt_run(self) -> None:
         calls: list[dict[str, object]] = []

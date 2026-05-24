@@ -102,6 +102,34 @@ def _token_usage(result: dict[str, Any]) -> tuple[bool, dict[str, Any], int | No
     return True, usage, int(total) if isinstance(total, int) else None
 
 
+def _safe_trace_observer_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "request_observed",
+        "response_observed",
+        "forwarded_to_wbp",
+        "forwarded_endpoint",
+        "method",
+        "path",
+        "request_body_sha256",
+        "response_body_sha256",
+        "upstream_status",
+        "prompt_body_recorded",
+        "auth_header_recorded",
+        "secret_value_recorded",
+        "raw_account_id_recorded",
+        "raw_backend_id_recorded",
+        "machine_error_code",
+        "observer_closed",
+    }
+    safe: dict[str, Any] = {}
+    for key, value in packet.items():
+        if key not in allowed:
+            continue
+        if isinstance(value, (str, int, bool)) or value is None:
+            safe[key] = value
+    return safe
+
+
 def _source_provenance_status(session: dict[str, Any]) -> str:
     if session.get("route_provenance_required") is True:
         if (
@@ -385,6 +413,14 @@ class CodexCustomSessionManager:
         token_usage_present, token_usage, token_burn = _token_usage(result)
         secret_value_recorded = result.get("secret_value_recorded") is True
         status_ok = result.get("status") == "ok" and bool(response_text) and not secret_value_recorded
+        isolated_engine_home_proven = (
+            result.get("env_codex_home_is_temp") is True
+            and result.get("env_home_is_temp") is True
+            and result.get("workdir_is_temp") is True
+            and result.get("command_workdir_is_temp") is True
+            and result.get("command_output_file_is_temp") is True
+            and result.get("current_codex_home_used") is False
+        )
         path_config_proven = (
             result.get("configured_provider") == "cliproxy"
             and result.get("configured_wire_api") == "responses"
@@ -396,7 +432,11 @@ class CodexCustomSessionManager:
             and result.get("command_json_mode") is True
         )
         independent_wbp_trace_observed = result.get("independent_wbp_trace_observed") is True
-        trace_observer_packet = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        raw_trace_observer_packet = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
+        trace_observer_packet = _safe_trace_observer_packet(raw_trace_observer_packet)
+        trace_path = str(trace_observer_packet.get("path") or "")
+        upstream_status = trace_observer_packet.get("upstream_status")
+        forwarded_to_wbp = trace_observer_packet.get("forwarded_to_wbp") is True
         wbp_path_configured = status_ok and path_config_proven
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
         source_provenance_status = _source_provenance_status(session)
@@ -405,35 +445,42 @@ class CodexCustomSessionManager:
         cli_proxy_api_path_proven = wbp_path_proven and result.get("configured_provider") == "cliproxy"
         trace_missing_after_response = status_ok and not wbp_path_proven
         route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
+        current_codex_touched_after_response = status_ok and result.get("current_codex_home_used") is True
+        isolation_missing_after_response = (
+            status_ok and not current_codex_touched_after_response and not isolated_engine_home_proven
+        )
         packet_status = (
             "ok"
-            if status_ok and wbp_path_proven and source_provenance_proven
+            if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
             else (
                 "blocked"
-                if trace_missing_after_response or route_provenance_missing_after_response
+                if trace_missing_after_response
+                or route_provenance_missing_after_response
+                or current_codex_touched_after_response
+                or isolation_missing_after_response
                 else str(result.get("status") or "failed")
             )
         )
         packet_machine_error_code = (
             "OK"
-            if status_ok and wbp_path_proven and source_provenance_proven
+            if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
             else (
                 "WBP_TRACE_PROOF_MISSING"
                 if trace_missing_after_response
                 else (
-                    "ROUTE_PROVENANCE_MISSING"
-                    if route_provenance_missing_after_response
-                    else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                    "CURRENT_CODEX_TOUCHED"
+                    if current_codex_touched_after_response
+                    else (
+                        "ISOLATION_PROOF_MISSING"
+                        if isolation_missing_after_response
+                        else (
+                            "ROUTE_PROVENANCE_MISSING"
+                            if route_provenance_missing_after_response
+                            else str(result.get("machine_error_code") or "ENGINE_PROMPT_FAILED")
+                        )
+                    )
                 )
             )
-        )
-        isolated_engine_home_proven = (
-            result.get("env_codex_home_is_temp") is True
-            and result.get("env_home_is_temp") is True
-            and result.get("workdir_is_temp") is True
-            and result.get("command_workdir_is_temp") is True
-            and result.get("command_output_file_is_temp") is True
-            and result.get("current_codex_home_used") is False
         )
         latency_ms = None
         duration_seconds = result.get("duration_seconds")
@@ -457,6 +504,7 @@ class CodexCustomSessionManager:
             "route_provenance_proven": session.get("route_provenance_proven") is True,
             "source_provenance_status": source_provenance_status,
             "source_provenance_proven": source_provenance_proven,
+            "selected_source_provenance": source_provenance_status,
             "selection_dry_run_proven": session.get("selection_dry_run_proven") is True,
             "live_selection_proven": session.get("live_selection_proven") is True,
             "browser_selected_backend": False,
@@ -471,7 +519,9 @@ class CodexCustomSessionManager:
             "prompt_preview_redacted": _safe_preview(prompt),
             "model_response_present": status_ok,
             "inference_proven": status_ok,
-            "live_prompt_full_success": status_ok and wbp_path_proven and source_provenance_proven,
+            "live_prompt_full_success": (
+                status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
+            ),
             "response_digest": response_digest,
             "response_preview_bounded": _response_preview(response_text) if status_ok else "",
             "token_usage_present": token_usage_present,
@@ -486,8 +536,12 @@ class CodexCustomSessionManager:
             "wbp_path_proven": wbp_path_proven,
             "cli_proxy_api_path_proven": cli_proxy_api_path_proven,
             "independent_wbp_trace_observed": independent_wbp_trace_observed,
+            "trace_path": trace_path,
+            "upstream_status": upstream_status if isinstance(upstream_status, int) else None,
+            "forwarded_to_wbp": forwarded_to_wbp,
             "trace_observer_packet": trace_observer_packet,
             "isolated_engine_home_proven": isolated_engine_home_proven,
+            "current_codex_touched": result.get("current_codex_home_used") is True,
             "configured_wire_api": result.get("configured_wire_api") if status_ok else "",
             "path_proof_status": "independently_observed" if wbp_path_proven else "configured_not_independently_observed",
             "path_proof_basis": "operator_surface_isolated_codex_exec_config_requires_independent_trace",
@@ -498,14 +552,22 @@ class CodexCustomSessionManager:
             "session": self._public_session(session),
             "next_action": (
                 "inspect_transcript"
-                if status_ok and wbp_path_proven and source_provenance_proven
+                if status_ok and wbp_path_proven and source_provenance_proven and isolated_engine_home_proven
                 else (
                     "inspect_trace_observer"
                     if trace_missing_after_response
                     else (
-                        "repair_route_provenance"
-                        if route_provenance_missing_after_response
-                        else str(result.get("next_action") or "stop_and_diagnose")
+                        "stop_and_diagnose_current_codex_touch"
+                        if current_codex_touched_after_response
+                        else (
+                            "repair_isolation_proof"
+                            if isolation_missing_after_response
+                            else (
+                                "repair_route_provenance"
+                                if route_provenance_missing_after_response
+                                else str(result.get("next_action") or "stop_and_diagnose")
+                            )
+                        )
                     )
                 )
             ),

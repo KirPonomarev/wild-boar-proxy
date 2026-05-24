@@ -4848,6 +4848,7 @@ class FakeOperatorSurfaceSession:
             "forwarded_to_wbp": trace_wbp,
             "forwarded_endpoint": "http://127.0.0.1:8318/v1" if trace_wbp else "",
             "path": "/v1/responses" if trace_wbp else "",
+            "upstream_status": 200 if trace_wbp else None,
             "prompt_body_recorded": False,
             "auth_header_recorded": False,
             "secret_value_recorded": False,
@@ -5532,8 +5533,13 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(proof["independent_wbp_trace_observed"])
         self.assertTrue(proof["wbp_path_observed"])
         self.assertTrue(proof["cli_proxy_api_path_observed"])
+        self.assertEqual(proof["trace_path"], "/v1/responses")
+        self.assertEqual(proof["upstream_status"], 200)
+        self.assertTrue(proof["forwarded_to_wbp"])
         self.assertTrue(proof["wbp_path_proven"])
         self.assertTrue(proof["cli_proxy_api_path_proven"])
+        self.assertEqual(proof["selected_source_provenance"], "backend_proven")
+        self.assertFalse(proof["current_codex_touched"])
         self.assertTrue(proof["live_prompt_full_success"])
         self.assertFalse(proof["browser_selected_backend"])
         self.assertEqual(
