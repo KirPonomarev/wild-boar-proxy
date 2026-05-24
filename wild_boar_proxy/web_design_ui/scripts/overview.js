@@ -473,6 +473,10 @@ let onboardLoginOverlayOpenUrl = "";
 let onboardLoginWindowBlobUrl = "";
 let operatorRunInFlight = false;
 let operatorLastPacket = null;
+let reviewPanelBusy = false;
+let reviewSurfacePacket = null;
+let reviewCommandsPacket = null;
+let reviewLastCommandPacket = null;
 let codexLaunchDryRunInFlight = false;
 let codexCustomModelDryRunInFlight = false;
 let codexCustomAccountDryRunInFlight = false;
@@ -722,6 +726,14 @@ async function fetchOperatorJson(path) {
 }
 
 async function fetchCodexLaunchJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${path} http ${response.status}`);
+  }
+  return response.json();
+}
+
+async function fetchReviewJson(path) {
   const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`${path} http ${response.status}`);
@@ -4099,6 +4111,429 @@ async function runOperatorPrompt() {
   } finally {
     operatorRunInFlight = false;
     document.getElementById("operatorRunAction")?.removeAttribute("disabled");
+  }
+}
+
+function reviewSetText(id, value) {
+  operatorSetText(id, value);
+}
+
+function reviewSetChip(visual, label) {
+  const chip = document.getElementById("reviewStatusChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function reviewPacketTemplate() {
+  return {
+    schema_version: 1,
+    project_id: "paste-current-project-id",
+    baseline_hash: "paste-current-baseline-hash",
+    review_items: [
+      {
+        id: "change-1",
+        kind: "exact_text",
+        scene_id: "scene-001",
+        before: "old text",
+        after: "new text"
+      }
+    ],
+    orphan_comments: [],
+    diagnostics: []
+  };
+}
+
+function reviewEnsurePacketInputSeed() {
+  const node = document.getElementById("reviewPacketInput");
+  if (!node || String(node.value || "").trim()) {
+    return;
+  }
+  node.value = JSON.stringify(reviewPacketTemplate(), null, 2);
+}
+
+async function postReviewCommand(commandId, payload = {}) {
+  const commandField = "command" + "_id";
+  const response = await fetch("api/review-command", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [commandField]: commandId, payload })
+  });
+  if (!response.ok) {
+    throw new Error(`api/review-command http ${response.status}`);
+  }
+  return response.json();
+}
+
+function reviewCommandSpec(commandId) {
+  const commands = Array.isArray(reviewCommandsPacket?.commands) ? reviewCommandsPacket.commands : [];
+  return commands.find((entry) => entry?.["command" + "_id"] === commandId) || null;
+}
+
+function reviewExactTextChanges() {
+  const surface = reviewSurfacePacket?.review_surface;
+  return Array.isArray(surface?.text_changes) ? surface.text_changes : [];
+}
+
+function reviewStructuralManualOnly() {
+  const surface = reviewSurfacePacket?.review_surface;
+  return Array.isArray(surface?.structural_manual_only) ? surface.structural_manual_only : [];
+}
+
+function reviewOrphanComments() {
+  const surface = reviewSurfacePacket?.review_surface;
+  return Array.isArray(surface?.orphan_comments) ? surface.orphan_comments : [];
+}
+
+function reviewReceiptPacketValue() {
+  const receipt = reviewLastCommandPacket?.data?.receipt;
+  return receipt ? JSON.stringify(receipt, null, 2) : "receipt pending";
+}
+
+function reviewBlockedPacket() {
+  if (reviewLastCommandPacket?.status && reviewLastCommandPacket.status !== "ok") {
+    return reviewLastCommandPacket;
+  }
+  if (reviewSurfacePacket?.apply_preflight?.status && reviewSurfacePacket.apply_preflight.status !== "ok") {
+    return reviewSurfacePacket.apply_preflight;
+  }
+  if (reviewSurfacePacket?.status && reviewSurfacePacket.status !== "ok") {
+    return reviewSurfacePacket;
+  }
+  return null;
+}
+
+function reviewLiveSourceSelected() {
+  const sourcePicker = document.getElementById("sourcePicker");
+  return !sourcePicker || sourcePicker.value === "live";
+}
+
+function reviewApplyAdmissionState() {
+  const preflight = reviewSurfacePacket?.apply_preflight;
+  const applySpec = reviewCommandSpec("apply_exact_text_change");
+  const admitted = Boolean(
+    applySpec?.runtime_enabled === true
+      && preflight?.status === "ok"
+      && preflight?.data?.future_apply_admissible === true
+      && preflight?.machine_error_code === "REVIEW_APPLY_TARGET_RESOLVED_ADMITTED"
+  );
+  return {
+    admitted,
+    label: admitted
+      ? String(preflight?.machine_error_code || "admitted")
+      : (
+        applySpec?.runtime_enabled === false
+          ? "REVIEW_APPLY_NOT_ENABLED"
+          : (preflight?.machine_error_code || reviewSurfacePacket?.machine_error_code || "not_ready")
+      ),
+  };
+}
+
+function reviewRejectNonLiveCommand(commandId) {
+  const commandField = "command" + "_id";
+  reviewLastCommandPacket = {
+    status: "command_error",
+    machine_error_code: "REVIEW_UI_SOURCE_NOT_LIVE",
+    human_message: `Review command ${commandId} is available only when source=live.`,
+    changed_files: [],
+    next_action: "switch_source_to_live",
+    data: { [commandField]: commandId }
+  };
+  renderReviewPanel();
+}
+
+function reviewListRow(title, detail) {
+  const item = document.createElement("div");
+  item.className = "action-ledger-item";
+  const head = document.createElement("div");
+  head.className = "action-ledger-entry-head";
+  const label = document.createElement("strong");
+  label.textContent = title;
+  head.append(label);
+  item.append(head);
+  const note = document.createElement("p");
+  note.textContent = detail || "-";
+  item.append(note);
+  return item;
+}
+
+function renderReviewList(targetId, rows) {
+  const node = document.getElementById(targetId);
+  if (!node) {
+    return;
+  }
+  node.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "action-ledger-empty";
+    empty.textContent = "Нет данных.";
+    node.append(empty);
+    return;
+  }
+  for (const row of rows) {
+    node.append(row);
+  }
+}
+
+function renderReviewPanelFailure(error) {
+  reviewSurfacePacket = null;
+  reviewCommandsPacket = null;
+  reviewSetChip("red", "failed");
+  reviewSetText("reviewStatusLine", `Review bridge fetch failed: ${error.message}`);
+  reviewSetText("reviewSessionState", "not available");
+  reviewSetText("reviewProjectId", "-");
+  reviewSetText("reviewBaselineHash", "-");
+  reviewSetText("reviewTextChangeCount", "0");
+  reviewSetText("reviewStructuralCount", "0");
+  reviewSetText("reviewOrphanCount", "0");
+  reviewSetText("reviewApplyPreflightState", "fetch failed");
+  reviewSetText("reviewLastCommandCode", reviewLastCommandPacket?.machine_error_code || "-");
+  renderReviewList("reviewBlockedReasonsList", [reviewListRow("fetch", error.message)]);
+  renderReviewList("reviewTextChangesList", []);
+  renderReviewList("reviewStructuralList", []);
+  renderReviewList("reviewOrphanList", []);
+  const receiptNode = document.getElementById("reviewReceiptPacket");
+  if (receiptNode) {
+    receiptNode.textContent = reviewReceiptPacketValue();
+  }
+  const responseNode = document.getElementById("reviewCommandResponse");
+  if (responseNode) {
+    responseNode.textContent = JSON.stringify({
+      status: "fetch_failed",
+      machine_error_code: "REVIEW_UI_FETCH_FAILED",
+      human_message: error.message
+    }, null, 2);
+  }
+  document.getElementById("reviewImportAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("reviewApplyAction")?.setAttribute("disabled", "disabled");
+  document.getElementById("reviewClearAction")?.setAttribute("disabled", "disabled");
+}
+
+function renderReviewPanel() {
+  reviewEnsurePacketInputSeed();
+  if (!reviewLiveSourceSelected()) {
+    reviewSetChip("neutral", "fixture");
+    reviewSetText("reviewStatusLine", "Review bridge UI reflects existing live packets only. Переключите source на live.");
+    reviewSetText("reviewSessionState", "live only");
+    reviewSetText("reviewProjectId", "-");
+    reviewSetText("reviewBaselineHash", "-");
+    reviewSetText("reviewTextChangeCount", "0");
+    reviewSetText("reviewStructuralCount", "0");
+    reviewSetText("reviewOrphanCount", "0");
+    reviewSetText("reviewApplyPreflightState", "live only");
+    reviewSetText("reviewLastCommandCode", reviewLastCommandPacket?.machine_error_code || "-");
+    renderReviewList("reviewBlockedReasonsList", [reviewListRow("review bridge", "Fixture preview does not expose review command/query truth.")]);
+    renderReviewList("reviewTextChangesList", []);
+    renderReviewList("reviewStructuralList", []);
+    renderReviewList("reviewOrphanList", []);
+    const receiptNode = document.getElementById("reviewReceiptPacket");
+    if (receiptNode) {
+      receiptNode.textContent = reviewReceiptPacketValue();
+    }
+    const responseNode = document.getElementById("reviewCommandResponse");
+    if (responseNode) {
+      responseNode.textContent = reviewLastCommandPacket ? JSON.stringify(reviewLastCommandPacket, null, 2) : "command packet pending";
+    }
+    document.getElementById("reviewImportAction")?.setAttribute("disabled", "disabled");
+    document.getElementById("reviewApplyAction")?.setAttribute("disabled", "disabled");
+    document.getElementById("reviewClearAction")?.setAttribute("disabled", "disabled");
+    return;
+  }
+
+  const sessionPresent = reviewSurfacePacket?.session_present === true;
+  const exactChanges = reviewExactTextChanges();
+  const structural = reviewStructuralManualOnly();
+  const orphanComments = reviewOrphanComments();
+  const blockedPacket = reviewBlockedPacket();
+  const applyState = reviewApplyAdmissionState();
+  const surfaceStatus = reviewSurfacePacket?.status || "unknown";
+  const statusVisual = surfaceStatus === "ok"
+    ? (applyState.admitted ? "green" : "amber")
+    : (surfaceStatus === "empty" ? "neutral" : "red");
+  reviewSetChip(statusVisual, applyState.admitted ? "apply admitted" : surfaceStatus);
+  reviewSetText(
+    "reviewStatusLine",
+    reviewSurfacePacket?.human_message
+      || (sessionPresent ? "Review session loaded through existing query surface." : "Review session is empty.")
+  );
+  reviewSetText("reviewSessionState", sessionPresent ? "active" : "empty");
+  reviewSetText("reviewProjectId", reviewSurfacePacket?.project_id || "-");
+  reviewSetText("reviewBaselineHash", reviewSurfacePacket?.baseline_hash || "-");
+  reviewSetText("reviewTextChangeCount", String(exactChanges.length));
+  reviewSetText("reviewStructuralCount", String(structural.length));
+  reviewSetText("reviewOrphanCount", String(orphanComments.length));
+  reviewSetText("reviewApplyPreflightState", applyState.label);
+  reviewSetText("reviewLastCommandCode", reviewLastCommandPacket?.machine_error_code || "-");
+
+  const blockedRows = [];
+  if (blockedPacket?.machine_error_code) {
+    blockedRows.push(
+      reviewListRow(
+        blockedPacket.machine_error_code,
+        blockedPacket.human_message || blockedPacket.next_action || "blocked"
+      )
+    );
+  }
+  renderReviewList("reviewBlockedReasonsList", blockedRows);
+  renderReviewList(
+    "reviewTextChangesList",
+    exactChanges.map((item) => reviewListRow(String(item.id || "exact_text"), `${String(item.scene_id || "-")} · exact_text`))
+  );
+  renderReviewList(
+    "reviewStructuralList",
+    structural.map((item) => reviewListRow(String(item.id || "structural"), "manual_only structural review item"))
+  );
+  renderReviewList(
+    "reviewOrphanList",
+    orphanComments.map((item, index) => reviewListRow(`orphan-${index + 1}`, String(item?.message || item?.text || JSON.stringify(item))))
+  );
+
+  const receiptNode = document.getElementById("reviewReceiptPacket");
+  if (receiptNode) {
+    receiptNode.textContent = reviewReceiptPacketValue();
+  }
+  const responseNode = document.getElementById("reviewCommandResponse");
+  if (responseNode) {
+    responseNode.textContent = reviewLastCommandPacket ? JSON.stringify(reviewLastCommandPacket, null, 2) : "command packet pending";
+  }
+  document.getElementById("reviewImportAction")?.removeAttribute("disabled");
+  document.getElementById("reviewClearAction")?.removeAttribute("disabled");
+
+  const applyButton = document.getElementById("reviewApplyAction");
+  if (applyButton) {
+    if (applyState.admitted) {
+      applyButton.removeAttribute("disabled");
+    } else {
+      applyButton.setAttribute("disabled", "disabled");
+    }
+  }
+}
+
+async function refreshReviewPanel() {
+  if (reviewPanelBusy || currentScreen() !== "overview") {
+    return;
+  }
+  reviewPanelBusy = true;
+  try {
+    reviewEnsurePacketInputSeed();
+    if (!reviewLiveSourceSelected()) {
+      renderReviewPanel();
+      return;
+    }
+    const [surface, commands] = await Promise.all([
+      fetchReviewJson("api/review-surface"),
+      fetchReviewJson("api/review-commands")
+    ]);
+    reviewSurfacePacket = surface;
+    reviewCommandsPacket = commands;
+    renderReviewPanel();
+  } catch (error) {
+    renderReviewPanelFailure(error);
+  } finally {
+    reviewPanelBusy = false;
+  }
+}
+
+async function importReviewPacketFromPanel() {
+  if (reviewPanelBusy) {
+    return;
+  }
+  if (!reviewLiveSourceSelected()) {
+    reviewRejectNonLiveCommand("import_review_packet");
+    return;
+  }
+  const input = document.getElementById("reviewPacketInput");
+  const rawValue = input ? String(input.value || "").trim() : "";
+  if (!rawValue) {
+    reviewLastCommandPacket = {
+      status: "command_error",
+      machine_error_code: "REVIEW_UI_PACKET_JSON_INVALID",
+      human_message: "Paste a bounded JSON review packet before import.",
+    };
+    renderReviewPanel();
+    return;
+  }
+  let reviewPacket;
+  try {
+    reviewPacket = JSON.parse(rawValue);
+  } catch (error) {
+    reviewLastCommandPacket = {
+      status: "command_error",
+      machine_error_code: "REVIEW_UI_PACKET_JSON_INVALID",
+      human_message: `Review packet JSON parse failed: ${error.message}`,
+    };
+    renderReviewPanel();
+    return;
+  }
+  try {
+    reviewPanelBusy = true;
+    reviewLastCommandPacket = await postReviewCommand("import_review_packet", { review_packet: reviewPacket });
+    const [surface, commands] = await Promise.all([
+      fetchReviewJson("api/review-surface"),
+      fetchReviewJson("api/review-commands")
+    ]);
+    reviewSurfacePacket = surface;
+    reviewCommandsPacket = commands;
+    renderReviewPanel();
+  } catch (error) {
+    renderReviewPanelFailure(error);
+  } finally {
+    reviewPanelBusy = false;
+  }
+}
+
+async function applyReviewExactChangeFromPanel() {
+  if (reviewPanelBusy) {
+    return;
+  }
+  if (!reviewLiveSourceSelected()) {
+    reviewRejectNonLiveCommand("apply_exact_text_change");
+    return;
+  }
+  try {
+    reviewPanelBusy = true;
+    reviewLastCommandPacket = await postReviewCommand("apply_exact_text_change", {});
+    const [surface, commands] = await Promise.all([
+      fetchReviewJson("api/review-surface"),
+      fetchReviewJson("api/review-commands")
+    ]);
+    reviewSurfacePacket = surface;
+    reviewCommandsPacket = commands;
+    renderReviewPanel();
+  } catch (error) {
+    renderReviewPanelFailure(error);
+  } finally {
+    reviewPanelBusy = false;
+  }
+}
+
+async function clearReviewSessionFromPanel() {
+  if (reviewPanelBusy) {
+    return;
+  }
+  if (!reviewLiveSourceSelected()) {
+    reviewRejectNonLiveCommand("clear_review_session");
+    return;
+  }
+  try {
+    reviewPanelBusy = true;
+    reviewLastCommandPacket = await postReviewCommand("clear_review_session", {});
+    const [surface, commands] = await Promise.all([
+      fetchReviewJson("api/review-surface"),
+      fetchReviewJson("api/review-commands")
+    ]);
+    reviewSurfacePacket = surface;
+    reviewCommandsPacket = commands;
+    renderReviewPanel();
+  } catch (error) {
+    renderReviewPanelFailure(error);
+  } finally {
+    reviewPanelBusy = false;
   }
 }
 
@@ -9882,6 +10317,9 @@ async function setFixtureState(stateId, updateUrl = false) {
   } else {
     renderSnapshot(fixture);
   }
+  if (currentScreen() === "overview") {
+    renderReviewPanel();
+  }
 }
 
 async function setLiveReadonly(updateUrl = false) {
@@ -9914,6 +10352,9 @@ async function setLiveReadonly(updateUrl = false) {
     renderSnapshot(snapshot);
   }
   setSourceCopy("live");
+  if (currentScreen() === "overview") {
+    await refreshReviewPanel();
+  }
   return snapshot;
 }
 
@@ -10043,6 +10484,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
   document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
+  document.getElementById("reviewRefreshAction")?.addEventListener("click", () => refreshReviewPanel());
+  document.getElementById("reviewImportAction")?.addEventListener("click", () => importReviewPacketFromPanel());
+  document.getElementById("reviewApplyAction")?.addEventListener("click", () => applyReviewExactChangeFromPanel());
+  document.getElementById("reviewClearAction")?.addEventListener("click", () => clearReviewSessionFromPanel());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());
   document.getElementById("actionLedgerBackdrop")?.addEventListener("click", () => closeActionLedgerPanel());
   document.getElementById("actionLedgerClear")?.addEventListener("click", () => clearActionLedger());
@@ -10103,4 +10548,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   refreshCodexCustomAccountsPanel();
   refreshCodexCustomSessionsPanel();
   refreshOperatorPanel();
+  reviewEnsurePacketInputSeed();
+  renderReviewPanel();
+  if (initialScreen === "overview" && initialSource === "live") {
+    refreshReviewPanel();
+  }
 });

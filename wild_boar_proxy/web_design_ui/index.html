@@ -1176,6 +1176,66 @@
           <div id="operatorTranscript" class="action-ledger-list" aria-label="Codex Operator transcript"></div>
         </section>
 
+        <section id="reviewBridgePanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Review Bridge</div>
+              <div id="reviewStatusLine" class="secondary">Review bridge surface ещё не загружен.</div>
+            </div>
+            <span id="reviewStatusChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Session</div><div id="reviewSessionState">not loaded</div>
+            <div>Project</div><div id="reviewProjectId">-</div>
+            <div>Baseline</div><div id="reviewBaselineHash">-</div>
+            <div>Text changes</div><div id="reviewTextChangeCount">0</div>
+            <div>Structural manual-only</div><div id="reviewStructuralCount">0</div>
+            <div>Orphan comments</div><div id="reviewOrphanCount">0</div>
+            <div>Apply preflight</div><div id="reviewApplyPreflightState">not requested</div>
+            <div>Last command</div><div id="reviewLastCommandCode">-</div>
+          </div>
+          <label class="form-field" for="reviewPacketInput">
+            <span>Bounded JSON review packet</span>
+            <textarea id="reviewPacketInput" rows="12" autocomplete="off" spellcheck="false"></textarea>
+          </label>
+          <div class="action-summary-footer">
+            <div>
+              <span>source: <strong>existing review command/query surfaces only</strong></span>
+              <span>intake: <strong>bounded JSON payload</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="reviewRefreshAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/arrows-clockwise.png" alt="" aria-hidden="true">
+                <span>Обновить</span>
+              </button>
+              <button id="reviewImportAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
+                <span>Импортировать</span>
+              </button>
+              <button id="reviewApplyAction" class="button" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
+                <span>Применить exact change</span>
+              </button>
+              <button id="reviewClearAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
+                <span>Очистить</span>
+              </button>
+            </div>
+          </div>
+          <div class="action-panel-grid">
+            <div>Blocked reasons</div>
+            <div id="reviewBlockedReasonsList" class="action-ledger-list" aria-live="polite"></div>
+            <div>Text changes</div>
+            <div id="reviewTextChangesList" class="action-ledger-list" aria-live="polite"></div>
+            <div>Structural</div>
+            <div id="reviewStructuralList" class="action-ledger-list" aria-live="polite"></div>
+            <div>Orphan comments</div>
+            <div id="reviewOrphanList" class="action-ledger-list" aria-live="polite"></div>
+          </div>
+          <pre id="reviewReceiptPacket" class="mono-value">receipt pending</pre>
+          <pre id="reviewCommandResponse" class="mono-value">command packet pending</pre>
+        </section>
+
         <div class="overview-bottom">
         <section class="card log-card">
           <div class="log-head">
