@@ -1,0 +1,12 @@
+{
+  "auth_header_recorded": false,
+  "captured_at_utc": "2026-05-24T01:47:34.818647Z",
+  "full_runtime_packet_not_embedded": true,
+  "prompt_body_recorded": false,
+  "raw_auth_ref_exposed": false,
+  "raw_backend_id_exposed": false,
+  "raw_runtime_paths_redacted": true,
+  "scan_notes": "No live token value, provider key, auth contents, raw backend id, or prompt body found in audit artifacts. Path-label references to ~/.codex/auth.json are metadata-only protected snapshots.",
+  "secret_value_recorded": false,
+  "status": "ok"
+}

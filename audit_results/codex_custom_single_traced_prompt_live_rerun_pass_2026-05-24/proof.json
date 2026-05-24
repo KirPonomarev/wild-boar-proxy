@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-24T01:46:43.095935Z",
+  "close_token": "CODEX_CUSTOM_SINGLE_TRACED_PROMPT_LIVE_OK",
+  "current_codex_untouched": true,
+  "exact_response_observed": true,
+  "forwarded_to_wbp": true,
+  "live_packet_machine_error_code": "OK",
+  "live_packet_status": "ok",
+  "prompt_count": 1,
+  "retry_count": 0,
+  "secret_value_recorded": false,
+  "trace_path": "/v1/responses",
+  "upstream_status": 200
+}
