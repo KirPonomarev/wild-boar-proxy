@@ -21,6 +21,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_rollback_point_dry_run_packet,
     build_custom_recovery_rollback_point_verify_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
+    build_custom_recovery_stop_cleanup_preflight_packet,
 )
 
 
@@ -307,6 +308,230 @@ class CodexRecoveryContractTests(unittest.TestCase):
         self.assertFalse(packet["recovery_operator_ready"])
         self.assertFalse(packet["rollback_operator_ready"])
         self.assertFalse(packet["process_kill_operator_ready"])
+
+    def test_stop_cleanup_preflight_uses_admitted_session_actions_source(self) -> None:
+        source = build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=recovery_contract_packet(),
+            sessions_packet={
+                "status": "ok",
+                "session_count": 1,
+                "sessions": [
+                    {
+                        "session_id": "ccs-source-session",
+                        "created_at_utc": "2026-05-24T10:00:00Z",
+                        "session_root_scope": "owned_temp_session_root",
+                        "current_codex_home_used": False,
+                        "model_server_issued": True,
+                        "selection_proven": True,
+                        "cleanup_state": "not_cleaned",
+                    }
+                ],
+            },
+        )
+
+        packet = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=source,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY",
+        )
+        self.assertEqual(
+            packet["claim_scope"],
+            "custom_codex_recovery_stop_cleanup_preflight_only",
+        )
+        self.assertEqual(
+            packet["verified_scope"],
+            "owned_custom_session_stop_cleanup_preflight_only",
+        )
+        self.assertEqual(
+            packet["contract_source_endpoint"],
+            "/api/codex/custom/recovery/admitted-session-actions",
+        )
+        self.assertEqual(
+            packet["selected_session_source"],
+            "server_selected_latest_owned_custom_session",
+        )
+        self.assertTrue(packet["stop_cleanup_preflight_ready"])
+        self.assertTrue(packet["selected_session_id_redacted"])
+        self.assertNotIn("selected_session_id", packet)
+        self.assertTrue(packet["selected_session_cancel_ready"])
+        self.assertTrue(packet["owned_session_cleanup_ready"])
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        self.assertIn("session_id", packet["forbidden_browser_fields"])
+        self.assertIn("cleanup_path", packet["forbidden_browser_fields"])
+        self.assertFalse(packet["arbitrary_path_cleanup_allowed"])
+        self.assertFalse(packet["process_kill_ready"])
+        self.assertFalse(packet["process_kill_performed"])
+        self.assertFalse(packet["session_cancel_performed"])
+        self.assertFalse(packet["owned_cleanup_performed"])
+        self.assertTrue(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["current_codex_home_touched"])
+        self.assertFalse(packet["auth_material_touched"])
+        self.assertFalse(packet["secret_value_recorded"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertEqual(
+            packet["human_summary"],
+            "stop/cleanup preflight verified · no action performed",
+        )
+        self.assertEqual(
+            packet["next_contour"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_PASS",
+        )
+
+    def test_stop_cleanup_preflight_blocks_without_session_or_cleaned_session(self) -> None:
+        no_session_source = build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=recovery_contract_packet(),
+            sessions_packet={"status": "ok", "session_count": 0, "sessions": []},
+        )
+        no_session = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=no_session_source,
+        )
+        cleaned_source = build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=recovery_contract_packet(),
+            sessions_packet={
+                "status": "ok",
+                "session_count": 1,
+                "sessions": [
+                    {
+                        "session_id": "ccs-cleaned",
+                        "created_at_utc": "2026-05-24T10:00:00Z",
+                        "session_root_scope": "owned_temp_session_root",
+                        "current_codex_home_used": False,
+                        "model_server_issued": True,
+                        "selection_proven": True,
+                        "cleanup_state": "cleaned",
+                    }
+                ],
+            },
+        )
+        cleaned = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=cleaned_source,
+        )
+
+        self.assertEqual(no_session["status"], "blocked")
+        self.assertEqual(
+            no_session["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NO_SESSION",
+        )
+        self.assertFalse(no_session["stop_cleanup_preflight_ready"])
+        self.assertTrue(no_session["filesystem_read_performed"])
+        self.assertFalse(no_session["filesystem_write_performed"])
+        self.assertFalse(no_session["session_cancel_performed"])
+        self.assertFalse(no_session["owned_cleanup_performed"])
+        self.assertFalse(no_session["process_kill_performed"])
+
+        self.assertEqual(cleaned["status"], "blocked")
+        self.assertEqual(
+            cleaned["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SESSION_ALREADY_CLEANED",
+        )
+        self.assertFalse(cleaned["stop_cleanup_preflight_ready"])
+        self.assertEqual(cleaned["selected_session_cleanup_state"], "cleaned")
+        self.assertFalse(cleaned["filesystem_write_performed"])
+        self.assertFalse(cleaned["session_cancel_performed"])
+        self.assertFalse(cleaned["owned_cleanup_performed"])
+
+    def test_stop_cleanup_preflight_blocks_browser_fields_before_read(self) -> None:
+        source = build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=recovery_contract_packet(),
+            sessions_packet={
+                "status": "ok",
+                "session_count": 1,
+                "sessions": [
+                    {
+                        "session_id": "ccs-source-session",
+                        "created_at_utc": "2026-05-24T10:00:00Z",
+                        "session_root_scope": "owned_temp_session_root",
+                        "current_codex_home_used": False,
+                        "model_server_issued": True,
+                        "selection_proven": True,
+                        "cleanup_state": "not_cleaned",
+                    }
+                ],
+            },
+        )
+
+        packet = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=source,
+            browser_payload={
+                "session_id": [""],
+                "path": [""],
+                "pid": [""],
+                "auth": [""],
+                "cleanup_path": [""],
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_BROWSER_FIELD_REJECTED",
+        )
+        self.assertCountEqual(
+            packet["forbidden_fields"],
+            ["auth", "cleanup_path", "path", "pid", "session_id"],
+        )
+        self.assertFalse(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["stop_cleanup_preflight_ready"])
+        self.assertFalse(packet["session_cancel_performed"])
+        self.assertFalse(packet["owned_cleanup_performed"])
+        self.assertFalse(packet["process_kill_performed"])
+
+    def test_stop_cleanup_preflight_blocks_ambiguous_server_selection(self) -> None:
+        source = build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=recovery_contract_packet(),
+            sessions_packet={
+                "status": "ok",
+                "session_count": 2,
+                "sessions": [
+                    {
+                        "session_id": "ccs-a",
+                        "created_at_utc": "2026-05-24T10:00:00Z",
+                        "session_root_scope": "owned_temp_session_root",
+                        "current_codex_home_used": False,
+                        "model_server_issued": True,
+                        "selection_proven": True,
+                        "cleanup_state": "not_cleaned",
+                    },
+                    {
+                        "session_id": "ccs-b",
+                        "created_at_utc": "2026-05-24T10:00:00Z",
+                        "session_root_scope": "owned_temp_session_root",
+                        "current_codex_home_used": False,
+                        "model_server_issued": True,
+                        "selection_proven": True,
+                        "cleanup_state": "not_cleaned",
+                    },
+                ],
+            },
+        )
+        packet = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=source,
+        )
+
+        self.assertEqual(source["status"], "blocked")
+        self.assertEqual(source["block_reason_code"], "SELECTED_SESSION_AMBIGUOUS")
+        self.assertTrue(source["selected_session_ambiguous"])
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_AMBIGUOUS_SESSION",
+        )
+        self.assertFalse(packet["stop_cleanup_preflight_ready"])
+        self.assertTrue(packet["selected_session_ambiguous"])
+        self.assertFalse(packet["session_cancel_performed"])
+        self.assertFalse(packet["owned_cleanup_performed"])
+        self.assertFalse(packet["process_kill_performed"])
 
     def test_rollback_process_owner_contract_is_dry_run_only(self) -> None:
         contract = build_custom_recovery_contract_packet(

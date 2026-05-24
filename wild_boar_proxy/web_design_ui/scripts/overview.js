@@ -2440,6 +2440,79 @@ function renderCodexCustomRecoveryRollbackApplyReceiptVerify(packet) {
   }
 }
 
+function renderCodexCustomRecoveryStopCleanupPreflight(packet) {
+  const response = document.getElementById("codexCustomRecoveryStopCleanupPreflightPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const ready = packet?.stop_cleanup_preflight_ready === true;
+  const scope = packet?.verified_scope || "not_verified";
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryStopCleanupPreflight",
+    ready ? `${status} · ${scope} · no action performed` : `${status} · ${machineCode}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryStop",
+    `${packet?.selected_session_cancel_ready === true} · preflight only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryCleanup",
+    `${packet?.owned_session_cleanup_ready === true} · owned root preflight only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryLiveReady",
+    `${packet?.rollback_live_ready === true} · stop/cleanup preflight only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${packet?.recovery_operator_ready === true} · not claimed`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: packet?.block_reason_code || "",
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_stop_cleanup_preflight_only",
+      verified_scope: scope,
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/stop-cleanup/preflight",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/admitted-session-actions",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      forbidden_fields: packet?.forbidden_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      stop_cleanup_preflight_ready: ready,
+      selected_session_source: packet?.selected_session_source || "server_selected_latest_owned_custom_session",
+      selected_session_required: packet?.selected_session_required === true,
+      selected_session_present: packet?.selected_session_present === true,
+      selected_session_id_redacted: packet?.selected_session_id_redacted !== false,
+      selected_session_ambiguous: packet?.selected_session_ambiguous === true,
+      selected_session_packet_valid: packet?.selected_session_packet_valid === true,
+      selected_session_cleanup_state: packet?.selected_session_cleanup_state || "",
+      selected_session_cancel_ready: packet?.selected_session_cancel_ready === true,
+      owned_session_cleanup_ready: packet?.owned_session_cleanup_ready === true,
+      arbitrary_path_cleanup_allowed: packet?.arbitrary_path_cleanup_allowed === true,
+      process_kill_ready: packet?.process_kill_ready === true,
+      process_kill_performed: packet?.process_kill_performed === true,
+      session_cancel_performed: packet?.session_cancel_performed === true,
+      owned_cleanup_performed: packet?.owned_cleanup_performed === true,
+      filesystem_read_performed: packet?.filesystem_read_performed === true,
+      filesystem_write_performed: packet?.filesystem_write_performed === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      auth_material_touched: packet?.auth_material_touched === true,
+      secret_value_recorded: packet?.secret_value_recorded === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      rollback_live_ready: packet?.rollback_live_ready === true,
+      source_machine_error_code: packet?.source_machine_error_code || "",
+      source_block_reason_code: packet?.source_block_reason_code || "",
+      human_summary: packet?.human_summary || "stop/cleanup preflight verified · no action performed",
+      next_contour: packet?.next_contour || "",
+    }, null, 2);
+  }
+}
+
 async function refreshCodexCustomRecoveryRollbackPointCreateAdmission() {
   try {
     renderCodexCustomRecoveryRollbackPointCreateAdmission(
@@ -2887,6 +2960,56 @@ async function refreshCodexCustomRecoveryRollbackPointDryRun() {
       dangerous_actions_disabled: true,
       dangerous_action_mutation_allowed: false,
       next_contour_claimed: false,
+    });
+  }
+}
+
+async function refreshCodexCustomRecoveryStopCleanupPreflight() {
+  try {
+    renderCodexCustomRecoveryStopCleanupPreflight(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/stop-cleanup/preflight")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryStopCleanupPreflight({
+      status: "failed",
+      machine_error_code: "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_FETCH_FAILED",
+      block_reason_code: "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_stop_cleanup_preflight_only",
+      verified_scope: "not_verified",
+      contract_endpoint: "/api/codex/custom/recovery/stop-cleanup/preflight",
+      contract_source_endpoint: "/api/codex/custom/recovery/admitted-session-actions",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "cleanup_path", "snapshot_path", "rollback_target", "session_id", "receipt_id", "receipt_path", "artifact_id", "artifact_path", "digest", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      forbidden_fields: [],
+      browser_forbidden_fields_rejected: true,
+      stop_cleanup_preflight_ready: false,
+      selected_session_source: "server_selected_latest_owned_custom_session",
+      selected_session_required: true,
+      selected_session_present: false,
+      selected_session_id_redacted: true,
+      selected_session_ambiguous: false,
+      selected_session_packet_valid: false,
+      selected_session_cancel_ready: false,
+      owned_session_cleanup_ready: false,
+      arbitrary_path_cleanup_allowed: false,
+      process_kill_ready: false,
+      process_kill_performed: false,
+      session_cancel_performed: false,
+      owned_cleanup_performed: false,
+      filesystem_read_performed: false,
+      filesystem_write_performed: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      current_codex_home_touched: false,
+      auth_material_touched: false,
+      secret_value_recorded: false,
+      recovery_operator_ready: false,
+      rollback_live_ready: false,
+      human_summary: "stop/cleanup preflight failed · no action performed",
+      next_contour: "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
+      human_message: error.message
     });
   }
 }
@@ -9269,6 +9392,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoveryRollbackApplyPreflightAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackApplyLivePreflight());
   document.getElementById("codexCustomRecoveryRollbackApplyReceiptAction")?.addEventListener("click", () => createCodexCustomRecoveryRollbackApplyReceipt());
   document.getElementById("codexCustomRecoveryRollbackApplyReceiptVerifyAction")?.addEventListener("click", () => verifyCodexCustomRecoveryRollbackApplyReceipt());
+  document.getElementById("codexCustomRecoveryStopCleanupPreflightAction")?.addEventListener("click", () => refreshCodexCustomRecoveryStopCleanupPreflight());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

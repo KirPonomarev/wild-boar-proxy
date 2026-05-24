@@ -561,6 +561,7 @@
             <div>Rollback apply preflight</div><div id="codexCustomRecoveryRollbackApplyPreflight">preflight not evaluated</div>
             <div>Rollback apply receipt</div><div id="codexCustomRecoveryRollbackApplyReceipt">bounded apply not run</div>
             <div>Rollback apply receipt verify</div><div id="codexCustomRecoveryRollbackApplyReceiptVerify">receipt verify not run</div>
+            <div>Stop/cleanup preflight</div><div id="codexCustomRecoveryStopCleanupPreflight">preflight not run</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -617,6 +618,10 @@
               <button id="codexCustomRecoveryRollbackApplyReceiptVerifyAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Verify receipt</span>
+              </button>
+              <button id="codexCustomRecoveryStopCleanupPreflightAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Stop/cleanup preflight</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -927,6 +932,33 @@
   "browser_payload_allowed": false,
   "dangerous_actions_disabled": true,
   "human_summary": "receipt verified · not system recovery"
+}</pre>
+          <pre id="codexCustomRecoveryStopCleanupPreflightPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_stop_cleanup_preflight_only",
+  "verified_scope": "not_verified",
+  "contract_endpoint": "/api/codex/custom/recovery/stop-cleanup/preflight",
+  "contract_source_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+  "stop_cleanup_preflight_ready": false,
+  "selected_session_source": "server_selected_latest_owned_custom_session",
+  "selected_session_id_redacted": true,
+  "selected_session_cancel_ready": false,
+  "owned_session_cleanup_ready": false,
+  "arbitrary_path_cleanup_allowed": false,
+  "process_kill_ready": false,
+  "process_kill_performed": false,
+  "session_cancel_performed": false,
+  "owned_cleanup_performed": false,
+  "filesystem_read_performed": false,
+  "filesystem_write_performed": false,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "recovery_operator_ready": false,
+  "rollback_live_ready": false,
+  "human_summary": "stop/cleanup preflight verified · no action performed"
 }</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",

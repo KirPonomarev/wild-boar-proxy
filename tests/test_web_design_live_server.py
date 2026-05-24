@@ -5448,6 +5448,9 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 blocked = json.loads(
                     fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
                 )
+                preflight_blocked = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
                 created = json.loads(
                     post_json(
                         f"{base}/api/codex/custom/sessions",
@@ -5456,6 +5459,21 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 )
                 ready = json.loads(
                     fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
+                )
+                preflight_ready = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
+                preflight_with_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/stop-cleanup/preflight"
+                        "?session_id=browser&path=/forbidden&pid=123&auth=browser"
+                    )
+                )
+                preflight_blank_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/stop-cleanup/preflight"
+                        "?session_id=&path=&pid=&auth="
+                    )
                 )
                 session_id = created["session"]["session_id"]
                 cancel = json.loads(
@@ -5467,12 +5485,21 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 after_cleanup = json.loads(
                     fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
                 )
+                preflight_after_cleanup = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
                 try:
                     post_json(f"{base}/api/codex/custom/recovery/admitted-session-actions", {})
                 except urllib.error.HTTPError as exc:
                     post_rejected_status = exc.code
                 else:  # pragma: no cover - defensive assertion branch
                     post_rejected_status = HTTPStatus.OK
+                try:
+                    post_json(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight", {})
+                except urllib.error.HTTPError as exc:
+                    preflight_post_rejected_status = exc.code
+                else:  # pragma: no cover - defensive assertion branch
+                    preflight_post_rejected_status = HTTPStatus.OK
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -5481,6 +5508,16 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(blocked["status"], "blocked")
         self.assertEqual(blocked["block_reason_code"], "SELECTED_SESSION_REQUIRED")
         self.assertFalse(blocked["session_admitted_actions_ready"])
+        self.assertEqual(preflight_blocked["status"], "blocked")
+        self.assertEqual(
+            preflight_blocked["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NO_SESSION",
+        )
+        self.assertFalse(preflight_blocked["stop_cleanup_preflight_ready"])
+        self.assertFalse(preflight_blocked["filesystem_write_performed"])
+        self.assertFalse(preflight_blocked["session_cancel_performed"])
+        self.assertFalse(preflight_blocked["owned_cleanup_performed"])
+        self.assertFalse(preflight_blocked["process_kill_performed"])
         self.assertEqual(ready["status"], "ok")
         self.assertEqual(ready["machine_error_code"], "ADMITTED_SESSION_ACTIONS_READY")
         self.assertTrue(ready["session_admitted_actions_ready"])
@@ -5502,6 +5539,60 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(ready["arbitrary_path_accepted"])
         self.assertTrue(ready["dangerous_actions_disabled"])
         self.assertFalse(ready["dangerous_action_mutation_allowed"])
+        self.assertEqual(preflight_ready["status"], "ok")
+        self.assertEqual(
+            preflight_ready["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY",
+        )
+        self.assertEqual(
+            preflight_ready["verified_scope"],
+            "owned_custom_session_stop_cleanup_preflight_only",
+        )
+        self.assertEqual(
+            preflight_ready["contract_source_endpoint"],
+            "/api/codex/custom/recovery/admitted-session-actions",
+        )
+        self.assertTrue(preflight_ready["stop_cleanup_preflight_ready"])
+        self.assertEqual(
+            preflight_ready["selected_session_source"],
+            "server_selected_latest_owned_custom_session",
+        )
+        self.assertTrue(preflight_ready["selected_session_id_redacted"])
+        self.assertNotIn("selected_session_id", preflight_ready)
+        self.assertTrue(preflight_ready["selected_session_cancel_ready"])
+        self.assertTrue(preflight_ready["owned_session_cleanup_ready"])
+        self.assertFalse(preflight_ready["process_kill_ready"])
+        self.assertFalse(preflight_ready["process_kill_performed"])
+        self.assertFalse(preflight_ready["session_cancel_performed"])
+        self.assertFalse(preflight_ready["owned_cleanup_performed"])
+        self.assertTrue(preflight_ready["filesystem_read_performed"])
+        self.assertFalse(preflight_ready["filesystem_write_performed"])
+        self.assertFalse(preflight_ready["current_codex_touched"])
+        self.assertFalse(preflight_ready["original_codex_touched"])
+        self.assertFalse(preflight_ready["auth_material_touched"])
+        self.assertFalse(preflight_ready["secret_value_recorded"])
+        self.assertFalse(preflight_ready["recovery_operator_ready"])
+        self.assertFalse(preflight_ready["rollback_live_ready"])
+        self.assertEqual(
+            preflight_ready["human_summary"],
+            "stop/cleanup preflight verified · no action performed",
+        )
+        self.assertEqual(preflight_with_query["status"], "blocked")
+        self.assertEqual(
+            preflight_with_query["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_BROWSER_FIELD_REJECTED",
+        )
+        self.assertFalse(preflight_with_query["filesystem_read_performed"])
+        for field in ("session_id", "path", "pid", "auth"):
+            self.assertIn(field, preflight_with_query["forbidden_fields"])
+        self.assertEqual(preflight_blank_query["status"], "blocked")
+        self.assertEqual(
+            preflight_blank_query["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_BROWSER_FIELD_REJECTED",
+        )
+        self.assertFalse(preflight_blank_query["filesystem_read_performed"])
+        for field in ("session_id", "path", "pid", "auth"):
+            self.assertIn(field, preflight_blank_query["forbidden_fields"])
         self.assertTrue(cancel["cancelled"])
         self.assertFalse(cancel["process_kill_claimed"])
         self.assertTrue(cleanup["cleanup_performed"])
@@ -5510,7 +5601,17 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(after_cleanup["status"], "blocked")
         self.assertEqual(after_cleanup["block_reason_code"], "SELECTED_SESSION_ALREADY_CLEANED")
         self.assertFalse(after_cleanup["session_admitted_actions_ready"])
+        self.assertEqual(preflight_after_cleanup["status"], "blocked")
+        self.assertEqual(
+            preflight_after_cleanup["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SESSION_ALREADY_CLEANED",
+        )
+        self.assertFalse(preflight_after_cleanup["stop_cleanup_preflight_ready"])
+        self.assertFalse(preflight_after_cleanup["session_cancel_performed"])
+        self.assertFalse(preflight_after_cleanup["owned_cleanup_performed"])
+        self.assertFalse(preflight_after_cleanup["process_kill_performed"])
         self.assertEqual(post_rejected_status, HTTPStatus.NOT_FOUND)
+        self.assertEqual(preflight_post_rejected_status, HTTPStatus.NOT_FOUND)
 
     def test_codex_custom_recovery_rollback_process_owner_contract_endpoint_is_dry_run_only(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):

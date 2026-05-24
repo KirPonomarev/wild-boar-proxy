@@ -48,8 +48,17 @@ ROLLBACK_APPLY_BOUNDED_LIVE_CLAIM_SCOPE = (
 ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE = (
     "custom_codex_recovery_rollback_apply_receipt_verify_only"
 )
+STOP_CLEANUP_PREFLIGHT_CLAIM_SCOPE = "custom_codex_recovery_stop_cleanup_preflight_only"
 ROLLBACK_APPLY_RECEIPT_ARTIFACT_KIND = "custom_codex_recovery_rollback_apply_receipt"
 ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS = [
+    "receipt_id",
+    "receipt_path",
+    "artifact_id",
+    "artifact_path",
+    "digest",
+]
+STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS = [
+    "cleanup_path",
     "receipt_id",
     "receipt_path",
     "artifact_id",
@@ -388,17 +397,34 @@ def _non_admitted_mutation(action: dict[str, Any]) -> bool:
     return action.get("mutation_allowed") is True or action.get("browser_payload_allowed") is True
 
 
-def _server_selected_session(sessions_packet: dict[str, Any] | None) -> dict[str, Any] | None:
+def _server_session_selection(
+    sessions_packet: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, bool, str]:
     sessions = sessions_packet.get("sessions") if isinstance(sessions_packet, dict) else None
     if not isinstance(sessions, list):
+        return None, False, "server_selected_latest_owned_custom_session"
+    typed_sessions = [session for session in sessions if isinstance(session, dict)]
+    candidates = [
+        session for session in typed_sessions if str(session.get("cleanup_state") or "") != "cleaned"
+    ]
+    if not candidates:
+        candidates = typed_sessions
+    if not candidates:
+        return None, False, "server_selected_latest_owned_custom_session"
+    latest_created = max(str(session.get("created_at_utc") or "") for session in candidates)
+    latest = [
+        session for session in candidates if str(session.get("created_at_utc") or "") == latest_created
+    ]
+    if len(latest) > 1:
+        return None, True, "server_selected_latest_owned_custom_session"
+    return latest[0], False, "server_selected_latest_owned_custom_session"
+
+
+def _server_selected_session(sessions_packet: dict[str, Any] | None) -> dict[str, Any] | None:
+    selected, ambiguous, _source = _server_session_selection(sessions_packet)
+    if ambiguous:
         return None
-    for session in sessions:
-        if isinstance(session, dict) and session.get("cleanup_state") != "cleaned":
-            return session
-    for session in sessions:
-        if isinstance(session, dict):
-            return session
-    return None
+    return selected
 
 
 def build_custom_recovery_admitted_session_actions_packet(
@@ -437,7 +463,9 @@ def build_custom_recovery_admitted_session_actions_packet(
         and contract.get("browser_payload_allowed") is False
     )
 
-    selected_session = _server_selected_session(sessions)
+    selected_session, selected_session_ambiguous, selected_session_source = (
+        _server_session_selection(sessions)
+    )
     selected_session_present = selected_session is not None
     selected_session_packet_valid = (
         isinstance(selected_session, dict)
@@ -449,7 +477,11 @@ def build_custom_recovery_admitted_session_actions_packet(
     selected_cleanup_state = (
         str(selected_session.get("cleanup_state") or "") if isinstance(selected_session, dict) else ""
     )
-    selected_session_available = selected_session_packet_valid and selected_cleanup_state != "cleaned"
+    selected_session_available = (
+        selected_session_packet_valid
+        and selected_cleanup_state != "cleaned"
+        and not selected_session_ambiguous
+    )
     selected_session_cancel_ready = (
         contract_readonly_ok and admitted_actions_contract_ready and selected_session_available
     )
@@ -467,6 +499,8 @@ def build_custom_recovery_admitted_session_actions_packet(
         block_reason = "ADMITTED_SESSION_ACTION_CONTRACT_FAILED"
     elif sessions.get("status") != "ok":
         block_reason = "SESSIONS_PACKET_FAILED"
+    elif selected_session_ambiguous:
+        block_reason = "SELECTED_SESSION_AMBIGUOUS"
     elif not selected_session_present:
         block_reason = "SELECTED_SESSION_REQUIRED"
     elif not selected_session_packet_valid:
@@ -497,6 +531,9 @@ def build_custom_recovery_admitted_session_actions_packet(
         "admitted_session_actions_contract_ready": admitted_actions_contract_ready,
         "selected_session_required": True,
         "selected_session_present": selected_session_present,
+        "selected_session_source": selected_session_source,
+        "selected_session_id_redacted": selected_session_present,
+        "selected_session_ambiguous": selected_session_ambiguous,
         "selected_session_id": selected_session.get("session_id") if isinstance(selected_session, dict) else "",
         "selected_session_packet_valid": selected_session_packet_valid,
         "selected_session_cleanup_state": selected_cleanup_state,
@@ -553,6 +590,176 @@ def build_custom_recovery_admitted_session_actions_packet(
         ],
         "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS",
         "next_contour_claimed": False,
+    }
+
+
+def _stop_cleanup_preflight_failure_packet(
+    *,
+    machine_error_code: str,
+    block_reason_code: str,
+    forbidden_fields: list[str] | None = None,
+    filesystem_read_performed: bool = False,
+    source_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    source = source_packet if isinstance(source_packet, dict) else {}
+    return {
+        "schema_version": 1,
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason_code,
+        "captured_at_utc": utc_now(),
+        "claim_scope": STOP_CLEANUP_PREFLIGHT_CLAIM_SCOPE,
+        "verified_scope": "not_verified",
+        "contract_endpoint": "/api/codex/custom/recovery/stop-cleanup/preflight",
+        "contract_source_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": forbidden_fields or [],
+        "browser_forbidden_fields_rejected": True,
+        "stop_cleanup_preflight_ready": False,
+        "selected_session_source": source.get(
+            "selected_session_source", "server_selected_latest_owned_custom_session"
+        ),
+        "selected_session_required": True,
+        "selected_session_present": source.get("selected_session_present") is True,
+        "selected_session_id_redacted": source.get("selected_session_present") is True,
+        "selected_session_ambiguous": source.get("selected_session_ambiguous") is True,
+        "selected_session_packet_valid": source.get("selected_session_packet_valid") is True,
+        "selected_session_cleanup_state": str(source.get("selected_session_cleanup_state") or ""),
+        "selected_session_cancel_ready": False,
+        "owned_session_cleanup_ready": False,
+        "arbitrary_path_cleanup_allowed": False,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "session_cancel_performed": False,
+        "owned_cleanup_performed": False,
+        "filesystem_read_performed": filesystem_read_performed,
+        "filesystem_write_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "recovery_operator_ready": False,
+        "rollback_live_ready": False,
+        "human_summary": "stop/cleanup preflight blocked · no action performed",
+        "source_machine_error_code": source.get("machine_error_code", ""),
+        "source_block_reason_code": source.get("block_reason_code", ""),
+        "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
+    }
+
+
+def build_custom_recovery_stop_cleanup_preflight_packet(
+    *,
+    admitted_session_actions_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    """Build a read-only stop/cleanup preflight derived from admitted session truth."""
+
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(browser_payload)))
+    if forbidden_payload_fields:
+        return _stop_cleanup_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_BROWSER_FIELD_REJECTED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_BROWSER_FIELD_REJECTED",
+            forbidden_fields=forbidden_payload_fields,
+            filesystem_read_performed=False,
+        )
+
+    source = (
+        admitted_session_actions_packet
+        if isinstance(admitted_session_actions_packet, dict)
+        else {}
+    )
+    source_status = str(source.get("status") or "")
+    source_block_reason = str(source.get("block_reason_code") or "")
+    source_ready = (
+        source_status == "ok"
+        and source.get("session_admitted_actions_ready") is True
+        and source.get("selected_session_cancel_ready") is True
+        and source.get("owned_session_cleanup_ready") is True
+        and source.get("selected_session_packet_valid") is True
+        and source.get("selected_session_ambiguous") is not True
+        and str(source.get("selected_session_cleanup_state") or "") != "cleaned"
+        and source.get("contract_endpoint_mutation_allowed") is False
+        and source.get("browser_payload_allowed") is False
+        and source.get("recovery_operator_ready") is False
+        and source.get("process_kill_operator_ready") is False
+        and source.get("process_kill_claimed") is False
+        and source.get("current_codex_touched") is False
+        and source.get("original_codex_touched") is False
+        and source.get("current_codex_home_touched") is False
+        and source.get("arbitrary_path_accepted") is False
+    )
+    if not source_ready:
+        if source_block_reason == "SELECTED_SESSION_REQUIRED":
+            machine_error_code = "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NO_SESSION"
+        elif source_block_reason == "SELECTED_SESSION_ALREADY_CLEANED":
+            machine_error_code = (
+                "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SESSION_ALREADY_CLEANED"
+            )
+        elif source_block_reason == "SELECTED_SESSION_AMBIGUOUS":
+            machine_error_code = "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_AMBIGUOUS_SESSION"
+        else:
+            machine_error_code = "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SOURCE_BLOCKED"
+        return _stop_cleanup_preflight_failure_packet(
+            machine_error_code=machine_error_code,
+            block_reason_code=source_block_reason or machine_error_code,
+            filesystem_read_performed=True,
+            source_packet=source,
+        )
+
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY",
+        "block_reason_code": "",
+        "captured_at_utc": utc_now(),
+        "claim_scope": STOP_CLEANUP_PREFLIGHT_CLAIM_SCOPE,
+        "verified_scope": "owned_custom_session_stop_cleanup_preflight_only",
+        "contract_endpoint": "/api/codex/custom/recovery/stop-cleanup/preflight",
+        "contract_source_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": [],
+        "browser_forbidden_fields_rejected": True,
+        "stop_cleanup_preflight_ready": True,
+        "selected_session_source": source.get(
+            "selected_session_source", "server_selected_latest_owned_custom_session"
+        ),
+        "selected_session_required": True,
+        "selected_session_present": True,
+        "selected_session_id_redacted": True,
+        "selected_session_ambiguous": False,
+        "selected_session_packet_valid": True,
+        "selected_session_cleanup_state": str(source.get("selected_session_cleanup_state") or ""),
+        "selected_session_cancel_ready": True,
+        "owned_session_cleanup_ready": True,
+        "arbitrary_path_cleanup_allowed": False,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "session_cancel_performed": False,
+        "owned_cleanup_performed": False,
+        "filesystem_read_performed": True,
+        "filesystem_write_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "recovery_operator_ready": False,
+        "rollback_live_ready": False,
+        "source_machine_error_code": source.get("machine_error_code", ""),
+        "source_block_reason_code": source.get("block_reason_code", ""),
+        "human_summary": "stop/cleanup preflight verified · no action performed",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_PASS",
     }
 
 
