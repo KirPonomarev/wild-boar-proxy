@@ -5613,6 +5613,130 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(post_rejected_status, HTTPStatus.NOT_FOUND)
         self.assertEqual(preflight_post_rejected_status, HTTPStatus.NOT_FOUND)
 
+    def test_codex_custom_recovery_stop_cleanup_live_endpoint_is_bounded(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                no_session = json.loads(
+                    post_json(f"{base}/api/codex/custom/recovery/stop-cleanup", {})
+                )
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/recovery/stop-cleanup",
+                        {"session_id": "", "path": "", "pid": "", "auth": ""},
+                    )
+                )
+                still_ready = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
+                live = json.loads(
+                    post_json(f"{base}/api/codex/custom/recovery/stop-cleanup", {})
+                )
+                after_live = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
+                session_id = created["session"]["session_id"]
+                session_after_live = json.loads(
+                    fetch(f"{base}/api/codex/custom/sessions/{session_id}")
+                )
+                try:
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup")
+                except urllib.error.HTTPError as exc:
+                    get_live_status = exc.code
+                else:  # pragma: no cover - defensive assertion branch
+                    get_live_status = HTTPStatus.OK
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(no_session["status"], "blocked")
+        self.assertEqual(
+            no_session["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NOT_READY",
+        )
+        self.assertFalse(no_session["session_cancel_performed"])
+        self.assertFalse(no_session["owned_cleanup_performed"])
+        self.assertFalse(no_session["filesystem_write_performed"])
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_BROWSER_FIELD_REJECTED",
+        )
+        self.assertFalse(rejected["session_cancel_performed"])
+        self.assertFalse(rejected["owned_cleanup_performed"])
+        self.assertFalse(rejected["filesystem_write_performed"])
+        for field in ("session_id", "path", "pid", "auth"):
+            self.assertIn(field, rejected["forbidden_fields"])
+        self.assertEqual(still_ready["status"], "ok")
+        self.assertTrue(still_ready["stop_cleanup_preflight_ready"])
+
+        self.assertEqual(live["status"], "ok")
+        self.assertEqual(
+            live["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
+        )
+        self.assertEqual(
+            live["verified_scope"],
+            "owned_custom_session_cancel_and_cleanup_only",
+        )
+        self.assertEqual(
+            live["declared_write_surface"],
+            "owned_temp_session_root_cleanup_only",
+        )
+        self.assertTrue(live["preflight_verified"])
+        self.assertTrue(live["selected_session_id_redacted"])
+        self.assertTrue(live["raw_session_id_omitted"])
+        self.assertNotIn("selected_session_id", live)
+        self.assertNotIn("session_id", live)
+        self.assertTrue(live["same_selected_session_ref"])
+        self.assertTrue(live["session_cancel_performed"])
+        self.assertTrue(live["session_cancel_verified"])
+        self.assertTrue(live["owned_cleanup_performed"])
+        self.assertTrue(live["owned_cleanup_verified"])
+        self.assertTrue(live["owned_session_root_only"])
+        self.assertFalse(live["arbitrary_path_cleanup_allowed"])
+        self.assertFalse(live["arbitrary_path_accepted"])
+        self.assertFalse(live["process_kill_ready"])
+        self.assertFalse(live["process_kill_performed"])
+        self.assertTrue(live["filesystem_write_performed"])
+        self.assertEqual(live["filesystem_write_scope"], "owned_temp_session_root_cleanup_only")
+        self.assertFalse(live["current_codex_touched"])
+        self.assertFalse(live["original_codex_touched"])
+        self.assertFalse(live["auth_material_touched"])
+        self.assertFalse(live["secret_value_recorded"])
+        self.assertFalse(live["rollback_live_ready"])
+        self.assertFalse(live["recovery_operator_ready"])
+        self.assertEqual(
+            live["human_summary"],
+            "owned session cancelled and cleaned · not system recovery",
+        )
+        self.assertEqual(after_live["status"], "blocked")
+        self.assertEqual(
+            after_live["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_SESSION_ALREADY_CLEANED",
+        )
+        self.assertEqual(session_after_live["session"]["cleanup_state"], "cleaned")
+        self.assertEqual(session_after_live["session"]["cancel_state"], "cancelled_dry_run_session")
+        self.assertEqual(get_live_status, HTTPStatus.NOT_FOUND)
+
     def test_codex_custom_recovery_rollback_process_owner_contract_endpoint_is_dry_run_only(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
             server = ThreadingHTTPServer(

@@ -54,7 +54,9 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_rollback_point_dry_run_packet,
     build_custom_recovery_rollback_point_verify_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
+    build_custom_recovery_stop_cleanup_live_packet,
     build_custom_recovery_stop_cleanup_preflight_packet,
+    custom_recovery_session_ref,
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
@@ -1788,6 +1790,92 @@ def build_handler(
             rollback_apply_live_preflight=build_rollback_apply_live_preflight_packet(),
         )
 
+    def build_recovery_admitted_session_actions_packet() -> dict[str, Any]:
+        original_status = build_original_status_packet()
+        custom_status = build_custom_status_packet(operator_surface_session.status_payload())
+        accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
+        api_readonly = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+        contract_packet = build_custom_recovery_contract_packet(
+            original_status=original_status,
+            custom_status=custom_status,
+            accounts_readonly=accounts_readonly,
+            api_readonly=api_readonly,
+        )
+        return build_custom_recovery_admitted_session_actions_packet(
+            contract_packet=contract_packet,
+            sessions_packet=codex_custom_sessions.list_packet(),
+        )
+
+    def build_stop_cleanup_preflight_packet(
+        browser_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if browser_payload:
+            return build_custom_recovery_stop_cleanup_preflight_packet(
+                admitted_session_actions_packet=None,
+                browser_payload=browser_payload,
+            )
+        return build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=build_recovery_admitted_session_actions_packet(),
+        )
+
+    def build_stop_cleanup_live_packet(
+        browser_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if browser_payload:
+            return build_custom_recovery_stop_cleanup_live_packet(
+                browser_payload=browser_payload,
+            )
+        preflight_source = build_recovery_admitted_session_actions_packet()
+        preflight = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=preflight_source,
+        )
+        internal_session_id = str(preflight_source.get("selected_session_id") or "")
+        preflight_session_ref = (
+            custom_recovery_session_ref(internal_session_id) if internal_session_id else ""
+        )
+        live_source = build_recovery_admitted_session_actions_packet()
+        live_session_id = str(live_source.get("selected_session_id") or "")
+        live_session_ref = custom_recovery_session_ref(live_session_id) if live_session_id else ""
+        if not internal_session_id or internal_session_id != live_session_id:
+            return build_custom_recovery_stop_cleanup_live_packet(
+                preflight_packet=preflight,
+                preflight_selected_session_ref=preflight_session_ref,
+                live_selected_session_ref=live_session_ref,
+            )
+
+        cancel_packet = codex_custom_sessions.cancel_packet(internal_session_id)
+        cancel_session_ref = (
+            custom_recovery_session_ref(internal_session_id)
+            if cancel_packet.get("status") == "ok"
+            else ""
+        )
+        if cancel_packet.get("status") != "ok" or cancel_packet.get("cancelled") is not True:
+            return build_custom_recovery_stop_cleanup_live_packet(
+                preflight_packet=preflight,
+                cancel_packet=cancel_packet,
+                preflight_selected_session_ref=preflight_session_ref,
+                live_selected_session_ref=live_session_ref,
+                cancel_selected_session_ref=cancel_session_ref,
+                cleanup_attempted=False,
+            )
+
+        cleanup_packet = codex_custom_sessions.cleanup_packet(internal_session_id)
+        cleanup_session_ref = (
+            custom_recovery_session_ref(internal_session_id)
+            if cleanup_packet.get("status") == "ok"
+            else ""
+        )
+        return build_custom_recovery_stop_cleanup_live_packet(
+            preflight_packet=preflight,
+            cancel_packet=cancel_packet,
+            cleanup_packet=cleanup_packet,
+            preflight_selected_session_ref=preflight_session_ref,
+            live_selected_session_ref=live_session_ref,
+            cancel_selected_session_ref=cancel_session_ref,
+            cleanup_selected_session_ref=cleanup_session_ref,
+            cleanup_attempted=True,
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -1886,54 +1974,18 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/custom/recovery/admitted-session-actions":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
-                )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                contract_packet = build_custom_recovery_contract_packet(
-                    original_status=original_status,
-                    custom_status=custom_status,
-                    accounts_readonly=accounts_readonly,
-                    api_readonly=api_readonly,
-                )
-                self._send_json(
-                    build_custom_recovery_admitted_session_actions_packet(
-                        contract_packet=contract_packet,
-                        sessions_packet=codex_custom_sessions.list_packet(),
-                    )
-                )
+                self._send_json(build_recovery_admitted_session_actions_packet())
                 return
             if parsed.path == "/api/codex/custom/recovery/stop-cleanup/preflight":
-                original_status = build_original_status_packet()
-                custom_status = build_custom_status_packet(
-                    operator_surface_session.status_payload()
-                )
-                accounts_readonly = build_accounts_readonly_snapshot(accounts_readonly_runner)
-                api_readonly = build_api_connections_readonly_snapshot(
-                    api_connections_readonly_runner
-                )
-                contract_packet = build_custom_recovery_contract_packet(
-                    original_status=original_status,
-                    custom_status=custom_status,
-                    accounts_readonly=accounts_readonly,
-                    api_readonly=api_readonly,
-                )
-                admitted_session_actions = build_custom_recovery_admitted_session_actions_packet(
-                    contract_packet=contract_packet,
-                    sessions_packet=codex_custom_sessions.list_packet(),
-                )
                 self._send_json(
-                    build_custom_recovery_stop_cleanup_preflight_packet(
-                        admitted_session_actions_packet=admitted_session_actions,
+                    build_stop_cleanup_preflight_packet(
                         browser_payload=(
                             parse_qs(parsed.query, keep_blank_values=True)
                             if parsed.query
                             else None
-                        ),
+                        )
+                        if parsed.query
+                        else None,
                     )
                 )
                 return
@@ -2080,6 +2132,13 @@ def build_handler(
             if parsed.path == "/api/codex/custom/recovery/rollback-apply":
                 self._send_json(
                     build_rollback_apply_bounded_live_packet(
+                        browser_payload=self._read_rollback_point_create_body(),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/stop-cleanup":
+                self._send_json(
+                    build_stop_cleanup_live_packet(
                         browser_payload=self._read_rollback_point_create_body(),
                     )
                 )

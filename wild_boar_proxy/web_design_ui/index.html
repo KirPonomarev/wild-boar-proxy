@@ -562,6 +562,7 @@
             <div>Rollback apply receipt</div><div id="codexCustomRecoveryRollbackApplyReceipt">bounded apply not run</div>
             <div>Rollback apply receipt verify</div><div id="codexCustomRecoveryRollbackApplyReceiptVerify">receipt verify not run</div>
             <div>Stop/cleanup preflight</div><div id="codexCustomRecoveryStopCleanupPreflight">preflight not run</div>
+            <div>Stop/cleanup live</div><div id="codexCustomRecoveryStopCleanupLive">live action not run</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -622,6 +623,10 @@
               <button id="codexCustomRecoveryStopCleanupPreflightAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Stop/cleanup preflight</span>
+              </button>
+              <button id="codexCustomRecoveryStopCleanupLiveAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Run owned stop/cleanup</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -959,6 +964,36 @@
   "recovery_operator_ready": false,
   "rollback_live_ready": false,
   "human_summary": "stop/cleanup preflight verified · no action performed"
+}</pre>
+          <pre id="codexCustomRecoveryStopCleanupLivePacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_stop_cleanup_live_only",
+  "verified_scope": "not_verified",
+  "declared_write_surface": "owned_temp_session_root_cleanup_only",
+  "preflight_required": true,
+  "preflight_verified": false,
+  "selected_session_id_redacted": true,
+  "raw_session_id_omitted": true,
+  "same_selected_session_ref": false,
+  "session_cancel_performed": false,
+  "session_cancel_verified": false,
+  "owned_cleanup_performed": false,
+  "owned_cleanup_verified": false,
+  "owned_session_root_only": false,
+  "arbitrary_path_cleanup_allowed": false,
+  "arbitrary_path_accepted": false,
+  "process_kill_ready": false,
+  "process_kill_performed": false,
+  "filesystem_write_performed": false,
+  "filesystem_write_scope": "",
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "rollback_live_ready": false,
+  "recovery_operator_ready": false,
+  "human_summary": "owned session cancelled and cleaned · not system recovery"
 }</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",

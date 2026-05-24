@@ -49,6 +49,7 @@ ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE = (
     "custom_codex_recovery_rollback_apply_receipt_verify_only"
 )
 STOP_CLEANUP_PREFLIGHT_CLAIM_SCOPE = "custom_codex_recovery_stop_cleanup_preflight_only"
+STOP_CLEANUP_LIVE_CLAIM_SCOPE = "custom_codex_recovery_stop_cleanup_live_only"
 ROLLBACK_APPLY_RECEIPT_ARTIFACT_KIND = "custom_codex_recovery_rollback_apply_receipt"
 ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS = [
     "receipt_id",
@@ -763,6 +764,286 @@ def build_custom_recovery_stop_cleanup_preflight_packet(
     }
 
 
+def _stop_cleanup_live_failure_packet(
+    *,
+    machine_error_code: str,
+    block_reason_code: str,
+    preflight_packet: dict[str, Any] | None = None,
+    cancel_packet: dict[str, Any] | None = None,
+    cleanup_packet: dict[str, Any] | None = None,
+    forbidden_fields: list[str] | None = None,
+    preflight_selected_session_ref: str = "",
+    live_selected_session_ref: str = "",
+    cancel_selected_session_ref: str = "",
+    cleanup_selected_session_ref: str = "",
+    cleanup_attempted: bool = False,
+    filesystem_write_performed: bool = False,
+    next_action: str = "repair_stop_cleanup_preconditions",
+) -> dict[str, Any]:
+    preflight = preflight_packet if isinstance(preflight_packet, dict) else {}
+    cancel = cancel_packet if isinstance(cancel_packet, dict) else {}
+    cleanup = cleanup_packet if isinstance(cleanup_packet, dict) else {}
+    cancel_performed = cancel.get("status") == "ok" and cancel.get("cancelled") is True
+    cleanup_performed = (
+        cleanup.get("status") == "ok" and cleanup.get("cleanup_performed") is True
+    )
+    refs = [
+        ref
+        for ref in (
+            preflight_selected_session_ref,
+            live_selected_session_ref,
+            cancel_selected_session_ref,
+            cleanup_selected_session_ref if cleanup_attempted else "",
+        )
+        if ref
+    ]
+    same_ref = bool(refs) and len(set(refs)) == 1
+    return {
+        "schema_version": 1,
+        "status": "failed" if cancel_performed and not cleanup_performed else "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason_code,
+        "captured_at_utc": utc_now(),
+        "claim_scope": STOP_CLEANUP_LIVE_CLAIM_SCOPE,
+        "verified_scope": "not_verified",
+        "declared_write_surface": "owned_temp_session_root_cleanup_only",
+        "contract_endpoint": "/api/codex/custom/recovery/stop-cleanup",
+        "contract_source_endpoint": "/api/codex/custom/recovery/stop-cleanup/preflight",
+        "contract_endpoint_mutation_allowed": True,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": forbidden_fields or [],
+        "browser_forbidden_fields_rejected": True,
+        "preflight_required": True,
+        "preflight_verified": False,
+        "selected_session_source": preflight.get(
+            "selected_session_source", "server_selected_latest_owned_custom_session"
+        ),
+        "selected_session_id_redacted": True,
+        "raw_session_id_omitted": True,
+        "preflight_selected_session_ref_present": bool(preflight_selected_session_ref),
+        "live_selected_session_ref_present": bool(live_selected_session_ref),
+        "cancel_selected_session_ref_present": bool(cancel_selected_session_ref),
+        "cleanup_selected_session_ref_present": bool(cleanup_selected_session_ref),
+        "same_selected_session_ref": same_ref,
+        "session_cancel_performed": cancel_performed,
+        "session_cancel_verified": cancel_performed
+        and cancel.get("process_kill_claimed") is False,
+        "cleanup_attempted": cleanup_attempted,
+        "owned_cleanup_performed": cleanup_performed,
+        "owned_cleanup_verified": cleanup_performed
+        and cleanup.get("owned_session_root_only") is True
+        and cleanup.get("arbitrary_path_accepted") is False
+        and cleanup.get("current_codex_home_touched") is False,
+        "owned_session_root_only": cleanup.get("owned_session_root_only") is True,
+        "arbitrary_path_cleanup_allowed": False,
+        "arbitrary_path_accepted": cleanup.get("arbitrary_path_accepted") is True,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "filesystem_write_performed": filesystem_write_performed,
+        "filesystem_write_scope": (
+            "owned_temp_session_root_cleanup_only" if filesystem_write_performed else ""
+        ),
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "source_preflight_machine_error_code": preflight.get("machine_error_code", ""),
+        "cancel_machine_error_code": cancel.get("machine_error_code", ""),
+        "cleanup_machine_error_code": cleanup.get("machine_error_code", ""),
+        "human_summary": "owned stop/cleanup blocked · not system recovery",
+        "next_action": next_action,
+        "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _stop_cleanup_preflight_ready(packet: dict[str, Any]) -> bool:
+    return (
+        packet.get("status") == "ok"
+        and packet.get("machine_error_code")
+        == "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY"
+        and packet.get("stop_cleanup_preflight_ready") is True
+        and packet.get("verified_scope")
+        == "owned_custom_session_stop_cleanup_preflight_only"
+        and packet.get("selected_session_id_redacted") is True
+        and packet.get("selected_session_cancel_ready") is True
+        and packet.get("owned_session_cleanup_ready") is True
+        and packet.get("process_kill_performed") is False
+        and packet.get("filesystem_write_performed") is False
+        and packet.get("recovery_operator_ready") is False
+        and packet.get("rollback_live_ready") is False
+    )
+
+
+def build_custom_recovery_stop_cleanup_live_packet(
+    *,
+    preflight_packet: dict[str, Any] | None = None,
+    cancel_packet: dict[str, Any] | None = None,
+    cleanup_packet: dict[str, Any] | None = None,
+    preflight_selected_session_ref: str = "",
+    live_selected_session_ref: str = "",
+    cancel_selected_session_ref: str = "",
+    cleanup_selected_session_ref: str = "",
+    browser_payload: Any = None,
+    cleanup_attempted: bool = False,
+) -> dict[str, Any]:
+    """Build the bounded live receipt for server-owned cancel and cleanup."""
+
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(browser_payload)))
+    if forbidden_payload_fields:
+        return _stop_cleanup_live_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_BROWSER_FIELD_REJECTED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_BROWSER_FIELD_REJECTED",
+            forbidden_fields=forbidden_payload_fields,
+            next_action="remove_forbidden_browser_fields",
+        )
+
+    preflight = preflight_packet if isinstance(preflight_packet, dict) else {}
+    if not _stop_cleanup_preflight_ready(preflight):
+        return _stop_cleanup_live_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NOT_READY",
+            block_reason_code=str(
+                preflight.get("machine_error_code")
+                or preflight.get("block_reason_code")
+                or "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_REQUIRED"
+            ),
+            preflight_packet=preflight,
+        )
+
+    if (
+        not preflight_selected_session_ref
+        or not live_selected_session_ref
+        or preflight_selected_session_ref != live_selected_session_ref
+    ):
+        return _stop_cleanup_live_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_SELECTED_SESSION_CHANGED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_SELECTED_SESSION_CHANGED",
+            preflight_packet=preflight,
+            preflight_selected_session_ref=preflight_selected_session_ref,
+            live_selected_session_ref=live_selected_session_ref,
+        )
+
+    cancel = cancel_packet if isinstance(cancel_packet, dict) else {}
+    cancel_ok = (
+        cancel.get("status") == "ok"
+        and cancel.get("cancelled") is True
+        and cancel.get("process_kill_claimed") is False
+        and cancel_selected_session_ref == live_selected_session_ref
+    )
+    if not cancel_ok:
+        return _stop_cleanup_live_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_CANCEL_FAILED_BEFORE_CLEANUP",
+            block_reason_code=str(
+                cancel.get("machine_error_code")
+                or cancel.get("status")
+                or "CUSTOM_CODEX_RECOVERY_CANCEL_FAILED_BEFORE_CLEANUP"
+            ),
+            preflight_packet=preflight,
+            cancel_packet=cancel,
+            preflight_selected_session_ref=preflight_selected_session_ref,
+            live_selected_session_ref=live_selected_session_ref,
+            cancel_selected_session_ref=cancel_selected_session_ref,
+            cleanup_attempted=False,
+            next_action="diagnose_owned_session_cancel_failure",
+        )
+
+    cleanup = cleanup_packet if isinstance(cleanup_packet, dict) else {}
+    cleanup_ok = (
+        cleanup_attempted
+        and cleanup.get("status") == "ok"
+        and cleanup.get("cleanup_performed") is True
+        and cleanup.get("owned_session_root_only") is True
+        and cleanup.get("arbitrary_path_accepted") is False
+        and cleanup.get("current_codex_home_touched") is False
+        and cleanup_selected_session_ref == live_selected_session_ref
+    )
+    if not cleanup_ok:
+        return _stop_cleanup_live_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_CLEANUP_FAILED_AFTER_CANCEL",
+            block_reason_code=str(
+                cleanup.get("machine_error_code")
+                or cleanup.get("status")
+                or "CUSTOM_CODEX_RECOVERY_CLEANUP_FAILED_AFTER_CANCEL"
+            ),
+            preflight_packet=preflight,
+            cancel_packet=cancel,
+            cleanup_packet=cleanup,
+            preflight_selected_session_ref=preflight_selected_session_ref,
+            live_selected_session_ref=live_selected_session_ref,
+            cancel_selected_session_ref=cancel_selected_session_ref,
+            cleanup_selected_session_ref=cleanup_selected_session_ref,
+            cleanup_attempted=cleanup_attempted,
+            filesystem_write_performed=True,
+            next_action="diagnose_owned_cleanup_failure",
+        )
+
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
+        "block_reason_code": "",
+        "captured_at_utc": utc_now(),
+        "claim_scope": STOP_CLEANUP_LIVE_CLAIM_SCOPE,
+        "verified_scope": "owned_custom_session_cancel_and_cleanup_only",
+        "declared_write_surface": "owned_temp_session_root_cleanup_only",
+        "contract_endpoint": "/api/codex/custom/recovery/stop-cleanup",
+        "contract_source_endpoint": "/api/codex/custom/recovery/stop-cleanup/preflight",
+        "contract_endpoint_mutation_allowed": True,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": [],
+        "browser_forbidden_fields_rejected": True,
+        "preflight_required": True,
+        "preflight_verified": True,
+        "selected_session_source": preflight.get(
+            "selected_session_source", "server_selected_latest_owned_custom_session"
+        ),
+        "selected_session_id_redacted": True,
+        "raw_session_id_omitted": True,
+        "preflight_selected_session_ref_present": True,
+        "live_selected_session_ref_present": True,
+        "cancel_selected_session_ref_present": True,
+        "cleanup_selected_session_ref_present": True,
+        "same_selected_session_ref": True,
+        "session_cancel_performed": True,
+        "session_cancel_verified": True,
+        "cleanup_attempted": True,
+        "owned_cleanup_performed": True,
+        "owned_cleanup_verified": True,
+        "owned_session_root_only": True,
+        "arbitrary_path_cleanup_allowed": False,
+        "arbitrary_path_accepted": False,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "filesystem_write_performed": True,
+        "filesystem_write_scope": "owned_temp_session_root_cleanup_only",
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "source_preflight_machine_error_code": preflight.get("machine_error_code", ""),
+        "cancel_machine_error_code": cancel.get("machine_error_code", ""),
+        "cleanup_machine_error_code": cleanup.get("machine_error_code", ""),
+        "human_summary": "owned session cancelled and cleaned · not system recovery",
+        "next_action": "none",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_PASS",
+        "next_contour_claimed": False,
+    }
+
+
 def build_custom_recovery_rollback_process_owner_contract_packet(
     *,
     contract_packet: dict[str, Any] | None,
@@ -1073,6 +1354,12 @@ def _rollback_point_surface_admission_check(surface: dict[str, Any]) -> dict[str
 def _stable_digest(payload: dict[str, Any]) -> str:
     body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def custom_recovery_session_ref(session_id: str) -> str:
+    return "custom-session:" + hashlib.sha256(
+        f"wbp-custom-session:{session_id}".encode("utf-8")
+    ).hexdigest()[:16]
 
 
 def _sha256_file(path: Path) -> str:
