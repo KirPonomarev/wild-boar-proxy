@@ -551,6 +551,7 @@
             <div>API check</div><div id="codexCustomRecoveryApi">API readonly pending</div>
             <div>Diagnostics</div><div id="codexCustomRecoveryDiagnostics">support artifact only · availability from action metadata</div>
             <div>Contract owner</div><div id="codexCustomRecoveryContractOwner">contract pending</div>
+            <div>Session actions</div><div id="codexCustomRecoveryAdmittedSessionActions">selected session required · readiness pending</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -567,6 +568,10 @@
               <button id="codexCustomRecoveryCheckAllAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Run recovery checks</span>
+              </button>
+              <button id="codexCustomRecoverySessionActionsAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
+                <span>Session actions</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -603,6 +608,20 @@
   "operator_ready_claimed": false,
   "rollback_claimed": false,
   "process_kill_claimed": false
+}</pre>
+          <pre id="codexCustomRecoveryAdmittedSessionActionsPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ADMITTED_SESSION_ACTIONS_NOT_LOADED",
+  "claim_scope": "custom_codex_recovery_admitted_session_actions_only",
+  "session_admitted_actions_ready": false,
+  "selected_session_cancel_ready": false,
+  "owned_session_cleanup_ready": false,
+  "recovery_operator_ready": false,
+  "rollback_operator_ready": false,
+  "process_kill_operator_ready": false,
+  "diagnostics_counted_as_recovery_action": false,
+  "readonly_checks_counted_as_mutation": false,
+  "session_create_counted_as_recovery_action": false
 }</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",

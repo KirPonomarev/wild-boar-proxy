@@ -10,7 +10,9 @@ import threading
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -5428,6 +5430,87 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertTrue(packet["readonly_sources"]["api_readonly_ok"])
         self.assertFalse(packet["recovery_live_ready"])
         self.assertFalse(packet["operator_ready_claimed"])
+
+    def test_codex_custom_recovery_admitted_session_actions_endpoint_is_bounded(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                blocked = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
+                )
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                ready = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
+                )
+                session_id = created["session"]["session_id"]
+                cancel = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions/{session_id}/cancel", {})
+                )
+                cleanup = json.loads(
+                    post_json(f"{base}/api/codex/custom/sessions/{session_id}/cleanup", {})
+                )
+                after_cleanup = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
+                )
+                try:
+                    post_json(f"{base}/api/codex/custom/recovery/admitted-session-actions", {})
+                except urllib.error.HTTPError as exc:
+                    post_rejected_status = exc.code
+                else:  # pragma: no cover - defensive assertion branch
+                    post_rejected_status = HTTPStatus.OK
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertEqual(blocked["block_reason_code"], "SELECTED_SESSION_REQUIRED")
+        self.assertFalse(blocked["session_admitted_actions_ready"])
+        self.assertEqual(ready["status"], "ok")
+        self.assertEqual(ready["machine_error_code"], "ADMITTED_SESSION_ACTIONS_READY")
+        self.assertTrue(ready["session_admitted_actions_ready"])
+        self.assertTrue(ready["selected_session_cancel_ready"])
+        self.assertTrue(ready["owned_session_cleanup_ready"])
+        self.assertTrue(ready["selected_session_packet_valid"])
+        self.assertFalse(ready["contract_endpoint_mutation_allowed"])
+        self.assertFalse(ready["browser_payload_allowed"])
+        self.assertEqual(ready["browser_payload_allowed_keys"], [])
+        self.assertIn("backend_id", ready["forbidden_browser_fields"])
+        self.assertFalse(ready["recovery_operator_ready"])
+        self.assertFalse(ready["rollback_operator_ready"])
+        self.assertFalse(ready["process_kill_operator_ready"])
+        self.assertFalse(ready["diagnostics_counted_as_recovery_action"])
+        self.assertFalse(ready["readonly_checks_counted_as_mutation"])
+        self.assertFalse(ready["session_create_counted_as_recovery_action"])
+        self.assertFalse(ready["current_codex_touched"])
+        self.assertFalse(ready["current_codex_home_touched"])
+        self.assertFalse(ready["arbitrary_path_accepted"])
+        self.assertTrue(ready["dangerous_actions_disabled"])
+        self.assertFalse(ready["dangerous_action_mutation_allowed"])
+        self.assertTrue(cancel["cancelled"])
+        self.assertFalse(cancel["process_kill_claimed"])
+        self.assertTrue(cleanup["cleanup_performed"])
+        self.assertTrue(cleanup["owned_session_root_only"])
+        self.assertFalse(cleanup["arbitrary_path_accepted"])
+        self.assertEqual(after_cleanup["status"], "blocked")
+        self.assertEqual(after_cleanup["block_reason_code"], "SELECTED_SESSION_ALREADY_CLEANED")
+        self.assertFalse(after_cleanup["session_admitted_actions_ready"])
+        self.assertEqual(post_rejected_status, HTTPStatus.NOT_FOUND)
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

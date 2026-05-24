@@ -1639,6 +1639,116 @@ function renderCodexCustomRecoveryContract(packet) {
   }
 }
 
+function renderCodexCustomRecoveryAdmittedSessionActions(packet) {
+  const response = document.getElementById("codexCustomRecoveryAdmittedSessionActionsPacket");
+  const ready = packet?.session_admitted_actions_ready === true;
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const blockReason = packet?.block_reason_code || "";
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryAdmittedSessionActions",
+    ready
+      ? `ready · selected ${packet?.selected_session_id || "server-selected"}`
+      : `${status} · ${blockReason || machineCode}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryStop",
+    `${packet?.selected_session_cancel_ready === true} · selected-session cancel only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryCleanup",
+    `${packet?.owned_session_cleanup_ready === true} · owned session root only`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: blockReason,
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_admitted_session_actions_only",
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/admitted-session-actions",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/contract",
+      session_source_endpoint: packet?.session_source_endpoint || "/api/codex/custom/sessions",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      session_admitted_actions_ready: ready,
+      admitted_session_actions_contract_ready: packet?.admitted_session_actions_contract_ready === true,
+      selected_session_required: packet?.selected_session_required === true,
+      selected_session_present: packet?.selected_session_present === true,
+      selected_session_id: packet?.selected_session_id || "",
+      selected_session_packet_valid: packet?.selected_session_packet_valid === true,
+      selected_session_cleanup_state: packet?.selected_session_cleanup_state || "",
+      selected_session_cancel_ready: packet?.selected_session_cancel_ready === true,
+      owned_session_cleanup_ready: packet?.owned_session_cleanup_ready === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      diagnostics_support_artifact_only: packet?.diagnostics_support_artifact_only !== false,
+      diagnostics_counted_as_recovery_action: packet?.diagnostics_counted_as_recovery_action === true,
+      readonly_checks_counted_as_mutation: packet?.readonly_checks_counted_as_mutation === true,
+      session_create_counted_as_recovery_action: packet?.session_create_counted_as_recovery_action === true,
+      contract_readonly_sources_ok: packet?.contract_readonly_sources_ok === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled !== false,
+      dangerous_action_mutation_allowed: packet?.dangerous_action_mutation_allowed === true,
+      session_count: packet?.session_count ?? 0,
+      actions: Array.isArray(packet?.actions) ? packet.actions : [],
+      next_contour_claimed: packet?.next_contour_claimed === true,
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomRecoveryAdmittedSessionActions() {
+  try {
+    renderCodexCustomRecoveryAdmittedSessionActions(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/admitted-session-actions")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryAdmittedSessionActions({
+      status: "failed",
+      machine_error_code: "ADMITTED_SESSION_ACTIONS_FETCH_FAILED",
+      block_reason_code: "ADMITTED_SESSION_ACTIONS_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_admitted_session_actions_only",
+      contract_endpoint: "/api/codex/custom/recovery/admitted-session-actions",
+      contract_source_endpoint: "/api/codex/custom/recovery/contract",
+      session_source_endpoint: "/api/codex/custom/sessions",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      browser_forbidden_fields_rejected: true,
+      session_admitted_actions_ready: false,
+      selected_session_cancel_ready: false,
+      owned_session_cleanup_ready: false,
+      recovery_operator_ready: false,
+      operator_ready_claimed: false,
+      rollback_operator_ready: false,
+      rollback_claimed: false,
+      process_kill_operator_ready: false,
+      process_kill_claimed: false,
+      diagnostics_support_artifact_only: true,
+      diagnostics_counted_as_recovery_action: false,
+      readonly_checks_counted_as_mutation: false,
+      session_create_counted_as_recovery_action: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      current_codex_home_touched: false,
+      arbitrary_path_accepted: false,
+      dangerous_actions_disabled: true,
+      dangerous_action_mutation_allowed: false,
+      next_contour_claimed: false,
+    });
+  }
+}
+
 async function refreshCodexCustomRecoveryContract() {
   codexCustomRecoverySetChip("neutral", "contract");
   try {
@@ -1788,6 +1898,7 @@ async function cancelCodexCustomRecoverySession() {
     diagnostics_support_artifact_only: true,
     dangerous_actions_disabled: true,
   });
+  await refreshCodexCustomRecoveryAdmittedSessionActions();
 }
 
 async function cleanupCodexCustomRecoverySession() {
@@ -1809,6 +1920,7 @@ async function cleanupCodexCustomRecoverySession() {
     diagnostics_support_artifact_only: true,
     dangerous_actions_disabled: true,
   });
+  await refreshCodexCustomRecoveryAdmittedSessionActions();
 }
 
 function operatorSetChip(visual, label) {
@@ -7904,6 +8016,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract());
   document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks());
+  document.getElementById("codexCustomRecoverySessionActionsAction")?.addEventListener("click", () => refreshCodexCustomRecoveryAdmittedSessionActions());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

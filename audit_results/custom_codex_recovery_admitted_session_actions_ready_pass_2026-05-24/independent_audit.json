@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "contour": "CUSTOM_CODEX_RECOVERY_ADMITTED_SESSION_ACTIONS_READY_PASS",
+  "captured_at_utc": "2026-05-24T10:04:26Z",
+  "auditors": [
+    {
+      "agent": "Singer",
+      "model": "gpt-5.4-mini",
+      "role": "independent_diff_audit_initial",
+      "verdict": "blocker",
+      "finding": "The first audit treated runtime plus UI edits as a layer-mixing blocker because no contour artifact yet declared that mix.",
+      "resolution": "Added contour.md and spec.md declaring the bounded web-operated recovery workflow and explicit runtime+UI scope."
+    },
+    {
+      "agent": "Copernicus",
+      "model": "gpt-5.4-mini",
+      "role": "independent_diff_audit_after_scope_artifacts",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "scope_mix_declared",
+          "status": "pass",
+          "evidence": "contour.md and spec.md explicitly put the GET route, UI rendering, and bounded browser proof in scope."
+        },
+        {
+          "id": "no_post_widening",
+          "status": "pass",
+          "evidence": "web_design_live_server.py adds GET /api/codex/custom/recovery/admitted-session-actions and no POST handler for that path."
+        },
+        {
+          "id": "forbidden_browser_fields",
+          "status": "pass",
+          "evidence": "packet and UI keep browser_payload_allowed=false, browser_payload_allowed_keys=[], and forbidden fields include backend_id, route_id, path, token, auth, api_key, secret, CODEX_HOME, HOME."
+        },
+        {
+          "id": "overclaims_shut_down",
+          "status": "pass",
+          "evidence": "recovery_operator_ready, rollback_operator_ready, process_kill_operator_ready, rollback_claimed, and process_kill_claimed stay false."
+        }
+      ]
+    }
+  ],
+  "final_verdict": "passed",
+  "blockers_open": []
+}

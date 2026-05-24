@@ -302,3 +302,190 @@ def build_custom_recovery_contract_packet(
             "Only actions with machine-backed owner contract and dry-run proof may be promoted."
         ),
     }
+
+
+def _action_by_id(actions: list[dict[str, Any]], action_id: str) -> dict[str, Any]:
+    for action in actions:
+        if action.get("id") == action_id:
+            return action
+    return {}
+
+
+def _admitted_session_action(action: dict[str, Any]) -> bool:
+    return (
+        action.get("status") == "admitted"
+        and action.get("mutation_allowed") is True
+        and action.get("browser_payload_allowed") is False
+    )
+
+
+def _non_admitted_mutation(action: dict[str, Any]) -> bool:
+    return action.get("mutation_allowed") is True or action.get("browser_payload_allowed") is True
+
+
+def _server_selected_session(sessions_packet: dict[str, Any] | None) -> dict[str, Any] | None:
+    sessions = sessions_packet.get("sessions") if isinstance(sessions_packet, dict) else None
+    if not isinstance(sessions, list):
+        return None
+    for session in sessions:
+        if isinstance(session, dict) and session.get("cleanup_state") != "cleaned":
+            return session
+    for session in sessions:
+        if isinstance(session, dict):
+            return session
+    return None
+
+
+def build_custom_recovery_admitted_session_actions_packet(
+    *,
+    contract_packet: dict[str, Any] | None,
+    sessions_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the narrow readiness packet for admitted selected-session actions."""
+
+    contract = contract_packet if isinstance(contract_packet, dict) else {}
+    sessions = sessions_packet if isinstance(sessions_packet, dict) else {}
+    readonly = contract.get("readonly_sources") if isinstance(contract.get("readonly_sources"), dict) else {}
+    actions = contract.get("actions") if isinstance(contract.get("actions"), list) else []
+    stop_action = _action_by_id(actions, "stop_selected_custom_session")
+    cleanup_action = _action_by_id(actions, "cleanup_owned_session_root")
+    rollback_action = _action_by_id(actions, "rollback_readiness")
+    kill_action = _action_by_id(actions, "stuck_process_kill_readiness")
+    arbitrary_cleanup_action = _action_by_id(actions, "cleanup_arbitrary_path")
+
+    contract_readonly_ok = (
+        contract.get("status") == "ok"
+        and readonly.get("original_status_ok") is True
+        and readonly.get("custom_status_ok") is True
+        and readonly.get("accounts_readonly_ok") is True
+        and readonly.get("api_readonly_ok") is True
+    )
+    admitted_actions_contract_ready = (
+        _admitted_session_action(stop_action)
+        and _admitted_session_action(cleanup_action)
+        and not _non_admitted_mutation(rollback_action)
+        and not _non_admitted_mutation(kill_action)
+        and not _non_admitted_mutation(arbitrary_cleanup_action)
+        and contract.get("rollback_claimed") is False
+        and contract.get("process_kill_claimed") is False
+        and contract.get("dangerous_actions_disabled") is True
+        and contract.get("browser_payload_allowed") is False
+    )
+
+    selected_session = _server_selected_session(sessions)
+    selected_session_present = selected_session is not None
+    selected_session_packet_valid = (
+        isinstance(selected_session, dict)
+        and selected_session.get("session_root_scope") == "owned_temp_session_root"
+        and selected_session.get("current_codex_home_used") is False
+        and selected_session.get("model_server_issued") is True
+        and selected_session.get("selection_proven") is True
+    )
+    selected_cleanup_state = (
+        str(selected_session.get("cleanup_state") or "") if isinstance(selected_session, dict) else ""
+    )
+    selected_session_available = selected_session_packet_valid and selected_cleanup_state != "cleaned"
+    selected_session_cancel_ready = (
+        contract_readonly_ok and admitted_actions_contract_ready and selected_session_available
+    )
+    owned_session_cleanup_ready = (
+        contract_readonly_ok and admitted_actions_contract_ready and selected_session_available
+    )
+    session_admitted_actions_ready = (
+        selected_session_cancel_ready and owned_session_cleanup_ready
+    )
+
+    block_reason = ""
+    if not contract_readonly_ok:
+        block_reason = "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED"
+    elif not admitted_actions_contract_ready:
+        block_reason = "ADMITTED_SESSION_ACTION_CONTRACT_FAILED"
+    elif sessions.get("status") != "ok":
+        block_reason = "SESSIONS_PACKET_FAILED"
+    elif not selected_session_present:
+        block_reason = "SELECTED_SESSION_REQUIRED"
+    elif not selected_session_packet_valid:
+        block_reason = "SELECTED_SESSION_PACKET_INVALID"
+    elif not selected_session_available:
+        block_reason = "SELECTED_SESSION_ALREADY_CLEANED"
+
+    return {
+        "schema_version": 1,
+        "status": "ok" if session_admitted_actions_ready else "blocked",
+        "machine_error_code": (
+            "ADMITTED_SESSION_ACTIONS_READY"
+            if session_admitted_actions_ready
+            else "ADMITTED_SESSION_ACTIONS_BLOCKED"
+        ),
+        "block_reason_code": block_reason,
+        "captured_at_utc": utc_now(),
+        "claim_scope": "custom_codex_recovery_admitted_session_actions_only",
+        "contract_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+        "contract_source_endpoint": "/api/codex/custom/recovery/contract",
+        "session_source_endpoint": "/api/codex/custom/sessions",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS,
+        "browser_forbidden_fields_rejected": True,
+        "session_admitted_actions_ready": session_admitted_actions_ready,
+        "admitted_session_actions_contract_ready": admitted_actions_contract_ready,
+        "selected_session_required": True,
+        "selected_session_present": selected_session_present,
+        "selected_session_id": selected_session.get("session_id") if isinstance(selected_session, dict) else "",
+        "selected_session_packet_valid": selected_session_packet_valid,
+        "selected_session_cleanup_state": selected_cleanup_state,
+        "selected_session_cancel_ready": selected_session_cancel_ready,
+        "owned_session_cleanup_ready": owned_session_cleanup_ready,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "diagnostics_support_artifact_only": True,
+        "diagnostics_counted_as_recovery_action": False,
+        "readonly_checks_counted_as_mutation": False,
+        "session_create_counted_as_recovery_action": False,
+        "contract_readonly_sources_ok": contract_readonly_ok,
+        "readonly_sources": readonly,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "arbitrary_path_accepted": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "session_count": int(sessions.get("session_count") or 0),
+        "actions": [
+            {
+                "id": stop_action.get("id") or "stop_selected_custom_session",
+                "status": stop_action.get("status") or "missing",
+                "mutation_allowed": stop_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": stop_action.get("browser_payload_allowed") is True,
+                "ready": selected_session_cancel_ready,
+            },
+            {
+                "id": cleanup_action.get("id") or "cleanup_owned_session_root",
+                "status": cleanup_action.get("status") or "missing",
+                "mutation_allowed": cleanup_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": cleanup_action.get("browser_payload_allowed") is True,
+                "ready": owned_session_cleanup_ready,
+            },
+            {
+                "id": rollback_action.get("id") or "rollback_readiness",
+                "status": rollback_action.get("status") or "missing",
+                "mutation_allowed": rollback_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": rollback_action.get("browser_payload_allowed") is True,
+                "ready": False,
+            },
+            {
+                "id": kill_action.get("id") or "stuck_process_kill_readiness",
+                "status": kill_action.get("status") or "missing",
+                "mutation_allowed": kill_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": kill_action.get("browser_payload_allowed") is True,
+                "ready": False,
+            },
+        ],
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_AND_OPERATOR_READY_PASS",
+        "next_contour_claimed": False,
+    }
