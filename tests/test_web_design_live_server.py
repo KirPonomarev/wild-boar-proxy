@@ -4896,6 +4896,13 @@ class FakeOperatorSurfaceSession:
         }
 
 
+class ReadyFakeOperatorSurfaceSession(FakeOperatorSurfaceSession):
+    def status_payload(self) -> dict[str, object]:
+        payload = dict(super().status_payload())
+        payload["claim_gate"] = {"status": "ok"}
+        return payload
+
+
 class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
     def test_operator_endpoints_expose_status_models_transcript_and_run(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []
@@ -5344,6 +5351,83 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             created_sessions[0].run_payloads,
             [],
         )
+
+    def test_codex_custom_recovery_contract_endpoint_is_dry_run_only(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            runner = MappingRunner(live_payloads())
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=runner))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(fetch(f"{base}/api/codex/custom/recovery/contract"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "RECOVERY_CONTRACT_DRY_RUN_ONLY")
+        self.assertTrue(packet["contract_aggregator_only"])
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["recovery_live_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        self.assertIn("backend_id", packet["forbidden_browser_fields"])
+        self.assertIn("CODEX_HOME", packet["forbidden_browser_fields"])
+        self.assertTrue(packet["readonly_sources"]["original_status_ok"])
+        self.assertTrue(packet["readonly_sources"]["custom_status_ok"])
+        self.assertTrue(packet["readonly_sources"]["accounts_readonly_ok"])
+        self.assertTrue(packet["readonly_sources"]["api_readonly_ok"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertTrue(packet["diagnostics_support_artifact_only"])
+        actions = {action["id"]: action for action in packet["actions"]}
+        self.assertEqual(actions["stop_selected_custom_session"]["status"], "admitted")
+        self.assertEqual(actions["cleanup_owned_session_root"]["status"], "admitted")
+        self.assertEqual(actions["rollback_readiness"]["status"], "dry_run_only")
+        self.assertEqual(actions["stuck_process_kill_readiness"]["status"], "dry_run_only")
+        self.assertEqual(actions["cleanup_arbitrary_path"]["status"], "disabled")
+        self.assertEqual(actions["touch_original_codex_profile"]["status"], "disabled")
+        self.assertNotIn(("accounts", "list", "--json", "path"), runner.calls)
+
+    def test_codex_custom_recovery_contract_blocks_readonly_failure(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = command_packet(
+            status="failed",
+            exit_code=1,
+            machine_error_code="ACCOUNTS_LIST_FAILED",
+            human_message="Accounts readonly failed.",
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(fetch(f"{base}/api/codex/custom/recovery/contract"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "RECOVERY_CONTRACT_DRY_RUN_ONLY")
+        self.assertEqual(
+            packet["contract_block_reason_code"],
+            "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED",
+        )
+        self.assertFalse(packet["readonly_sources"]["accounts_readonly_ok"])
+        self.assertTrue(packet["readonly_sources"]["api_readonly_ok"])
+        self.assertFalse(packet["recovery_live_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

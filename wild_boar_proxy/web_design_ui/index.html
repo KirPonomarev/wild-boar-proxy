@@ -550,6 +550,9 @@
             <div>Accounts check</div><div id="codexCustomRecoveryAccounts">accounts readonly pending</div>
             <div>API check</div><div id="codexCustomRecoveryApi">API readonly pending</div>
             <div>Diagnostics</div><div id="codexCustomRecoveryDiagnostics">support artifact only · availability from action metadata</div>
+            <div>Contract owner</div><div id="codexCustomRecoveryContractOwner">contract pending</div>
+            <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
+            <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
           <div class="action-summary-footer">
             <div>
@@ -557,6 +560,10 @@
               <span>browser payload: <strong id="codexCustomRecoveryBrowserPayload">no path/auth/backend/secret</strong></span>
             </div>
             <div class="action-row">
+              <button id="codexCustomRecoveryContractAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                <span>Contract dry-run</span>
+              </button>
               <button id="codexCustomRecoveryCheckAllAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Run recovery checks</span>
@@ -584,6 +591,19 @@
             <div class="action-ledger-row amber"><strong>remove routes</strong><div class="action-ledger-meta">disabled here · route cleanup remains separately gated</div></div>
             <div class="action-ledger-row amber"><strong>touch Original Codex profile</strong><div class="action-ledger-meta">forbidden · protected baseline</div></div>
           </div>
+          <div id="codexCustomRecoveryContractActions" class="action-ledger-list" aria-label="Codex Custom recovery contract actions">
+            <div class="action-ledger-row neutral"><strong>contract pending</strong><div class="action-ledger-meta">server-issued action matrix not loaded</div></div>
+          </div>
+          <pre id="codexCustomRecoveryContractPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "RECOVERY_CONTRACT_NOT_LOADED",
+  "claim_scope": "custom_codex_recovery_contract_dry_run_only",
+  "contract_endpoint_mutation_allowed": false,
+  "recovery_live_ready": false,
+  "operator_ready_claimed": false,
+  "rollback_claimed": false,
+  "process_kill_claimed": false
+}</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",
   "machine_error_code": "RECOVERY_SURFACE_PENDING",

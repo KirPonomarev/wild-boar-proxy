@@ -398,7 +398,15 @@ class WebDesignUiTests(unittest.TestCase):
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
         self.assertIn('id="codexCustomRecoveryPanel"', html)
+        self.assertIn('id="codexCustomRecoveryContractAction"', html)
+        self.assertIn('id="codexCustomRecoveryContractActions"', html)
+        self.assertIn('id="codexCustomRecoveryContractPacket"', html)
         self.assertIn('id="codexCustomRecoveryPacket"', html)
+        self.assertIn('"machine_error_code": "RECOVERY_CONTRACT_NOT_LOADED"', html)
+        self.assertIn('"claim_scope": "custom_codex_recovery_contract_dry_run_only"', html)
+        self.assertIn('"contract_endpoint_mutation_allowed": false', html)
+        self.assertIn('"recovery_live_ready": false', html)
+        self.assertIn('"operator_ready_claimed": false', html)
         self.assertIn('"claim_scope": "custom_recovery_surface_readonly_checks_only"', html)
         self.assertIn('"action_scope": "bounded_custom_session_only"', html)
         self.assertIn('"current_codex_touched": false', html)
@@ -417,6 +425,16 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn('"diagnostics_support_artifact_only": true', html)
         self.assertIn('"dangerous_actions_disabled": true', html)
 
+        self.assertIn("refreshCodexCustomRecoveryContract()", js)
+        self.assertIn('fetchCodexLaunchJson("api/codex/custom/recovery/contract")', js)
+        self.assertIn("renderCodexCustomRecoveryContract", js)
+        self.assertIn("contract_aggregator_only: packet?.contract_aggregator_only === true", js)
+        self.assertIn("contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true", js)
+        self.assertIn("recovery_live_ready: liveReady", js)
+        self.assertIn("operator_ready_claimed: operatorReady", js)
+        self.assertIn("rollback_claimed: packet?.rollback_claimed === true", js)
+        self.assertIn("process_kill_claimed: packet?.process_kill_claimed === true", js)
+        self.assertIn('document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract())', js)
         self.assertIn("runCodexCustomRecoveryChecks()", js)
         self.assertIn('fetchCodexLaunchJson("api/codex/original/status")', js)
         self.assertIn('fetchCodexLaunchJson("api/codex/custom/status")', js)
@@ -449,6 +467,8 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn('data-ui-action="credentials_mutate"', html)
         self.assertNotIn('data-ui-action="route_remove"', html)
         self.assertNotIn('fetch("api/codex/custom/recovery"', js)
+        self.assertNotIn('fetch("api/codex/custom/recovery/contract"', js)
+        self.assertNotIn('fetch("api/codex/custom/recovery/contract", { method: "POST"', js)
         self.assertNotIn('fetch("api/codex/custom/kill"', js)
         self.assertNotIn('fetch("api/codex/custom/rollback"', js)
         self.assertNotIn('postCodexCustomSessionAction("cleanup", { path', js)
@@ -551,6 +571,127 @@ sandbox.runCodexCustomRecoveryChecks().then(() => {
   console.error(error);
   process.exit(1);
 });
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_codex_custom_recovery_contract_render_is_dry_run_only(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.children = [];
+    this.textContent = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+  append(...items) {
+    for (const item of items) {
+      this.children.push(item);
+      this.lastElementChild = item;
+    }
+  }
+  replaceChildren(...items) {
+    this.children = [];
+    this.append(...items);
+  }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const packet = {
+  status: "blocked",
+  machine_error_code: "RECOVERY_CONTRACT_DRY_RUN_ONLY",
+  contract_block_reason_code: "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED",
+  claim_scope: "custom_codex_recovery_contract_dry_run_only",
+  contract_owner: "wbp_control_layer_contract_aggregator",
+  contract_endpoint: "/api/codex/custom/recovery/contract",
+  contract_aggregator_only: true,
+  contract_endpoint_mutation_allowed: false,
+  recovery_live_ready: false,
+  operator_ready_claimed: false,
+  rollback_claimed: false,
+  process_kill_claimed: false,
+  current_codex_touched: false,
+  original_codex_touched: false,
+  browser_forbidden_fields_rejected: true,
+  browser_payload_allowed: false,
+  browser_payload_allowed_keys: [],
+  forbidden_browser_fields: ["backend_id", "route_id", "path", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+  fresh_truth: false,
+  historical_isolation_proof_only: true,
+  dangerous_actions_disabled: true,
+  diagnostics_support_artifact_only: true,
+  readonly_sources: {
+    original_status_ok: true,
+    custom_status_ok: true,
+    accounts_readonly_ok: false,
+    api_readonly_ok: true
+  },
+  actions: [
+    { id: "rollback_readiness", status: "dry_run_only", owner: "not_admitted", layer: "recovery_policy", mutation_allowed: false, browser_payload_allowed: false, disabled_reason_code: "ROLLBACK_CONTRACT_NOT_ADMITTED" },
+    { id: "cleanup_arbitrary_path", status: "disabled", owner: "not_admitted", layer: "filesystem_policy", mutation_allowed: false, browser_payload_allowed: false, disabled_reason_code: "ARBITRARY_PATH_FORBIDDEN" }
+  ]
+};
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch() { throw new Error("fetch not expected"); }
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.renderCodexCustomRecoveryContract(packet);
+const rendered = JSON.parse(node("codexCustomRecoveryContractPacket").textContent);
+if (rendered.status !== "blocked") {
+  throw new Error(`contract render must preserve blocked status: ${rendered.status}`);
+}
+if (rendered.recovery_live_ready !== false || rendered.operator_ready_claimed !== false) {
+  throw new Error(`contract render overclaimed readiness: ${JSON.stringify(rendered)}`);
+}
+if (rendered.contract_endpoint_mutation_allowed !== false) {
+  throw new Error(`contract endpoint must remain read-only: ${JSON.stringify(rendered)}`);
+}
+if (rendered.rollback_claimed !== false || rendered.process_kill_claimed !== false) {
+  throw new Error(`contract render overclaimed recovery action: ${JSON.stringify(rendered)}`);
+}
+if (rendered.readonly_sources.accounts_readonly_ok !== false || rendered.readonly_sources.api_readonly_ok !== true) {
+  throw new Error(`readonly source truth not preserved: ${JSON.stringify(rendered)}`);
+}
+if (rendered.action_counts.dry_run_only !== 1 || rendered.action_counts.disabled !== 1) {
+  throw new Error(`action counts wrong: ${JSON.stringify(rendered.action_counts)}`);
+}
+if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "dry-run only") {
+  throw new Error(`chip must avoid green live claim: ${node("codexCustomRecoveryChip").lastElementChild.textContent}`);
+}
 """
         result = subprocess.run(
             ["node", "-e", script],

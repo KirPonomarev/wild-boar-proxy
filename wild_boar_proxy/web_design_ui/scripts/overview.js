@@ -1526,6 +1526,160 @@ function renderCodexCustomRecoveryPacket(packet) {
   }
 }
 
+function codexCustomRecoveryActionRow(action) {
+  const row = document.createElement("div");
+  const status = String(action?.status || "unknown");
+  row.className = `action-ledger-row ${status === "admitted" ? "green" : (status === "disabled" ? "amber" : "neutral")}`;
+  const title = document.createElement("strong");
+  title.textContent = `${action?.id || "unknown"} · ${status}`;
+  const meta = document.createElement("div");
+  meta.className = "action-ledger-meta";
+  meta.textContent = [
+    `owner ${action?.owner || "unknown"}`,
+    `layer ${action?.layer || "unknown"}`,
+    `mutation ${action?.mutation_allowed === true ? "allowed" : "no"}`,
+    `browser payload ${action?.browser_payload_allowed === true ? "allowed" : "no"}`,
+    action?.disabled_reason_code ? `reason ${action.disabled_reason_code}` : "",
+  ].filter(Boolean).join(" · ");
+  row.append(title, meta);
+  return row;
+}
+
+function renderCodexCustomRecoveryContract(packet) {
+  const response = document.getElementById("codexCustomRecoveryContractPacket");
+  const actionsNode = document.getElementById("codexCustomRecoveryContractActions");
+  const status = packet?.status || "unknown";
+  const liveReady = packet?.recovery_live_ready === true;
+  const operatorReady = packet?.operator_ready_claimed === true;
+  const readonly = packet?.readonly_sources || {};
+  const actions = Array.isArray(packet?.actions) ? packet.actions : [];
+  const admitted = actions.filter((action) => action?.status === "admitted").length;
+  const dryRunOnly = actions.filter((action) => action?.status === "dry_run_only").length;
+  const disabled = actions.filter((action) => action?.status === "disabled").length;
+  const delegated = actions.filter((action) => action?.status === "delegated_readonly").length;
+  const blocked = status === "blocked" || packet?.contract_block_reason_code;
+  codexCustomRecoverySetChip(blocked ? "amber" : "blue", liveReady ? "live ready" : "dry-run only");
+  codexCustomRecoverySetText(
+    "codexCustomRecoverySummary",
+    `${status} · ${packet?.machine_error_code || "UNKNOWN"} · ${packet?.claim_scope || "custom_codex_recovery_contract_dry_run_only"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryContractOwner",
+    `${packet?.contract_owner || "unknown"} · ${packet?.contract_aggregator_only === true ? "aggregator only" : "unknown"}`
+  );
+  codexCustomRecoverySetText("codexCustomRecoveryLiveReady", `${liveReady} · dry-run contract`);
+  codexCustomRecoverySetText("codexCustomRecoveryOperatorReady", `${operatorReady} · not claimed`);
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryIsolation",
+    `current ${packet?.current_codex_touched === true ? "touched" : "untouched"} · original ${packet?.original_codex_touched === true ? "touched" : "untouched"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryAccounts",
+    `readonly ${readonly.accounts_readonly_ok === true ? "ok" : "blocked"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryApi",
+    `readonly ${readonly.api_readonly_ok === true ? "ok" : "blocked"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryDiagnostics",
+    packet?.diagnostics_support_artifact_only === true ? "support artifact only" : "not admitted"
+  );
+  codexCustomRecoverySetText("codexCustomRecoveryDangerousCount", `${disabled} disabled`);
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryBrowserPayload",
+    packet?.browser_payload_allowed === true ? "allowed by contract" : "no path/auth/backend/secret"
+  );
+  if (actionsNode) {
+    actionsNode.replaceChildren(...(actions.length ? actions.map(codexCustomRecoveryActionRow) : [codexCustomRecoveryActionRow({
+      id: "contract_missing_actions",
+      status: "disabled",
+      owner: "contract",
+      layer: "control_layer",
+      mutation_allowed: false,
+      browser_payload_allowed: false,
+      disabled_reason_code: "RECOVERY_CONTRACT_ACTIONS_MISSING",
+    })]));
+  }
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      contract_block_reason_code: packet?.contract_block_reason_code || "",
+      claim_scope: packet?.claim_scope || "",
+      contract_owner: packet?.contract_owner || "",
+      contract_endpoint: packet?.contract_endpoint || "",
+      contract_aggregator_only: packet?.contract_aggregator_only === true,
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      recovery_live_ready: liveReady,
+      operator_ready_claimed: operatorReady,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      fresh_truth: packet?.fresh_truth === true,
+      historical_isolation_proof_only: packet?.historical_isolation_proof_only === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled === true,
+      diagnostics_support_artifact_only: packet?.diagnostics_support_artifact_only === true,
+      readonly_sources: readonly,
+      action_counts: {
+        admitted,
+        delegated_readonly: delegated,
+        dry_run_only: dryRunOnly,
+        disabled,
+        total: actions.length,
+      },
+      actions,
+      next_contour: packet?.next_contour || "",
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomRecoveryContract() {
+  codexCustomRecoverySetChip("neutral", "contract");
+  try {
+    renderCodexCustomRecoveryContract(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/contract")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryContract({
+      status: "failed",
+      machine_error_code: "RECOVERY_CONTRACT_FETCH_FAILED",
+      contract_block_reason_code: "RECOVERY_CONTRACT_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_contract_dry_run_only",
+      contract_owner: "wbp_control_layer_contract_aggregator",
+      contract_endpoint: "/api/codex/custom/recovery/contract",
+      contract_aggregator_only: true,
+      contract_endpoint_mutation_allowed: false,
+      recovery_live_ready: false,
+      operator_ready_claimed: false,
+      rollback_claimed: false,
+      process_kill_claimed: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      browser_forbidden_fields_rejected: true,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      fresh_truth: false,
+      historical_isolation_proof_only: true,
+      dangerous_actions_disabled: true,
+      diagnostics_support_artifact_only: true,
+      readonly_sources: {
+        original_status_ok: false,
+        custom_status_ok: false,
+        accounts_readonly_ok: false,
+        api_readonly_ok: false,
+      },
+      actions: [],
+    });
+  }
+}
+
 async function runCodexCustomRecoveryChecks() {
   codexCustomRecoverySetChip("neutral", "checking");
   try {
@@ -7748,6 +7902,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
+  document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract());
   document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
