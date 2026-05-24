@@ -563,6 +563,7 @@
             <div>Rollback apply receipt verify</div><div id="codexCustomRecoveryRollbackApplyReceiptVerify">receipt verify not run</div>
             <div>Stop/cleanup preflight</div><div id="codexCustomRecoveryStopCleanupPreflight">preflight not run</div>
             <div>Stop/cleanup live</div><div id="codexCustomRecoveryStopCleanupLive">live action not run</div>
+            <div>Process kill preflight</div><div id="codexCustomRecoveryProcessKillPreflight">preflight not run</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -627,6 +628,10 @@
               <button id="codexCustomRecoveryStopCleanupLiveAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Run owned stop/cleanup</span>
+              </button>
+              <button id="codexCustomRecoveryProcessKillPreflightAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Process kill preflight</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -695,6 +700,40 @@
   "diagnostics_counted_as_recovery_action": false,
   "readonly_checks_counted_as_mutation": false,
   "session_create_counted_as_recovery_action": false
+}</pre>
+          <pre id="codexCustomRecoveryProcessKillPreflightPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_process_kill_preflight_only",
+  "contract_endpoint": "/api/codex/custom/recovery/process-kill/preflight",
+  "contract_endpoint_mutation_allowed": false,
+  "browser_payload_allowed": false,
+  "browser_payload_allowed_keys": [],
+  "selected_session_id_redacted": true,
+  "raw_session_id_omitted": true,
+  "process_candidate_present": false,
+  "process_candidate_ref_present": false,
+  "raw_pid_omitted": true,
+  "raw_process_path_omitted": true,
+  "owned_process_identity_required": true,
+  "owned_process_identity_present": false,
+  "current_codex_process_exclusion_required": true,
+  "current_codex_process_excluded": false,
+  "original_codex_process_exclusion_required": true,
+  "original_codex_process_excluded": false,
+  "process_kill_preflight_evaluated": false,
+  "process_kill_preflight_ready": false,
+  "process_kill_ready": false,
+  "process_kill_performed": false,
+  "process_kill_live_ready": false,
+  "process_kill_admitted": false,
+  "process_kill_claimed": false,
+  "filesystem_write_performed": false,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "auth_material_touched": false,
+  "recovery_operator_ready": false,
+  "dangerous_actions_disabled": true
 }</pre>
           <pre id="codexCustomRecoveryRollbackPointPacket" class="mono-value">{
   "status": "pending",

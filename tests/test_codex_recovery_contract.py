@@ -12,6 +12,7 @@ from pathlib import Path
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
+    build_custom_recovery_process_kill_preflight_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
     build_custom_recovery_rollback_apply_bounded_live_packet,
     build_custom_recovery_rollback_apply_receipt_verify_packet,
@@ -68,6 +69,35 @@ def rollback_process_owner_contract_packet() -> dict[str, object]:
     return build_custom_recovery_rollback_process_owner_contract_packet(
         contract_packet=recovery_contract_packet(),
     )
+
+
+def process_kill_admitted_packet(
+    session: dict[str, object] | None = None,
+) -> dict[str, object]:
+    selected_session = session or {
+        "session_id": "ccs-process",
+        "created_at_utc": "2026-05-24T10:00:00Z",
+        "session_root_scope": "owned_temp_session_root",
+        "current_codex_home_used": False,
+        "model_server_issued": True,
+        "selection_proven": True,
+        "cleanup_state": "not_cleaned",
+        "cancel_state": "not_cancelled",
+        "process_candidate_present": True,
+        "process_owned_by_custom_session": True,
+        "current_codex_process_candidate": False,
+        "original_codex_process_candidate": False,
+        "process_candidate_ref": "owned-test-process",
+    }
+    packet = build_custom_recovery_admitted_session_actions_packet(
+        contract_packet=recovery_contract_packet(),
+        sessions_packet={
+            "status": "ok",
+            "session_count": 1,
+            "sessions": [selected_session],
+        },
+    )
+    return {**packet, "selected_session_packet": selected_session}
 
 
 def rollback_point_verify_packet(root: Path) -> dict[str, object]:
@@ -796,6 +826,177 @@ class CodexRecoveryContractTests(unittest.TestCase):
         self.assertFalse(cleanup_failed["process_kill_performed"])
         self.assertTrue(cleanup_failed["filesystem_write_performed"])
         self.assertEqual(cleanup_failed["next_action"], "diagnose_owned_cleanup_failure")
+
+    def test_process_kill_preflight_is_readonly_and_redacted(self) -> None:
+        packet = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(),
+        )
+        serialized = json.dumps(packet, sort_keys=True)
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_ELIGIBLE",
+        )
+        self.assertEqual(
+            packet["claim_scope"],
+            "custom_codex_recovery_process_kill_preflight_only",
+        )
+        self.assertEqual(
+            packet["verified_scope"],
+            "custom_codex_owned_process_kill_preflight_only",
+        )
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        self.assertEqual(packet["selected_source"], "server_owned_custom_session_observation")
+        self.assertTrue(packet["selected_session_id_redacted"])
+        self.assertTrue(packet["raw_session_id_omitted"])
+        self.assertNotIn("selected_session_id", packet)
+        self.assertNotIn("session_id", packet)
+        self.assertTrue(packet["selected_session_ref_present"])
+        self.assertTrue(packet["process_candidate_present"])
+        self.assertTrue(packet["process_candidate_ref_present"])
+        self.assertTrue(packet["raw_pid_omitted"])
+        self.assertTrue(packet["raw_process_id_omitted"])
+        self.assertTrue(packet["raw_process_path_omitted"])
+        self.assertTrue(packet["raw_process_command_omitted"])
+        self.assertNotIn("owned-test-process", serialized)
+        self.assertTrue(packet["owned_process_identity_required"])
+        self.assertTrue(packet["owned_process_identity_present"])
+        self.assertTrue(packet["process_owned_by_custom_session"])
+        self.assertTrue(packet["process_kill_eligible"])
+        self.assertTrue(packet["process_kill_preflight_evaluated"])
+        self.assertEqual(packet["process_kill_preflight_result"], "eligible")
+        self.assertTrue(packet["process_kill_preflight_ready"])
+        self.assertFalse(packet["process_kill_ready"])
+        self.assertFalse(packet["process_kill_performed"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["process_kill_admitted"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertTrue(packet["current_codex_process_exclusion_required"])
+        self.assertTrue(packet["current_codex_process_excluded"])
+        self.assertFalse(packet["current_codex_process_candidate"])
+        self.assertTrue(packet["original_codex_process_exclusion_required"])
+        self.assertTrue(packet["original_codex_process_excluded"])
+        self.assertFalse(packet["original_codex_process_candidate"])
+        self.assertTrue(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["auth_material_touched"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_operator_ready"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_operator_ready"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertFalse(packet["dangerous_action_mutation_allowed"])
+
+    def test_process_kill_preflight_blocks_browser_fields_and_bad_candidates(self) -> None:
+        rejected = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(),
+            browser_payload={
+                "pid": "123",
+                "process_id": "456",
+                "session_id": "ccs-browser",
+                "path": "/outside",
+                "HOME": "/outside",
+                "CODEX_HOME": "/outside",
+                "backend_id": "browser",
+                "route_id": "browser",
+                "auth": "secret",
+                "token": "secret",
+            },
+        )
+        base = {
+            "session_id": "ccs-process",
+            "created_at_utc": "2026-05-24T10:00:00Z",
+            "session_root_scope": "owned_temp_session_root",
+            "current_codex_home_used": False,
+            "model_server_issued": True,
+            "selection_proven": True,
+            "cleanup_state": "not_cleaned",
+            "cancel_state": "not_cancelled",
+        }
+        no_candidate = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(base),
+        )
+        not_owned = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(
+                {**base, "process_candidate_present": True, "process_owned_by_custom_session": False}
+            ),
+        )
+        current = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(
+                {
+                    **base,
+                    "process_candidate_present": True,
+                    "process_owned_by_custom_session": True,
+                    "current_codex_process_candidate": True,
+                }
+            ),
+        )
+        original = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(
+                {
+                    **base,
+                    "process_candidate_present": True,
+                    "process_owned_by_custom_session": True,
+                    "original_codex_process_candidate": True,
+                }
+            ),
+        )
+        cancelled = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=process_kill_admitted_packet(
+                {
+                    **base,
+                    "cancel_state": "cancelled_dry_run_session",
+                    "process_candidate_present": True,
+                    "process_owned_by_custom_session": True,
+                }
+            ),
+        )
+
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_BROWSER_FIELD_REJECTED",
+        )
+        self.assertFalse(rejected["filesystem_read_performed"])
+        self.assertFalse(rejected["process_kill_performed"])
+        for field in (
+            "pid",
+            "process_id",
+            "session_id",
+            "path",
+            "HOME",
+            "CODEX_HOME",
+            "backend_id",
+            "route_id",
+            "auth",
+            "token",
+        ):
+            self.assertIn(field, rejected["forbidden_fields"])
+
+        expected_blocks = {
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NO_PROCESS_CANDIDATE": no_candidate,
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NOT_OWNED_CUSTOM_PROCESS": not_owned,
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_CURRENT_CODEX_REJECTED": current,
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_ORIGINAL_CODEX_REJECTED": original,
+            "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SESSION_ALREADY_CANCELLED": cancelled,
+        }
+        for code, blocked in expected_blocks.items():
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertEqual(blocked["machine_error_code"], code)
+            self.assertFalse(blocked["process_kill_eligible"])
+            self.assertFalse(blocked["process_kill_preflight_ready"])
+            self.assertFalse(blocked["process_kill_ready"])
+            self.assertFalse(blocked["process_kill_performed"])
+            self.assertFalse(blocked["process_kill_live_ready"])
+            self.assertFalse(blocked["process_kill_admitted"])
+            self.assertFalse(blocked["process_kill_claimed"])
+            self.assertFalse(blocked["filesystem_write_performed"])
 
     def test_rollback_process_owner_contract_is_dry_run_only(self) -> None:
         contract = build_custom_recovery_contract_packet(

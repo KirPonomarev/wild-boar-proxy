@@ -50,6 +50,9 @@ ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE = (
 )
 STOP_CLEANUP_PREFLIGHT_CLAIM_SCOPE = "custom_codex_recovery_stop_cleanup_preflight_only"
 STOP_CLEANUP_LIVE_CLAIM_SCOPE = "custom_codex_recovery_stop_cleanup_live_only"
+PROCESS_KILL_PREFLIGHT_CLAIM_SCOPE = (
+    "custom_codex_recovery_process_kill_preflight_only"
+)
 ROLLBACK_APPLY_RECEIPT_ARTIFACT_KIND = "custom_codex_recovery_rollback_apply_receipt"
 ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS = [
     "receipt_id",
@@ -60,6 +63,20 @@ ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS = [
 ]
 STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS = [
     "cleanup_path",
+    "receipt_id",
+    "receipt_path",
+    "artifact_id",
+    "artifact_path",
+    "digest",
+]
+PROCESS_KILL_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS = [
+    "cleanup_path",
+    "process_path",
+    "process_root",
+    "process_command",
+    "command",
+    "argv",
+    "executable",
     "receipt_id",
     "receipt_path",
     "artifact_id",
@@ -1362,6 +1379,13 @@ def custom_recovery_session_ref(session_id: str) -> str:
     ).hexdigest()[:16]
 
 
+def custom_recovery_process_ref(session_id: str, process_marker: str = "") -> str:
+    marker = process_marker or "server-owned-process-candidate"
+    return "custom-process:" + hashlib.sha256(
+        f"wbp-custom-process:{session_id}:{marker}".encode("utf-8")
+    ).hexdigest()[:16]
+
+
 def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -1378,6 +1402,279 @@ def _forbidden_payload_fields(payload: Any, *, prefix: str = "") -> list[str]:
         for index, value in enumerate(payload):
             findings.extend(_forbidden_payload_fields(value, prefix=f"{prefix}[{index}]"))
     return findings
+
+
+def _process_kill_preflight_failure_packet(
+    *,
+    machine_error_code: str,
+    block_reason_code: str,
+    source_packet: dict[str, Any] | None = None,
+    selected_session: dict[str, Any] | None = None,
+    forbidden_fields: list[str] | None = None,
+    filesystem_read_performed: bool = False,
+) -> dict[str, Any]:
+    source = source_packet if isinstance(source_packet, dict) else {}
+    session = selected_session if isinstance(selected_session, dict) else {}
+    session_id = str(session.get("session_id") or "")
+    process_candidate_present = session.get("process_candidate_present") is True
+    current_candidate = session.get("current_codex_process_candidate") is True
+    original_candidate = session.get("original_codex_process_candidate") is True
+    owned_candidate = session.get("process_owned_by_custom_session") is True
+    return {
+        "schema_version": 1,
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason_code,
+        "captured_at_utc": utc_now(),
+        "claim_scope": PROCESS_KILL_PREFLIGHT_CLAIM_SCOPE,
+        "verified_scope": "not_verified",
+        "contract_endpoint": "/api/codex/custom/recovery/process-kill/preflight",
+        "contract_source_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + PROCESS_KILL_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": forbidden_fields or [],
+        "browser_forbidden_fields_rejected": True,
+        "selected_source": "server_owned_custom_session_observation",
+        "selected_session_source": "server_selected_latest_owned_custom_session",
+        "selected_session_required": True,
+        "selected_session_present": bool(session),
+        "selected_session_id_redacted": True,
+        "selected_session_ambiguous": source.get("selected_session_ambiguous") is True,
+        "selected_session_ref_present": bool(session_id),
+        "raw_session_id_omitted": True,
+        "selected_session_packet_valid": source.get("selected_session_packet_valid") is True,
+        "selected_session_cleanup_state": str(session.get("cleanup_state") or ""),
+        "selected_session_cancel_state": str(session.get("cancel_state") or ""),
+        "owned_process_identity_required": True,
+        "owned_process_identity_present": owned_candidate,
+        "current_codex_process_exclusion_required": True,
+        "original_codex_process_exclusion_required": True,
+        "process_candidate_present": process_candidate_present,
+        "process_candidate_ref_present": False,
+        "raw_pid_omitted": True,
+        "raw_process_id_omitted": True,
+        "raw_process_path_omitted": True,
+        "raw_process_command_omitted": True,
+        "process_owned_by_custom_session": owned_candidate,
+        "process_kill_eligible": False,
+        "process_kill_preflight_evaluated": True,
+        "process_kill_preflight_result": "blocked",
+        "process_kill_preflight_ready": False,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "process_kill_claimed": False,
+        "current_codex_process_candidate": current_candidate,
+        "original_codex_process_candidate": original_candidate,
+        "current_codex_process_excluded": not current_candidate,
+        "original_codex_process_excluded": not original_candidate,
+        "filesystem_read_performed": filesystem_read_performed,
+        "filesystem_write_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "source_machine_error_code": source.get("machine_error_code", ""),
+        "source_block_reason_code": source.get("block_reason_code", ""),
+        "human_summary": "process kill preflight blocked · no kill performed",
+        "next_action": "repair_process_kill_preconditions",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def build_custom_recovery_process_kill_preflight_packet(
+    *,
+    admitted_session_actions_packet: dict[str, Any] | None,
+    browser_payload: Any = None,
+) -> dict[str, Any]:
+    """Build the preflight-only process-kill packet without mutating processes."""
+
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(browser_payload)))
+    if forbidden_payload_fields:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_BROWSER_FIELD_REJECTED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_BROWSER_FIELD_REJECTED",
+            forbidden_fields=forbidden_payload_fields,
+        )
+
+    source = admitted_session_actions_packet if isinstance(admitted_session_actions_packet, dict) else {}
+    selected_session = (
+        source.get("selected_session_packet")
+        if isinstance(source.get("selected_session_packet"), dict)
+        else None
+    )
+    if source.get("status") != "ok" or source.get("session_admitted_actions_ready") is not True:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SOURCE_NOT_READY",
+            block_reason_code=str(
+                source.get("block_reason_code")
+                or source.get("machine_error_code")
+                or "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SOURCE_NOT_READY"
+            ),
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=bool(source),
+        )
+
+    if not isinstance(selected_session, dict):
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NO_SESSION",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NO_SESSION",
+            source_packet=source,
+            filesystem_read_performed=True,
+        )
+
+    cleanup_state = str(selected_session.get("cleanup_state") or "")
+    cancel_state = str(selected_session.get("cancel_state") or "")
+    if cleanup_state == "cleaned":
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SESSION_ALREADY_CLEANED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SESSION_ALREADY_CLEANED",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+    if cancel_state and cancel_state != "not_cancelled":
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SESSION_ALREADY_CANCELLED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_SESSION_ALREADY_CANCELLED",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+
+    session_id = str(selected_session.get("session_id") or "")
+    process_candidate_present = selected_session.get("process_candidate_present") is True
+    owned_candidate = selected_session.get("process_owned_by_custom_session") is True
+    current_candidate = selected_session.get("current_codex_process_candidate") is True
+    original_candidate = selected_session.get("original_codex_process_candidate") is True
+
+    if not process_candidate_present:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NO_PROCESS_CANDIDATE",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NO_PROCESS_CANDIDATE",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+    if current_candidate:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_CURRENT_CODEX_REJECTED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_CURRENT_CODEX_REJECTED",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+    if original_candidate:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_ORIGINAL_CODEX_REJECTED",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_ORIGINAL_CODEX_REJECTED",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+    if not owned_candidate:
+        return _process_kill_preflight_failure_packet(
+            machine_error_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NOT_OWNED_CUSTOM_PROCESS",
+            block_reason_code="CUSTOM_CODEX_RECOVERY_PROCESS_KILL_NOT_OWNED_CUSTOM_PROCESS",
+            source_packet=source,
+            selected_session=selected_session,
+            filesystem_read_performed=True,
+        )
+
+    process_marker = str(selected_session.get("process_candidate_ref") or "")
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "machine_error_code": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_ELIGIBLE",
+        "block_reason_code": "",
+        "captured_at_utc": utc_now(),
+        "claim_scope": PROCESS_KILL_PREFLIGHT_CLAIM_SCOPE,
+        "verified_scope": "custom_codex_owned_process_kill_preflight_only",
+        "contract_endpoint": "/api/codex/custom/recovery/process-kill/preflight",
+        "contract_source_endpoint": "/api/codex/custom/recovery/admitted-session-actions",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": (
+            FORBIDDEN_BROWSER_FIELDS + PROCESS_KILL_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        ),
+        "forbidden_fields": [],
+        "browser_forbidden_fields_rejected": True,
+        "selected_source": "server_owned_custom_session_observation",
+        "selected_session_source": "server_selected_latest_owned_custom_session",
+        "selected_session_required": True,
+        "selected_session_present": True,
+        "selected_session_id_redacted": True,
+        "selected_session_ambiguous": False,
+        "selected_session_ref": custom_recovery_session_ref(session_id),
+        "selected_session_ref_present": True,
+        "raw_session_id_omitted": True,
+        "selected_session_packet_valid": True,
+        "selected_session_cleanup_state": cleanup_state,
+        "selected_session_cancel_state": cancel_state,
+        "owned_process_identity_required": True,
+        "owned_process_identity_present": True,
+        "current_codex_process_exclusion_required": True,
+        "original_codex_process_exclusion_required": True,
+        "process_candidate_present": True,
+        "process_candidate_ref": custom_recovery_process_ref(session_id, process_marker),
+        "process_candidate_ref_present": True,
+        "raw_pid_omitted": True,
+        "raw_process_id_omitted": True,
+        "raw_process_path_omitted": True,
+        "raw_process_command_omitted": True,
+        "process_owned_by_custom_session": True,
+        "process_kill_eligible": True,
+        "process_kill_preflight_evaluated": True,
+        "process_kill_preflight_result": "eligible",
+        "process_kill_preflight_ready": True,
+        "process_kill_ready": False,
+        "process_kill_performed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "process_kill_claimed": False,
+        "current_codex_process_candidate": False,
+        "original_codex_process_candidate": False,
+        "current_codex_process_excluded": True,
+        "original_codex_process_excluded": True,
+        "filesystem_read_performed": True,
+        "filesystem_write_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "secret_value_recorded": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "source_machine_error_code": source.get("machine_error_code", ""),
+        "source_block_reason_code": source.get("block_reason_code", ""),
+        "human_summary": "owned custom process kill preflight eligible · no kill performed",
+        "next_action": "process_kill_live_requires_separate_contour",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_LIVE_PASS",
+        "next_contour_claimed": False,
+    }
 
 
 def _rollback_point_artifact_root(root: Path | None) -> Path:

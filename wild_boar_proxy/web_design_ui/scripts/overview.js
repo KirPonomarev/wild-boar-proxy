@@ -2440,6 +2440,97 @@ function renderCodexCustomRecoveryRollbackApplyReceiptVerify(packet) {
   }
 }
 
+function renderCodexCustomRecoveryProcessKillPreflight(packet) {
+  const response = document.getElementById("codexCustomRecoveryProcessKillPreflightPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const ready = packet?.process_kill_preflight_ready === true;
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryProcessKillPreflight",
+    ready ? `${status} · preflight eligible · no kill performed` : `${status} · ${machineCode}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryLiveReady",
+    `${packet?.process_kill_live_ready === true} · process kill preflight only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${packet?.recovery_operator_ready === true} · not claimed`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: packet?.block_reason_code || "",
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_process_kill_preflight_only",
+      verified_scope: packet?.verified_scope || "not_verified",
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/process-kill/preflight",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/admitted-session-actions",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      forbidden_fields: packet?.forbidden_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      selected_source: packet?.selected_source || "server_owned_custom_session_observation",
+      selected_session_source: packet?.selected_session_source || "server_selected_latest_owned_custom_session",
+      selected_session_required: packet?.selected_session_required === true,
+      selected_session_present: packet?.selected_session_present === true,
+      selected_session_id_redacted: packet?.selected_session_id_redacted !== false,
+      selected_session_ambiguous: packet?.selected_session_ambiguous === true,
+      selected_session_ref_present: packet?.selected_session_ref_present === true,
+      raw_session_id_omitted: packet?.raw_session_id_omitted !== false,
+      selected_session_packet_valid: packet?.selected_session_packet_valid === true,
+      selected_session_cleanup_state: packet?.selected_session_cleanup_state || "",
+      selected_session_cancel_state: packet?.selected_session_cancel_state || "",
+      owned_process_identity_required: packet?.owned_process_identity_required === true,
+      owned_process_identity_present: packet?.owned_process_identity_present === true,
+      current_codex_process_exclusion_required: packet?.current_codex_process_exclusion_required === true,
+      original_codex_process_exclusion_required: packet?.original_codex_process_exclusion_required === true,
+      process_candidate_present: packet?.process_candidate_present === true,
+      process_candidate_ref_present: packet?.process_candidate_ref_present === true,
+      raw_pid_omitted: packet?.raw_pid_omitted !== false,
+      raw_process_id_omitted: packet?.raw_process_id_omitted !== false,
+      raw_process_path_omitted: packet?.raw_process_path_omitted !== false,
+      raw_process_command_omitted: packet?.raw_process_command_omitted !== false,
+      process_owned_by_custom_session: packet?.process_owned_by_custom_session === true,
+      process_kill_eligible: packet?.process_kill_eligible === true,
+      process_kill_preflight_evaluated: packet?.process_kill_preflight_evaluated === true,
+      process_kill_preflight_result: packet?.process_kill_preflight_result || "",
+      process_kill_preflight_ready: ready,
+      process_kill_ready: packet?.process_kill_ready === true,
+      process_kill_performed: packet?.process_kill_performed === true,
+      process_kill_live_ready: packet?.process_kill_live_ready === true,
+      process_kill_admitted: packet?.process_kill_admitted === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      current_codex_process_candidate: packet?.current_codex_process_candidate === true,
+      original_codex_process_candidate: packet?.original_codex_process_candidate === true,
+      current_codex_process_excluded: packet?.current_codex_process_excluded === true,
+      original_codex_process_excluded: packet?.original_codex_process_excluded === true,
+      filesystem_read_performed: packet?.filesystem_read_performed === true,
+      filesystem_write_performed: packet?.filesystem_write_performed === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      auth_material_touched: packet?.auth_material_touched === true,
+      secret_value_recorded: packet?.secret_value_recorded === true,
+      rollback_live_ready: packet?.rollback_live_ready === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled !== false,
+      dangerous_action_mutation_allowed: packet?.dangerous_action_mutation_allowed === true,
+      source_machine_error_code: packet?.source_machine_error_code || "",
+      source_block_reason_code: packet?.source_block_reason_code || "",
+      human_summary: packet?.human_summary || "process kill preflight checked · no kill performed",
+      next_contour: packet?.next_contour || "",
+      next_contour_claimed: packet?.next_contour_claimed === true,
+    }, null, 2);
+  }
+}
+
 function renderCodexCustomRecoveryStopCleanupPreflight(packet) {
   const response = document.getElementById("codexCustomRecoveryStopCleanupPreflightPacket");
   const status = packet?.status || "unknown";
@@ -3089,6 +3180,81 @@ async function refreshCodexCustomRecoveryStopCleanupPreflight() {
       rollback_live_ready: false,
       human_summary: "stop/cleanup preflight failed · no action performed",
       next_contour: "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
+      human_message: error.message
+    });
+  }
+}
+
+async function refreshCodexCustomRecoveryProcessKillPreflight() {
+  try {
+    renderCodexCustomRecoveryProcessKillPreflight(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/process-kill/preflight")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryProcessKillPreflight({
+      status: "failed",
+      machine_error_code: "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_FETCH_FAILED",
+      block_reason_code: "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_process_kill_preflight_only",
+      verified_scope: "not_verified",
+      contract_endpoint: "/api/codex/custom/recovery/process-kill/preflight",
+      contract_source_endpoint: "/api/codex/custom/recovery/admitted-session-actions",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "cleanup_path", "process_path", "process_root", "process_command", "command", "argv", "executable", "snapshot_path", "rollback_target", "session_id", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      forbidden_fields: [],
+      browser_forbidden_fields_rejected: true,
+      selected_source: "server_owned_custom_session_observation",
+      selected_session_source: "server_selected_latest_owned_custom_session",
+      selected_session_required: true,
+      selected_session_present: false,
+      selected_session_id_redacted: true,
+      selected_session_ambiguous: false,
+      selected_session_ref_present: false,
+      raw_session_id_omitted: true,
+      selected_session_packet_valid: false,
+      owned_process_identity_required: true,
+      owned_process_identity_present: false,
+      current_codex_process_exclusion_required: true,
+      original_codex_process_exclusion_required: true,
+      process_candidate_present: false,
+      process_candidate_ref_present: false,
+      raw_pid_omitted: true,
+      raw_process_id_omitted: true,
+      raw_process_path_omitted: true,
+      raw_process_command_omitted: true,
+      process_owned_by_custom_session: false,
+      process_kill_eligible: false,
+      process_kill_preflight_evaluated: false,
+      process_kill_preflight_result: "fetch_failed",
+      process_kill_preflight_ready: false,
+      process_kill_ready: false,
+      process_kill_performed: false,
+      process_kill_live_ready: false,
+      process_kill_admitted: false,
+      process_kill_claimed: false,
+      current_codex_process_candidate: false,
+      original_codex_process_candidate: false,
+      current_codex_process_excluded: false,
+      original_codex_process_excluded: false,
+      filesystem_read_performed: false,
+      filesystem_write_performed: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      current_codex_home_touched: false,
+      auth_material_touched: false,
+      secret_value_recorded: false,
+      rollback_live_ready: false,
+      recovery_operator_ready: false,
+      operator_ready_claimed: false,
+      rollback_operator_ready: false,
+      rollback_claimed: false,
+      process_kill_operator_ready: false,
+      dangerous_actions_disabled: true,
+      dangerous_action_mutation_allowed: false,
+      human_summary: "process kill preflight failed · no kill performed",
+      next_contour: "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_PASS",
       human_message: error.message
     });
   }
@@ -9541,6 +9707,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoveryRollbackApplyReceiptVerifyAction")?.addEventListener("click", () => verifyCodexCustomRecoveryRollbackApplyReceipt());
   document.getElementById("codexCustomRecoveryStopCleanupPreflightAction")?.addEventListener("click", () => refreshCodexCustomRecoveryStopCleanupPreflight());
   document.getElementById("codexCustomRecoveryStopCleanupLiveAction")?.addEventListener("click", () => runCodexCustomRecoveryStopCleanupLive());
+  document.getElementById("codexCustomRecoveryProcessKillPreflightAction")?.addEventListener("click", () => refreshCodexCustomRecoveryProcessKillPreflight());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

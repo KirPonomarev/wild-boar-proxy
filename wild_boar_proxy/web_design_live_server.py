@@ -45,6 +45,7 @@ from wild_boar_proxy.codex_model_registry import (
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
+    build_custom_recovery_process_kill_preflight_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
     build_custom_recovery_rollback_apply_bounded_live_packet,
     build_custom_recovery_rollback_apply_receipt_verify_packet,
@@ -1876,6 +1877,29 @@ def build_handler(
             cleanup_attempted=True,
         )
 
+    def build_process_kill_preflight_packet(
+        browser_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if browser_payload:
+            return build_custom_recovery_process_kill_preflight_packet(
+                admitted_session_actions_packet=None,
+                browser_payload=browser_payload,
+            )
+        sessions_packet = codex_custom_sessions.list_packet()
+        admitted = build_recovery_admitted_session_actions_packet()
+        selected_session_id = str(admitted.get("selected_session_id") or "")
+        if selected_session_id:
+            for session in sessions_packet.get("sessions", []):
+                if (
+                    isinstance(session, dict)
+                    and str(session.get("session_id") or "") == selected_session_id
+                ):
+                    admitted = {**admitted, "selected_session_packet": session}
+                    break
+        return build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=admitted,
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -1979,6 +2003,19 @@ def build_handler(
             if parsed.path == "/api/codex/custom/recovery/stop-cleanup/preflight":
                 self._send_json(
                     build_stop_cleanup_preflight_packet(
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        )
+                        if parsed.query
+                        else None,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/process-kill/preflight":
+                self._send_json(
+                    build_process_kill_preflight_packet(
                         browser_payload=(
                             parse_qs(parsed.query, keep_blank_values=True)
                             if parsed.query
