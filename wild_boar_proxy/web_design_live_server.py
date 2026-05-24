@@ -48,6 +48,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
+    build_custom_recovery_rollback_point_verify_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
@@ -1896,6 +1897,13 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/custom/recovery/rollback-point-create-admission":
                 self._send_json(build_rollback_point_create_admission_packet())
+                return
+            if parsed.path == "/api/codex/custom/recovery/rollback-point/verify":
+                self._send_json(
+                    build_custom_recovery_rollback_point_verify_packet(
+                        browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                    )
+                )
                 return
             custom_session = self._custom_session_route(parsed.path)
             if custom_session is not None:

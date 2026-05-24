@@ -1,0 +1,57 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_PASS",
+  "branch": "codex/external-agent-lab-isolated",
+  "start_head": "dade73c5",
+  "commands": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/codex_recovery_contract.py wild_boar_proxy/web_design_live_server.py",
+      "status": "passed"
+    },
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "passed"
+    },
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_codex_recovery_contract tests.test_web_design_live_server.WebDesignCodexCustomSessionEndpointTests.test_codex_custom_recovery_rollback_point_create_admission_endpoint_allows_bounded_create tests.test_web_design_ui.WebDesignUiTests.test_codex_custom_recovery_surface_is_bounded_and_readonly -q",
+      "status": "passed",
+      "tests": 31
+    },
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_codex_recovery_contract tests.test_codex_custom_sessions tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "status": "passed",
+      "tests": 207
+    },
+    {
+      "command": "$BUNDLED_PYTHON -B -m unittest tests.test_operator_surface tests.test_web_design_command_adapter -q",
+      "status": "passed",
+      "tests": 33
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    },
+    {
+      "command": "python3 tools/check_closeout_resilience.py audit_results/custom_codex_recovery_rollback_point_verify_pass_2026-05-24/closeout.md",
+      "status": "passed"
+    },
+    {
+      "command": "rg redaction scan over contour artifacts",
+      "status": "passed"
+    }
+  ],
+  "bounded_packet_proof": {
+    "verify_status": "ok",
+    "verify_result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_READY",
+    "tampered_provenance_status": "blocked",
+    "tampered_provenance_machine_error_code": "ROLLBACK_POINT_VERIFY_PROVENANCE_MISMATCH",
+    "filesystem_write_performed_by_verify": false,
+    "rollback_apply_admitted": false,
+    "recovery_operator_ready": false,
+    "current_codex_touched": false,
+    "original_codex_touched": false,
+    "secret_value_recorded": false
+  },
+  "pending_commands": [
+    "python3 tools/check_closeout_resilience.py --staged-only"
+  ]
+}

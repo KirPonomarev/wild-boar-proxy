@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +15,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
+    build_custom_recovery_rollback_point_verify_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
 )
 
@@ -42,6 +45,21 @@ def rollback_point_create_admission_packet() -> dict[str, object]:
     )
     return build_custom_recovery_rollback_point_create_admission_packet(
         rollback_point_dry_run_contract=dry_run,
+    )
+
+
+def stable_digest(payload: dict[str, object]) -> str:
+    body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def rewrite_artifact(path: Path, payload: dict[str, object]) -> None:
+    payload = dict(payload)
+    payload.pop("artifact_payload_sha256", None)
+    payload["artifact_payload_sha256"] = stable_digest(payload)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -721,6 +739,16 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertTrue(packet["rollback_point_artifact_digest_present"])
             self.assertRegex(packet["rollback_point_artifact_sha256"], r"^[0-9a-f]{64}$")
             self.assertNotIn(str(tmp), str(packet))
+            artifact = json.loads(next(Path(tmp).glob("crp-*.json")).read_text(encoding="utf-8"))
+            self.assertRegex(artifact["artifact_payload_sha256"], r"^[0-9a-f]{64}$")
+            manifest = json.loads(
+                (Path(tmp) / "_rollback_point_manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                manifest["artifact_kind"],
+                "custom_codex_recovery_rollback_point_manifest",
+            )
+            self.assertRegex(manifest["manifest_payload_sha256"], r"^[0-9a-f]{64}$")
             self.assertFalse(packet["snapshot_file_created"])
             self.assertFalse(packet["rollback_apply_admitted"])
             self.assertFalse(packet["rollback_apply_performed"])
@@ -731,7 +759,7 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertFalse(packet["original_codex_touched"])
             self.assertFalse(packet["auth_material_touched"])
             self.assertFalse(packet["secret_value_recorded"])
-            self.assertEqual(len(list(Path(tmp).glob("*.json"))), 1)
+            self.assertEqual(len(list(Path(tmp).glob("crp-*.json"))), 1)
             actions = {action["id"]: action for action in packet["actions"]}
             self.assertTrue(actions["rollback_point_create"]["performed"])
             self.assertFalse(actions["rollback_apply"]["performed"])
@@ -765,6 +793,317 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertFalse(packet["rollback_point_created"])
             self.assertFalse(packet["filesystem_write_performed"])
             self.assertEqual(list(Path(tmp).glob("*.json")), [])
+
+    def test_rollback_point_verify_succeeds_after_bounded_create(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            create = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(create["status"], "ok")
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_VERIFY_READY")
+            self.assertEqual(
+                packet["claim_scope"],
+                "custom_codex_recovery_rollback_point_verify_only",
+            )
+            self.assertEqual(
+                packet["result_token"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_READY",
+            )
+            self.assertTrue(packet["rollback_point_verify_performed"])
+            self.assertTrue(packet["rollback_point_verified"])
+            self.assertTrue(packet["rollback_point_present"])
+            self.assertEqual(
+                packet["rollback_point_selection_source"],
+                "server_owned_latest_valid_artifact",
+            )
+            self.assertFalse(packet["rollback_point_selection_ambiguous"])
+            self.assertTrue(packet["rollback_point_artifact_id_present"])
+            self.assertTrue(packet["rollback_point_artifact_path_redacted"])
+            self.assertTrue(packet["rollback_point_digest_verified"])
+            self.assertTrue(packet["rollback_point_payload_digest_verified"])
+            self.assertTrue(packet["rollback_point_source_admission_digest_present"])
+            self.assertTrue(packet["rollback_point_manifest_verified"])
+            self.assertTrue(packet["rollback_point_provenance_verified"])
+            self.assertTrue(packet["rollback_point_schema_valid"])
+            self.assertTrue(packet["rollback_point_kind_valid"])
+            self.assertTrue(packet["rollback_point_surface_verified"])
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertEqual(packet["filesystem_read_scope"], "owned_generated_recovery_artifact")
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["rollback_apply_admitted"])
+            self.assertFalse(packet["rollback_apply_ready"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["rollback_completed"])
+            self.assertFalse(packet["rollback_live_ready"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["current_codex_touched"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["auth_material_touched"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertNotIn(str(tmp), str(packet))
+
+    def test_rollback_point_verify_blocks_without_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_VERIFY_NOT_FOUND")
+            self.assertFalse(packet["rollback_point_present"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+
+    def test_rollback_point_verify_rejects_browser_payload_without_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp),
+                browser_payload={"artifact_id": "browser", "path": "/tmp/forbidden"},
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_BROWSER_FIELD_REJECTED",
+            )
+            self.assertIn("artifact_id", packet["forbidden_fields"])
+            self.assertIn("path", packet["forbidden_fields"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+
+    def test_rollback_point_verify_rejects_malformed_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "crp-bad.json").write_text("{", encoding="utf-8")
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID")
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertFalse(packet["rollback_point_verified"])
+
+    def test_rollback_point_verify_rejects_unmanifested_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = {
+                "schema_version": 1,
+                "artifact_kind": "custom_codex_recovery_rollback_point",
+                "created_at_utc": "2026-05-24T00:00:00Z",
+                "claim_scope": "custom_codex_recovery_rollback_point_create_live_only",
+                "source_admission_sha256": "a" * 64,
+                "write_surface_id": "owned_generated_recovery_artifact",
+                "write_surface_scope": "server_owned_generated_recovery_artifact",
+                "current_codex_touched": False,
+                "original_codex_touched": False,
+                "auth_material_touched": False,
+                "secret_value_recorded": False,
+                "rollback_apply_admitted": False,
+                "recovery_operator_ready": False,
+            }
+            rewrite_artifact(Path(tmp) / "crp-unmanifested.json", payload)
+
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING",
+            )
+            self.assertFalse(packet["rollback_point_verified"])
+
+    def test_rollback_point_verify_rejects_provenance_manifest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            create = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["source_admission_sha256"] = "f" * 64
+            rewrite_artifact(path, payload)
+
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_PROVENANCE_MISMATCH",
+            )
+            self.assertFalse(packet["rollback_point_verified"])
+
+    def test_rollback_point_verify_rejects_missing_or_invalid_created_at(self) -> None:
+        for value in (None, "not-a-timestamp"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                create = build_custom_recovery_rollback_point_create_live_packet(
+                    rollback_point_create_admission=rollback_point_create_admission_packet(),
+                    browser_payload={},
+                    artifact_root=Path(tmp),
+                )
+                path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if value is None:
+                    payload.pop("created_at_utc", None)
+                else:
+                    payload["created_at_utc"] = value
+                rewrite_artifact(path, payload)
+
+                packet = build_custom_recovery_rollback_point_verify_packet(
+                    artifact_root=Path(tmp)
+                )
+
+                self.assertEqual(packet["status"], "blocked")
+                self.assertEqual(
+                    packet["machine_error_code"],
+                    "ROLLBACK_POINT_VERIFY_TIMESTAMP_INVALID",
+                )
+                self.assertFalse(packet["rollback_point_verified"])
+
+    def test_rollback_point_verify_rejects_wrong_schema_and_kind(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            rewrite_artifact(
+                Path(tmp) / "crp-wrong-schema.json",
+                {
+                    "schema_version": 2,
+                    "artifact_kind": "custom_codex_recovery_rollback_point",
+                    "created_at_utc": "2026-05-24T00:00:00Z",
+                },
+            )
+            schema_packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp)
+            )
+            self.assertEqual(
+                schema_packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            rewrite_artifact(
+                Path(tmp) / "crp-wrong-kind.json",
+                {
+                    "schema_version": 1,
+                    "artifact_kind": "wrong_kind",
+                    "created_at_utc": "2026-05-24T00:00:00Z",
+                },
+            )
+            kind_packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp)
+            )
+            self.assertEqual(
+                kind_packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_KIND_INVALID",
+            )
+
+    def test_rollback_point_verify_rejects_missing_provenance_wrong_surface_and_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            create = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload.pop("source_admission_sha256", None)
+            rewrite_artifact(path, payload)
+            provenance_packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp)
+            )
+            self.assertEqual(
+                provenance_packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            create = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["write_surface_id"] = "current_codex_home"
+            rewrite_artifact(path, payload)
+            surface_packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp)
+            )
+            self.assertEqual(
+                surface_packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            create = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["artifact_payload_sha256"] = "0" * 64
+            path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            digest_packet = build_custom_recovery_rollback_point_verify_packet(
+                artifact_root=Path(tmp)
+            )
+            self.assertEqual(
+                digest_packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_DIGEST_MISMATCH",
+            )
+
+    def test_rollback_point_verify_rejects_touch_and_secret_claims(self) -> None:
+        for field, expected_error in (
+            ("current_codex_touched", "CURRENT_CODEX_TOUCHED"),
+            ("original_codex_touched", "ORIGINAL_CODEX_TOUCHED"),
+            ("auth_material_touched", "ROLLBACK_POINT_VERIFY_SECRET_LEAK_DETECTED"),
+            ("secret_value_recorded", "ROLLBACK_POINT_VERIFY_SECRET_LEAK_DETECTED"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                create = build_custom_recovery_rollback_point_create_live_packet(
+                    rollback_point_create_admission=rollback_point_create_admission_packet(),
+                    browser_payload={},
+                    artifact_root=Path(tmp),
+                )
+                path = Path(tmp) / f"{create['rollback_point_artifact_id']}.json"
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                payload[field] = True
+                rewrite_artifact(path, payload)
+                packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+                self.assertEqual(packet["machine_error_code"], expected_error)
+                self.assertFalse(packet["rollback_point_verified"])
+
+    def test_rollback_point_verify_rejects_ambiguous_latest_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            second = build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=rollback_point_create_admission_packet(),
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+            first_path = Path(tmp) / f"{first['rollback_point_artifact_id']}.json"
+            second_path = Path(tmp) / f"{second['rollback_point_artifact_id']}.json"
+            first_payload = json.loads(first_path.read_text(encoding="utf-8"))
+            second_payload = json.loads(second_path.read_text(encoding="utf-8"))
+            second_payload["created_at_utc"] = first_payload["created_at_utc"]
+            rewrite_artifact(second_path, second_payload)
+
+            packet = build_custom_recovery_rollback_point_verify_packet(artifact_root=Path(tmp))
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_POINT_VERIFY_AMBIGUOUS_SELECTION",
+            )
+            self.assertTrue(packet["rollback_point_selection_ambiguous"])
+            self.assertFalse(packet["rollback_point_verified"])
 
     def test_rollback_point_create_live_rejects_shallow_admission_without_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

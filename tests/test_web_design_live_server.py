@@ -5737,6 +5737,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 forbidden_posts: dict[str, int] = {}
                 for suffix in (
                     "rollback-point-create-admission",
+                    "rollback-point/verify",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5768,6 +5769,15 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     NO_PROXY_OPENER.open(non_object_request, timeout=10)
                     .read()
                     .decode("utf-8")
+                )
+                verify_packet = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/rollback-point/verify")
+                )
+                verify_with_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/rollback-point/verify"
+                        "?artifact_id=browser&path=/tmp/forbidden&digest=browser"
+                    )
                 )
             finally:
                 server.shutdown()
@@ -5836,6 +5846,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             forbidden_posts,
             {
                 "rollback-point-create-admission": HTTPStatus.NOT_FOUND,
+                "rollback-point/verify": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -5888,6 +5899,54 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         )
         self.assertIn("invalid_body", non_object_create["forbidden_fields"])
         self.assertFalse(non_object_create["filesystem_write_performed"])
+        self.assertEqual(verify_packet["status"], "ok")
+        self.assertEqual(verify_packet["machine_error_code"], "ROLLBACK_POINT_VERIFY_READY")
+        self.assertEqual(
+            verify_packet["claim_scope"],
+            "custom_codex_recovery_rollback_point_verify_only",
+        )
+        self.assertEqual(
+            verify_packet["result_token"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_READY",
+        )
+        self.assertTrue(verify_packet["rollback_point_verify_performed"])
+        self.assertTrue(verify_packet["rollback_point_verified"])
+        self.assertEqual(
+            verify_packet["rollback_point_selection_source"],
+            "server_owned_latest_valid_artifact",
+        )
+        self.assertFalse(verify_packet["rollback_point_selection_ambiguous"])
+        self.assertTrue(verify_packet["rollback_point_artifact_path_redacted"])
+        self.assertTrue(verify_packet["rollback_point_digest_verified"])
+        self.assertTrue(verify_packet["rollback_point_provenance_verified"])
+        self.assertTrue(verify_packet["rollback_point_schema_valid"])
+        self.assertTrue(verify_packet["rollback_point_kind_valid"])
+        self.assertTrue(verify_packet["rollback_point_surface_verified"])
+        self.assertTrue(verify_packet["filesystem_read_performed"])
+        self.assertEqual(verify_packet["filesystem_read_scope"], "owned_generated_recovery_artifact")
+        self.assertFalse(verify_packet["filesystem_write_performed"])
+        self.assertFalse(verify_packet["rollback_apply_admitted"])
+        self.assertFalse(verify_packet["rollback_apply_ready"])
+        self.assertFalse(verify_packet["rollback_apply_performed"])
+        self.assertFalse(verify_packet["rollback_completed"])
+        self.assertFalse(verify_packet["rollback_live_ready"])
+        self.assertFalse(verify_packet["recovery_operator_ready"])
+        self.assertFalse(verify_packet["current_codex_touched"])
+        self.assertFalse(verify_packet["original_codex_touched"])
+        self.assertFalse(verify_packet["auth_material_touched"])
+        self.assertFalse(verify_packet["secret_value_recorded"])
+        self.assertIn("artifact_id", verify_packet["forbidden_browser_fields"])
+        self.assertIn("digest", verify_packet["forbidden_browser_fields"])
+        self.assertNotIn("/tmp/", json.dumps(verify_packet))
+        self.assertEqual(verify_with_query["status"], "blocked")
+        self.assertEqual(
+            verify_with_query["machine_error_code"],
+            "ROLLBACK_POINT_VERIFY_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("artifact_id", verify_with_query["forbidden_fields"])
+        self.assertIn("path", verify_with_query["forbidden_fields"])
+        self.assertIn("digest", verify_with_query["forbidden_fields"])
+        self.assertFalse(verify_with_query["filesystem_read_performed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

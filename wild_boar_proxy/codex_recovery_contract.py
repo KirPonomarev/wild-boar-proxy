@@ -8,6 +8,7 @@ import hashlib
 import json
 import tempfile
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,10 @@ FORBIDDEN_BROWSER_FIELDS = [
     "HOME",
 ]
 ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE = "owned_generated_recovery_artifact"
+ROLLBACK_POINT_ARTIFACT_KIND = "custom_codex_recovery_rollback_point"
+ROLLBACK_POINT_MANIFEST_KIND = "custom_codex_recovery_rollback_point_manifest"
+ROLLBACK_POINT_CREATE_CLAIM_SCOPE = "custom_codex_recovery_rollback_point_create_live_only"
+ROLLBACK_POINT_VERIFY_CLAIM_SCOPE = "custom_codex_recovery_rollback_point_verify_only"
 
 ROLLBACK_POINT_ALLOWED_WRITE_SURFACES = {
     "owned_temp_session_root": {
@@ -868,6 +873,15 @@ def _rollback_point_artifact_root(root: Path | None) -> Path:
     return resolved
 
 
+def _rollback_point_artifact_root_readonly(root: Path | None) -> Path:
+    base = root or Path(tempfile.gettempdir()) / "wbp-codex-custom-recovery" / "rollback-points"
+    return base.resolve()
+
+
+def _rollback_point_manifest_path(root: Path) -> Path:
+    return (root / "_rollback_point_manifest.json").resolve()
+
+
 def _path_under_root(path: Path, root: Path) -> bool:
     resolved = path.resolve()
     return resolved == root or root in resolved.parents
@@ -890,7 +904,7 @@ def _rollback_point_create_failure_packet(
         "machine_error_code": machine_error_code,
         "block_reason_code": block_reason_code,
         "captured_at_utc": utc_now(),
-        "claim_scope": "custom_codex_recovery_rollback_point_create_live_only",
+        "claim_scope": ROLLBACK_POINT_CREATE_CLAIM_SCOPE,
         "contract_endpoint": "/api/codex/custom/recovery/rollback-point",
         "contract_source_endpoint": "/api/codex/custom/recovery/rollback-point-create-admission",
         "contract_endpoint_mutation_allowed": True,
@@ -1447,9 +1461,9 @@ def build_custom_recovery_rollback_point_create_live_packet(
     now = utc_now()
     artifact_payload = {
         "schema_version": 1,
-        "artifact_kind": "custom_codex_recovery_rollback_point",
+        "artifact_kind": ROLLBACK_POINT_ARTIFACT_KIND,
         "created_at_utc": now,
-        "claim_scope": "custom_codex_recovery_rollback_point_create_live_only",
+        "claim_scope": ROLLBACK_POINT_CREATE_CLAIM_SCOPE,
         "source_admission_sha256": _stable_digest(admission),
         "write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
         "write_surface_scope": selected_surface["scope"],
@@ -1460,6 +1474,10 @@ def build_custom_recovery_rollback_point_create_live_packet(
         "rollback_apply_admitted": False,
         "recovery_operator_ready": False,
     }
+    artifact_payload = {
+        **artifact_payload,
+        "artifact_payload_sha256": _stable_digest(artifact_payload),
+    }
     try:
         artifact_path.write_text(
             json.dumps(artifact_payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
@@ -1468,6 +1486,52 @@ def build_custom_recovery_rollback_point_create_live_packet(
         artifact_path.chmod(0o600)
         artifact_digest = _sha256_file(artifact_path)
         readback = json.loads(artifact_path.read_text(encoding="utf-8"))
+        manifest_path = _rollback_point_manifest_path(root)
+        manifest_entries: list[dict[str, Any]] = []
+        if manifest_path.exists():
+            manifest_readback = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(manifest_readback, dict):
+                existing_entries = manifest_readback.get("entries")
+                if isinstance(existing_entries, list):
+                    manifest_entries = [
+                        entry for entry in existing_entries if isinstance(entry, dict)
+                    ]
+        manifest_entries = [
+            entry
+            for entry in manifest_entries
+            if entry.get("artifact_id") != artifact_id
+        ]
+        manifest_payload = {
+            "schema_version": 1,
+            "artifact_kind": ROLLBACK_POINT_MANIFEST_KIND,
+            "claim_scope": ROLLBACK_POINT_CREATE_CLAIM_SCOPE,
+            "updated_at_utc": now,
+            "write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+            "write_surface_scope": selected_surface["scope"],
+            "entries": manifest_entries
+            + [
+                {
+                    "artifact_id": artifact_id,
+                    "artifact_sha256": artifact_digest,
+                    "artifact_payload_sha256": artifact_payload["artifact_payload_sha256"],
+                    "source_admission_sha256": artifact_payload["source_admission_sha256"],
+                    "created_at_utc": now,
+                    "artifact_kind": ROLLBACK_POINT_ARTIFACT_KIND,
+                    "write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+                    "write_surface_scope": selected_surface["scope"],
+                }
+            ],
+        }
+        manifest_payload = {
+            **manifest_payload,
+            "manifest_payload_sha256": _stable_digest(manifest_payload),
+        }
+        manifest_path.write_text(
+            json.dumps(manifest_payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.chmod(0o600)
+        manifest_readback = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return _rollback_point_create_failure_packet(
             admission_packet=admission,
@@ -1479,15 +1543,35 @@ def build_custom_recovery_rollback_point_create_live_packet(
 
     verification_ok = (
         isinstance(readback, dict)
-        and readback.get("artifact_kind") == "custom_codex_recovery_rollback_point"
-        and readback.get("claim_scope")
-        == "custom_codex_recovery_rollback_point_create_live_only"
+        and readback.get("artifact_kind") == ROLLBACK_POINT_ARTIFACT_KIND
+        and readback.get("claim_scope") == ROLLBACK_POINT_CREATE_CLAIM_SCOPE
         and readback.get("write_surface_id") == ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
         and readback.get("source_admission_sha256") == _stable_digest(admission)
         and readback.get("current_codex_touched") is False
         and readback.get("original_codex_touched") is False
         and readback.get("auth_material_touched") is False
         and readback.get("secret_value_recorded") is False
+        and isinstance(manifest_readback, dict)
+        and manifest_readback.get("artifact_kind") == ROLLBACK_POINT_MANIFEST_KIND
+        and manifest_readback.get("manifest_payload_sha256")
+        == _stable_digest(
+            {
+                key: value
+                for key, value in manifest_readback.items()
+                if key != "manifest_payload_sha256"
+            }
+        )
+        and any(
+            isinstance(entry, dict)
+            and entry.get("artifact_id") == artifact_id
+            and entry.get("artifact_sha256") == artifact_digest
+            and entry.get("artifact_payload_sha256")
+            == artifact_payload["artifact_payload_sha256"]
+            and entry.get("source_admission_sha256") == _stable_digest(admission)
+            and entry.get("created_at_utc") == now
+            for entry in manifest_readback.get("entries", [])
+            if isinstance(manifest_readback.get("entries"), list)
+        )
     )
     if not verification_ok:
         return _rollback_point_create_failure_packet(
@@ -1527,7 +1611,7 @@ def build_custom_recovery_rollback_point_create_live_packet(
         "machine_error_code": "ROLLBACK_POINT_CREATE_LIVE_READY",
         "block_reason_code": "",
         "captured_at_utc": now,
-        "claim_scope": "custom_codex_recovery_rollback_point_create_live_only",
+        "claim_scope": ROLLBACK_POINT_CREATE_CLAIM_SCOPE,
         "contract_endpoint": "/api/codex/custom/recovery/rollback-point",
         "contract_source_endpoint": "/api/codex/custom/recovery/rollback-point-create-admission",
         "contract_endpoint_mutation_allowed": True,
@@ -1611,5 +1695,436 @@ def build_custom_recovery_rollback_point_create_live_packet(
         ],
         "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_LIVE_READY",
         "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _rollback_point_verify_failure_packet(
+    *,
+    machine_error_code: str,
+    block_reason_code: str,
+    forbidden_fields: list[str] | None = None,
+    artifact_id: str = "",
+    artifact_sha256: str = "",
+    filesystem_read_performed: bool = False,
+    selection_ambiguous: bool = False,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason_code,
+        "captured_at_utc": utc_now(),
+        "claim_scope": ROLLBACK_POINT_VERIFY_CLAIM_SCOPE,
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-point/verify",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-point",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ["artifact_id", "artifact_path", "digest"],
+        "forbidden_fields": forbidden_fields or [],
+        "browser_forbidden_fields_rejected": True,
+        "rollback_point_verify_performed": filesystem_read_performed,
+        "rollback_point_verified": False,
+        "rollback_point_present": bool(artifact_id),
+        "rollback_point_selection_source": "server_owned_latest_valid_artifact",
+        "rollback_point_selection_ambiguous": selection_ambiguous,
+        "rollback_point_artifact_id": artifact_id,
+        "rollback_point_artifact_id_present": bool(artifact_id),
+        "rollback_point_artifact_path_redacted": True,
+        "rollback_point_artifact_ref": f"rollback-point:{artifact_sha256[:16]}"
+        if artifact_sha256
+        else "",
+        "rollback_point_artifact_sha256": artifact_sha256,
+        "rollback_point_artifact_digest_present": bool(artifact_sha256),
+        "rollback_point_digest_verified": False,
+        "rollback_point_file_digest_present": bool(artifact_sha256),
+        "rollback_point_source_admission_digest_present": False,
+        "rollback_point_provenance_verified": False,
+        "rollback_point_schema_valid": False,
+        "rollback_point_kind_valid": False,
+        "rollback_point_surface_verified": False,
+        "filesystem_read_performed": filesystem_read_performed,
+        "filesystem_read_scope": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+        if filesystem_read_performed
+        else "",
+        "filesystem_write_performed": False,
+        "selected_write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+        "rollback_apply_admitted": False,
+        "rollback_apply_ready": False,
+        "rollback_apply_performed": False,
+        "rollback_completed": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "auth_material_allowed_surface": False,
+        "secret_value_recorded": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "actions": [
+            {
+                "id": "rollback_point_verify",
+                "status": "blocked",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": filesystem_read_performed,
+                "verified": False,
+                "disabled_reason_code": block_reason_code,
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "ready": False,
+                "performed": False,
+                "disabled_reason_code": "ROLLBACK_APPLY_NOT_ADMITTED",
+            },
+        ],
+        "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_BLOCKED",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_ADMISSION_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _read_rollback_point_artifact(path: Path, root: Path) -> tuple[dict[str, Any] | None, str]:
+    if not _path_under_root(path, root):
+        return None, "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    if not isinstance(payload, dict):
+        return None, "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    return payload, ""
+
+
+def _rollback_point_payload_digest_verified(payload: dict[str, Any]) -> bool:
+    observed = payload.get("artifact_payload_sha256")
+    if not isinstance(observed, str) or not observed:
+        return False
+    comparable = dict(payload)
+    comparable.pop("artifact_payload_sha256", None)
+    return observed == _stable_digest(comparable)
+
+
+def _rollback_point_manifest_digest_verified(manifest: dict[str, Any]) -> bool:
+    observed = manifest.get("manifest_payload_sha256")
+    if not isinstance(observed, str) or not observed:
+        return False
+    comparable = dict(manifest)
+    comparable.pop("manifest_payload_sha256", None)
+    return observed == _stable_digest(comparable)
+
+
+def _rollback_point_created_at_valid(value: Any) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _read_rollback_point_manifest(root: Path) -> tuple[dict[str, dict[str, Any]], str]:
+    path = _rollback_point_manifest_path(root)
+    if not path.exists():
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if not _path_under_root(path, root):
+        return {}, "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if not isinstance(manifest, dict):
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if manifest.get("schema_version") != 1:
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if manifest.get("artifact_kind") != ROLLBACK_POINT_MANIFEST_KIND:
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if manifest.get("claim_scope") != ROLLBACK_POINT_CREATE_CLAIM_SCOPE:
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if manifest.get("write_surface_id") != ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE:
+        return {}, "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    expected_scope = ROLLBACK_POINT_ALLOWED_WRITE_SURFACES[
+        ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+    ]["scope"]
+    if manifest.get("write_surface_scope") != expected_scope:
+        return {}, "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    if not _rollback_point_manifest_digest_verified(manifest):
+        return {}, "ROLLBACK_POINT_VERIFY_DIGEST_MISMATCH"
+    entries = manifest.get("entries")
+    if not isinstance(entries, list):
+        return {}, "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    by_artifact_id: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        artifact_id = entry.get("artifact_id")
+        if isinstance(artifact_id, str) and artifact_id:
+            by_artifact_id[artifact_id] = entry
+    return by_artifact_id, ""
+
+
+def _rollback_point_payload_error(payload: dict[str, Any]) -> str:
+    if payload.get("schema_version") != 1:
+        return "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    if payload.get("artifact_kind") != ROLLBACK_POINT_ARTIFACT_KIND:
+        return "ROLLBACK_POINT_VERIFY_KIND_INVALID"
+    if payload.get("claim_scope") != ROLLBACK_POINT_CREATE_CLAIM_SCOPE:
+        return "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    if not _rollback_point_created_at_valid(payload.get("created_at_utc")):
+        return "ROLLBACK_POINT_VERIFY_TIMESTAMP_INVALID"
+    source_admission_sha = payload.get("source_admission_sha256")
+    source_admission_sha_valid = (
+        isinstance(source_admission_sha, str)
+        and len(source_admission_sha) == 64
+        and all(character in "0123456789abcdef" for character in source_admission_sha)
+    )
+    if not source_admission_sha_valid:
+        return "ROLLBACK_POINT_VERIFY_PROVENANCE_MISSING"
+    if payload.get("write_surface_id") != ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE:
+        return "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    expected_scope = ROLLBACK_POINT_ALLOWED_WRITE_SURFACES[
+        ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+    ]["scope"]
+    if payload.get("write_surface_scope") != expected_scope:
+        return "ROLLBACK_POINT_VERIFY_FORBIDDEN_SURFACE"
+    if payload.get("current_codex_touched") is not False:
+        return "CURRENT_CODEX_TOUCHED"
+    if payload.get("original_codex_touched") is not False:
+        return "ORIGINAL_CODEX_TOUCHED"
+    if payload.get("auth_material_touched") is not False:
+        return "ROLLBACK_POINT_VERIFY_SECRET_LEAK_DETECTED"
+    if payload.get("secret_value_recorded") is not False:
+        return "ROLLBACK_POINT_VERIFY_SECRET_LEAK_DETECTED"
+    if payload.get("rollback_apply_admitted") is not False:
+        return "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    if payload.get("recovery_operator_ready") is not False:
+        return "ROLLBACK_POINT_VERIFY_SCHEMA_INVALID"
+    if not _rollback_point_payload_digest_verified(payload):
+        return "ROLLBACK_POINT_VERIFY_DIGEST_MISMATCH"
+    return ""
+
+
+def build_custom_recovery_rollback_point_verify_packet(
+    *,
+    artifact_root: Path | None = None,
+    browser_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Verify the newest server-owned rollback point artifact without writing."""
+
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(payload)))
+    if forbidden_payload_fields:
+        return _rollback_point_verify_failure_packet(
+            machine_error_code="ROLLBACK_POINT_VERIFY_BROWSER_FIELD_REJECTED",
+            block_reason_code="ROLLBACK_POINT_VERIFY_BROWSER_FIELD_REJECTED",
+            forbidden_fields=forbidden_payload_fields,
+        )
+
+    root = _rollback_point_artifact_root_readonly(artifact_root)
+    if not root.exists() or not root.is_dir():
+        return _rollback_point_verify_failure_packet(
+            machine_error_code="ROLLBACK_POINT_VERIFY_NOT_FOUND",
+            block_reason_code="ROLLBACK_POINT_VERIFY_NOT_FOUND",
+        )
+
+    paths = sorted(
+        (path.resolve() for path in root.glob("crp-*.json") if path.is_file()),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    if not paths:
+        return _rollback_point_verify_failure_packet(
+            machine_error_code="ROLLBACK_POINT_VERIFY_NOT_FOUND",
+            block_reason_code="ROLLBACK_POINT_VERIFY_NOT_FOUND",
+        )
+
+    candidates: list[tuple[Path, dict[str, Any], str]] = []
+    first_error = ""
+    first_artifact_id = ""
+    first_artifact_sha = ""
+    for path in paths:
+        artifact_id = path.stem
+        payload, read_error = _read_rollback_point_artifact(path, root)
+        file_sha = _sha256_file(path) if path.exists() else ""
+        if read_error:
+            if not first_error:
+                first_error = read_error
+                first_artifact_id = artifact_id
+                first_artifact_sha = file_sha
+            continue
+        assert payload is not None
+        payload_error = _rollback_point_payload_error(payload)
+        if payload_error:
+            if not first_error:
+                first_error = payload_error
+                first_artifact_id = artifact_id
+                first_artifact_sha = file_sha
+            continue
+        created_at = str(payload.get("created_at_utc") or "")
+        candidates.append((path, payload, created_at))
+
+    if not candidates:
+        error = first_error or "ROLLBACK_POINT_VERIFY_NOT_FOUND"
+        return _rollback_point_verify_failure_packet(
+            machine_error_code=error,
+            block_reason_code=error,
+            artifact_id=first_artifact_id,
+            artifact_sha256=first_artifact_sha,
+            filesystem_read_performed=bool(first_artifact_id),
+        )
+
+    candidates.sort(key=lambda item: (item[2], item[0].name), reverse=True)
+    newest_created_at = candidates[0][2]
+    ambiguous = len([item for item in candidates if item[2] == newest_created_at]) > 1
+    if ambiguous:
+        return _rollback_point_verify_failure_packet(
+            machine_error_code="ROLLBACK_POINT_VERIFY_AMBIGUOUS_SELECTION",
+            block_reason_code="ROLLBACK_POINT_VERIFY_AMBIGUOUS_SELECTION",
+            artifact_id=candidates[0][0].stem,
+            artifact_sha256=_sha256_file(candidates[0][0]),
+            filesystem_read_performed=True,
+            selection_ambiguous=True,
+        )
+
+    selected_path, selected_payload, _created_at = candidates[0]
+    artifact_sha = _sha256_file(selected_path)
+    source_admission_sha = str(selected_payload.get("source_admission_sha256") or "")
+    manifest_entries, manifest_error = _read_rollback_point_manifest(root)
+    if manifest_error:
+        return _rollback_point_verify_failure_packet(
+            machine_error_code=manifest_error,
+            block_reason_code=manifest_error,
+            artifact_id=selected_path.stem,
+            artifact_sha256=artifact_sha,
+            filesystem_read_performed=True,
+        )
+    manifest_entry = manifest_entries.get(selected_path.stem)
+    payload_digest = str(selected_payload.get("artifact_payload_sha256") or "")
+    manifest_entry_valid = (
+        isinstance(manifest_entry, dict)
+        and manifest_entry.get("artifact_id") == selected_path.stem
+        and manifest_entry.get("artifact_sha256") == artifact_sha
+        and manifest_entry.get("artifact_payload_sha256") == payload_digest
+        and manifest_entry.get("source_admission_sha256") == source_admission_sha
+        and manifest_entry.get("created_at_utc") == selected_payload.get("created_at_utc")
+        and manifest_entry.get("artifact_kind") == ROLLBACK_POINT_ARTIFACT_KIND
+        and manifest_entry.get("write_surface_id") == ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+        and manifest_entry.get("write_surface_scope")
+        == ROLLBACK_POINT_ALLOWED_WRITE_SURFACES[
+            ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+        ]["scope"]
+    )
+    if not manifest_entry_valid:
+        return _rollback_point_verify_failure_packet(
+            machine_error_code="ROLLBACK_POINT_VERIFY_PROVENANCE_MISMATCH",
+            block_reason_code="ROLLBACK_POINT_VERIFY_PROVENANCE_MISMATCH",
+            artifact_id=selected_path.stem,
+            artifact_sha256=artifact_sha,
+            filesystem_read_performed=True,
+        )
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "machine_error_code": "ROLLBACK_POINT_VERIFY_READY",
+        "block_reason_code": "",
+        "captured_at_utc": utc_now(),
+        "claim_scope": ROLLBACK_POINT_VERIFY_CLAIM_SCOPE,
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-point/verify",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-point",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ["artifact_id", "artifact_path", "digest"],
+        "browser_forbidden_fields_rejected": True,
+        "rollback_point_verify_performed": True,
+        "rollback_point_verified": True,
+        "rollback_point_present": True,
+        "rollback_point_selection_source": "server_owned_latest_valid_artifact",
+        "rollback_point_selection_ambiguous": False,
+        "rollback_point_artifact_id": selected_path.stem,
+        "rollback_point_artifact_id_present": True,
+        "rollback_point_artifact_path_redacted": True,
+        "rollback_point_artifact_ref": f"rollback-point:{artifact_sha[:16]}",
+        "rollback_point_artifact_sha256": artifact_sha,
+        "rollback_point_artifact_digest_present": True,
+        "rollback_point_digest_verified": True,
+        "rollback_point_file_digest_present": True,
+        "rollback_point_payload_digest_verified": True,
+        "rollback_point_source_admission_digest_present": bool(source_admission_sha),
+        "rollback_point_source_admission_sha256_present": bool(source_admission_sha),
+        "rollback_point_manifest_verified": True,
+        "rollback_point_provenance_verified": True,
+        "rollback_point_schema_valid": True,
+        "rollback_point_kind_valid": True,
+        "rollback_point_surface_verified": True,
+        "filesystem_read_performed": True,
+        "filesystem_read_scope": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+        "filesystem_write_performed": False,
+        "selected_write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+        "rollback_apply_admitted": False,
+        "rollback_apply_ready": False,
+        "rollback_apply_performed": False,
+        "rollback_completed": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "auth_material_allowed_surface": False,
+        "secret_value_recorded": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "actions": [
+            {
+                "id": "rollback_point_verify",
+                "status": "verified",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": True,
+                "verified": True,
+                "disabled_reason_code": "",
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "ready": False,
+                "performed": False,
+                "disabled_reason_code": "ROLLBACK_APPLY_NOT_ADMITTED",
+            },
+        ],
+        "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_VERIFY_READY",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_ADMISSION_PASS",
         "next_contour_claimed": False,
     }
