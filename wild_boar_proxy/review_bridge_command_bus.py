@@ -8,6 +8,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from wild_boar_proxy.review_bridge_packet_import import (
+    ReviewImportContext,
+    ReviewPacketImportError,
+    adapt_review_packet,
+)
 from wild_boar_proxy.review_bridge_session_store import ReviewSessionStore
 
 
@@ -32,22 +37,8 @@ class ReviewCommandSpec:
 ALLOWLIST: dict[str, ReviewCommandSpec] = {
     "import_review_packet": ReviewCommandSpec(
         command_id="import_review_packet",
-        required_args=(
-            "project_id",
-            "session_id",
-            "baseline_hash",
-            "review_surface",
-            "revision_session",
-            "source_packet_hash",
-        ),
-        allowed_args=(
-            "project_id",
-            "session_id",
-            "baseline_hash",
-            "review_surface",
-            "revision_session",
-            "source_packet_hash",
-        ),
+        required_args=("review_packet",),
+        allowed_args=("review_packet",),
     ),
     "clear_review_session": ReviewCommandSpec(
         command_id="clear_review_session",
@@ -85,6 +76,7 @@ def execute_review_command(
     command_id: str,
     *,
     payload: dict[str, Any] | None = None,
+    import_context: ReviewImportContext | None = None,
 ) -> dict[str, Any]:
     body = payload or {}
     try:
@@ -114,12 +106,13 @@ def execute_review_command(
                 },
             )
         if command_id == "import_review_packet":
-            project_id = _require_nonempty_string(body, "project_id")
-            session_id = _require_nonempty_string(body, "session_id")
-            baseline_hash = _require_nonempty_string(body, "baseline_hash")
-            source_packet_hash = _require_nonempty_string(body, "source_packet_hash")
-            review_surface = _require_object(body, "review_surface")
-            revision_session = _require_object(body, "revision_session")
+            adapted = _normalize_import_payload(body, import_context=import_context)
+            project_id = _require_nonempty_string(adapted, "project_id")
+            session_id = _require_nonempty_string(adapted, "session_id")
+            baseline_hash = _require_nonempty_string(adapted, "baseline_hash")
+            source_packet_hash = _require_nonempty_string(adapted, "source_packet_hash")
+            review_surface = _require_object(adapted, "review_surface")
+            revision_session = _require_object(adapted, "revision_session")
             record = store._store_imported_session(
                 project_id=project_id,
                 session_id=session_id,
@@ -137,6 +130,9 @@ def execute_review_command(
                 data={
                     "command_id": command_id,
                     "session_present": True,
+                    "manuscript_write_performed": False,
+                    "filesystem_mutation_performed": False,
+                    "session_store_memory_only": True,
                     "session_record": asdict(record),
                 },
             )
@@ -153,6 +149,22 @@ def execute_review_command(
             next_action="fix_command_payload",
             data={"command_id": command_id},
         )
+
+
+def _normalize_import_payload(
+    payload: dict[str, Any],
+    *,
+    import_context: ReviewImportContext | None,
+) -> dict[str, Any]:
+    if import_context is None:
+        raise ReviewBridgeCommandError(
+            "REVIEW_IMPORT_CONTEXT_UNAVAILABLE",
+            "Review import context is unavailable for packet adaptation.",
+        )
+    try:
+        return adapt_review_packet(payload["review_packet"], context=import_context)
+    except ReviewPacketImportError as exc:
+        raise ReviewBridgeCommandError(exc.machine_error_code, exc.human_message) from exc
 
 
 def _packet(

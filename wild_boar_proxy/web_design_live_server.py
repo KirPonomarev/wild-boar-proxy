@@ -69,6 +69,10 @@ from wild_boar_proxy.review_bridge_command_bus import (
     execute_review_command,
     review_allowlist_metadata,
 )
+from wild_boar_proxy.review_bridge_packet_import import (
+    ReviewImportContext,
+    default_review_import_context,
+)
 from wild_boar_proxy.review_bridge_session_store import (
     ReviewQueryBridge,
     ReviewSessionStore,
@@ -1808,6 +1812,7 @@ def build_handler(
     launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
     owner_authorization_phrase: str | None = None,
+    review_import_context: ReviewImportContext | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -1818,6 +1823,7 @@ def build_handler(
     codex_custom_sessions = CodexCustomSessionManager()
     review_session_store = ReviewSessionStore()
     review_query_bridge = ReviewQueryBridge(review_session_store)
+    bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
@@ -2369,6 +2375,7 @@ def build_handler(
                         review_session_store,
                         command_id,
                         payload=command_payload if isinstance(command_payload, dict) else {},
+                        import_context=bounded_review_import_context,
                     )
                 )
                 return

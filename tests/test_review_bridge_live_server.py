@@ -12,10 +12,15 @@ import urllib.request
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 
+from wild_boar_proxy.review_bridge_packet_import import ReviewImportContext
 from wild_boar_proxy.web_design_live_server import build_handler
 
 
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+IMPORT_CONTEXT = ReviewImportContext(
+    project_id="project-alpha",
+    baseline_hash="sha256:baseline-alpha",
+)
 
 
 def free_port() -> int:
@@ -40,16 +45,24 @@ def post_json(url: str, payload: dict[str, object]) -> str:
         return response.read().decode("utf-8")
 
 
+def review_packet(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "project_id": "project-alpha",
+        "baseline_hash": "sha256:baseline-alpha",
+        "review_items": [{"id": "change-1", "kind": "exact_text"}],
+        "orphan_comments": [],
+        "diagnostics": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def import_command_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "command_id": "import_review_packet",
         "payload": {
-            "project_id": "project-alpha",
-            "session_id": "session-001",
-            "baseline_hash": "sha256:baseline",
-            "review_surface": {"items": [{"id": "change-1"}]},
-            "revision_session": {"mode": "review_only"},
-            "source_packet_hash": "sha256:packet",
+            "review_packet": review_packet(),
         },
     }
     payload.update(overrides)
@@ -58,7 +71,10 @@ def import_command_payload(**overrides: object) -> dict[str, object]:
 
 class ReviewBridgeLiveServerTests(unittest.TestCase):
     def test_review_command_and_query_surfaces_stay_split(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler())
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(review_import_context=IMPORT_CONTEXT),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         base = f"http://127.0.0.1:{server.server_port}"
@@ -95,7 +111,10 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             server.server_close()
 
     def test_review_command_requires_command_id_and_query_surface_rejects_post(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler())
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(review_import_context=IMPORT_CONTEXT),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         base = f"http://127.0.0.1:{server.server_port}"
@@ -118,7 +137,10 @@ class ReviewBridgeLiveServerTests(unittest.TestCase):
             server.server_close()
 
     def test_apply_exact_text_change_stays_not_enabled_through_http(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler())
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", free_port()),
+            build_handler(review_import_context=IMPORT_CONTEXT),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         base = f"http://127.0.0.1:{server.server_port}"
