@@ -1,0 +1,292 @@
+{
+  "admitted_preflight_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": true,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "resolved_item_id": "change-1",
+      "resolved_scene_id": "scene-001",
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "scene_path_ref": "drafts/scene-001.md",
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": true,
+      "write_permitted_now": false
+    },
+    "exit_code": 0,
+    "human_message": "Review apply preflight resolved one exact-text target. No write performed.",
+    "machine_error_code": "REVIEW_APPLY_TARGET_RESOLVED_ADMITTED",
+    "next_action": "wait_for_contour_04_apply_enablement",
+    "status": "ok"
+  },
+  "unknown_scene_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight could not resolve the scene_id inside the current project manifest.",
+    "machine_error_code": "REVIEW_APPLY_TARGET_SCENE_UNKNOWN",
+    "next_action": "register_scene_in_server_owned_manifest",
+    "status": "blocked"
+  },
+  "ambiguous_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "candidate_scene_count": 2,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": true,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight found more than one target for the requested scene_id.",
+    "machine_error_code": "REVIEW_APPLY_TARGET_AMBIGUOUS",
+    "next_action": "deduplicate_scene_manifest",
+    "status": "blocked"
+  },
+  "missing_fields_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight requires exact-text items with scene_id, before, and after fields.",
+    "machine_error_code": "REVIEW_APPLY_EXACT_FIELDS_MISSING",
+    "next_action": "fix_review_packet_fields",
+    "status": "blocked"
+  },
+  "stale_baseline_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight baseline does not match the current project truth.",
+    "machine_error_code": "REVIEW_APPLY_BASELINE_STALE",
+    "next_action": "reimport_review_packet",
+    "status": "blocked"
+  },
+  "closed_session_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": false,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "after",
+        "artifact_path",
+        "baseline_hash",
+        "before",
+        "digest",
+        "path",
+        "project_root",
+        "receipt_path",
+        "scene_id",
+        "scene_path",
+        "session_id"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": false,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight requires an active review session.",
+    "machine_error_code": "REVIEW_APPLY_SESSION_CLOSED",
+    "next_action": "import_review_packet",
+    "status": "blocked"
+  },
+  "browser_rejected_packet": {
+    "changed_files": [],
+    "data": {
+      "browser_forbidden_fields_rejected": true,
+      "filesystem_mutation_performed": false,
+      "forbidden_browser_fields": [
+        "path"
+      ],
+      "future_apply_admissible": false,
+      "manuscript_write_performed": false,
+      "preflight_only": true,
+      "resolution_ambiguous": false,
+      "scene_manifest_present": true,
+      "scene_manifest_source_status": "ok",
+      "scene_path_absolute_exposed": false,
+      "session_present": true,
+      "target_resolution_source": "server_owned_scene_inventory_manifest",
+      "target_resolved": false,
+      "write_permitted_now": false
+    },
+    "exit_code": 1,
+    "human_message": "Review apply preflight rejects browser-owned target fields.",
+    "machine_error_code": "REVIEW_APPLY_BROWSER_FIELD_REJECTED",
+    "next_action": "remove_forbidden_browser_fields",
+    "status": "blocked"
+  },
+  "default_query_surface_without_apply_context": {
+    "baseline_hash": "sha256:baseline-alpha",
+    "created_at": "2026-05-24T20:37:48.164779Z",
+    "machine_error_code": "OK",
+    "project_id": "project-alpha",
+    "review_surface": {
+      "diagnostics": [],
+      "filesystem_mutation_performed": false,
+      "items": [
+        {
+          "after": "new",
+          "before": "old",
+          "id": "change-1",
+          "kind": "exact_text",
+          "scene_id": "scene-001"
+        }
+      ],
+      "manual_only_structural": false,
+      "manuscript_write_performed": false,
+      "orphan_comments": [],
+      "schema_version": 1,
+      "structural_manual_only": [],
+      "text_changes": [
+        {
+          "after": "new",
+          "before": "old",
+          "id": "change-1",
+          "kind": "exact_text",
+          "scene_id": "scene-001"
+        }
+      ]
+    },
+    "revision_session": {
+      "baseline_hash": "sha256:baseline-alpha",
+      "mode": "review_only",
+      "project_id": "project-alpha",
+      "schema_version": 1,
+      "source": "bounded_review_packet_import"
+    },
+    "session_id": "review-import-8fd7c24e759f",
+    "session_present": true,
+    "source_packet_hash": "sha256:8fd7c24e759f55151f66b7f3dfebc693b1d5cf46f2ffd38cf24d106f65daa2dc",
+    "status": "ok"
+  }
+}

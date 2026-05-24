@@ -1,0 +1,15 @@
+{
+  "auditor": "Faraday",
+  "status": "passed",
+  "findings": [],
+  "verdict": "CONTOUR_04A_SCOPE_CLEAN",
+  "notes": [
+    "The latest fix keeps apply preflight opt-in: explicit review_apply_context or repo-local scene manifest only.",
+    "The review-apply admission layer stays query-only and zero-write.",
+    "apply_exact_text_change remains blocked as REVIEW_APPLY_NOT_ENABLED.",
+    "No import-contract redesign and no UI drift detected."
+  ],
+  "residual_risks": [
+    "A future repo-root scene manifest would make apply_preflight appear by default, which is acceptable only as explicit server-owned opt-in."
+  ]
+}

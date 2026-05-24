@@ -65,6 +65,10 @@ from wild_boar_proxy.codex_recovery_contract import (
     custom_recovery_session_ref,
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
+from wild_boar_proxy.review_bridge_apply_admission import (
+    ReviewApplyContext,
+    default_review_apply_context,
+)
 from wild_boar_proxy.review_bridge_command_bus import (
     execute_review_command,
     review_allowlist_metadata,
@@ -1813,6 +1817,7 @@ def build_handler(
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
     owner_authorization_phrase: str | None = None,
     review_import_context: ReviewImportContext | None = None,
+    review_apply_context: ReviewApplyContext | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     command_runner = runner or JsonCommandRunner()
     readonly_runner = command_runner
@@ -1822,8 +1827,16 @@ def build_handler(
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
     review_session_store = ReviewSessionStore()
-    review_query_bridge = ReviewQueryBridge(review_session_store)
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
+    bounded_review_apply_context = review_apply_context
+    if bounded_review_apply_context is None:
+        default_apply_context = default_review_apply_context(ROOT)
+        if default_apply_context.source_status == "ok":
+            bounded_review_apply_context = default_apply_context
+    review_query_bridge = ReviewQueryBridge(
+        review_session_store,
+        review_apply_context=bounded_review_apply_context,
+    )
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
@@ -2143,7 +2156,11 @@ def build_handler(
                 self._send_json(operator_surface_session.transcript_payload())
                 return
             if parsed.path == "/api/review-surface":
-                self._send_json(review_query_bridge.get_review_surface())
+                self._send_json(
+                    review_query_bridge.get_review_surface(
+                        parse_qs(parsed.query, keep_blank_values=True) if parsed.query else None
+                    )
+                )
                 return
             if parsed.path == "/api/review-commands":
                 self._send_json(

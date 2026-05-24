@@ -9,6 +9,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from wild_boar_proxy.review_bridge_apply_admission import (
+    ReviewApplyContext,
+    build_review_apply_preflight_packet,
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -85,8 +90,25 @@ class ReviewSessionStore:
 class ReviewQueryBridge:
     """Read-only query bridge for review session surfaces."""
 
-    def __init__(self, store: ReviewSessionStore) -> None:
+    def __init__(
+        self,
+        store: ReviewSessionStore,
+        *,
+        review_apply_context: ReviewApplyContext | None = None,
+    ) -> None:
         self._store = store
+        self._review_apply_context = review_apply_context
 
-    def get_review_surface(self) -> dict[str, Any]:
-        return self._store.query_surface()
+    def get_review_surface(
+        self,
+        browser_payload: dict[str, list[str]] | None = None,
+    ) -> dict[str, Any]:
+        payload = self._store.query_surface()
+        if self._review_apply_context is None:
+            return payload
+        payload["apply_preflight"] = build_review_apply_preflight_packet(
+            self._store.active_record(),
+            context=self._review_apply_context,
+            browser_payload=browser_payload,
+        )
+        return payload
