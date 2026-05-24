@@ -65,6 +65,14 @@ from wild_boar_proxy.codex_recovery_contract import (
     custom_recovery_session_ref,
 )
 from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
+from wild_boar_proxy.review_bridge_command_bus import (
+    execute_review_command,
+    review_allowlist_metadata,
+)
+from wild_boar_proxy.review_bridge_session_store import (
+    ReviewQueryBridge,
+    ReviewSessionStore,
+)
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
 from wild_boar_proxy.operator_surface import OperatorSurfaceSession
 
@@ -1808,6 +1816,8 @@ def build_handler(
     action_runner = command_runner
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
+    review_session_store = ReviewSessionStore()
+    review_query_bridge = ReviewQueryBridge(review_session_store)
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
@@ -2126,6 +2136,18 @@ def build_handler(
             if parsed.path == "/api/operator/transcript":
                 self._send_json(operator_surface_session.transcript_payload())
                 return
+            if parsed.path == "/api/review-surface":
+                self._send_json(review_query_bridge.get_review_surface())
+                return
+            if parsed.path == "/api/review-commands":
+                self._send_json(
+                    {
+                        "status": "ok",
+                        "machine_error_code": "OK",
+                        "commands": review_allowlist_metadata(),
+                    }
+                )
+                return
             if parsed.path == "/api/codex/launch-modes":
                 self._send_json(build_launch_modes_packet(operator_surface_session.status_payload()))
                 return
@@ -2324,6 +2346,31 @@ def build_handler(
             parsed = urlparse(self.path)
             if parsed.path == "/api/operator/run":
                 self._send_json(operator_surface_session.run_prompt(self._read_json_body()))
+                return
+            if parsed.path == "/api/review-command":
+                payload = self._read_json_body()
+                command_id = payload.get("command_id")
+                if not isinstance(command_id, str):
+                    self._send_json(
+                        {
+                            "status": "command_error",
+                            "exit_code": 1,
+                            "human_message": "command_id must be a non-empty string.",
+                            "machine_error_code": "REVIEW_COMMAND_ID_REQUIRED",
+                            "changed_files": [],
+                            "next_action": "fix_command_payload",
+                            "data": {},
+                        }
+                    )
+                    return
+                command_payload = payload.get("payload", {})
+                self._send_json(
+                    execute_review_command(
+                        review_session_store,
+                        command_id,
+                        payload=command_payload if isinstance(command_payload, dict) else {},
+                    )
+                )
                 return
             if parsed.path == "/api/codex/original/launch-dry-run":
                 self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
