@@ -39,6 +39,9 @@ ROLLBACK_POINT_VERIFY_CLAIM_SCOPE = "custom_codex_recovery_rollback_point_verify
 ROLLBACK_APPLY_ADMISSION_DRY_RUN_CLAIM_SCOPE = (
     "custom_codex_recovery_rollback_apply_admission_dry_run_only"
 )
+ROLLBACK_APPLY_LIVE_PREFLIGHT_CLAIM_SCOPE = (
+    "custom_codex_recovery_rollback_apply_live_preflight_only"
+)
 
 ROLLBACK_POINT_ALLOWED_WRITE_SURFACES = {
     "owned_temp_session_root": {
@@ -2367,6 +2370,8 @@ def build_custom_recovery_rollback_apply_admission_dry_run_packet(
         "rollback_point_provenance_verified": verify.get("rollback_point_provenance_verified") is True,
         "rollback_point_digest_verified": verify.get("rollback_point_digest_verified") is True,
         "rollback_point_surface_verified": verify.get("rollback_point_surface_verified") is True,
+        "source_filesystem_read_performed": verify.get("filesystem_read_performed") is True,
+        "source_filesystem_read_scope": verify.get("filesystem_read_scope") or "",
         "recovery_contract_readonly_sources_ok": contract_readonly_sources_ok,
         "rollback_process_owner_contract_ok": process_owner_contract_ok,
         "write_surface_machine_check_performed": True,
@@ -2437,6 +2442,294 @@ def build_custom_recovery_rollback_apply_admission_dry_run_packet(
             if status == "ok"
             else "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_ADMISSION_DRY_RUN_BLOCKED"
         ),
-        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_LIVE_ADMISSION_PASS",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_LIVE_PREFLIGHT_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _rollback_apply_admission_dry_run_ready(packet: dict[str, Any]) -> bool:
+    required_false_fields = [
+        "contract_endpoint_mutation_allowed",
+        "browser_payload_allowed",
+        "session_state_blocks_apply_admission",
+        "filesystem_read_performed",
+        "filesystem_write_performed",
+        "rollback_apply_admitted",
+        "rollback_apply_ready",
+        "rollback_apply_performed",
+        "rollback_completed",
+        "rollback_live_ready",
+        "recovery_operator_ready",
+        "operator_ready_claimed",
+        "rollback_operator_ready",
+        "rollback_claimed",
+        "process_kill_operator_ready",
+        "process_kill_claimed",
+        "process_kill_live_ready",
+        "process_kill_admitted",
+        "process_kill_performed",
+        "current_codex_touched",
+        "original_codex_touched",
+        "current_codex_home_touched",
+        "auth_material_touched",
+        "auth_material_allowed_surface",
+        "secret_value_recorded",
+        "arbitrary_path_accepted",
+        "arbitrary_path_allowed_surface",
+        "dangerous_action_mutation_allowed",
+        "next_contour_claimed",
+    ]
+    required_true_fields = [
+        "browser_forbidden_fields_rejected",
+        "rollback_apply_admission_evaluated",
+        "rollback_apply_admission_eligible_for_next_contour",
+        "rollback_point_verify_required",
+        "rollback_point_verify_valid",
+        "rollback_point_verified",
+        "rollback_point_present",
+        "rollback_point_artifact_path_redacted",
+        "rollback_point_manifest_verified",
+        "rollback_point_provenance_verified",
+        "rollback_point_digest_verified",
+        "rollback_point_surface_verified",
+        "recovery_contract_readonly_sources_ok",
+        "rollback_process_owner_contract_ok",
+        "write_surface_machine_check_performed",
+        "write_surfaces_all_eligible",
+        "session_state_read_performed",
+        "session_state_all_owned",
+        "dangerous_actions_disabled",
+    ]
+    forbidden_fields = packet.get("forbidden_browser_fields")
+    allowed_surface_ids = packet.get("allowed_write_surface_ids")
+    forbidden_surfaces = packet.get("forbidden_surfaces")
+    actions = packet.get("actions")
+    action_by_id = {
+        action.get("id"): action
+        for action in actions
+        if isinstance(action, dict) and isinstance(action.get("id"), str)
+    } if isinstance(actions, list) else {}
+    admission_action = action_by_id.get("rollback_apply_admission_dry_run", {})
+    apply_action = action_by_id.get("rollback_apply", {})
+    kill_action = action_by_id.get("process_kill", {})
+    return (
+        packet.get("status") == "ok"
+        and packet.get("machine_error_code") == "ROLLBACK_APPLY_ADMISSION_DRY_RUN_EVALUATED"
+        and packet.get("claim_scope") == ROLLBACK_APPLY_ADMISSION_DRY_RUN_CLAIM_SCOPE
+        and packet.get("contract_endpoint")
+        == "/api/codex/custom/recovery/rollback-apply/admission-dry-run"
+        and packet.get("browser_payload_allowed_keys") == []
+        and packet.get("rollback_apply_admission_result") == "eligible_for_next_contour"
+        and packet.get("rollback_apply_admission_scope") == "dry_run_next_contour_only"
+        and packet.get("session_state_status") == "ok"
+        and all(packet.get(field) is False for field in required_false_fields)
+        and all(packet.get(field) is True for field in required_true_fields)
+        and allowed_surface_ids == list(ROLLBACK_POINT_ALLOWED_WRITE_SURFACES)
+        and isinstance(forbidden_surfaces, list)
+        and all(surface in forbidden_surfaces for surface in ROLLBACK_POINT_FORBIDDEN_SURFACES)
+        and isinstance(forbidden_fields, list)
+        and all(
+            field in forbidden_fields
+            for field in FORBIDDEN_BROWSER_FIELDS + ["artifact_id", "artifact_path", "digest"]
+        )
+        and admission_action.get("status") == "evaluated"
+        and admission_action.get("mutation_allowed") is False
+        and admission_action.get("browser_payload_allowed") is False
+        and admission_action.get("evaluated") is True
+        and admission_action.get("result") == "eligible_for_next_contour"
+        and apply_action.get("status") == "disabled"
+        and apply_action.get("admitted") is False
+        and apply_action.get("ready") is False
+        and apply_action.get("performed") is False
+        and kill_action.get("status") == "disabled"
+        and kill_action.get("admitted") is False
+        and kill_action.get("performed") is False
+    )
+
+
+def build_custom_recovery_rollback_apply_live_preflight_packet(
+    *,
+    rollback_apply_admission_dry_run: dict[str, Any] | None = None,
+    browser_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Evaluate future bounded rollback-apply contour preflight without admitting apply."""
+
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(payload)))
+    dry_run = (
+        rollback_apply_admission_dry_run
+        if isinstance(rollback_apply_admission_dry_run, dict)
+        else {}
+    )
+    if forbidden_payload_fields:
+        dry_run_ready = False
+        status = "blocked"
+        machine_error_code = "ROLLBACK_APPLY_LIVE_PREFLIGHT_BROWSER_FIELD_REJECTED"
+        block_reason = "ROLLBACK_APPLY_LIVE_PREFLIGHT_BROWSER_FIELD_REJECTED"
+    else:
+        dry_run_ready = _rollback_apply_admission_dry_run_ready(dry_run)
+        if dry_run_ready:
+            status = "ok"
+            machine_error_code = "ROLLBACK_APPLY_LIVE_PREFLIGHT_EVALUATED"
+            block_reason = ""
+        else:
+            status = "blocked"
+            machine_error_code = "ROLLBACK_APPLY_LIVE_PREFLIGHT_BLOCKED"
+            block_reason = str(
+                dry_run.get("block_reason_code")
+                or dry_run.get("machine_error_code")
+                or "ROLLBACK_APPLY_ADMISSION_DRY_RUN_REQUIRED"
+            )
+
+    checked_surfaces = [
+        _rollback_point_surface_admission_check(
+            {
+                "id": surface_id,
+                "owner": metadata["owner"],
+                "status": "contract_metadata_only",
+                "filesystem_write_admitted": False,
+                "machine_checked": False,
+            }
+        )
+        for surface_id, metadata in ROLLBACK_POINT_ALLOWED_WRITE_SURFACES.items()
+    ]
+    future_write_surfaces_all_owned = all(
+        surface["eligible_for_next_contour"] is True
+        and surface["current_codex_excluded"] is True
+        and surface["original_codex_excluded"] is True
+        and surface["auth_material_excluded"] is True
+        and surface["arbitrary_path_excluded"] is True
+        for surface in checked_surfaces
+    )
+    upstream_filesystem_read_performed = (
+        dry_run.get("source_filesystem_read_performed") is True and dry_run_ready
+    )
+    upstream_filesystem_read_scope = (
+        str(dry_run.get("source_filesystem_read_scope") or "")
+        if upstream_filesystem_read_performed
+        else ""
+    )
+    preflight_result = (
+        "eligible_for_bounded_apply_contour"
+        if status == "ok"
+        else "not_eligible"
+    )
+    return {
+        "schema_version": 1,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason,
+        "captured_at_utc": utc_now(),
+        "claim_scope": ROLLBACK_APPLY_LIVE_PREFLIGHT_CLAIM_SCOPE,
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-apply/live-preflight",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-apply/admission-dry-run",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ["artifact_id", "artifact_path", "digest"],
+        "forbidden_fields": forbidden_payload_fields,
+        "browser_forbidden_fields_rejected": True,
+        "rollback_apply_live_preflight_evaluated": True,
+        "rollback_apply_live_preflight_result": preflight_result,
+        "rollback_apply_live_preflight_eligible_for_next_contour": status == "ok",
+        "rollback_apply_live_preflight_scope": "preflight_next_contour_only",
+        "rollback_apply_dry_run_required": True,
+        "rollback_apply_dry_run_eligible": dry_run_ready,
+        "rollback_point_verified": dry_run.get("rollback_point_verified") is True and dry_run_ready,
+        "rollback_point_manifest_verified": (
+            dry_run.get("rollback_point_manifest_verified") is True and dry_run_ready
+        ),
+        "rollback_point_provenance_verified": (
+            dry_run.get("rollback_point_provenance_verified") is True and dry_run_ready
+        ),
+        "rollback_point_digest_verified": (
+            dry_run.get("rollback_point_digest_verified") is True and dry_run_ready
+        ),
+        "rollback_point_surface_verified": (
+            dry_run.get("rollback_point_surface_verified") is True and dry_run_ready
+        ),
+        "rollback_point_artifact_path_redacted": True,
+        "rollback_point_artifact_ref": str(dry_run.get("rollback_point_artifact_ref") or "")
+        if dry_run_ready
+        else "",
+        "future_write_surfaces_declared": True,
+        "future_write_surfaces_all_owned": future_write_surfaces_all_owned,
+        "future_write_surface_machine_check_performed": True,
+        "future_write_surfaces": checked_surfaces,
+        "future_write_surface_ids": list(ROLLBACK_POINT_ALLOWED_WRITE_SURFACES),
+        "forbidden_surfaces": ROLLBACK_POINT_FORBIDDEN_SURFACES,
+        "rollback_target_class": "owned_generated_recovery_artifact",
+        "rollback_target_browser_supplied": False,
+        "current_codex_excluded": True,
+        "original_codex_excluded": True,
+        "auth_material_excluded": True,
+        "arbitrary_path_rejected": True,
+        "process_kill_not_admitted": True,
+        "source_filesystem_read_performed": upstream_filesystem_read_performed,
+        "source_filesystem_read_scope": upstream_filesystem_read_scope,
+        "filesystem_read_performed": upstream_filesystem_read_performed,
+        "filesystem_read_scope": upstream_filesystem_read_scope,
+        "filesystem_write_performed": False,
+        "rollback_apply_admitted": False,
+        "rollback_apply_ready": False,
+        "rollback_apply_performed": False,
+        "rollback_completed": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "process_kill_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "auth_material_allowed_surface": False,
+        "secret_value_recorded": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "actions": [
+            {
+                "id": "rollback_apply_live_preflight",
+                "status": "evaluated" if status == "ok" else "blocked",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "evaluated": True,
+                "result": preflight_result,
+                "disabled_reason_code": block_reason,
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "ready": False,
+                "performed": False,
+                "disabled_reason_code": "ROLLBACK_APPLY_BOUNDED_LIVE_NOT_ADMITTED",
+            },
+            {
+                "id": "process_kill",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "performed": False,
+                "disabled_reason_code": "PROCESS_KILL_NOT_ADMITTED",
+            },
+        ],
+        "result_token": (
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_LIVE_PREFLIGHT_EVALUATED"
+            if status == "ok"
+            else "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_LIVE_PREFLIGHT_BLOCKED"
+        ),
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_BOUNDED_LIVE_PASS",
         "next_contour_claimed": False,
     }

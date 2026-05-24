@@ -5739,6 +5739,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     "rollback-point-create-admission",
                     "rollback-point/verify",
                     "rollback-apply/admission-dry-run",
+                    "rollback-apply/live-preflight",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5791,6 +5792,24 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         f"{base}/api/codex/custom/recovery/"
                         "rollback-apply/admission-dry-run"
                         "?artifact_id=browser&path=/tmp/forbidden&digest=browser"
+                    )
+                )
+                apply_preflight_packet = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/live-preflight"
+                    )
+                )
+                apply_preflight_with_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/live-preflight"
+                        "?artifact_id=browser&artifact_path=/tmp/artifact"
+                        "&path=/tmp/forbidden&digest=browser&session_id=ccs-browser"
+                        "&backend_id=browser-backend&route_id=browser-route"
+                        "&CODEX_HOME=/tmp/codex&HOME=/tmp/home"
+                        "&auth=browser-auth&token=browser-token"
+                        "&api_key=browser-key&secret=browser-secret"
                     )
                 )
             finally:
@@ -5862,6 +5881,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 "rollback-point-create-admission": HTTPStatus.NOT_FOUND,
                 "rollback-point/verify": HTTPStatus.NOT_FOUND,
                 "rollback-apply/admission-dry-run": HTTPStatus.NOT_FOUND,
+                "rollback-apply/live-preflight": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -6009,6 +6029,73 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertIn("digest", apply_admission_with_query["forbidden_fields"])
         self.assertFalse(apply_admission_with_query["filesystem_read_performed"])
         self.assertFalse(apply_admission_with_query["filesystem_write_performed"])
+        self.assertEqual(apply_preflight_packet["status"], "ok")
+        self.assertEqual(
+            apply_preflight_packet["machine_error_code"],
+            "ROLLBACK_APPLY_LIVE_PREFLIGHT_EVALUATED",
+        )
+        self.assertEqual(
+            apply_preflight_packet["claim_scope"],
+            "custom_codex_recovery_rollback_apply_live_preflight_only",
+        )
+        self.assertTrue(apply_preflight_packet["rollback_apply_live_preflight_evaluated"])
+        self.assertEqual(
+            apply_preflight_packet["rollback_apply_live_preflight_result"],
+            "eligible_for_bounded_apply_contour",
+        )
+        self.assertTrue(apply_preflight_packet["rollback_apply_dry_run_eligible"])
+        self.assertTrue(apply_preflight_packet["rollback_point_verified"])
+        self.assertTrue(apply_preflight_packet["future_write_surfaces_declared"])
+        self.assertTrue(apply_preflight_packet["future_write_surfaces_all_owned"])
+        self.assertTrue(apply_preflight_packet["current_codex_excluded"])
+        self.assertTrue(apply_preflight_packet["original_codex_excluded"])
+        self.assertTrue(apply_preflight_packet["auth_material_excluded"])
+        self.assertTrue(apply_preflight_packet["arbitrary_path_rejected"])
+        self.assertTrue(apply_preflight_packet["process_kill_not_admitted"])
+        self.assertTrue(apply_preflight_packet["source_filesystem_read_performed"])
+        self.assertEqual(
+            apply_preflight_packet["source_filesystem_read_scope"],
+            "owned_generated_recovery_artifact",
+        )
+        self.assertTrue(apply_preflight_packet["filesystem_read_performed"])
+        self.assertEqual(
+            apply_preflight_packet["filesystem_read_scope"],
+            "owned_generated_recovery_artifact",
+        )
+        self.assertFalse(apply_preflight_packet["filesystem_write_performed"])
+        self.assertFalse(apply_preflight_packet["rollback_apply_admitted"])
+        self.assertFalse(apply_preflight_packet["rollback_apply_ready"])
+        self.assertFalse(apply_preflight_packet["rollback_apply_performed"])
+        self.assertFalse(apply_preflight_packet["rollback_completed"])
+        self.assertFalse(apply_preflight_packet["rollback_live_ready"])
+        self.assertFalse(apply_preflight_packet["process_kill_performed"])
+        self.assertFalse(apply_preflight_packet["recovery_operator_ready"])
+        self.assertFalse(apply_preflight_packet["current_codex_touched"])
+        self.assertFalse(apply_preflight_packet["original_codex_touched"])
+        self.assertFalse(apply_preflight_packet["auth_material_touched"])
+        self.assertFalse(apply_preflight_packet["secret_value_recorded"])
+        self.assertNotIn("/tmp/", json.dumps(apply_preflight_packet))
+        self.assertEqual(apply_preflight_with_query["status"], "blocked")
+        self.assertEqual(
+            apply_preflight_with_query["machine_error_code"],
+            "ROLLBACK_APPLY_LIVE_PREFLIGHT_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("artifact_id", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("artifact_path", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("path", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("digest", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("session_id", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("backend_id", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("route_id", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("CODEX_HOME", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("HOME", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("auth", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("token", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("api_key", apply_preflight_with_query["forbidden_fields"])
+        self.assertIn("secret", apply_preflight_with_query["forbidden_fields"])
+        self.assertFalse(apply_preflight_with_query["source_filesystem_read_performed"])
+        self.assertFalse(apply_preflight_with_query["filesystem_read_performed"])
+        self.assertFalse(apply_preflight_with_query["filesystem_write_performed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

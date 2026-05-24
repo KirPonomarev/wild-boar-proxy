@@ -2178,6 +2178,101 @@ function renderCodexCustomRecoveryRollbackApplyAdmissionDryRun(packet) {
   }
 }
 
+function renderCodexCustomRecoveryRollbackApplyLivePreflight(packet) {
+  const response = document.getElementById("codexCustomRecoveryRollbackApplyPreflightPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const evaluated = packet?.rollback_apply_live_preflight_evaluated === true;
+  const result = packet?.rollback_apply_live_preflight_result || "not_evaluated";
+  const eligible = packet?.rollback_apply_live_preflight_eligible_for_next_contour === true;
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryRollbackApplyPreflight",
+    `${status} · ${evaluated ? result : "not evaluated"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryLiveReady",
+    `${packet?.rollback_live_ready === true} · apply preflight only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${packet?.recovery_operator_ready === true} · not claimed`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: packet?.block_reason_code || "",
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_rollback_apply_live_preflight_only",
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/rollback-apply/live-preflight",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/rollback-apply/admission-dry-run",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      forbidden_fields: packet?.forbidden_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      rollback_apply_live_preflight_evaluated: evaluated,
+      rollback_apply_live_preflight_result: result,
+      rollback_apply_live_preflight_eligible_for_next_contour: eligible,
+      rollback_apply_live_preflight_scope: packet?.rollback_apply_live_preflight_scope || "",
+      rollback_apply_dry_run_required: packet?.rollback_apply_dry_run_required === true,
+      rollback_apply_dry_run_eligible: packet?.rollback_apply_dry_run_eligible === true,
+      rollback_point_verified: packet?.rollback_point_verified === true,
+      rollback_point_manifest_verified: packet?.rollback_point_manifest_verified === true,
+      rollback_point_provenance_verified: packet?.rollback_point_provenance_verified === true,
+      rollback_point_digest_verified: packet?.rollback_point_digest_verified === true,
+      rollback_point_surface_verified: packet?.rollback_point_surface_verified === true,
+      rollback_point_artifact_path_redacted: packet?.rollback_point_artifact_path_redacted !== false,
+      rollback_point_artifact_ref: packet?.rollback_point_artifact_ref || "",
+      future_write_surfaces_declared: packet?.future_write_surfaces_declared === true,
+      future_write_surfaces_all_owned: packet?.future_write_surfaces_all_owned === true,
+      future_write_surface_machine_check_performed: packet?.future_write_surface_machine_check_performed === true,
+      future_write_surfaces: Array.isArray(packet?.future_write_surfaces) ? packet.future_write_surfaces : [],
+      future_write_surface_ids: Array.isArray(packet?.future_write_surface_ids) ? packet.future_write_surface_ids : [],
+      forbidden_surfaces: Array.isArray(packet?.forbidden_surfaces) ? packet.forbidden_surfaces : [],
+      rollback_target_class: packet?.rollback_target_class || "",
+      rollback_target_browser_supplied: packet?.rollback_target_browser_supplied === true,
+      current_codex_excluded: packet?.current_codex_excluded === true,
+      original_codex_excluded: packet?.original_codex_excluded === true,
+      auth_material_excluded: packet?.auth_material_excluded === true,
+      arbitrary_path_rejected: packet?.arbitrary_path_rejected === true,
+      process_kill_not_admitted: packet?.process_kill_not_admitted === true,
+      source_filesystem_read_performed: packet?.source_filesystem_read_performed === true,
+      source_filesystem_read_scope: packet?.source_filesystem_read_scope || "",
+      filesystem_read_performed: packet?.filesystem_read_performed === true,
+      filesystem_read_scope: packet?.filesystem_read_scope || "",
+      filesystem_write_performed: packet?.filesystem_write_performed === true,
+      rollback_apply_admitted: packet?.rollback_apply_admitted === true,
+      rollback_apply_ready: packet?.rollback_apply_ready === true,
+      rollback_apply_performed: packet?.rollback_apply_performed === true,
+      rollback_completed: packet?.rollback_completed === true,
+      rollback_live_ready: packet?.rollback_live_ready === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      process_kill_live_ready: packet?.process_kill_live_ready === true,
+      process_kill_admitted: packet?.process_kill_admitted === true,
+      process_kill_performed: packet?.process_kill_performed === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      auth_material_touched: packet?.auth_material_touched === true,
+      secret_value_recorded: packet?.secret_value_recorded === true,
+      arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+      arbitrary_path_allowed_surface: packet?.arbitrary_path_allowed_surface === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled !== false,
+      dangerous_action_mutation_allowed: packet?.dangerous_action_mutation_allowed === true,
+      actions: Array.isArray(packet?.actions) ? packet.actions : [],
+      result_token: packet?.result_token || "",
+      next_contour: packet?.next_contour || "",
+      next_contour_claimed: packet?.next_contour_claimed === true,
+    }, null, 2);
+  }
+}
+
 async function refreshCodexCustomRecoveryRollbackPointCreateAdmission() {
   try {
     renderCodexCustomRecoveryRollbackPointCreateAdmission(
@@ -2374,6 +2469,68 @@ async function refreshCodexCustomRecoveryRollbackApplyAdmissionDryRun() {
       write_surface_machine_check_performed: false,
       write_surfaces_all_eligible: false,
       filesystem_read_performed: false,
+      filesystem_write_performed: false,
+      rollback_apply_admitted: false,
+      rollback_apply_ready: false,
+      rollback_apply_performed: false,
+      rollback_completed: false,
+      rollback_live_ready: false,
+      recovery_operator_ready: false,
+      process_kill_performed: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      auth_material_touched: false,
+      secret_value_recorded: false,
+      dangerous_actions_disabled: true,
+      dangerous_action_mutation_allowed: false,
+      next_contour_claimed: false,
+      human_message: error.message
+    });
+  }
+}
+
+async function refreshCodexCustomRecoveryRollbackApplyLivePreflight() {
+  try {
+    renderCodexCustomRecoveryRollbackApplyLivePreflight(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/rollback-apply/live-preflight")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryRollbackApplyLivePreflight({
+      status: "failed",
+      machine_error_code: "ROLLBACK_APPLY_LIVE_PREFLIGHT_FETCH_FAILED",
+      block_reason_code: "ROLLBACK_APPLY_LIVE_PREFLIGHT_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_rollback_apply_live_preflight_only",
+      contract_endpoint: "/api/codex/custom/recovery/rollback-apply/live-preflight",
+      contract_source_endpoint: "/api/codex/custom/recovery/rollback-apply/admission-dry-run",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "snapshot_path", "rollback_target", "session_id", "artifact_id", "artifact_path", "digest", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      forbidden_fields: [],
+      browser_forbidden_fields_rejected: true,
+      rollback_apply_live_preflight_evaluated: false,
+      rollback_apply_live_preflight_result: "not_evaluated",
+      rollback_apply_live_preflight_eligible_for_next_contour: false,
+      rollback_apply_dry_run_required: true,
+      rollback_apply_dry_run_eligible: false,
+      rollback_point_verified: false,
+      rollback_point_manifest_verified: false,
+      rollback_point_provenance_verified: false,
+      rollback_point_digest_verified: false,
+      rollback_point_surface_verified: false,
+      rollback_point_artifact_path_redacted: true,
+      future_write_surfaces_declared: false,
+      future_write_surfaces_all_owned: false,
+      future_write_surface_machine_check_performed: false,
+      rollback_target_browser_supplied: false,
+      current_codex_excluded: true,
+      original_codex_excluded: true,
+      auth_material_excluded: true,
+      arbitrary_path_rejected: true,
+      process_kill_not_admitted: true,
+      source_filesystem_read_performed: false,
+      filesystem_read_performed: false,
+      filesystem_read_scope: "",
       filesystem_write_performed: false,
       rollback_apply_admitted: false,
       rollback_apply_ready: false,
@@ -8827,6 +8984,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoveryRollbackPointCreateAction")?.addEventListener("click", () => createCodexCustomRecoveryRollbackPoint());
   document.getElementById("codexCustomRecoveryRollbackPointVerifyAction")?.addEventListener("click", () => verifyCodexCustomRecoveryRollbackPoint());
   document.getElementById("codexCustomRecoveryRollbackApplyAdmissionAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackApplyAdmissionDryRun());
+  document.getElementById("codexCustomRecoveryRollbackApplyPreflightAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackApplyLivePreflight());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

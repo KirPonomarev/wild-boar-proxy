@@ -13,6 +13,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
+    build_custom_recovery_rollback_apply_live_preflight_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
@@ -71,6 +72,15 @@ def rollback_point_verify_packet(root: Path) -> dict[str, object]:
         artifact_root=root,
     )
     return build_custom_recovery_rollback_point_verify_packet(artifact_root=root)
+
+
+def rollback_apply_admission_dry_run_packet(root: Path) -> dict[str, object]:
+    return build_custom_recovery_rollback_apply_admission_dry_run_packet(
+        rollback_point_verify=rollback_point_verify_packet(root),
+        recovery_contract=recovery_contract_packet(),
+        rollback_process_owner_contract=rollback_process_owner_contract_packet(),
+        sessions_packet={"status": "ok", "session_count": 0, "sessions": []},
+    )
 
 
 def stable_digest(payload: dict[str, object]) -> str:
@@ -1230,9 +1240,18 @@ class CodexRecoveryContractTests(unittest.TestCase):
             rollback_point_verify=None,
             browser_payload={
                 "artifact_id": "browser",
+                "artifact_path": "/tmp/artifact",
+                "backend_id": "browser-backend",
+                "route_id": "browser-route",
                 "path": "/tmp/forbidden",
                 "digest": "browser",
                 "session_id": "ccs-browser",
+                "CODEX_HOME": "/tmp/codex",
+                "HOME": "/tmp/home",
+                "auth": "browser-auth",
+                "token": "browser-token",
+                "api_key": "browser-key",
+                "secret": "browser-secret",
             },
         )
 
@@ -1242,9 +1261,18 @@ class CodexRecoveryContractTests(unittest.TestCase):
             "ROLLBACK_APPLY_ADMISSION_BROWSER_FIELD_REJECTED",
         )
         self.assertIn("artifact_id", packet["forbidden_fields"])
+        self.assertIn("artifact_path", packet["forbidden_fields"])
+        self.assertIn("backend_id", packet["forbidden_fields"])
+        self.assertIn("route_id", packet["forbidden_fields"])
         self.assertIn("path", packet["forbidden_fields"])
         self.assertIn("digest", packet["forbidden_fields"])
         self.assertIn("session_id", packet["forbidden_fields"])
+        self.assertIn("CODEX_HOME", packet["forbidden_fields"])
+        self.assertIn("HOME", packet["forbidden_fields"])
+        self.assertIn("auth", packet["forbidden_fields"])
+        self.assertIn("token", packet["forbidden_fields"])
+        self.assertIn("api_key", packet["forbidden_fields"])
+        self.assertIn("secret", packet["forbidden_fields"])
         self.assertFalse(packet["rollback_point_verify_valid"])
         self.assertFalse(packet["filesystem_read_performed"])
         self.assertFalse(packet["filesystem_write_performed"])
@@ -1283,6 +1311,152 @@ class CodexRecoveryContractTests(unittest.TestCase):
                 self.assertFalse(packet["rollback_apply_performed"])
                 self.assertFalse(packet["filesystem_write_performed"])
                 self.assertFalse(packet["process_kill_performed"])
+
+    def test_rollback_apply_live_preflight_evaluates_after_dry_run_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dry_run = rollback_apply_admission_dry_run_packet(Path(tmp))
+            packet = build_custom_recovery_rollback_apply_live_preflight_packet(
+                rollback_apply_admission_dry_run=dry_run,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_LIVE_PREFLIGHT_EVALUATED",
+            )
+            self.assertEqual(
+                packet["claim_scope"],
+                "custom_codex_recovery_rollback_apply_live_preflight_only",
+            )
+            self.assertEqual(
+                packet["result_token"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_LIVE_PREFLIGHT_EVALUATED",
+            )
+            self.assertTrue(packet["rollback_apply_live_preflight_evaluated"])
+            self.assertEqual(
+                packet["rollback_apply_live_preflight_result"],
+                "eligible_for_bounded_apply_contour",
+            )
+            self.assertTrue(packet["rollback_apply_live_preflight_eligible_for_next_contour"])
+            self.assertEqual(
+                packet["rollback_apply_live_preflight_scope"],
+                "preflight_next_contour_only",
+            )
+            self.assertTrue(packet["rollback_apply_dry_run_required"])
+            self.assertTrue(packet["rollback_apply_dry_run_eligible"])
+            self.assertTrue(packet["rollback_point_verified"])
+            self.assertTrue(packet["future_write_surfaces_declared"])
+            self.assertTrue(packet["future_write_surfaces_all_owned"])
+            self.assertTrue(packet["future_write_surface_machine_check_performed"])
+            self.assertEqual(packet["rollback_target_class"], "owned_generated_recovery_artifact")
+            self.assertFalse(packet["rollback_target_browser_supplied"])
+            self.assertTrue(packet["current_codex_excluded"])
+            self.assertTrue(packet["original_codex_excluded"])
+            self.assertTrue(packet["auth_material_excluded"])
+            self.assertTrue(packet["arbitrary_path_rejected"])
+            self.assertTrue(packet["process_kill_not_admitted"])
+            self.assertTrue(packet["source_filesystem_read_performed"])
+            self.assertEqual(
+                packet["source_filesystem_read_scope"],
+                "owned_generated_recovery_artifact",
+            )
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertEqual(
+                packet["filesystem_read_scope"],
+                "owned_generated_recovery_artifact",
+            )
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["rollback_apply_admitted"])
+            self.assertFalse(packet["rollback_apply_ready"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["rollback_completed"])
+            self.assertFalse(packet["rollback_live_ready"])
+            self.assertFalse(packet["process_kill_performed"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["current_codex_touched"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["auth_material_touched"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertEqual(packet["browser_payload_allowed_keys"], [])
+            self.assertIn("artifact_id", packet["forbidden_browser_fields"])
+            self.assertIn("digest", packet["forbidden_browser_fields"])
+            actions = {action["id"]: action for action in packet["actions"]}
+            self.assertEqual(actions["rollback_apply_live_preflight"]["status"], "evaluated")
+            self.assertEqual(
+                actions["rollback_apply_live_preflight"]["result"],
+                "eligible_for_bounded_apply_contour",
+            )
+            self.assertFalse(actions["rollback_apply"]["admitted"])
+            self.assertFalse(actions["rollback_apply"]["ready"])
+            self.assertFalse(actions["rollback_apply"]["performed"])
+            self.assertFalse(actions["process_kill"]["admitted"])
+            self.assertFalse(actions["process_kill"]["performed"])
+
+    def test_rollback_apply_live_preflight_blocks_without_dry_run_eligible(self) -> None:
+        packet = build_custom_recovery_rollback_apply_live_preflight_packet(
+            rollback_apply_admission_dry_run={
+                "status": "blocked",
+                "machine_error_code": "ROLLBACK_APPLY_ADMISSION_DRY_RUN_BLOCKED",
+                "block_reason_code": "ROLLBACK_POINT_VERIFY_NOT_FOUND",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_APPLY_LIVE_PREFLIGHT_BLOCKED")
+        self.assertEqual(packet["block_reason_code"], "ROLLBACK_POINT_VERIFY_NOT_FOUND")
+        self.assertEqual(packet["rollback_apply_live_preflight_result"], "not_eligible")
+        self.assertFalse(packet["rollback_apply_live_preflight_eligible_for_next_contour"])
+        self.assertFalse(packet["rollback_apply_dry_run_eligible"])
+        self.assertFalse(packet["rollback_point_verified"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_apply_ready"])
+        self.assertFalse(packet["rollback_apply_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["process_kill_performed"])
+
+    def test_rollback_apply_live_preflight_rejects_browser_payload_without_read(self) -> None:
+        packet = build_custom_recovery_rollback_apply_live_preflight_packet(
+            rollback_apply_admission_dry_run=None,
+            browser_payload={
+                "artifact_id": "browser",
+                "path": "/tmp/forbidden",
+                "digest": "browser",
+                "session_id": "ccs-browser",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "ROLLBACK_APPLY_LIVE_PREFLIGHT_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("artifact_id", packet["forbidden_fields"])
+        self.assertIn("path", packet["forbidden_fields"])
+        self.assertIn("digest", packet["forbidden_fields"])
+        self.assertIn("session_id", packet["forbidden_fields"])
+        self.assertFalse(packet["rollback_apply_dry_run_eligible"])
+        self.assertFalse(packet["source_filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_read_performed"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_apply_performed"])
+
+    def test_rollback_apply_live_preflight_blocks_touched_dry_run_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dry_run = rollback_apply_admission_dry_run_packet(Path(tmp))
+            dry_run["current_codex_touched"] = True
+            packet = build_custom_recovery_rollback_apply_live_preflight_packet(
+                rollback_apply_admission_dry_run=dry_run,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(packet["machine_error_code"], "ROLLBACK_APPLY_LIVE_PREFLIGHT_BLOCKED")
+            self.assertFalse(packet["rollback_apply_dry_run_eligible"])
+            self.assertFalse(packet["rollback_apply_admitted"])
+            self.assertFalse(packet["rollback_apply_ready"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["process_kill_performed"])
 
     def test_rollback_point_create_live_rejects_shallow_admission_without_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -558,6 +558,7 @@
             <div>Rollback point create</div><div id="codexCustomRecoveryRollbackPointCreate">live create not run</div>
             <div>Rollback point verify</div><div id="codexCustomRecoveryRollbackPointVerify">verify not run</div>
             <div>Rollback apply admission</div><div id="codexCustomRecoveryRollbackApplyAdmission">dry-run not evaluated</div>
+            <div>Rollback apply preflight</div><div id="codexCustomRecoveryRollbackApplyPreflight">preflight not evaluated</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -602,6 +603,10 @@
               <button id="codexCustomRecoveryRollbackApplyAdmissionAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Apply admission dry-run</span>
+              </button>
+              <button id="codexCustomRecoveryRollbackApplyPreflightAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Apply preflight</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -795,6 +800,42 @@
   "write_surface_machine_check_performed": false,
   "write_surfaces_all_eligible": false,
   "filesystem_read_performed": false,
+  "filesystem_write_performed": false,
+  "rollback_apply_admitted": false,
+  "rollback_apply_ready": false,
+  "rollback_apply_performed": false,
+  "rollback_completed": false,
+  "rollback_live_ready": false,
+  "process_kill_performed": false,
+  "recovery_operator_ready": false,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "browser_payload_allowed": false,
+  "dangerous_actions_disabled": true
+}</pre>
+          <pre id="codexCustomRecoveryRollbackApplyPreflightPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ROLLBACK_APPLY_LIVE_PREFLIGHT_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_rollback_apply_live_preflight_only",
+  "rollback_apply_live_preflight_evaluated": false,
+  "rollback_apply_live_preflight_result": "not_evaluated",
+  "rollback_apply_live_preflight_eligible_for_next_contour": false,
+  "rollback_apply_dry_run_required": true,
+  "rollback_apply_dry_run_eligible": false,
+  "rollback_point_verified": false,
+  "future_write_surfaces_declared": false,
+  "future_write_surfaces_all_owned": false,
+  "current_codex_excluded": true,
+  "original_codex_excluded": true,
+  "auth_material_excluded": true,
+  "arbitrary_path_rejected": true,
+  "process_kill_not_admitted": true,
+  "source_filesystem_read_performed": false,
+  "source_filesystem_read_scope": "",
+  "filesystem_read_performed": false,
+  "filesystem_read_scope": "",
   "filesystem_write_performed": false,
   "rollback_apply_admitted": false,
   "rollback_apply_ready": false,
