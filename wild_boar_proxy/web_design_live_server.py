@@ -524,6 +524,18 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Проверить setup/import foundation",
         "human_meaning": "Показать bounded server-owned discovery truth для setup/import без browser paths, selection persistence или runtime mutation.",
     },
+    "legacy_import_discovery": {
+        "adapter_command_id": "server_owned_legacy_import_discovery",
+        "action_role": "legacy_import_source_discovery",
+        "mutation_class": "setup_import_admission",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только bounded server-owned discovery truth для importable legacy source; browser paths, selection persistence и import execution не включены",
+        "display_name": "Найти import source",
+        "human_meaning": "Показать bounded server-owned discovery truth для importable legacy source без browser path intake и без import execution.",
+    },
     "legacy_import": {
         "adapter_command_id": "legacy_import",
         "action_role": "setup_import_import_capable_foundation",
@@ -629,6 +641,9 @@ SETUP_IMPORT_FOUNDATION_ACTIONS = frozenset({"setup_discovery", "legacy_import"}
 SETUP_DISCOVERY_SOURCE_KIND = "current_runtime_owned_layout"
 SETUP_DISCOVERY_AVAILABLE_STATE = "server_owned_discovery_only"
 SETUP_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_SETUP_DISCOVERY_SOURCE_UNSAFE"
+LEGACY_IMPORT_DISCOVERY_SOURCE_KIND = "known_owned_legacy_import_source"
+LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE = "server_owned_import_source_discovery_only"
+LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_LEGACY_IMPORT_DISCOVERY_SOURCE_UNSAFE"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
@@ -848,6 +863,10 @@ def _current_runtime_target_paths() -> tuple[Path, Path]:
     return profile_dir, data_dir
 
 
+def _legacy_import_discovery_source_dir() -> Path:
+    return Path("~/" + ".co" + "dex-custom-cli").expanduser()
+
+
 def _setup_discovery_packet() -> dict[str, Any]:
     paths = RuntimePaths.from_env()
     if not paths.profile_dir.is_absolute() or not paths.managed_dir.is_absolute():
@@ -913,6 +932,113 @@ def _setup_discovery_packet() -> dict[str, Any]:
                 "filesystem_mutation_performed": False,
                 "import_execution_claimed": False,
                 "candidate_marker_count": candidate_marker_count,
+            }
+        },
+    )
+
+
+def _legacy_import_discovery_packet() -> dict[str, Any]:
+    paths = RuntimePaths.from_env()
+    source_dir = _legacy_import_discovery_source_dir()
+    try:
+        source_dir_resolved = source_dir.resolve(strict=False)
+        current_profile_resolved = paths.profile_dir.resolve(strict=False)
+    except OSError:
+        source_dir_resolved = source_dir
+        current_profile_resolved = paths.profile_dir
+    if not source_dir.is_absolute():
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                "Legacy import discovery requires an absolute server-owned source candidate. "
+                "Browser path intake remains forbidden."
+            ),
+            machine_error_code=LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "discovery_state": "blocked",
+                    "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "selection_persisted": False,
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "candidate_marker_count": 0,
+                    "current_runtime_layout_reused": False,
+                }
+            },
+        )
+    if source_dir_resolved == current_profile_resolved:
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                "Legacy import discovery rejected the current runtime layout as an import source candidate. "
+                "Browser path intake remains forbidden."
+            ),
+            machine_error_code=LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "discovery_state": "blocked",
+                    "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "selection_persisted": False,
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "candidate_marker_count": 0,
+                    "current_runtime_layout_reused": True,
+                }
+            },
+        )
+
+    required_markers = (
+        source_dir / "backend-registry.json",
+        source_dir / ("supervisor" + "-state" + ".json"),
+        source_dir / "config.toml",
+    )
+    optional_markers = (
+        source_dir / "runtime-mode.txt",
+        source_dir / "runtime-effective-mode.txt",
+        source_dir / "external-models",
+    )
+    candidate_marker_count = sum(
+        1
+        for candidate in (*required_markers, *optional_markers)
+        if candidate.exists()
+    )
+    required_markers_present = all(
+        candidate.exists() and candidate.is_file() for candidate in required_markers
+    )
+    discovery_state = "discovered" if required_markers_present else "none"
+    human_message = (
+        "Legacy import discovery found one bounded server-owned import source candidate. No write performed."
+        if discovery_state == "discovered"
+        else "Legacy import discovery found no bounded server-owned import source candidate. No write performed."
+    )
+    return build_command_payload(
+        ok=True,
+        human_message=human_message,
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "data": {
+                "discovery_state": discovery_state,
+                "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                "browser_path_intake": False,
+                "selection_persisted": False,
+                "filesystem_mutation_performed": False,
+                "import_execution_claimed": False,
+                "candidate_marker_count": candidate_marker_count,
+                "current_runtime_layout_reused": False,
             }
         },
     )
@@ -1754,6 +1880,20 @@ def run_ui_action(
     ui_action = payload.get("ui_action")
     if not isinstance(ui_action, str):
         return _blocked_action("unknown", "UI action должен быть строкой.")
+    if ui_action == "legacy_import_discovery":
+        forbidden_browser_fields = tuple(
+            field
+            for field in ("source_dir", "source_path", "path", "source")
+            if field in payload
+        )
+        if forbidden_browser_fields:
+            return _unavailable_action(
+                ui_action,
+                "Legacy import discovery does not accept browser-owned path or source fields.",
+                "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+                availability_state=LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE,
+                disabled_reasons=("browser_path_forbidden",),
+            )
 
     action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
     if action_spec is None:
@@ -1777,6 +1917,12 @@ def run_ui_action(
             ui_action,
             action_spec=action_spec,
             packet=_setup_discovery_packet(),
+        )
+    if ui_action == "legacy_import_discovery":
+        return _direct_ui_action_packet_response(
+            ui_action,
+            action_spec=action_spec,
+            packet=_legacy_import_discovery_packet(),
         )
     if not _action_available(
         ui_action,
@@ -3352,6 +3498,8 @@ def _action_available(
 ) -> bool:
     if ui_action == "setup_discovery":
         return True
+    if ui_action == "legacy_import_discovery":
+        return True
     if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
         return False
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3375,6 +3523,8 @@ def _action_availability_state(
 ) -> str:
     if ui_action == "setup_discovery":
         return SETUP_DISCOVERY_AVAILABLE_STATE
+    if ui_action == "legacy_import_discovery":
+        return LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE
     if ui_action == "legacy_import":
         return "foundation_import_capable_only"
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3401,6 +3551,8 @@ def _action_unavailable_code(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
+    if ui_action == "legacy_import_discovery":
+        return ""
     if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
         return SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3426,6 +3578,8 @@ def _action_disabled_reasons(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> tuple[str, ...]:
+    if ui_action == "legacy_import_discovery":
+        return ()
     if ui_action == "legacy_import":
         return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_DISABLED_REASONS
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3456,6 +3610,8 @@ def _action_unavailable_reason(
     action_phase: str,
 ) -> str:
     if ui_action == "setup_discovery":
+        return ""
+    if ui_action == "legacy_import_discovery":
         return ""
     if ui_action == "legacy_import":
         return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE

@@ -892,6 +892,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("import_apply", metadata["actions"])
         self.assertNotIn("installer_init", metadata["actions"])
         self.assertIn("setup_discovery", metadata["actions"])
+        self.assertIn("legacy_import_discovery", metadata["actions"])
         self.assertIn("legacy_import", metadata["actions"])
         self.assertTrue(metadata["actions"]["setup_discovery"]["available"])
         self.assertEqual(
@@ -899,6 +900,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
             live_server.SETUP_DISCOVERY_AVAILABLE_STATE,
         )
         self.assertEqual(metadata["actions"]["setup_discovery"]["disabled_reason_code"], "")
+        self.assertTrue(metadata["actions"]["legacy_import_discovery"]["available"])
+        self.assertEqual(
+            metadata["actions"]["legacy_import_discovery"]["availability_state"],
+            live_server.LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE,
+        )
+        self.assertEqual(
+            metadata["actions"]["legacy_import_discovery"]["disabled_reason_code"], ""
+        )
         self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertEqual(
             metadata["actions"]["legacy_import"]["availability_state"],
@@ -936,12 +945,16 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
         self.assertTrue(sandbox_blocked["actions"]["setup_discovery"]["available"])
+        self.assertTrue(sandbox_blocked["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(sandbox_blocked["actions"]["legacy_import"]["available"])
         self.assertTrue(sandbox_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(sandbox_metadata["actions"]["legacy_import"]["available"])
         self.assertTrue(full_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(full_metadata["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(full_metadata["actions"]["legacy_import"]["available"])
         self.assertTrue(bounded_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(bounded_metadata["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(bounded_metadata["actions"]["legacy_import"]["available"])
 
         self.assertEqual(sandbox_blocked["action_phase"], SANDBOX_ACTION_PHASE)
@@ -1149,6 +1162,126 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertGreater(setup_discovery["result"]["data"]["candidate_marker_count"], 0)
         self.assertFalse(setup_discovery["result"]["data"]["filesystem_mutation_performed"])
         self.assertFalse(setup_discovery["result"]["data"]["import_execution_claimed"])
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_discovery_returns_zero_write_none_packet_without_execution(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_updates = {
+                "HOME": str(root),
+                "WBP_PROFILE_DIR": str(root / "profile"),
+                "WBP_MANAGED_DIR": str(root / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                legacy_discovery = run_ui_action(
+                    runner, {"ui_action": "legacy_import_discovery"}
+                )
+
+        self.assertEqual(legacy_discovery["status"], "ok")
+        self.assertEqual(legacy_discovery["ui_action"], "legacy_import_discovery")
+        self.assertEqual(legacy_discovery["result"]["machine_error_code"], "OK")
+        self.assertEqual(legacy_discovery["result"]["changed_files"], [])
+        self.assertEqual(legacy_discovery["result"]["data"]["discovery_state"], "none")
+        self.assertEqual(
+            legacy_discovery["result"]["data"]["source_kind"],
+            live_server.LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+        )
+        self.assertFalse(legacy_discovery["result"]["data"]["browser_path_intake"])
+        self.assertFalse(legacy_discovery["result"]["data"]["selection_persisted"])
+        self.assertFalse(
+            legacy_discovery["result"]["data"]["current_runtime_layout_reused"]
+        )
+        self.assertEqual(legacy_discovery["result"]["data"]["candidate_marker_count"], 0)
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_discovery_returns_discovered_packet_from_known_owned_source(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            candidate_dir = root / ".codex-custom-cli"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "backend-registry.json").write_text(
+                json.dumps({"backends": []}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "supervisor-state.json").write_text(
+                json.dumps({"schema_version": 1}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "config.toml").write_text('model = "gpt-5.4"\n', encoding="utf-8")
+            (candidate_dir / "runtime-mode.txt").write_text("stable\n", encoding="utf-8")
+            env_updates = {
+                "HOME": str(root),
+                "WBP_PROFILE_DIR": str(root / "profile"),
+                "WBP_MANAGED_DIR": str(root / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                legacy_discovery = run_ui_action(
+                    runner, {"ui_action": "legacy_import_discovery"}
+                )
+
+        self.assertEqual(legacy_discovery["status"], "ok")
+        self.assertEqual(legacy_discovery["result"]["machine_error_code"], "OK")
+        self.assertEqual(legacy_discovery["result"]["data"]["discovery_state"], "discovered")
+        self.assertGreaterEqual(
+            legacy_discovery["result"]["data"]["candidate_marker_count"], 4
+        )
+        self.assertFalse(
+            legacy_discovery["result"]["data"]["filesystem_mutation_performed"]
+        )
+        self.assertFalse(legacy_discovery["result"]["data"]["import_execution_claimed"])
+        self.assertFalse(
+            legacy_discovery["result"]["data"]["current_runtime_layout_reused"]
+        )
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_discovery_blocks_current_runtime_layout_reuse(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            candidate_dir = root / ".codex-custom-cli"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            env_updates = {
+                "HOME": str(root),
+                "WBP_PROFILE_DIR": str(candidate_dir),
+                "WBP_MANAGED_DIR": str(candidate_dir / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                legacy_discovery = run_ui_action(
+                    runner, {"ui_action": "legacy_import_discovery"}
+                )
+
+        self.assertEqual(legacy_discovery["status"], "command_error")
+        self.assertEqual(
+            legacy_discovery["result"]["machine_error_code"],
+            live_server.LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE,
+        )
+        self.assertEqual(legacy_discovery["result"]["data"]["discovery_state"], "blocked")
+        self.assertTrue(legacy_discovery["result"]["data"]["current_runtime_layout_reused"])
+        self.assertFalse(legacy_discovery["result"]["data"]["browser_path_intake"])
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_discovery_rejects_browser_owned_path_fields(self) -> None:
+        runner = MappingRunner(live_payloads())
+        legacy_discovery = run_ui_action(
+            runner,
+            {
+                "ui_action": "legacy_import_discovery",
+                "source_dir": "/tmp/legacy-source",
+                "source_path": "/tmp/legacy-source",
+            },
+        )
+
+        self.assertEqual(legacy_discovery["status"], "integration_failure")
+        self.assertEqual(
+            legacy_discovery["result"]["machine_error_code"],
+            "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+        )
+        self.assertEqual(
+            legacy_discovery["availability_state"],
+            live_server.LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE,
+        )
+        self.assertEqual(legacy_discovery["disabled_reasons"], ["browser_path_forbidden"])
+        self.assertEqual(legacy_discovery["result"]["changed_files"], [])
         self.assertEqual(runner.calls, [])
 
     def test_setup_discovery_blocks_relative_server_owned_runtime_paths(self) -> None:
@@ -4229,9 +4362,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(api_connections["source"], "api_connections_readonly")
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
         self.assertIn("setup_discovery", metadata["actions"])
+        self.assertIn("legacy_import_discovery", metadata["actions"])
         self.assertNotIn("select_client", metadata["actions"])
         self.assertIn("legacy_import", metadata["actions"])
         self.assertTrue(metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(metadata["actions"]["legacy_import_discovery"]["available"])
         self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertNotIn("api_route_create", metadata["actions"])
         self.assertNotIn("api_route_update", metadata["actions"])
