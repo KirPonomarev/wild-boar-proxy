@@ -1,0 +1,25 @@
+{
+  "artifact_payload_sha256": "9f6589c3e608ec302d8acc93b149f72e992ff902a3d3299492d353b8ed45b835",
+  "findings": [],
+  "notes": [
+    "sanitized local absolute paths in generated packet artifacts",
+    "forbidden field names are metadata, not secret values"
+  ],
+  "scanned_files": [
+    "browser_projection_proof.json",
+    "closeout.md",
+    "dangerous_actions_matrix.json",
+    "diagnostics_redaction_packet.json",
+    "independent_audit.json",
+    "operator_recovery_matrix.json",
+    "redaction_audit.json",
+    "rollback_lifecycle_packets.json",
+    "session_recovery_packets.json",
+    "spec.md",
+    "verification_summary.json"
+  ],
+  "schema_version": 1,
+  "secret_leak": false,
+  "secret_value_recorded": false,
+  "status": "passed"
+}

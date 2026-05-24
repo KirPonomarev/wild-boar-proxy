@@ -566,6 +566,7 @@
             <div>Process kill preflight</div><div id="codexCustomRecoveryProcessKillPreflight">preflight not run</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
+            <div>Operator matrix</div><div id="codexCustomRecoveryOperatorMatrix">bounded matrix not loaded</div>
           </div>
           <div class="action-summary-footer">
             <div>
@@ -580,6 +581,10 @@
               <button id="codexCustomRecoveryCheckAllAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Run recovery checks</span>
+              </button>
+              <button id="codexCustomRecoveryOperatorMatrixAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
+                <span>Operator matrix</span>
               </button>
               <button id="codexCustomRecoverySessionActionsAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
@@ -667,6 +672,17 @@
   "recovery_live_ready": false,
   "operator_ready_claimed": false,
   "rollback_claimed": false,
+  "process_kill_claimed": false
+}</pre>
+          <pre id="codexCustomRecoveryOperatorMatrixPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_NOT_LOADED",
+  "claim_scope": "custom_codex_recovery_rollback_operator_surface_bounded_local_use",
+  "operator_recovery_matrix_complete": false,
+  "bounded_local_operator_surface_ready": false,
+  "diagnostics_export_redacted": false,
+  "recovery_operator_ready": false,
+  "operator_ready_claimed": false,
   "process_kill_claimed": false
 }</pre>
           <pre id="codexCustomRecoveryAdmittedSessionActionsPacket" class="mono-value">{

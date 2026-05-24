@@ -4356,3 +4356,529 @@ def build_custom_recovery_rollback_apply_receipt_verify_packet(
         "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
         "next_contour_claimed": False,
     }
+
+
+def _packet_status(packet: dict[str, Any] | None) -> str:
+    if not isinstance(packet, dict):
+        return "missing"
+    return str(packet.get("status") or "missing")
+
+
+def _packet_machine_error_code(packet: dict[str, Any] | None) -> str:
+    if not isinstance(packet, dict):
+        return "MISSING_PACKET"
+    return str(packet.get("machine_error_code") or "")
+
+
+def _packet_forbidden_fields_rejected(packet: dict[str, Any] | None) -> bool:
+    return (
+        isinstance(packet, dict)
+        and packet.get("browser_forbidden_fields_rejected") is True
+    )
+
+
+def _packet_machine_classified(packet: dict[str, Any] | None) -> bool:
+    return (
+        isinstance(packet, dict)
+        and bool(str(packet.get("status") or ""))
+        and bool(str(packet.get("machine_error_code") or ""))
+    )
+
+
+def _packet_has_touch_or_secret(packet: dict[str, Any] | None) -> bool:
+    if not isinstance(packet, dict):
+        return False
+    sensitive_true_fields = [
+        "current_codex_touched",
+        "original_codex_touched",
+        "current_codex_home_touched",
+        "auth_material_touched",
+        "secret_value_recorded",
+        "arbitrary_path_accepted",
+        "dangerous_action_mutation_allowed",
+        "process_kill_performed",
+        "process_kill_admitted",
+        "process_kill_live_ready",
+        "process_kill_claimed",
+    ]
+    return any(packet.get(field) is True for field in sensitive_true_fields)
+
+
+def _matrix_action(
+    action_id: str,
+    *,
+    group: str,
+    classification: str,
+    owner_surface: str,
+    packet: dict[str, Any] | None,
+    enabled_in_ui: bool,
+    mutation_class: str,
+    disabled_reason_code: str = "",
+) -> dict[str, Any]:
+    return {
+        "id": action_id,
+        "group": group,
+        "classification": classification,
+        "owner_surface": owner_surface,
+        "packet_status": _packet_status(packet),
+        "machine_error_code": _packet_machine_error_code(packet),
+        "enabled_in_ui": enabled_in_ui,
+        "mutation_class": mutation_class,
+        "disabled_reason_code": disabled_reason_code,
+        "browser_forbidden_fields_rejected": _packet_forbidden_fields_rejected(packet),
+        "touch_or_secret_detected": _packet_has_touch_or_secret(packet),
+    }
+
+
+def build_custom_recovery_rollback_operator_ready_packet(
+    *,
+    recovery_contract: dict[str, Any] | None,
+    admitted_session_actions: dict[str, Any] | None,
+    rollback_process_owner_contract: dict[str, Any] | None,
+    rollback_point_dry_run: dict[str, Any] | None,
+    rollback_point_create_admission: dict[str, Any] | None,
+    rollback_point_verify: dict[str, Any] | None,
+    rollback_apply_admission: dict[str, Any] | None,
+    rollback_apply_live_preflight: dict[str, Any] | None,
+    rollback_apply_receipt_verify: dict[str, Any] | None,
+    stop_cleanup_preflight: dict[str, Any] | None,
+    stop_cleanup_live: dict[str, Any] | None,
+    process_kill_preflight: dict[str, Any] | None,
+    diagnostics_redaction_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Aggregate recovery/rollback surfaces without becoming runtime truth owner."""
+
+    contract = recovery_contract if isinstance(recovery_contract, dict) else {}
+    admitted = admitted_session_actions if isinstance(admitted_session_actions, dict) else {}
+    rollback_owner = (
+        rollback_process_owner_contract
+        if isinstance(rollback_process_owner_contract, dict)
+        else {}
+    )
+    rollback_dry_run = rollback_point_dry_run if isinstance(rollback_point_dry_run, dict) else {}
+    create_admission = (
+        rollback_point_create_admission
+        if isinstance(rollback_point_create_admission, dict)
+        else {}
+    )
+    verify = rollback_point_verify if isinstance(rollback_point_verify, dict) else {}
+    apply_admission = (
+        rollback_apply_admission if isinstance(rollback_apply_admission, dict) else {}
+    )
+    apply_preflight = (
+        rollback_apply_live_preflight
+        if isinstance(rollback_apply_live_preflight, dict)
+        else {}
+    )
+    receipt_verify = (
+        rollback_apply_receipt_verify
+        if isinstance(rollback_apply_receipt_verify, dict)
+        else {}
+    )
+    stop_preflight = stop_cleanup_preflight if isinstance(stop_cleanup_preflight, dict) else {}
+    stop_live = stop_cleanup_live if isinstance(stop_cleanup_live, dict) else {}
+    stop_live_action_packet = stop_live or {
+        "status": "not_run",
+        "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_NOT_RUN",
+        "browser_forbidden_fields_rejected": True,
+    }
+    kill_preflight = process_kill_preflight if isinstance(process_kill_preflight, dict) else {}
+    diagnostics = (
+        diagnostics_redaction_packet
+        if isinstance(diagnostics_redaction_packet, dict)
+        else {}
+    )
+    diagnostics_action_packet = {
+        **diagnostics,
+        "browser_forbidden_fields_rejected": True,
+    } if diagnostics else {"browser_forbidden_fields_rejected": True}
+
+    session_cancel_classification = (
+        "admitted_live"
+        if admitted.get("selected_session_cancel_ready") is True
+        else "admitted_live_blocked_until_owned_session"
+    )
+    owned_cleanup_classification = (
+        "admitted_live"
+        if admitted.get("owned_session_cleanup_ready") is True
+        else "admitted_live_blocked_until_owned_session"
+    )
+    stop_cleanup_live_classification = (
+        "admitted_live_performed"
+        if stop_live.get("machine_error_code")
+        == "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY"
+        else "admitted_live_blocked_or_not_run"
+    )
+    rollback_verify_classification = (
+        "readonly_verify_ready"
+        if verify.get("machine_error_code") == "ROLLBACK_POINT_VERIFY_READY"
+        else "readonly_verify_blocked_until_artifact"
+    )
+    rollback_apply_classification = (
+        "bounded_receipt_verify_ready"
+        if receipt_verify.get("machine_error_code")
+        == "ROLLBACK_APPLY_RECEIPT_VERIFY_READY"
+        else "bounded_receipt_verify_blocked_until_receipt"
+    )
+    process_kill_classification = (
+        "preflight_only_eligible_no_live_kill"
+        if kill_preflight.get("machine_error_code")
+        == "CUSTOM_CODEX_RECOVERY_PROCESS_KILL_PREFLIGHT_ELIGIBLE"
+        else "preflight_only_blocked_or_not_applicable"
+    )
+
+    actions = [
+        _matrix_action(
+            "session_cancel",
+            group="session_recovery",
+            classification=session_cancel_classification,
+            owner_surface="/api/codex/custom/recovery/admitted-session-actions",
+            packet=admitted,
+            enabled_in_ui=admitted.get("selected_session_cancel_ready") is True,
+            mutation_class="owned_session_cancel_only",
+            disabled_reason_code=str(admitted.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "owned_session_cleanup",
+            group="session_recovery",
+            classification=owned_cleanup_classification,
+            owner_surface="/api/codex/custom/recovery/admitted-session-actions",
+            packet=admitted,
+            enabled_in_ui=admitted.get("owned_session_cleanup_ready") is True,
+            mutation_class="owned_temp_session_root_cleanup_only",
+            disabled_reason_code=str(admitted.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "stop_cleanup_preflight",
+            group="session_recovery",
+            classification="preflight_only",
+            owner_surface="/api/codex/custom/recovery/stop-cleanup/preflight",
+            packet=stop_preflight,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(stop_preflight.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "stop_cleanup_live",
+            group="session_recovery",
+            classification=stop_cleanup_live_classification,
+            owner_surface="/api/codex/custom/recovery/stop-cleanup",
+            packet=stop_live_action_packet,
+            enabled_in_ui=stop_preflight.get("stop_cleanup_preflight_ready") is True,
+            mutation_class="owned_temp_session_root_cleanup_only",
+            disabled_reason_code=str(stop_live.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_process_owner_contract",
+            group="rollback_lifecycle",
+            classification="dry_run_contract",
+            owner_surface="/api/codex/custom/recovery/rollback-process-owner-contract",
+            packet=rollback_owner,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(rollback_owner.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_point_dry_run",
+            group="rollback_lifecycle",
+            classification="dry_run_contract",
+            owner_surface="/api/codex/custom/recovery/rollback-point-dry-run",
+            packet=rollback_dry_run,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(rollback_dry_run.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_point_create_admission",
+            group="rollback_lifecycle",
+            classification="admission_only",
+            owner_surface="/api/codex/custom/recovery/rollback-point-create-admission",
+            packet=create_admission,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(create_admission.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_point_verify",
+            group="rollback_lifecycle",
+            classification=rollback_verify_classification,
+            owner_surface="/api/codex/custom/recovery/rollback-point/verify",
+            packet=verify,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(verify.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_apply_admission",
+            group="rollback_lifecycle",
+            classification="dry_run_admission",
+            owner_surface="/api/codex/custom/recovery/rollback-apply/admission-dry-run",
+            packet=apply_admission,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(apply_admission.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_apply_live_preflight",
+            group="rollback_lifecycle",
+            classification="preflight_only",
+            owner_surface="/api/codex/custom/recovery/rollback-apply/live-preflight",
+            packet=apply_preflight,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(apply_preflight.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "rollback_apply_receipt_verify",
+            group="rollback_lifecycle",
+            classification=rollback_apply_classification,
+            owner_surface="/api/codex/custom/recovery/rollback-apply/receipt/verify",
+            packet=receipt_verify,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(receipt_verify.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "diagnostics_export",
+            group="diagnostics",
+            classification="support_artifact_only",
+            owner_surface="diagnostics export --json",
+            packet=diagnostics_action_packet,
+            enabled_in_ui=True,
+            mutation_class="support_artifact_only",
+            disabled_reason_code="",
+        ),
+        _matrix_action(
+            "process_kill_preflight",
+            group="dangerous_actions",
+            classification=process_kill_classification,
+            owner_surface="/api/codex/custom/recovery/process-kill/preflight",
+            packet=kill_preflight,
+            enabled_in_ui=True,
+            mutation_class="none",
+            disabled_reason_code=str(kill_preflight.get("block_reason_code") or ""),
+        ),
+        _matrix_action(
+            "process_kill_live",
+            group="dangerous_actions",
+            classification="visible_disabled",
+            owner_surface="not_admitted",
+            packet={"browser_forbidden_fields_rejected": True},
+            enabled_in_ui=False,
+            mutation_class="forbidden_without_separate_live_admission",
+            disabled_reason_code="PROCESS_KILL_LIVE_NOT_ADMITTED",
+        ),
+        _matrix_action(
+            "account_mutation",
+            group="dangerous_actions",
+            classification="visible_disabled",
+            owner_surface="not_in_scope",
+            packet={"browser_forbidden_fields_rejected": True},
+            enabled_in_ui=False,
+            mutation_class="forbidden_in_this_contour",
+            disabled_reason_code="ACCOUNT_MUTATION_OUT_OF_SCOPE",
+        ),
+        _matrix_action(
+            "route_remove",
+            group="dangerous_actions",
+            classification="visible_disabled",
+            owner_surface="not_in_scope",
+            packet={"browser_forbidden_fields_rejected": True},
+            enabled_in_ui=False,
+            mutation_class="forbidden_in_this_contour",
+            disabled_reason_code="ROUTE_REMOVE_OUT_OF_SCOPE",
+        ),
+        _matrix_action(
+            "global_reset_uninstall",
+            group="dangerous_actions",
+            classification="visible_disabled",
+            owner_surface="not_in_scope",
+            packet={"browser_forbidden_fields_rejected": True},
+            enabled_in_ui=False,
+            mutation_class="forbidden_in_this_contour",
+            disabled_reason_code="GLOBAL_DESTRUCTIVE_ACTION_OUT_OF_SCOPE",
+        ),
+        _matrix_action(
+            "touch_original_codex",
+            group="dangerous_actions",
+            classification="visible_disabled",
+            owner_surface="canon_forbidden",
+            packet={"browser_forbidden_fields_rejected": True},
+            enabled_in_ui=False,
+            mutation_class="forbidden",
+            disabled_reason_code="ORIGINAL_CODEX_PROTECTED_BASELINE",
+        ),
+    ]
+
+    required_action_ids = {
+        "session_cancel",
+        "owned_session_cleanup",
+        "stop_cleanup_preflight",
+        "stop_cleanup_live",
+        "rollback_process_owner_contract",
+        "rollback_point_dry_run",
+        "rollback_point_create_admission",
+        "rollback_point_verify",
+        "rollback_apply_admission",
+        "rollback_apply_live_preflight",
+        "rollback_apply_receipt_verify",
+        "diagnostics_export",
+        "process_kill_preflight",
+        "process_kill_live",
+        "account_mutation",
+        "route_remove",
+        "global_reset_uninstall",
+        "touch_original_codex",
+    }
+    observed_action_ids = {
+        action["id"] for action in actions if isinstance(action.get("id"), str)
+    }
+    required_input_packets = {
+        "recovery_contract": contract,
+        "admitted_session_actions": admitted,
+        "rollback_process_owner_contract": rollback_owner,
+        "rollback_point_dry_run": rollback_dry_run,
+        "rollback_point_create_admission": create_admission,
+        "rollback_point_verify": verify,
+        "rollback_apply_admission": apply_admission,
+        "rollback_apply_live_preflight": apply_preflight,
+        "rollback_apply_receipt_verify": receipt_verify,
+        "stop_cleanup_preflight": stop_preflight,
+        "process_kill_preflight": kill_preflight,
+    }
+    required_input_packets_classified = all(
+        _packet_machine_classified(packet)
+        for packet in required_input_packets.values()
+    )
+    missing_or_unclassified_input_packets = sorted(
+        name
+        for name, packet in required_input_packets.items()
+        if not _packet_machine_classified(packet)
+    )
+    operator_recovery_matrix_complete = required_action_ids <= observed_action_ids
+    session_recovery_actions_classified = all(
+        action["classification"] != "missing"
+        for action in actions
+        if action["group"] == "session_recovery"
+    )
+    rollback_lifecycle_actions_classified = all(
+        action["classification"] != "missing"
+        for action in actions
+        if action["group"] == "rollback_lifecycle"
+    )
+    dangerous_actions_disabled_or_preflight_only = all(
+        action["classification"] in {
+            "preflight_only_eligible_no_live_kill",
+            "preflight_only_blocked_or_not_applicable",
+            "visible_disabled",
+        }
+        and action["mutation_class"] != "owned_temp_session_root_cleanup_only"
+        for action in actions
+        if action["group"] == "dangerous_actions"
+    )
+    browser_forbidden_fields_rejected = all(
+        action["browser_forbidden_fields_rejected"] is True for action in actions
+    )
+    touch_or_secret_count = sum(
+        1 for action in actions if action["touch_or_secret_detected"] is True
+    )
+    diagnostics_findings = diagnostics.get("findings")
+    diagnostics_export_redacted = (
+        diagnostics.get("status") in {"passed", "ok"}
+        and diagnostics.get("secret_value_recorded") is not True
+        and diagnostics.get("secret_leak") is not True
+        and (not isinstance(diagnostics_findings, list) or not diagnostics_findings)
+    )
+    diagnostics_packet_classified = bool(str(diagnostics.get("status") or ""))
+    process_kill_live_not_admitted_without_owned_target = (
+        kill_preflight.get("process_kill_performed") is not True
+        and kill_preflight.get("process_kill_live_ready") is not True
+        and kill_preflight.get("process_kill_admitted") is not True
+    )
+    no_false_green = (
+        contract.get("recovery_live_ready") is not True
+        and contract.get("operator_ready_claimed") is not True
+        and all(action["touch_or_secret_detected"] is False for action in actions)
+    )
+    bounded_local_operator_surface_ready = (
+        operator_recovery_matrix_complete
+        and required_input_packets_classified
+        and diagnostics_packet_classified
+        and session_recovery_actions_classified
+        and rollback_lifecycle_actions_classified
+        and diagnostics_export_redacted
+        and dangerous_actions_disabled_or_preflight_only
+        and browser_forbidden_fields_rejected
+        and process_kill_live_not_admitted_without_owned_target
+        and no_false_green
+    )
+
+    return {
+        "schema_version": 1,
+        "status": "ok" if bounded_local_operator_surface_ready else "blocked",
+        "machine_error_code": (
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_READY"
+            if bounded_local_operator_surface_ready
+            else "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED"
+        ),
+        "captured_at_utc": utc_now(),
+        "claim_scope": "custom_codex_recovery_rollback_operator_surface_bounded_local_use",
+        "contract_endpoint": "/api/codex/custom/recovery/operator-ready",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS
+        + STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS
+        + PROCESS_KILL_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS,
+        "browser_forbidden_fields_rejected": browser_forbidden_fields_rejected,
+        "operator_recovery_matrix_complete": operator_recovery_matrix_complete,
+        "required_input_packets_classified": required_input_packets_classified,
+        "missing_or_unclassified_input_packets": missing_or_unclassified_input_packets,
+        "session_recovery_actions_classified": session_recovery_actions_classified,
+        "rollback_lifecycle_actions_classified": rollback_lifecycle_actions_classified,
+        "diagnostics_surface_classified": True,
+        "diagnostics_packet_classified": diagnostics_packet_classified,
+        "diagnostics_export_redacted": diagnostics_export_redacted,
+        "dangerous_actions_disabled_or_preflight_only": dangerous_actions_disabled_or_preflight_only,
+        "process_kill_live_not_admitted_without_owned_target": (
+            process_kill_live_not_admitted_without_owned_target
+        ),
+        "bounded_local_operator_surface_ready": bounded_local_operator_surface_ready,
+        "final_verdict": (
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_SURFACE_READY_FOR_BOUNDED_LOCAL_USE"
+            if bounded_local_operator_surface_ready and diagnostics_export_redacted
+            else "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_READY"
+            if bounded_local_operator_surface_ready
+            else "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED"
+        ),
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "secret_leak": False,
+        "touch_or_secret_finding_count": touch_or_secret_count,
+        "false_green": False if no_false_green else True,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "production_ready": False,
+        "desktop_ready": False,
+        "installer_ready": False,
+        "multi_user_ready": False,
+        "actions": actions,
+        "non_claims": [
+            "production_ready",
+            "desktop_ready",
+            "installer_ready",
+            "multi_user_ready",
+            "arbitrary_process_kill_ready",
+            "account_lifecycle_ready",
+            "stage_pilot_scale_ready",
+        ],
+        "next_action": "close_contour_after_redaction_audit_and_independent_audit"
+        if bounded_local_operator_surface_ready
+        else "repair_operator_matrix",
+    }

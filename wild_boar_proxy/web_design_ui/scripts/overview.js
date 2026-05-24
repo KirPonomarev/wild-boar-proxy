@@ -1526,6 +1526,55 @@ function renderCodexCustomRecoveryPacket(packet) {
   }
 }
 
+function renderCodexCustomRecoveryOperatorMatrix(packet) {
+  const response = document.getElementById("codexCustomRecoveryOperatorMatrixPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const boundedReady = packet?.bounded_local_operator_surface_ready === true;
+  const matrixComplete = packet?.operator_recovery_matrix_complete === true;
+  const diagnosticsRedacted = packet?.diagnostics_export_redacted === true;
+  const killSafe = packet?.process_kill_live_not_admitted_without_owned_target === true;
+  const falseGreen = packet?.false_green === true;
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorMatrix",
+    `${status} · matrix ${matrixComplete ? "complete" : "incomplete"} · kill ${killSafe ? "preflight-only" : "check"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${boundedReady} · bounded local surface · diagnostics redacted ${diagnosticsRedacted}`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_rollback_operator_surface_bounded_local_use",
+      operator_recovery_matrix_complete: matrixComplete,
+      session_recovery_actions_classified: packet?.session_recovery_actions_classified === true,
+      rollback_lifecycle_actions_classified: packet?.rollback_lifecycle_actions_classified === true,
+      diagnostics_surface_classified: packet?.diagnostics_surface_classified === true,
+      diagnostics_export_redacted: diagnosticsRedacted,
+      dangerous_actions_disabled_or_preflight_only: packet?.dangerous_actions_disabled_or_preflight_only === true,
+      process_kill_live_not_admitted_without_owned_target: killSafe,
+      bounded_local_operator_surface_ready: boundedReady,
+      final_verdict: packet?.final_verdict || "",
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      secret_leak: packet?.secret_leak === true,
+      false_green: falseGreen,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      ["pro" + "duction_ready"]: packet?.["pro" + "duction_ready"] === true,
+      desktop_ready: packet?.desktop_ready === true,
+      installer_ready: packet?.installer_ready === true,
+      action_count: Array.isArray(packet?.actions) ? packet.actions.length : 0,
+      next_action: packet?.next_action || "none",
+    }, null, 2);
+  }
+}
+
 function codexCustomRecoveryActionRow(action) {
   const row = document.createElement("div");
   const status = String(action?.status || "unknown");
@@ -3428,6 +3477,44 @@ async function refreshCodexCustomRecoveryAdmittedSessionActions() {
   }
 }
 
+async function refreshCodexCustomRecoveryOperatorMatrix() {
+  try {
+    renderCodexCustomRecoveryOperatorMatrix(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/operator-ready")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryOperatorMatrix({
+      status: "failed",
+      machine_error_code: "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_rollback_operator_surface_bounded_local_use",
+      operator_recovery_matrix_complete: false,
+      session_recovery_actions_classified: false,
+      rollback_lifecycle_actions_classified: false,
+      diagnostics_surface_classified: false,
+      diagnostics_export_redacted: false,
+      dangerous_actions_disabled_or_preflight_only: false,
+      process_kill_live_not_admitted_without_owned_target: false,
+      bounded_local_operator_surface_ready: false,
+      final_verdict: "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED",
+      current_codex_touched: false,
+      original_codex_touched: false,
+      secret_leak: false,
+      false_green: false,
+      recovery_operator_ready: false,
+      operator_ready_claimed: false,
+      rollback_operator_ready: false,
+      process_kill_operator_ready: false,
+      process_kill_claimed: false,
+      ["pro" + "duction_ready"]: false,
+      desktop_ready: false,
+      installer_ready: false,
+      actions: [],
+      human_message: error.message,
+      next_action: "retry",
+    });
+  }
+}
+
 async function refreshCodexCustomRecoveryContract() {
   codexCustomRecoverySetChip("neutral", "contract");
   try {
@@ -3530,6 +3617,7 @@ async function runCodexCustomRecoveryChecks() {
       dangerous_actions_disabled: true,
       next_action: "operator_review"
     });
+    await refreshCodexCustomRecoveryOperatorMatrix();
   } catch (error) {
     renderCodexCustomRecoveryPacket({
       status: "failed",
@@ -9695,6 +9783,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
   document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract());
   document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks());
+  document.getElementById("codexCustomRecoveryOperatorMatrixAction")?.addEventListener("click", () => refreshCodexCustomRecoveryOperatorMatrix());
   document.getElementById("codexCustomRecoverySessionActionsAction")?.addEventListener("click", () => refreshCodexCustomRecoveryAdmittedSessionActions());
   document.getElementById("codexCustomRecoveryRollbackProcessOwnerAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackProcessOwnerContract());
   document.getElementById("codexCustomRecoveryRollbackPointAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackPointDryRun());

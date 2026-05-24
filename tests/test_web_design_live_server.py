@@ -5431,6 +5431,62 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(packet["recovery_live_ready"])
         self.assertFalse(packet["operator_ready_claimed"])
 
+    def test_codex_custom_recovery_operator_ready_endpoint_is_bounded_matrix(self) -> None:
+        payloads = live_payloads()
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/operator-ready")
+                )
+                forbidden = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/operator-ready"
+                        "?pid=123&path=/tmp/raw&auth=raw"
+                    )
+                )
+                try:
+                    post_json(f"{base}/api/codex/custom/recovery/operator-ready", {})
+                    post_status = HTTPStatus.OK
+                except urllib.error.HTTPError as exc:
+                    post_status = HTTPStatus(exc.code)
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_READY",
+        )
+        self.assertTrue(packet["operator_recovery_matrix_complete"])
+        self.assertTrue(packet["session_recovery_actions_classified"])
+        self.assertTrue(packet["rollback_lifecycle_actions_classified"])
+        self.assertTrue(packet["dangerous_actions_disabled_or_preflight_only"])
+        self.assertTrue(packet["process_kill_live_not_admitted_without_owned_target"])
+        self.assertTrue(packet["diagnostics_export_redacted"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertFalse(packet["production_ready"])
+        self.assertEqual(forbidden["status"], "blocked")
+        self.assertEqual(
+            forbidden["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BROWSER_FIELD_REJECTED",
+        )
+        self.assertTrue(forbidden["browser_forbidden_fields_rejected"])
+        self.assertIn("path", forbidden["forbidden_fields"])
+        self.assertIn("pid", forbidden["forbidden_fields"])
+        self.assertIn("auth", forbidden["forbidden_fields"])
+        self.assertEqual(post_status, HTTPStatus.NOT_FOUND)
+
     def test_codex_custom_recovery_admitted_session_actions_endpoint_is_bounded(self) -> None:
         payloads = live_payloads()
         payloads[("accounts", "list", "--json")] = accounts_packet(

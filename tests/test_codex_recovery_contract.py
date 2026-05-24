@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.codex_recovery_contract import (
+    STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS,
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_process_kill_preflight_packet,
@@ -17,6 +18,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_rollback_apply_bounded_live_packet,
     build_custom_recovery_rollback_apply_receipt_verify_packet,
     build_custom_recovery_rollback_apply_live_preflight_packet,
+    build_custom_recovery_rollback_operator_ready_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
     build_custom_recovery_rollback_point_dry_run_packet,
@@ -2690,6 +2692,229 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertFalse(packet["rollback_point_created"])
             self.assertFalse(packet["filesystem_write_performed"])
             self.assertEqual(list(Path(tmp).glob("*.json")), [])
+
+    def test_operator_ready_matrix_aggregates_bounded_surfaces_without_overclaim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            contract = recovery_contract_packet()
+            admitted = process_kill_admitted_packet()
+            process_owner = build_custom_recovery_rollback_process_owner_contract_packet(
+                contract_packet=contract,
+            )
+            dry_run = build_custom_recovery_rollback_point_dry_run_packet(
+                rollback_process_owner_contract=process_owner,
+            )
+            admission = build_custom_recovery_rollback_point_create_admission_packet(
+                rollback_point_dry_run_contract=dry_run,
+            )
+            build_custom_recovery_rollback_point_create_live_packet(
+                rollback_point_create_admission=admission,
+                browser_payload={},
+                artifact_root=root,
+            )
+            verify = build_custom_recovery_rollback_point_verify_packet(artifact_root=root)
+            apply_admission = build_custom_recovery_rollback_apply_admission_dry_run_packet(
+                rollback_point_verify=verify,
+                recovery_contract=contract,
+                rollback_process_owner_contract=process_owner,
+                sessions_packet={"status": "ok", "session_count": 1, "sessions": []},
+            )
+            apply_preflight = build_custom_recovery_rollback_apply_live_preflight_packet(
+                rollback_apply_admission_dry_run=apply_admission,
+            )
+            build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=apply_preflight,
+                browser_payload={},
+                artifact_root=root,
+            )
+            receipt_verify = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=root,
+            )
+            stop_preflight = build_custom_recovery_stop_cleanup_preflight_packet(
+                admitted_session_actions_packet=admitted,
+            )
+            kill_preflight = build_custom_recovery_process_kill_preflight_packet(
+                admitted_session_actions_packet=admitted,
+            )
+
+            packet = build_custom_recovery_rollback_operator_ready_packet(
+                recovery_contract=contract,
+                admitted_session_actions=admitted,
+                rollback_process_owner_contract=process_owner,
+                rollback_point_dry_run=dry_run,
+                rollback_point_create_admission=admission,
+                rollback_point_verify=verify,
+                rollback_apply_admission=apply_admission,
+                rollback_apply_live_preflight=apply_preflight,
+                rollback_apply_receipt_verify=receipt_verify,
+                stop_cleanup_preflight=stop_preflight,
+                stop_cleanup_live=None,
+                process_kill_preflight=kill_preflight,
+                diagnostics_redaction_packet={
+                    "status": "passed",
+                    "findings": [],
+                    "secret_leak": False,
+                    "secret_value_recorded": False,
+                },
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_READY",
+            )
+            self.assertTrue(packet["operator_recovery_matrix_complete"])
+            self.assertTrue(packet["required_input_packets_classified"])
+            self.assertEqual(packet["missing_or_unclassified_input_packets"], [])
+            self.assertTrue(packet["session_recovery_actions_classified"])
+            self.assertTrue(packet["rollback_lifecycle_actions_classified"])
+            self.assertTrue(packet["diagnostics_packet_classified"])
+            self.assertTrue(packet["diagnostics_export_redacted"])
+            self.assertTrue(packet["dangerous_actions_disabled_or_preflight_only"])
+            self.assertTrue(packet["process_kill_live_not_admitted_without_owned_target"])
+            self.assertTrue(packet["bounded_local_operator_surface_ready"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["operator_ready_claimed"])
+            self.assertFalse(packet["process_kill_claimed"])
+            self.assertFalse(packet["production_ready"])
+            for field in STOP_CLEANUP_PREFLIGHT_EXTRA_FORBIDDEN_FIELDS:
+                self.assertIn(field, packet["forbidden_browser_fields"])
+            action_by_id = {action["id"]: action for action in packet["actions"]}
+            self.assertEqual(
+                action_by_id["process_kill_live"]["classification"],
+                "visible_disabled",
+            )
+            self.assertEqual(
+                action_by_id["process_kill_live"]["disabled_reason_code"],
+                "PROCESS_KILL_LIVE_NOT_ADMITTED",
+            )
+
+    def test_operator_ready_matrix_blocks_touch_or_secret_false_green(self) -> None:
+        contract = recovery_contract_packet()
+        admitted = process_kill_admitted_packet()
+        stop_preflight = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=admitted,
+        )
+        poisoned_stop_preflight = {**stop_preflight, "current_codex_touched": True}
+
+        packet = build_custom_recovery_rollback_operator_ready_packet(
+            recovery_contract=contract,
+            admitted_session_actions=admitted,
+            rollback_process_owner_contract=rollback_process_owner_contract_packet(),
+            rollback_point_dry_run={},
+            rollback_point_create_admission={},
+            rollback_point_verify={},
+            rollback_apply_admission={},
+            rollback_apply_live_preflight={},
+            rollback_apply_receipt_verify={},
+            stop_cleanup_preflight=poisoned_stop_preflight,
+            stop_cleanup_live=None,
+            process_kill_preflight=build_custom_recovery_process_kill_preflight_packet(
+                admitted_session_actions_packet=admitted,
+            ),
+            diagnostics_redaction_packet={
+                "status": "passed",
+                "findings": [],
+                "secret_leak": False,
+                "secret_value_recorded": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["false_green"])
+        self.assertGreater(packet["touch_or_secret_finding_count"], 0)
+        self.assertFalse(packet["bounded_local_operator_surface_ready"])
+
+    def test_operator_ready_matrix_blocks_missing_inputs(self) -> None:
+        packet = build_custom_recovery_rollback_operator_ready_packet(
+            recovery_contract={},
+            admitted_session_actions={},
+            rollback_process_owner_contract={},
+            rollback_point_dry_run={},
+            rollback_point_create_admission={},
+            rollback_point_verify={},
+            rollback_apply_admission={},
+            rollback_apply_live_preflight={},
+            rollback_apply_receipt_verify={},
+            stop_cleanup_preflight={},
+            stop_cleanup_live=None,
+            process_kill_preflight={},
+            diagnostics_redaction_packet={
+                "status": "passed",
+                "findings": [],
+                "secret_leak": False,
+                "secret_value_recorded": False,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_OPERATOR_MATRIX_BLOCKED",
+        )
+        self.assertFalse(packet["required_input_packets_classified"])
+        self.assertIn("recovery_contract", packet["missing_or_unclassified_input_packets"])
+        self.assertFalse(packet["bounded_local_operator_surface_ready"])
+
+    def test_operator_ready_matrix_blocks_diagnostics_redaction_failure(self) -> None:
+        contract = recovery_contract_packet()
+        admitted = process_kill_admitted_packet()
+        process_owner = build_custom_recovery_rollback_process_owner_contract_packet(
+            contract_packet=contract,
+        )
+        dry_run = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract=process_owner,
+        )
+        create_admission = build_custom_recovery_rollback_point_create_admission_packet(
+            rollback_point_dry_run_contract=dry_run,
+        )
+        stop_preflight = build_custom_recovery_stop_cleanup_preflight_packet(
+            admitted_session_actions_packet=admitted,
+        )
+        kill_preflight = build_custom_recovery_process_kill_preflight_packet(
+            admitted_session_actions_packet=admitted,
+        )
+
+        packet = build_custom_recovery_rollback_operator_ready_packet(
+            recovery_contract=contract,
+            admitted_session_actions=admitted,
+            rollback_process_owner_contract=process_owner,
+            rollback_point_dry_run=dry_run,
+            rollback_point_create_admission=create_admission,
+            rollback_point_verify={
+                "status": "blocked",
+                "machine_error_code": "ROLLBACK_POINT_VERIFY_NOT_FOUND",
+                "browser_forbidden_fields_rejected": True,
+            },
+            rollback_apply_admission={
+                "status": "blocked",
+                "machine_error_code": "ROLLBACK_APPLY_ADMISSION_BLOCKED",
+                "browser_forbidden_fields_rejected": True,
+            },
+            rollback_apply_live_preflight={
+                "status": "blocked",
+                "machine_error_code": "ROLLBACK_APPLY_PREFLIGHT_BLOCKED",
+                "browser_forbidden_fields_rejected": True,
+            },
+            rollback_apply_receipt_verify={
+                "status": "blocked",
+                "machine_error_code": "ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+                "browser_forbidden_fields_rejected": True,
+            },
+            stop_cleanup_preflight=stop_preflight,
+            stop_cleanup_live=None,
+            process_kill_preflight=kill_preflight,
+            diagnostics_redaction_packet={
+                "status": "passed",
+                "findings": ["secret-like value recorded"],
+                "secret_leak": True,
+                "secret_value_recorded": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["diagnostics_export_redacted"])
+        self.assertFalse(packet["bounded_local_operator_surface_ready"])
 
 
 if __name__ == "__main__":
