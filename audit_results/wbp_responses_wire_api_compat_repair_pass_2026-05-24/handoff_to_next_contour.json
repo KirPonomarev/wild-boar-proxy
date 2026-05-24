@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-24T01:39:10Z",
+  "wire_layer_outcome": "repaired",
+  "close_token": "WBP_RESPONSES_WIRE_API_COMPAT_REPAIRED",
+  "next_contour": "CODEX_CUSTOM_SINGLE_TRACED_PROMPT_LIVE_RERUN_PASS",
+  "rerun_live_prompt_allowed_next": true,
+  "account_reauth_required": false,
+  "reason": "Repo-owned trace compatibility defects were fixed without live prompt rerun. The next contour may run exactly one traced Codex Custom prompt to test whether preserving safe compatibility headers resolves the previous upstream 401.",
+  "if_next_rerun_returns_401": {
+    "next_contour": "GPT_ACCOUNT_AUTH_REPAIR_OR_OPERATOR_REAUTH_PASS",
+    "rerun_live_prompt_allowed_next": false,
+    "account_reauth_required": true
+  }
+}

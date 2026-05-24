@@ -1,0 +1,46 @@
+{
+  "captured_at_utc": "2026-05-24T01:36:20Z",
+  "primary_path": [
+    {
+      "file": "wild_boar_proxy/operator_surface.py",
+      "lines": "115-127",
+      "symbol": "build_codex_config",
+      "fact": "writes model_provider=cliproxy and wire_api=responses into isolated Codex config"
+    },
+    {
+      "file": "wild_boar_proxy/operator_surface.py",
+      "lines": "184-210",
+      "symbol": "_TraceObserverHandler",
+      "fact": "receives localhost trace requests and delegates to WbpTraceObserver.forward"
+    },
+    {
+      "file": "wild_boar_proxy/operator_surface.py",
+      "lines": "247-282",
+      "symbol": "WbpTraceObserver.forward",
+      "fact": "allows POST /v1/responses, forwards to downstream WBP endpoint, records only digests and status"
+    },
+    {
+      "file": "wild_boar_proxy/operator_surface.py",
+      "lines": "487-707",
+      "symbol": "OperatorSurfaceSession.run_prompt",
+      "fact": "creates temp CODEX_HOME, optionally inserts trace observer, runs codex exec via stdin, records trace packet"
+    },
+    {
+      "file": "wild_boar_proxy/codex_custom_sessions.py",
+      "lines": "388-505",
+      "symbol": "Codex Custom session proof aggregation",
+      "fact": "requires configured_provider=cliproxy, configured_wire_api=responses, and independent trace for path proof"
+    }
+  ],
+  "legacy_observed_path": {
+    "file": "external_agent_lab/legacy/proxy_server.py",
+    "lines": "494-780",
+    "role": "old CLI proxy implementation, not the current WBP operator-surface path for this contour"
+  },
+  "risk_found": {
+    "id": "TRACE_OBSERVER_HEADER_STRIPPING",
+    "description": "Trace observer forwarded only Content-Type and local Authorization, dropping Codex/OpenAI compatibility headers before WBP.",
+    "repo_owned": true,
+    "fixed_in_this_contour": true
+  }
+}

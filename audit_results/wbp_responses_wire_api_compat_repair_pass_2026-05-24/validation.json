@@ -1,0 +1,34 @@
+{
+  "captured_at_utc": "2026-05-24T01:38:10Z",
+  "status": "ok",
+  "commands": [
+    {
+      "command": "python3 -B -m unittest tests.test_operator_surface -q",
+      "result": "OK",
+      "tests": 10
+    },
+    {
+      "command": "python3 -B -m unittest tests.test_codex_custom_sessions tests.test_codex_account_selection -q",
+      "result": "OK",
+      "tests": 20
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_operator_surface tests.test_codex_custom_sessions tests.test_codex_account_selection tests.test_web_design_live_server -q",
+      "result": "OK",
+      "tests": 115
+    },
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "OK"
+    },
+    {
+      "command": "git diff --check",
+      "result": "OK"
+    }
+  ],
+  "live_probe": {
+    "codex_custom_prompt_rerun": false,
+    "direct_wbp_responses_probe": false,
+    "reason": "repo-owned trace compatibility defects were found and covered synthetically; no live probe was needed"
+  }
+}

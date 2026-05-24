@@ -56,11 +56,14 @@ class OperatorSurfaceTests(unittest.TestCase):
             select_server_issued_model("gpt-free-form", ["gpt-5.3-codex"])
 
     def test_trace_observer_forwards_without_recording_body_or_auth(self) -> None:
+        captured_headers: dict[str, str] = {}
+
         class UpstreamHandler(BaseHTTPRequestHandler):
             def log_message(self, format: str, *args: object) -> None:  # noqa: A002
                 return
 
             def do_POST(self) -> None:
+                captured_headers.update({key: value for key, value in self.headers.items()})
                 self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -81,6 +84,12 @@ class OperatorSurfaceTests(unittest.TestCase):
                     headers={
                         "Authorization": "Bearer sk-test-secret-value",
                         "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "OpenAI-Beta": "responses=v1",
+                        "User-Agent": "Codex-Test/1.0",
+                        "Proxy-Authorization": "Bearer sk-proxy-secret",
+                        "Cookie": "session=secret",
+                        "Connection": "close",
                     },
                     method="POST",
                 )
@@ -103,6 +112,12 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(packet["secret_value_recorded"])
         self.assertNotIn("SECRET PROMPT", json.dumps(packet))
         self.assertNotIn("sk-test-secret-value", json.dumps(packet))
+        self.assertEqual(captured_headers.get("Authorization"), "Bearer sk-test-secret-value")
+        self.assertEqual(captured_headers.get("Accept"), "application/json")
+        self.assertEqual(captured_headers.get("Openai-Beta"), "responses=v1")
+        self.assertEqual(captured_headers.get("User-Agent"), "Codex-Test/1.0")
+        self.assertNotIn("Proxy-Authorization", captured_headers)
+        self.assertNotIn("Cookie", captured_headers)
 
     def test_trace_observer_classifies_upstream_4xx_without_green_code(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):
@@ -321,6 +336,86 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(trace["prompt_body_recorded"])
         self.assertFalse(trace["auth_header_recorded"])
         self.assertNotIn("Reply with exactly WBP_TRACE_OK.", json.dumps(trace))
+        self.assertNotIn("sk-test-secret-value", json.dumps(result))
+
+    def test_run_prompt_trace_mode_bubbles_upstream_401_code(self) -> None:
+        class UpstreamHandler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                body = json.dumps({"error": {"message": "auth failed"}}).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        session = OperatorSurfaceSession(
+            OperatorSurfaceConfig(
+                endpoint=f"http://127.0.0.1:{server.server_port}/v1",
+                codex_bin=Path("/bin/echo"),
+                runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
+                timeout_seconds=5,
+            )
+        )
+        session.probe_models = lambda: {  # type: ignore[method-assign]
+            "ok": True,
+            "model_ids": ["gpt-5.3-codex"],
+            "server_issued": True,
+        }
+        session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
+        session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
+
+        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            env = kwargs.get("env")
+            self.assertIsInstance(env, dict)
+            config_path = Path(str(env["CODEX_HOME"])) / "config.toml"  # type: ignore[index]
+            config = config_path.read_text(encoding="utf-8")
+            match = re.search(r'base_url = "([^"]+)"', config)
+            self.assertIsNotNone(match)
+            request = urllib.request.Request(
+                f"{match.group(1)}/responses",  # type: ignore[union-attr]
+                data=b'{"input":"Reply with exactly WBP_TRACE_OK."}',
+                headers={
+                    "Authorization": "Bearer sk-test-secret-value",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5)
+            self.assertEqual(raised.exception.code, 401)
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="upstream failed")
+
+        try:
+            with mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run):
+                result = session.run_prompt(
+                    {
+                        "prompt": "Reply with exactly WBP_TRACE_OK.",
+                        "model_id": "gpt-5.3-codex",
+                    },
+                    trace_wbp=True,
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["machine_error_code"], "TRACE_UPSTREAM_HTTP_401")
+        trace = result["trace_observer_packet"]
+        self.assertTrue(trace["request_observed"])
+        self.assertTrue(trace["response_observed"])
+        self.assertEqual(trace["path"], "/v1/responses")
+        self.assertEqual(trace["upstream_status"], 401)
+        self.assertEqual(trace["machine_error_code"], "TRACE_UPSTREAM_HTTP_401")
+        self.assertFalse(result["independent_wbp_trace_observed"])
+        self.assertNotIn("Reply with exactly WBP_TRACE_OK.", json.dumps(result))
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
 
     def test_process_isolation_proof_reports_protected_surfaces_unchanged(self) -> None:

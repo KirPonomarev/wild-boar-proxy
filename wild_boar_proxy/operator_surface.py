@@ -131,6 +131,28 @@ def _body_digest(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
 
+def _forward_request_headers(headers: dict[str, str]) -> dict[str, str]:
+    excluded = {
+        "connection",
+        "content-length",
+        "host",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+        "cookie",
+    }
+    forwarded: dict[str, str] = {}
+    for key, value in headers.items():
+        if key.lower() not in excluded:
+            forwarded[key] = value
+    forwarded.setdefault("Content-Type", "application/json")
+    return forwarded
+
+
 def _empty_trace_packet() -> dict[str, Any]:
     return {
         "request_observed": False,
@@ -244,9 +266,7 @@ class WbpTraceObserver:
             response_body = json.dumps({"error": {"message": "trace observer path not allowed"}}).encode("utf-8")
             self._packet.update({"machine_error_code": "TRACE_PATH_NOT_ALLOWED", "upstream_status": 403})
             return 403, response_body, {"Content-Type": "application/json"}
-        request_headers = {"Content-Type": headers.get("Content-Type", "application/json")}
-        if "Authorization" in headers:
-            request_headers["Authorization"] = headers["Authorization"]
+        request_headers = _forward_request_headers(headers)
         request = urllib.request.Request(forwarded_url, data=body if method != "GET" else None, headers=request_headers, method=method)
         try:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -640,9 +660,18 @@ class OperatorSurfaceSession:
         }
         self.transcript.append(entry)
         ok = exit_code == 0 and bool(final_message)
+        trace_machine_error_code = str(trace_packet.get("machine_error_code") or "")
+        prompt_machine_error_code = "OK" if ok else "ENGINE_PROMPT_FAILED"
+        if (
+            not ok
+            and trace_wbp
+            and trace_packet.get("response_observed") is True
+            and trace_machine_error_code.startswith("TRACE_UPSTREAM_HTTP_")
+        ):
+            prompt_machine_error_code = trace_machine_error_code
         return {
             "status": "ok" if ok else "failed",
-            "machine_error_code": "OK" if ok else "ENGINE_PROMPT_FAILED",
+            "machine_error_code": prompt_machine_error_code,
             "human_message": "Codex Operator prompt completed." if ok else "Codex Operator prompt failed.",
             "selected_model": selected_model,
             "configured_base_url": effective_endpoint,
