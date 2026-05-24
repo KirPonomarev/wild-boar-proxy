@@ -533,6 +533,80 @@
           <pre id="codexCustomSessionTranscript" class="mono-value">service ledger pending</pre>
         </section>
 
+        <section id="codexCustomRecoveryPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Custom Recovery</div>
+              <div id="codexCustomRecoverySummary" class="secondary">Recovery surface uses existing bounded session and readonly packets.</div>
+            </div>
+            <span id="codexCustomRecoveryChip" class="chip neutral"><span class="dot"></span><span>pending</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Action scope</div><div id="codexCustomRecoveryScope">bounded_custom_session_only</div>
+            <div>Original baseline</div><div id="codexCustomRecoveryOriginal">protected baseline · status pending</div>
+            <div>Session stop</div><div id="codexCustomRecoveryStop">cancel packet pending</div>
+            <div>Owned cleanup</div><div id="codexCustomRecoveryCleanup">cleanup packet pending</div>
+            <div>Isolation check</div><div id="codexCustomRecoveryIsolation">current Codex untouched proof pending</div>
+            <div>Accounts check</div><div id="codexCustomRecoveryAccounts">accounts readonly pending</div>
+            <div>API check</div><div id="codexCustomRecoveryApi">API readonly pending</div>
+            <div>Diagnostics</div><div id="codexCustomRecoveryDiagnostics">support artifact only · availability from action metadata</div>
+          </div>
+          <div class="action-summary-footer">
+            <div>
+              <span>dangerous: <strong id="codexCustomRecoveryDangerousCount">7 disabled</strong></span>
+              <span>browser payload: <strong id="codexCustomRecoveryBrowserPayload">no path/auth/backend/secret</strong></span>
+            </div>
+            <div class="action-row">
+              <button id="codexCustomRecoveryCheckAllAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Run recovery checks</span>
+              </button>
+              <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
+                <span>Cancel selected</span>
+              </button>
+              <button id="codexCustomRecoveryCleanupAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/trash.png" alt="" aria-hidden="true">
+                <span>Cleanup selected</span>
+              </button>
+              <button id="codexCustomRecoveryDiagnosticsAction" class="button ghost live-action" type="button" data-ui-action="export_diagnostics" disabled title="Diagnostics export follows action metadata; support artifact only.">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/download-simple.png" alt="" aria-hidden="true">
+                <span>Export diagnostics</span>
+              </button>
+            </div>
+          </div>
+          <div id="codexCustomRecoveryDangerousList" class="action-ledger-list" aria-label="Disabled dangerous recovery actions">
+            <div class="action-ledger-row amber"><strong>kill arbitrary process</strong><div class="action-ledger-meta">disabled · no admitted process-owner surface</div></div>
+            <div class="action-ledger-row amber"><strong>cleanup arbitrary path</strong><div class="action-ledger-meta">disabled · cleanup is owned session root only</div></div>
+            <div class="action-ledger-row amber"><strong>reset global data</strong><div class="action-ledger-meta">disabled · requires rollback semantics</div></div>
+            <div class="action-ledger-row amber"><strong>rollback without rollback point</strong><div class="action-ledger-meta">disabled · missing rollback point contract</div></div>
+            <div class="action-ledger-row amber"><strong>mutate credentials</strong><div class="action-ledger-meta">disabled · owner credential flow only</div></div>
+            <div class="action-ledger-row amber"><strong>remove routes</strong><div class="action-ledger-meta">disabled here · route cleanup remains separately gated</div></div>
+            <div class="action-ledger-row amber"><strong>touch Original Codex profile</strong><div class="action-ledger-meta">forbidden · protected baseline</div></div>
+          </div>
+          <pre id="codexCustomRecoveryPacket" class="mono-value">{
+  "status": "display_only",
+  "machine_error_code": "RECOVERY_SURFACE_PENDING",
+  "claim_scope": "custom_recovery_surface_readonly_checks_only",
+  "action_scope": "bounded_custom_session_only",
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "owned_session_root_only": true,
+  "arbitrary_path_accepted": false,
+  "browser_forbidden_fields_rejected": true,
+  "accounts_readonly_ok": false,
+  "api_readonly_ok": false,
+  "process_kill_claimed": false,
+  "rollback_claimed": false,
+  "live_recovery_proof_claimed": false,
+  "historical_isolation_proof_only": true,
+  "fresh_truth": false,
+  "load_or_rotation_claimed": false,
+  "diagnostics_support_artifact_only": true,
+  "dangerous_actions_disabled": true
+}</pre>
+        </section>
+
         <section id="codexCustomBoundedLoadProofPanel" class="card log-card">
           <div class="log-head">
             <div>

@@ -1453,6 +1453,210 @@ async function cleanupCodexCustomSession() {
   await postCodexCustomSessionAction("cleanup", {});
 }
 
+function codexCustomRecoverySetText(id, value) {
+  operatorSetText(id, value);
+}
+
+function codexCustomRecoverySetChip(visual, label) {
+  const chip = document.getElementById("codexCustomRecoveryChip");
+  if (!chip) {
+    return;
+  }
+  chip.className = `chip ${VISUAL_CLASS[visual] || ACTION_STATUS_VISUAL_CLASS[visual] || "neutral"}`;
+  if (chip.lastElementChild) {
+    chip.lastElementChild.textContent = label || visual || "unknown";
+  }
+}
+
+function renderCodexCustomRecoveryPacket(packet) {
+  const response = document.getElementById("codexCustomRecoveryPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const currentTouched = packet?.current_codex_touched === true || packet?.current_codex_home_touched === true;
+  const arbitraryPathAccepted = packet?.arbitrary_path_accepted === true;
+  const dangerousOk = packet?.dangerous_actions_disabled !== false;
+  const claimScope = packet?.claim_scope || "custom_recovery_surface_readonly_checks_only";
+  const ok = status === "ok" && !currentTouched && !arbitraryPathAccepted && dangerousOk;
+  const blocked = status === "blocked" || status === "rejected" || currentTouched || arbitraryPathAccepted;
+  codexCustomRecoverySetChip(ok ? "green" : (blocked ? "amber" : "neutral"), ok ? "checks ok" : status);
+  codexCustomRecoverySetText(
+    "codexCustomRecoverySummary",
+    `${status} · ${machineCode} · ${claimScope}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryIsolation",
+    `current ${currentTouched ? "touched" : "untouched"} · original ${packet?.original_codex_touched === true ? "touched" : "untouched"}`
+  );
+  if (Object.prototype.hasOwnProperty.call(packet || {}, "cancelled")) {
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryStop",
+      `${status} · process kill ${packet?.process_kill_claimed === true ? "claimed" : "not claimed"}`
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(packet || {}, "cleanup_performed")) {
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryCleanup",
+      `${status} · owned root ${packet?.owned_session_root_only === true ? "yes" : "no"} · arbitrary path ${arbitraryPathAccepted ? "accepted" : "rejected"}`
+    );
+  }
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      claim_scope: claimScope,
+      action_scope: packet?.action_scope || "bounded_custom_session_only",
+      current_codex_touched: currentTouched,
+      original_codex_touched: packet?.original_codex_touched === true,
+      owned_session_root_only: packet?.owned_session_root_only === true,
+      arbitrary_path_accepted: arbitraryPathAccepted,
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected !== false,
+      accounts_readonly_ok: packet?.accounts_readonly_ok === true,
+      api_readonly_ok: packet?.api_readonly_ok === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      live_recovery_proof_claimed: packet?.live_recovery_proof_claimed === true,
+      historical_isolation_proof_only: packet?.historical_isolation_proof_only !== false,
+      fresh_truth: packet?.fresh_truth === true,
+      load_or_rotation_claimed: packet?.load_or_rotation_claimed === true,
+      cleanup_performed: packet?.cleanup_performed === true,
+      diagnostics_support_artifact_only: packet?.diagnostics_support_artifact_only !== false,
+      dangerous_actions_disabled: dangerousOk,
+      next_action: packet?.next_action || "none",
+    }, null, 2);
+  }
+}
+
+async function runCodexCustomRecoveryChecks() {
+  codexCustomRecoverySetChip("neutral", "checking");
+  try {
+    const [originalStatus, customStatus, accountsSnapshot, apiSnapshot] = await Promise.all([
+      fetchCodexLaunchJson("api/codex/original/status"),
+      fetchCodexLaunchJson("api/codex/custom/status"),
+      loadAccountsReadonly(),
+      loadApiConnectionsReadonly()
+    ]);
+    await Promise.all([
+      refreshCodexLaunchModesPanel(),
+      refreshCodexCustomModelsPanel(),
+      refreshCodexCustomAccountsPanel(),
+      refreshCodexCustomSessionsPanel()
+    ]);
+    const accountsSummary = accountsSnapshot?.summary || {};
+    const apiSummary = apiSnapshot?.summary || {};
+    const diagnosticsMetadata = actionMetadata?.export_diagnostics || {};
+    const originalOk = originalStatus?.status === "ok";
+    const customOk = customStatus?.status === "ok";
+    const accountsOk = accountsSnapshot?.status === "ok" && accountsSnapshot?.primary_truth_ok === true;
+    const apiOk = apiSnapshot?.status === "ok" && apiSnapshot?.primary_truth_ok === true;
+    const checksOk = originalOk && customOk && accountsOk && apiOk;
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryOriginal",
+      `${originalStatus?.status || "unknown"} · proxy ${originalStatus?.proxy_injection_allowed === false ? "forbidden" : "unknown"} · ${originalStatus?.launch_claim_scope || "status_only"}`
+    );
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryAccounts",
+      `${accountsSnapshot?.status || "unknown"} · visible ${accountsSummary.visible_count ?? 0} · machine ${accountsSummary.machine_error_code || "unknown"}`
+    );
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryApi",
+      `${apiSnapshot?.status || "unknown"} · routes ${apiSummary.routes_count ?? 0} · enabled ${apiSummary.enabled_count ?? 0}`
+    );
+    codexCustomRecoverySetText(
+      "codexCustomRecoveryDiagnostics",
+      diagnosticsMetadata.available === true ? "available · support artifact only" : `disabled · ${diagnosticsMetadata.disabled_reason_code || diagnosticsMetadata.unavailable_reason || "metadata"}`
+    );
+    renderCodexCustomRecoveryPacket({
+      status: checksOk ? "ok" : "blocked",
+      machine_error_code: checksOk ? "RECOVERY_READONLY_CHECKS_COMPLETE" : "RECOVERY_READONLY_CHECKS_BLOCKED",
+      claim_scope: "custom_recovery_surface_readonly_checks_only",
+      action_scope: "bounded_custom_session_only",
+      current_codex_touched: false,
+      original_codex_touched: false,
+      owned_session_root_only: true,
+      arbitrary_path_accepted: false,
+      browser_forbidden_fields_rejected: true,
+      accounts_readonly_ok: accountsOk,
+      api_readonly_ok: apiOk,
+      process_kill_claimed: false,
+      rollback_claimed: false,
+      live_recovery_proof_claimed: false,
+      historical_isolation_proof_only: true,
+      fresh_truth: false,
+      load_or_rotation_claimed: false,
+      diagnostics_support_artifact_only: true,
+      dangerous_actions_disabled: true,
+      next_action: "operator_review"
+    });
+  } catch (error) {
+    renderCodexCustomRecoveryPacket({
+      status: "failed",
+      machine_error_code: "RECOVERY_READONLY_CHECKS_FAILED",
+      claim_scope: "custom_recovery_surface_readonly_checks_only",
+      action_scope: "bounded_custom_session_only",
+      current_codex_touched: false,
+      original_codex_touched: false,
+      owned_session_root_only: true,
+      arbitrary_path_accepted: false,
+      browser_forbidden_fields_rejected: true,
+      accounts_readonly_ok: false,
+      api_readonly_ok: false,
+      process_kill_claimed: false,
+      rollback_claimed: false,
+      live_recovery_proof_claimed: false,
+      historical_isolation_proof_only: true,
+      fresh_truth: false,
+      load_or_rotation_claimed: false,
+      diagnostics_support_artifact_only: true,
+      dangerous_actions_disabled: true,
+      next_action: "retry",
+    });
+    codexCustomRecoverySetText("codexCustomRecoverySummary", `Recovery checks failed: ${error.message}`);
+  }
+}
+
+async function cancelCodexCustomRecoverySession() {
+  const packet = await postCodexCustomSessionAction("cancel", {});
+  renderCodexCustomRecoveryPacket({
+    ...(packet || { status: "rejected", machine_error_code: "SESSION_NOT_SELECTED", next_action: "create_session" }),
+    claim_scope: "custom_recovery_surface_session_cancel_only",
+    action_scope: "bounded_custom_session_only",
+    original_codex_touched: false,
+    owned_session_root_only: true,
+    arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+    browser_forbidden_fields_rejected: true,
+    accounts_readonly_ok: false,
+    api_readonly_ok: false,
+    rollback_claimed: false,
+    live_recovery_proof_claimed: false,
+    historical_isolation_proof_only: true,
+    fresh_truth: false,
+    load_or_rotation_claimed: false,
+    diagnostics_support_artifact_only: true,
+    dangerous_actions_disabled: true,
+  });
+}
+
+async function cleanupCodexCustomRecoverySession() {
+  const packet = await postCodexCustomSessionAction("cleanup", {});
+  renderCodexCustomRecoveryPacket({
+    ...(packet || { status: "rejected", machine_error_code: "SESSION_NOT_SELECTED", next_action: "create_session" }),
+    claim_scope: "custom_recovery_surface_owned_cleanup_only",
+    action_scope: "bounded_custom_session_only",
+    original_codex_touched: false,
+    owned_session_root_only: packet ? packet.owned_session_root_only === true : true,
+    browser_forbidden_fields_rejected: true,
+    accounts_readonly_ok: false,
+    api_readonly_ok: false,
+    rollback_claimed: false,
+    live_recovery_proof_claimed: false,
+    historical_isolation_proof_only: true,
+    fresh_truth: false,
+    load_or_rotation_claimed: false,
+    diagnostics_support_artifact_only: true,
+    dangerous_actions_disabled: true,
+  });
+}
+
 function operatorSetChip(visual, label) {
   const chip = document.getElementById("operatorStatusChip");
   if (!chip) {
@@ -7544,6 +7748,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomSessionPromptRunAction")?.addEventListener("click", () => runCodexCustomSessionPrompt());
   document.getElementById("codexCustomSessionCancelAction")?.addEventListener("click", () => cancelCodexCustomSession());
   document.getElementById("codexCustomSessionCleanupAction")?.addEventListener("click", () => cleanupCodexCustomSession());
+  document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks());
+  document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
+  document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
   document.getElementById("operatorRunAction")?.addEventListener("click", () => runOperatorPrompt());
   document.getElementById("actionLedgerClose")?.addEventListener("click", () => closeActionLedgerPanel());

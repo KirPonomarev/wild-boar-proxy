@@ -393,6 +393,174 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("postCodexCustomSessionAction(\"prompt\", { prompt: promptNode ? promptNode.value : \"\", model_id", js)
         self.assertNotIn("postCodexCustomSessionAction(\"cleanup\", { path", js)
 
+    def test_codex_custom_recovery_surface_is_bounded_and_readonly(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexCustomRecoveryPanel"', html)
+        self.assertIn('id="codexCustomRecoveryPacket"', html)
+        self.assertIn('"claim_scope": "custom_recovery_surface_readonly_checks_only"', html)
+        self.assertIn('"action_scope": "bounded_custom_session_only"', html)
+        self.assertIn('"current_codex_touched": false', html)
+        self.assertIn('"original_codex_touched": false', html)
+        self.assertIn('"owned_session_root_only": true', html)
+        self.assertIn('"arbitrary_path_accepted": false', html)
+        self.assertIn('"browser_forbidden_fields_rejected": true', html)
+        self.assertIn('"accounts_readonly_ok": false', html)
+        self.assertIn('"api_readonly_ok": false', html)
+        self.assertIn('"process_kill_claimed": false', html)
+        self.assertIn('"rollback_claimed": false', html)
+        self.assertIn('"live_recovery_proof_claimed": false', html)
+        self.assertIn('"historical_isolation_proof_only": true', html)
+        self.assertIn('"fresh_truth": false', html)
+        self.assertIn('"load_or_rotation_claimed": false', html)
+        self.assertIn('"diagnostics_support_artifact_only": true', html)
+        self.assertIn('"dangerous_actions_disabled": true', html)
+
+        self.assertIn("runCodexCustomRecoveryChecks()", js)
+        self.assertIn('fetchCodexLaunchJson("api/codex/original/status")', js)
+        self.assertIn('fetchCodexLaunchJson("api/codex/custom/status")', js)
+        self.assertIn("loadAccountsReadonly()", js)
+        self.assertIn("loadApiConnectionsReadonly()", js)
+        self.assertIn('const accountsOk = accountsSnapshot?.status === "ok" && accountsSnapshot?.primary_truth_ok === true', js)
+        self.assertIn('const apiOk = apiSnapshot?.status === "ok" && apiSnapshot?.primary_truth_ok === true', js)
+        self.assertIn("const checksOk = originalOk && customOk && accountsOk && apiOk", js)
+        self.assertIn('status: checksOk ? "ok" : "blocked"', js)
+        self.assertIn('machine_error_code: checksOk ? "RECOVERY_READONLY_CHECKS_COMPLETE" : "RECOVERY_READONLY_CHECKS_BLOCKED"', js)
+        self.assertIn("accounts_readonly_ok: accountsOk", js)
+        self.assertIn("api_readonly_ok: apiOk", js)
+        self.assertIn("cancelCodexCustomRecoverySession()", js)
+        self.assertIn("cleanupCodexCustomRecoverySession()", js)
+        self.assertIn('postCodexCustomSessionAction("cancel", {})', js)
+        self.assertIn('postCodexCustomSessionAction("cleanup", {})', js)
+        self.assertIn('document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks())', js)
+        self.assertIn('document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession())', js)
+        self.assertIn('document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession())', js)
+
+        self.assertIn("kill arbitrary process", html)
+        self.assertIn("cleanup arbitrary path", html)
+        self.assertIn("rollback without rollback point", html)
+        self.assertIn("mutate credentials", html)
+        self.assertIn("touch Original Codex profile", html)
+        self.assertNotIn('data-ui-action="kill_process"', html)
+        self.assertNotIn('data-ui-action="cleanup_path"', html)
+        self.assertNotIn('data-ui-action="rollback_apply"', html)
+        self.assertNotIn('data-ui-action="global_reset"', html)
+        self.assertNotIn('data-ui-action="credentials_mutate"', html)
+        self.assertNotIn('data-ui-action="route_remove"', html)
+        self.assertNotIn('fetch("api/codex/custom/recovery"', js)
+        self.assertNotIn('fetch("api/codex/custom/kill"', js)
+        self.assertNotIn('fetch("api/codex/custom/rollback"', js)
+        self.assertNotIn('postCodexCustomSessionAction("cleanup", { path', js)
+        self.assertNotIn("CODEX_CUSTOM_ROTATION_READY", html[html.find('id="codexCustomRecoveryPanel"'):html.find('id="codexCustomBoundedLoadProofPanel"')])
+        self.assertNotIn("CUSTOM_CODEX_RECOVERY_ROLLBACK_AND_OPERATOR_READY_PASS", html + js)
+
+    def test_codex_custom_recovery_blocks_when_readonly_probe_fails(self) -> None:
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+class Node {
+  constructor() {
+    this.textContent = "";
+    this.className = "";
+    this.lastElementChild = { textContent: "" };
+  }
+}
+
+const nodes = {};
+function node(id) {
+  if (!nodes[id]) {
+    nodes[id] = new Node();
+    nodes[id].id = id;
+  }
+  return nodes[id];
+}
+
+const responses = {
+  "api/codex/original/status": {
+    status: "ok",
+    proxy_injection_allowed: false,
+    launch_claim_scope: "status_only"
+  },
+  "api/codex/custom/status": {
+    status: "ok"
+  },
+  "api/accounts-readonly": {
+    status: "integration_failure",
+    primary_truth_ok: false,
+    summary: {
+      visible_count: 0,
+      machine_error_code: "UI_ACCOUNTS_READONLY_FETCH_FAILED"
+    }
+  },
+  "api/api-connections-readonly": {
+    status: "ok",
+    primary_truth_ok: true,
+    summary: {
+      routes_count: 1,
+      enabled_count: 1
+    }
+  }
+};
+
+const sandbox = {
+  console,
+  document: {
+    getElementById(id) { return node(id); },
+    createElement() { return new Node(); },
+    addEventListener() {},
+    querySelector() { return null; },
+    querySelectorAll() { return []; }
+  },
+  window: {
+    location: { search: "", href: "http://127.0.0.1/" },
+    history: { replaceState() {} }
+  },
+  URL,
+  URLSearchParams,
+  fetch: async (url) => ({
+    ok: true,
+    json: async () => responses[url] || { status: "ok", primary_truth_ok: true, summary: {} }
+  })
+};
+
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync("scripts/overview.js", "utf8"), sandbox);
+sandbox.refreshCodexLaunchModesPanel = async () => {};
+sandbox.refreshCodexCustomModelsPanel = async () => {};
+sandbox.refreshCodexCustomAccountsPanel = async () => {};
+sandbox.refreshCodexCustomSessionsPanel = async () => {};
+sandbox.actionMetadata = {};
+
+sandbox.runCodexCustomRecoveryChecks().then(() => {
+  const packet = JSON.parse(node("codexCustomRecoveryPacket").textContent);
+  if (packet.status !== "blocked") {
+    throw new Error(`readonly failure must block recovery checks, got ${packet.status}`);
+  }
+  if (packet.machine_error_code !== "RECOVERY_READONLY_CHECKS_BLOCKED") {
+    throw new Error(`wrong machine code: ${packet.machine_error_code}`);
+  }
+  if (packet.accounts_readonly_ok !== false || packet.api_readonly_ok !== true) {
+    throw new Error(`readonly booleans not preserved: ${JSON.stringify(packet)}`);
+  }
+  if (node("codexCustomRecoveryChip").lastElementChild.textContent !== "blocked") {
+    throw new Error(`chip did not show blocked: ${node("codexCustomRecoveryChip").lastElementChild.textContent}`);
+  }
+}).catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+"""
+        result = subprocess.run(
+            ["node", "-e", script],
+            cwd=WEB_DESIGN_UI,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_codex_custom_bounded_load_proof_ui_is_bounded_display_only(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()

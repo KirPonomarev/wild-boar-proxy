@@ -1,0 +1,110 @@
+{
+  "contour": "CUSTOM_CODEX_RECOVERY_SURFACE_PASS",
+  "date": "2026-05-24",
+  "browser": "Codex in-app browser",
+  "target": "http://127.0.0.1:8793/",
+  "server": "wild_boar_proxy.web_design_live_server",
+  "live_prompt_or_load_run": false,
+  "initial_panel_probe": {
+    "panel_visible": true,
+    "summary": "Recovery surface uses existing bounded session and readonly packets.",
+    "dangerous_count": 7,
+    "buttons": {
+      "codexCustomRecoveryCheckAllAction": {
+        "exists": true,
+        "disabled": false,
+        "action": null
+      },
+      "codexCustomRecoveryCancelAction": {
+        "exists": true,
+        "disabled": false,
+        "action": null
+      },
+      "codexCustomRecoveryCleanupAction": {
+        "exists": true,
+        "disabled": false,
+        "action": null
+      },
+      "codexCustomRecoveryDiagnosticsAction": {
+        "exists": true,
+        "disabled": true,
+        "action": "export_diagnostics"
+      }
+    },
+    "packet": {
+      "status": "display_only",
+      "machine_error_code": "RECOVERY_SURFACE_PENDING",
+      "claim_scope": "custom_recovery_surface_readonly_checks_only",
+      "action_scope": "bounded_custom_session_only",
+      "current_codex_touched": false,
+      "original_codex_touched": false,
+      "owned_session_root_only": true,
+      "arbitrary_path_accepted": false,
+      "browser_forbidden_fields_rejected": true,
+      "accounts_readonly_ok": false,
+      "api_readonly_ok": false,
+      "process_kill_claimed": false,
+      "rollback_claimed": false,
+      "live_recovery_proof_claimed": false,
+      "historical_isolation_proof_only": true,
+      "fresh_truth": false,
+      "load_or_rotation_claimed": false,
+      "diagnostics_support_artifact_only": true,
+      "dangerous_actions_disabled": true
+    }
+  },
+  "readonly_check_probe": {
+    "button_count": 1,
+    "chip": "blocked",
+    "summary": "blocked · RECOVERY_READONLY_CHECKS_BLOCKED · custom_recovery_surface_readonly_checks_only",
+    "original": "ok · proxy forbidden · status_only",
+    "accounts": "ok · visible 25 · machine OK",
+    "api": "ok · routes 0 · enabled 0",
+    "diagnostics": "disabled · RUNTIME_LIVE_ACTION_CHAIN_PARKED",
+    "console_errors_or_warnings": [],
+    "packet": {
+      "status": "blocked",
+      "machine_error_code": "RECOVERY_READONLY_CHECKS_BLOCKED",
+      "claim_scope": "custom_recovery_surface_readonly_checks_only",
+      "action_scope": "bounded_custom_session_only",
+      "current_codex_touched": false,
+      "original_codex_touched": false,
+      "owned_session_root_only": true,
+      "arbitrary_path_accepted": false,
+      "browser_forbidden_fields_rejected": true,
+      "accounts_readonly_ok": true,
+      "api_readonly_ok": true,
+      "process_kill_claimed": false,
+      "rollback_claimed": false,
+      "live_recovery_proof_claimed": false,
+      "historical_isolation_proof_only": true,
+      "fresh_truth": false,
+      "load_or_rotation_claimed": false,
+      "diagnostics_support_artifact_only": true,
+      "dangerous_actions_disabled": true,
+      "next_action": "operator_review"
+    }
+  },
+  "no_session_cleanup_probe": {
+    "status": "rejected",
+    "machine_error_code": "SESSION_NOT_SELECTED",
+    "claim_scope": "custom_recovery_surface_owned_cleanup_only",
+    "action_scope": "bounded_custom_session_only",
+    "current_codex_touched": false,
+    "original_codex_touched": false,
+    "owned_session_root_only": true,
+    "arbitrary_path_accepted": false,
+    "browser_forbidden_fields_rejected": true,
+    "accounts_readonly_ok": false,
+    "api_readonly_ok": false,
+    "process_kill_claimed": false,
+    "rollback_claimed": false,
+    "live_recovery_proof_claimed": false,
+    "historical_isolation_proof_only": true,
+    "fresh_truth": false,
+    "load_or_rotation_claimed": false,
+    "diagnostics_support_artifact_only": true,
+    "dangerous_actions_disabled": true,
+    "next_action": "create_session"
+  }
+}
