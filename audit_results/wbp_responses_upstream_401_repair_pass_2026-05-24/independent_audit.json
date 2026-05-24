@@ -1,0 +1,23 @@
+{
+  "allowed_claim": "trace observer 4xx false-green guard repaired and 401 boundary classified away from local token rejection",
+  "auditor": "Kuhn / 5.4-mini independent read-only auditor",
+  "captured_at_utc": "2026-05-24T01:28:50.037381Z",
+  "classification_ok": true,
+  "classification_precision": "intentionally broad between wire API compatibility and GPT account auth stale/invalid",
+  "false_green_fixed": "4xx upstream responses now map to TRACE_UPSTREAM_HTTP_<status> instead of OK",
+  "forbidden_claim": "Codex Custom live prompt success",
+  "machine_error_code": "OK",
+  "next_actions": [
+    "WBP_RESPONSES_WIRE_API_COMPAT_REPAIR_PASS",
+    "GPT_ACCOUNT_AUTH_REPAIR_OR_OPERATOR_REAUTH_PASS"
+  ],
+  "patch_scope_ok": true,
+  "read_only_audit_note": "Auditor did not run live runtime/API/provider/prompt commands.",
+  "repo_patch_files": [
+    "wild_boar_proxy/operator_surface.py",
+    "tests/test_operator_surface.py"
+  ],
+  "status": "ok",
+  "success_overestimated": false,
+  "verdict": "classification honest and guard repair narrow; not an end-to-end live pass"
+}

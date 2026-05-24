@@ -104,6 +104,66 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertNotIn("SECRET PROMPT", json.dumps(packet))
         self.assertNotIn("sk-test-secret-value", json.dumps(packet))
 
+    def test_trace_observer_classifies_upstream_4xx_without_green_code(self) -> None:
+        class UpstreamHandler(BaseHTTPRequestHandler):
+            status_code = 401
+
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_POST(self) -> None:
+                self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+                self.send_response(self.status_code)
+                self.send_header("Content-Type", "application/json")
+                body = json.dumps({"error": {"message": "auth failed"}}).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        for status_code in (401, 403, 429):
+            with self.subTest(status_code=status_code):
+                UpstreamHandler.status_code = status_code
+                server = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                try:
+                    downstream = f"http://127.0.0.1:{server.server_port}/v1"
+                    with WbpTraceObserver(downstream_endpoint=downstream) as observer:
+                        request = urllib.request.Request(
+                            f"{observer.listen_endpoint}/responses",
+                            data=b'{"input":"SECRET PROMPT"}',
+                            headers={
+                                "Authorization": "Bearer sk-test-secret-value",
+                                "Content-Type": "application/json",
+                            },
+                            method="POST",
+                        )
+                        with self.assertRaises(urllib.error.HTTPError) as raised:
+                            urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                                request,
+                                timeout=5,
+                            )
+                        self.assertEqual(raised.exception.code, status_code)
+                        packet = observer.packet()
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+                self.assertTrue(packet["request_observed"])
+                self.assertTrue(packet["response_observed"])
+                self.assertTrue(packet["forwarded_to_wbp"])
+                self.assertEqual(packet["upstream_status"], status_code)
+                self.assertEqual(
+                    packet["machine_error_code"],
+                    f"TRACE_UPSTREAM_HTTP_{status_code}",
+                )
+                self.assertFalse(packet["prompt_body_recorded"])
+                self.assertFalse(packet["auth_header_recorded"])
+                self.assertFalse(packet["secret_value_recorded"])
+                self.assertNotIn("SECRET PROMPT", json.dumps(packet))
+                self.assertNotIn("sk-test-secret-value", json.dumps(packet))
+
     def test_run_prompt_uses_stdin_dash_and_redacted_transcript(self) -> None:
         session = OperatorSurfaceSession(
             OperatorSurfaceConfig(

@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-24T01:25:33.437977Z",
+  "findings": [
+    {
+      "classification": "guard_bug",
+      "evidence": "WbpTraceObserver previously set machine_error_code OK for status <500, including HTTP 401. Patched to TRACE_UPSTREAM_HTTP_401 for 4xx.",
+      "id": "<redacted-backend-id>",
+      "repo_owned": true
+    },
+    {
+      "classification": "local_token_accepted_for_models",
+      "evidence": "runtime and operator token shape hash prefix matched; /models with same token returned 200; invalid token returned 401.",
+      "id": "<redacted-backend-id>",
+      "repo_owned": false
+    },
+    {
+      "classification": "responses_downstream_or_account_auth",
+      "evidence": "previous /responses call reached WBP and got 401; no second /responses probe run in this contour.",
+      "id": "<redacted-backend-id>",
+      "repo_owned": false
+    }
+  ],
+  "machine_error_code": "OK",
+  "status": "ok"
+}

@@ -1,0 +1,30 @@
+{
+  "captured_at_utc": "2026-05-24T01:28:50.037089Z",
+  "invalid_token_401": true,
+  "machine_error_code": "OK",
+  "models_probe_ok": true,
+  "no_second_codex_custom_live_prompt": true,
+  "patched_guard_validated": true,
+  "responses_probe_not_run": true,
+  "status": "ok",
+  "tests": [
+    {
+      "command": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "status": "ok"
+    },
+    {
+      "command": "python -B -m unittest tests.test_operator_surface -q",
+      "count": 9,
+      "status": "ok"
+    },
+    {
+      "command": "python -B -m unittest tests.test_operator_surface tests.test_codex_custom_sessions tests.test_codex_account_selection tests.test_web_design_live_server -q",
+      "count": 114,
+      "status": "ok"
+    },
+    {
+      "command": "git diff --check",
+      "status": "ok"
+    }
+  ]
+}

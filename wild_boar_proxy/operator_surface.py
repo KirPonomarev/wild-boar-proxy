@@ -263,6 +263,12 @@ class WbpTraceObserver:
             status = 502
             response_headers = {"Content-Type": "application/json"}
             self._packet.update({"machine_error_code": type(exc).__name__})
+        if 200 <= status < 400:
+            machine_error_code = "OK"
+        elif 400 <= status < 500:
+            machine_error_code = f"TRACE_UPSTREAM_HTTP_{status}"
+        else:
+            machine_error_code = self._packet.get("machine_error_code") or "TRACE_UPSTREAM_FAILED"
         self._packet.update(
             {
                 "response_observed": True,
@@ -270,7 +276,7 @@ class WbpTraceObserver:
                 "forwarded_endpoint": self.downstream_endpoint,
                 "upstream_status": status,
                 "response_body_sha256": _body_digest(response_body) if response_body else "",
-                "machine_error_code": "OK" if status < 500 else self._packet.get("machine_error_code") or "TRACE_UPSTREAM_FAILED",
+                "machine_error_code": machine_error_code,
             }
         )
         return status, response_body, response_headers
