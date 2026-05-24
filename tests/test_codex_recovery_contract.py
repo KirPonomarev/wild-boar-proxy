@@ -13,6 +13,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
+    build_custom_recovery_rollback_apply_bounded_live_packet,
     build_custom_recovery_rollback_apply_live_preflight_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
@@ -80,6 +81,12 @@ def rollback_apply_admission_dry_run_packet(root: Path) -> dict[str, object]:
         recovery_contract=recovery_contract_packet(),
         rollback_process_owner_contract=rollback_process_owner_contract_packet(),
         sessions_packet={"status": "ok", "session_count": 0, "sessions": []},
+    )
+
+
+def rollback_apply_live_preflight_packet(root: Path) -> dict[str, object]:
+    return build_custom_recovery_rollback_apply_live_preflight_packet(
+        rollback_apply_admission_dry_run=rollback_apply_admission_dry_run_packet(root),
     )
 
 
@@ -1457,6 +1464,201 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertFalse(packet["rollback_apply_performed"])
             self.assertFalse(packet["filesystem_write_performed"])
             self.assertFalse(packet["process_kill_performed"])
+
+    def test_rollback_apply_bounded_live_writes_receipt_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight = rollback_apply_live_preflight_packet(root)
+            packet = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=preflight,
+                browser_payload={},
+                artifact_root=root,
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_BOUNDED_LIVE_PERFORMED",
+            )
+            self.assertEqual(
+                packet["claim_scope"],
+                "custom_codex_recovery_rollback_apply_bounded_live_only",
+            )
+            self.assertEqual(
+                packet["result_token"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_BOUNDED_LIVE_PERFORMED",
+            )
+            self.assertTrue(packet["rollback_apply_preflight_required"])
+            self.assertTrue(packet["rollback_apply_preflight_valid"])
+            self.assertTrue(packet["rollback_apply_bounded_live_performed"])
+            self.assertTrue(packet["rollback_apply_receipt_created"])
+            self.assertTrue(packet["rollback_apply_receipt_path_redacted"])
+            self.assertTrue(packet["rollback_apply_receipt_digest_present"])
+            self.assertRegex(packet["rollback_apply_receipt_sha256"], r"^[0-9a-f]{64}$")
+            self.assertTrue(packet["rollback_apply_receipt_provenance_verified"])
+            self.assertTrue(packet["rollback_apply_receipt_payload_digest_verified"])
+            self.assertTrue(packet["source_preflight_sha256_present"])
+            self.assertTrue(packet["rollback_point_verified"])
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertEqual(packet["filesystem_read_scope"], "owned_generated_recovery_artifact")
+            self.assertTrue(packet["filesystem_write_performed"])
+            self.assertEqual(packet["filesystem_write_scope"], "owned_generated_recovery_artifact")
+            self.assertTrue(packet["rollback_apply_admitted"])
+            self.assertTrue(packet["rollback_apply_ready"])
+            self.assertTrue(packet["rollback_apply_performed"])
+            self.assertEqual(
+                packet["rollback_apply_completed_scope"],
+                "bounded_apply_receipt_only",
+            )
+            self.assertTrue(packet["rollback_completed"])
+            self.assertFalse(packet["rollback_live_ready"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["process_kill_performed"])
+            self.assertFalse(packet["current_codex_touched"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["current_codex_home_touched"])
+            self.assertFalse(packet["auth_material_touched"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertEqual(packet["browser_payload_allowed_keys"], [])
+            self.assertIn("artifact_id", packet["forbidden_browser_fields"])
+            self.assertIn("digest", packet["forbidden_browser_fields"])
+            self.assertNotIn("/tmp/", json.dumps(packet))
+            actions = {action["id"]: action for action in packet["actions"]}
+            self.assertEqual(actions["rollback_apply"]["status"], "performed")
+            self.assertTrue(actions["rollback_apply"]["performed"])
+            self.assertEqual(
+                actions["rollback_apply"]["completed_scope"],
+                "bounded_apply_receipt_only",
+            )
+            self.assertFalse(actions["process_kill"]["performed"])
+            self.assertFalse((root / "_rollback_apply_receipt_manifest.json").exists())
+            receipt_path = root / f"{packet['rollback_apply_receipt_id']}.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                receipt["artifact_kind"],
+                "custom_codex_recovery_rollback_apply_receipt",
+            )
+            self.assertEqual(
+                receipt["claim_scope"],
+                "custom_codex_recovery_rollback_apply_bounded_live_only",
+            )
+            self.assertEqual(receipt["source_preflight_sha256"], stable_digest(preflight))
+            self.assertEqual(
+                receipt["source_rollback_point_ref"],
+                packet["source_rollback_point_ref"],
+            )
+            self.assertFalse(receipt["current_codex_touched"])
+            self.assertFalse(receipt["original_codex_touched"])
+            self.assertFalse(receipt["auth_material_touched"])
+            self.assertFalse(receipt["secret_value_recorded"])
+            self.assertFalse(receipt["process_kill_performed"])
+            self.assertFalse(receipt["recovery_operator_ready"])
+
+    def test_rollback_apply_bounded_live_blocks_missing_preflight_without_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=None,
+                browser_payload={},
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_PREFLIGHT_NOT_ELIGIBLE",
+            )
+            self.assertFalse(packet["rollback_apply_preflight_valid"])
+            self.assertFalse(packet["rollback_apply_bounded_live_performed"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["process_kill_performed"])
+            self.assertFalse(packet["recovery_operator_ready"])
+
+    def test_rollback_apply_bounded_live_blocks_touched_or_written_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for field, value in (
+                ("current_codex_touched", True),
+                ("original_codex_touched", True),
+                ("auth_material_touched", True),
+                ("filesystem_write_performed", True),
+                ("recovery_operator_ready", True),
+            ):
+                preflight = rollback_apply_live_preflight_packet(root)
+                preflight[field] = value
+                packet = build_custom_recovery_rollback_apply_bounded_live_packet(
+                    rollback_apply_live_preflight=preflight,
+                    browser_payload={},
+                    artifact_root=root,
+                )
+
+                self.assertEqual(packet["status"], "blocked")
+                self.assertEqual(
+                    packet["machine_error_code"],
+                    "ROLLBACK_APPLY_PREFLIGHT_NOT_ELIGIBLE",
+                )
+                self.assertFalse(packet["rollback_apply_performed"])
+                self.assertFalse(packet["filesystem_write_performed"])
+                self.assertFalse(packet["process_kill_performed"])
+
+    def test_rollback_apply_bounded_live_rejects_browser_payload_without_read_or_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=None,
+                browser_payload={
+                    "artifact_id": "browser",
+                    "artifact_path": "/tmp/artifact",
+                    "backend_id": "browser-backend",
+                    "route_id": "browser-route",
+                    "path": "/tmp/forbidden",
+                    "snapshot_path": "/tmp/snapshot",
+                    "rollback_target": "/tmp/target",
+                    "digest": "browser",
+                    "session_id": "ccs-browser",
+                    "pid": "123",
+                    "process_id": "456",
+                    "CODEX_HOME": "/tmp/codex",
+                    "HOME": "/tmp/home",
+                    "auth": "browser-auth",
+                    "token": "browser-token",
+                    "api_key": "browser-key",
+                    "secret": "browser-secret",
+                },
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_BROWSER_FIELD_REJECTED",
+            )
+            for field in (
+                "artifact_id",
+                "artifact_path",
+                "backend_id",
+                "route_id",
+                "path",
+                "snapshot_path",
+                "rollback_target",
+                "digest",
+                "session_id",
+                "pid",
+                "process_id",
+                "CODEX_HOME",
+                "HOME",
+                "auth",
+                "token",
+                "api_key",
+                "secret",
+            ):
+                self.assertIn(field, packet["forbidden_fields"])
+            self.assertFalse(packet["rollback_apply_preflight_valid"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["process_kill_performed"])
+            self.assertFalse(packet["recovery_operator_ready"])
 
     def test_rollback_point_create_live_rejects_shallow_admission_without_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

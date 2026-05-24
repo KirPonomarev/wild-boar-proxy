@@ -46,6 +46,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
+    build_custom_recovery_rollback_apply_bounded_live_packet,
     build_custom_recovery_rollback_apply_live_preflight_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
@@ -1774,6 +1775,17 @@ def build_handler(
             ),
         )
 
+    def build_rollback_apply_bounded_live_packet(
+        browser_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if browser_payload:
+            return build_custom_recovery_rollback_apply_bounded_live_packet(
+                browser_payload=browser_payload,
+            )
+        return build_custom_recovery_rollback_apply_bounded_live_packet(
+            rollback_apply_live_preflight=build_rollback_apply_live_preflight_packet(),
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
@@ -2018,6 +2030,13 @@ def build_handler(
                         rollback_point_create_admission=(
                             build_rollback_point_create_admission_packet()
                         ),
+                        browser_payload=self._read_rollback_point_create_body(),
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/rollback-apply":
+                self._send_json(
+                    build_rollback_apply_bounded_live_packet(
                         browser_payload=self._read_rollback_point_create_body(),
                     )
                 )

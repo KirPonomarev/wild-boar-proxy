@@ -1,0 +1,29 @@
+{
+  "first_audit": {
+    "agent": "Ohm",
+    "model": "gpt-5.4-mini",
+    "verdict": "fail",
+    "findings": [
+      {
+        "severity": "medium",
+        "issue": "Success path wrote a receipt and a receipt manifest while the packet claimed bounded_apply_receipt_only.",
+        "fix": "Removed receipt manifest write and added a regression assertion that no receipt manifest is created."
+      }
+    ]
+  },
+  "second_audit": {
+    "agent": "Planck",
+    "model": "gpt-5.4-mini",
+    "verdict": "pass",
+    "findings": [],
+    "checked_invariants": [
+      "success path writes exactly one bounded receipt file",
+      "no receipt manifest or auxiliary apply-state file is written",
+      "browser payload rejection happens before read/write",
+      "rollback_live_ready remains false",
+      "recovery_operator_ready remains false",
+      "process_kill_performed remains false",
+      "current/original/auth touch flags remain false"
+    ]
+  }
+}

@@ -5812,6 +5812,47 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                         "&api_key=browser-key&secret=browser-secret"
                     )
                 )
+                apply_packet = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/recovery/rollback-apply",
+                        {},
+                    )
+                )
+                apply_with_payload = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/recovery/rollback-apply",
+                        {
+                            "artifact_id": "browser",
+                            "artifact_path": "/tmp/artifact",
+                            "path": "/tmp/forbidden",
+                            "snapshot_path": "/tmp/snapshot",
+                            "rollback_target": "/tmp/target",
+                            "digest": "browser",
+                            "session_id": "ccs-browser",
+                            "backend_id": "browser-backend",
+                            "route_id": "browser-route",
+                            "pid": "123",
+                            "process_id": "456",
+                            "CODEX_HOME": "/tmp/codex",
+                            "HOME": "/tmp/home",
+                            "auth": "browser-auth",
+                            "token": "browser-token",
+                            "api_key": "browser-key",
+                            "secret": "browser-secret",
+                        },
+                    )
+                )
+                non_object_apply_request = urllib.request.Request(
+                    f"{base}/api/codex/custom/recovery/rollback-apply",
+                    data=b"[]",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                non_object_apply = json.loads(
+                    NO_PROXY_OPENER.open(non_object_apply_request, timeout=10)
+                    .read()
+                    .decode("utf-8")
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -6096,6 +6137,89 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(apply_preflight_with_query["source_filesystem_read_performed"])
         self.assertFalse(apply_preflight_with_query["filesystem_read_performed"])
         self.assertFalse(apply_preflight_with_query["filesystem_write_performed"])
+        self.assertEqual(apply_packet["status"], "ok")
+        self.assertEqual(
+            apply_packet["machine_error_code"],
+            "ROLLBACK_APPLY_BOUNDED_LIVE_PERFORMED",
+        )
+        self.assertEqual(
+            apply_packet["claim_scope"],
+            "custom_codex_recovery_rollback_apply_bounded_live_only",
+        )
+        self.assertTrue(apply_packet["rollback_apply_preflight_required"])
+        self.assertTrue(apply_packet["rollback_apply_preflight_valid"])
+        self.assertTrue(apply_packet["rollback_apply_bounded_live_performed"])
+        self.assertTrue(apply_packet["rollback_apply_receipt_created"])
+        self.assertTrue(apply_packet["rollback_apply_receipt_path_redacted"])
+        self.assertTrue(apply_packet["rollback_apply_receipt_digest_present"])
+        self.assertRegex(apply_packet["rollback_apply_receipt_sha256"], r"^[0-9a-f]{64}$")
+        self.assertTrue(apply_packet["rollback_apply_receipt_provenance_verified"])
+        self.assertTrue(apply_packet["rollback_apply_receipt_payload_digest_verified"])
+        self.assertTrue(apply_packet["source_preflight_sha256_present"])
+        self.assertTrue(apply_packet["rollback_point_verified"])
+        self.assertTrue(apply_packet["filesystem_read_performed"])
+        self.assertEqual(apply_packet["filesystem_read_scope"], "owned_generated_recovery_artifact")
+        self.assertTrue(apply_packet["filesystem_write_performed"])
+        self.assertEqual(apply_packet["filesystem_write_scope"], "owned_generated_recovery_artifact")
+        self.assertTrue(apply_packet["rollback_apply_admitted"])
+        self.assertTrue(apply_packet["rollback_apply_ready"])
+        self.assertTrue(apply_packet["rollback_apply_performed"])
+        self.assertEqual(
+            apply_packet["rollback_apply_completed_scope"],
+            "bounded_apply_receipt_only",
+        )
+        self.assertTrue(apply_packet["rollback_completed"])
+        self.assertFalse(apply_packet["rollback_live_ready"])
+        self.assertFalse(apply_packet["process_kill_performed"])
+        self.assertFalse(apply_packet["recovery_operator_ready"])
+        self.assertFalse(apply_packet["current_codex_touched"])
+        self.assertFalse(apply_packet["original_codex_touched"])
+        self.assertFalse(apply_packet["current_codex_home_touched"])
+        self.assertFalse(apply_packet["auth_material_touched"])
+        self.assertFalse(apply_packet["secret_value_recorded"])
+        self.assertNotIn("/tmp/", json.dumps(apply_packet))
+        actions = {action["id"]: action for action in apply_packet["actions"]}
+        self.assertEqual(actions["rollback_apply"]["status"], "performed")
+        self.assertEqual(
+            actions["rollback_apply"]["completed_scope"],
+            "bounded_apply_receipt_only",
+        )
+        self.assertFalse(actions["process_kill"]["performed"])
+        self.assertEqual(apply_with_payload["status"], "blocked")
+        self.assertEqual(
+            apply_with_payload["machine_error_code"],
+            "ROLLBACK_APPLY_BROWSER_FIELD_REJECTED",
+        )
+        for field in (
+            "artifact_id",
+            "artifact_path",
+            "path",
+            "snapshot_path",
+            "rollback_target",
+            "digest",
+            "session_id",
+            "backend_id",
+            "route_id",
+            "pid",
+            "process_id",
+            "CODEX_HOME",
+            "HOME",
+            "auth",
+            "token",
+            "api_key",
+            "secret",
+        ):
+            self.assertIn(field, apply_with_payload["forbidden_fields"])
+        self.assertFalse(apply_with_payload["filesystem_read_performed"])
+        self.assertFalse(apply_with_payload["filesystem_write_performed"])
+        self.assertFalse(apply_with_payload["rollback_apply_performed"])
+        self.assertEqual(non_object_apply["status"], "blocked")
+        self.assertEqual(
+            non_object_apply["machine_error_code"],
+            "ROLLBACK_APPLY_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("invalid_body", non_object_apply["forbidden_fields"])
+        self.assertFalse(non_object_apply["filesystem_write_performed"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

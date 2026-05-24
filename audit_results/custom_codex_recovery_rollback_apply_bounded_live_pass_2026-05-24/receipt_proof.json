@@ -1,0 +1,19 @@
+{
+  "artifact_kind": "custom_codex_recovery_rollback_apply_receipt",
+  "claim_scope": "custom_codex_recovery_rollback_apply_bounded_live_only",
+  "completed_scope": "bounded_apply_receipt_only",
+  "receipt_digest_present": true,
+  "receipt_payload_digest_verified": true,
+  "receipt_provenance_verified": true,
+  "receipt_path_redacted": true,
+  "receipt_manifest_written": false,
+  "source_preflight_sha256_present": true,
+  "source_rollback_point_ref_present": true,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "current_codex_home_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "process_kill_performed": false,
+  "recovery_operator_ready": false
+}
