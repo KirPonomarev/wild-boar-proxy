@@ -28,6 +28,8 @@ class CloseoutResilienceTests(unittest.TestCase):
 
         for phrase in checker.REQUIRED_PHRASES:
             self.assertIn(phrase, text)
+        self.assertNotIn("next exact command", text)
+        self.assertNotIn("follow-up contour", text)
 
     def test_valid_closeout_passes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -43,8 +45,8 @@ class CloseoutResilienceTests(unittest.TestCase):
                         "- head: abc123",
                         "- touched files: tools/check_closeout_resilience.py",
                         "- tests run: python -m unittest tests.test_closeout_resilience",
-                        "- blocked risks: none",
-                        "- next exact command: CLOSED",
+                        "- blocked risks: no blocking risks remain",
+                        "- closure state: CLOSED",
                         "## Notes",
                         "- resume from here: CLOSED",
                     )
@@ -74,6 +76,40 @@ class CloseoutResilienceTests(unittest.TestCase):
         self.assertTrue(errors)
         self.assertTrue(
             any("## Contour Capsule" in error for error in errors),
+            errors,
+        )
+
+    def test_forward_plan_text_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "audit_results" / "sample_closeout.md"
+            path.parent.mkdir()
+            path.write_text(
+                "\n".join(
+                    (
+                        "# Sample Closeout",
+                        "## Contour Capsule",
+                        "- goal: prove the checker",
+                        "- branch: codex/sample",
+                        "- head: abc123",
+                        "- touched files: tools/check_closeout_resilience.py",
+                        "- tests run: python -m unittest tests.test_closeout_resilience",
+                        "- blocked risks: no blocking risks remain",
+                        "- closure state: CLOSED",
+                        "## Notes",
+                        "- resume from here: OPEN NEXT_CONTOUR",
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            errors = checker.validate_closeout(path)
+
+        self.assertTrue(errors)
+        self.assertTrue(
+            any(
+                "forward-plan text" in error or "must be exactly `CLOSED`" in error
+                for error in errors
+            ),
             errors,
         )
 

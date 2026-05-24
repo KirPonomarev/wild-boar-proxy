@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "contour": "REPO_ROUTE_TAIL_HYGIENE_PASS",
+  "status": "passed",
+  "changed_surfaces": [
+    "AGENTS.md",
+    "CANON.md",
+    "WORKFLOW_OS_V1_2.md",
+    "templates/CLOSEOUT_TEMPLATE.md",
+    "tools/check_closeout_resilience.py",
+    "tests/test_closeout_resilience.py"
+  ],
+  "tests": [
+    {
+      "command": "python3 -m unittest tests.test_closeout_resilience tests.test_repo_hygiene -q",
+      "result": "Ran 5 tests OK"
+    },
+    {
+      "command": "python3 -m py_compile tools/check_closeout_resilience.py tests/test_closeout_resilience.py tests/test_repo_hygiene.py",
+      "result": "OK"
+    }
+  ],
+  "runtime_changed": false,
+  "ui_changed": false,
+  "release_claims_changed": false
+}

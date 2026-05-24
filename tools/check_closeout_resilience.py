@@ -19,7 +19,7 @@ REQUIRED_PHRASES = (
     "- touched files:",
     "- tests run:",
     "- blocked risks:",
-    "- next exact command:",
+    "- closure state:",
     "resume from here:",
 )
 
@@ -47,13 +47,25 @@ FIELD_REGEX = {
     "blocked risks": re.compile(
         r"^\s*-\s*blocked risks:\s*(.+?)\s*$", flags=re.IGNORECASE | re.MULTILINE
     ),
-    "next exact command": re.compile(
-        r"^\s*-\s*next exact command:\s*(.+?)\s*$", flags=re.IGNORECASE | re.MULTILINE
+    "closure state": re.compile(
+        r"^\s*-\s*closure state:\s*(.+?)\s*$", flags=re.IGNORECASE | re.MULTILINE
     ),
     "resume from here": re.compile(
         r"^\s*-\s*resume from here:\s*(.+?)\s*$", flags=re.IGNORECASE | re.MULTILINE
     ),
 }
+
+FORWARD_PLAN_PATTERNS = (
+    re.compile(r"^\s*-\s*next action\s*:", flags=re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*-\s*next exact command\s*:", flags=re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*-\s*follow-up contour\s*:", flags=re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bnext[_ -]?contour\b", flags=re.IGNORECASE),
+    re.compile(r"\brecommended next\b", flags=re.IGNORECASE),
+    re.compile(r"\bmaster[_ -]?plan\b", flags=re.IGNORECASE),
+    re.compile(r"\bfinal[_ -]?execution[_ -]?plan\b", flags=re.IGNORECASE),
+    re.compile(r"\bfinal[_ -]?critical[_ -]?path\b", flags=re.IGNORECASE),
+    re.compile(r"\bnext[_ -]?step\b", flags=re.IGNORECASE),
+)
 
 
 def is_closeout_path(path: Path) -> bool:
@@ -150,7 +162,7 @@ def validate_closeout(path: Path) -> list[str]:
         "touched files",
         "tests run",
         "blocked risks",
-        "next exact command",
+        "closure state",
         "resume from here",
     ):
         value = _field_value(text, field_name)
@@ -160,10 +172,19 @@ def validate_closeout(path: Path) -> list[str]:
             errors.append(f"{path}: field `{field_name}` is empty or placeholder")
 
     resume = _field_value(text, "resume from here")
-    if resume and resume.strip().upper() != "CLOSED" and resume.strip().lower().startswith("closed /"):
-        errors.append(
-            f"{path}: field `resume from here` should be `CLOSED` or an exact next contour/command"
-        )
+    if resume and resume.strip().upper() != "CLOSED":
+        errors.append(f"{path}: field `resume from here` must be exactly `CLOSED`")
+
+    closure_state = _field_value(text, "closure state")
+    if closure_state and closure_state.strip().upper() != "CLOSED":
+        errors.append(f"{path}: field `closure state` must be exactly `CLOSED`")
+
+    for pattern in FORWARD_PLAN_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            errors.append(
+                f"{path}: closeout stores forward-plan text `{match.group(0).strip()}`"
+            )
     return errors
 
 

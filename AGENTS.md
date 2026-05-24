@@ -38,6 +38,9 @@ It does not override the product/runtime canon above.
 - Do not create or rely on repo-resident master plans, roadmaps, next-contour
   queues, or repair plans. Active planning belongs outside the repo; this repo
   keeps canon, contracts, implementation, tests, and completed evidence.
+- Treat `audit_results/` as historical evidence only. It is not an active
+  navigation source for "what is next"; use the current task thread and the
+  current contour's completed closeout only.
 
 ## Current Repo Boundaries
 
@@ -114,3 +117,6 @@ Closeout resilience is enforced both by policy and by git hooks.
   `python3 tools/check_closeout_resilience.py --staged-only`
 - Any commit with a changed `audit_results/*closeout*.md` and missing/placeholder
   `Contour Capsule` or `resume from here` fields must fail.
+- Any new or changed closeout that stores next-contour pointers, master-plan
+  routes, or future execution queues must fail. Completed evidence closes a
+  contour; it must not seed the next one.

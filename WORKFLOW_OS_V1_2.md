@@ -101,9 +101,9 @@ Treat thread context as volatile. Treat repo packets and commits as durable.
 - Do not commit raw tool dumps, archived thread extracts, private research
   notes, external-reference artifacts, tokens, logs, or large JSONL extracts.
 - At closeout, include a `Contour Capsule` with goal, branch, head, touched
-  files, tests run, blocked risks, and the next exact command.
-- At closeout, include `resume from here` so a new thread can continue without
-  replaying long chat history.
+  files, tests run, blocked risks, and closure state.
+- At closeout, `resume from here` must be `CLOSED`. Future plans, next-contour
+  pointers, master-plan routes, and repair queues belong outside the repo.
 - Before committing a new or changed closeout artifact, run:
   `python3 tools/check_closeout_resilience.py`
 - Enable automatic enforcement in local clones:

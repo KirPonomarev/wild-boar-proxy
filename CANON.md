@@ -64,6 +64,10 @@ Completed contour evidence is allowed only when it records what was already
 done and verified. It must not become a forward plan or a source of product
 truth.
 
+Historical evidence is not route guidance. Agents must not derive the active
+next contour from `audit_results/`, historical closeouts, old spec files, or
+plan-like text preserved in completed artifacts.
+
 ## Owner authorization rule
 
 The project owner may grant project-scoped standing approval in the current
