@@ -15,11 +15,11 @@ Proposed
 
 Wild Boar Proxy canon keeps `CLIProxyAPI` as the engine and treats Wild Boar
 Proxy as the managing layer. The external-models lab proved there is product
-value in route-based external API model management, but `MASTER_PLAN.md` still
-assigns local proxy servers, HTTP API surface, OpenAI-compatible endpoints, and
-provider protocol translation to engine ownership. This decision is expensive to
-reverse because an uncontrolled merge would create a second hidden engine and a
-new runtime truth surface.
+value in route-based external API model management, but the canon and runtime
+contract keep local proxy servers, HTTP API surface, OpenAI-compatible
+endpoints, and provider protocol translation under engine ownership. This
+decision is expensive to reverse because an uncontrolled merge would create a
+second hidden engine and a new runtime truth surface.
 
 ## Decision
 
@@ -67,6 +67,7 @@ We introduce external-models first as a bounded compatibility adapter contract.
 - runtime packet:
   - none in C1
 - supporting docs:
-  - `MASTER_PLAN.md`
+  - `CANON.md`
+  - `RUNTIME_CONTRACT.md`
   - `COMMAND_API.md`
   - `EXTERNAL_AGENT_LAB.md`

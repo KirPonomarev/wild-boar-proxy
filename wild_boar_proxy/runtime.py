@@ -153,7 +153,7 @@ LAUNCHABLE_PACKAGE_EXECUTABLE_NAME = "WildBoarProxy"
 LAUNCHABLE_PACKAGE_ARTIFACT_KIND = "macos_app_bundle"
 EXPERIMENTAL_PACKAGE_ALLOWED_TOP_LEVEL_DIRS = {"wild_boar_proxy", "docs"}
 EXPERIMENTAL_PACKAGE_ALLOWED_ROOT_SUFFIXES = {".md", ".txt"}
-EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "MASTER_PLAN.md"
+EXPERIMENTAL_PACKAGE_REPO_MARKER_FILE = "CANON.md"
 EXPERIMENTAL_PACKAGE_REPO_MARKER_DIR = "wild_boar_proxy"
 EXPERIMENTAL_PACKAGE_EXCLUDED_BASENAMES = {
     ".env",
@@ -4441,24 +4441,14 @@ def list_experimental_package_files(source_root: Path, output_dir: Path) -> list
     return package_files
 
 
-def read_experimental_plan_metadata(source_root: Path) -> dict[str, str]:
-    plan_path = source_root / "MASTER_PLAN.md"
-    if not plan_path.is_file():
+def read_experimental_repository_metadata(source_root: Path) -> dict[str, str]:
+    canon_path = source_root / "CANON.md"
+    if not canon_path.is_file():
         return {}
-    plan_version = ""
-    plan_date = ""
-    for raw_line in plan_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("PLAN_VERSION:"):
-            plan_version = line.split(":", 1)[1].strip()
-        if line.startswith("PLAN_DATE:"):
-            plan_date = line.split(":", 1)[1].strip()
-    metadata: dict[str, str] = {}
-    if plan_version:
-        metadata["plan_version"] = plan_version
-    if plan_date:
-        metadata["plan_date"] = plan_date
-    return metadata
+    return {
+        "repository_truth_policy": "canon_contracts_code_tests_completed_evidence",
+        "repo_plan_files_allowed": "false",
+    }
 
 
 def launchable_package_app_path(output_dir: Path) -> Path:
@@ -4658,7 +4648,7 @@ def run_package_experimental_build(
             "included_files": [
                 str(path.relative_to(source_root)) for path in package_files
             ],
-            **read_experimental_plan_metadata(source_root),
+            **read_experimental_repository_metadata(source_root),
         }
         manifest = {
             "schema_version": EXPERIMENTAL_PACKAGE_SCHEMA_VERSION,
@@ -4914,7 +4904,7 @@ def run_package_launchable_build(
             "included_files": [
                 str(path.relative_to(source_root)) for path in package_files
             ],
-            **read_experimental_plan_metadata(source_root),
+            **read_experimental_repository_metadata(source_root),
         }
         write_json_artifact(metadata_path, metadata)
         metadata_sha256 = hash_file(metadata_path)

@@ -11,12 +11,11 @@ The full workflow canon lives in [WORKFLOW_OS_V1_2.md](WORKFLOW_OS_V1_2.md).
 When documents conflict, follow this order:
 
 1. `CANON.md`
-2. `MASTER_PLAN.md`
-3. `RUNTIME_CONTRACT.md`
-4. `STATE_SCHEMA.md`
-5. `COMMAND_API.md`
-6. `DELIVERY_RULES.md`
-7. `README.md`
+2. `RUNTIME_CONTRACT.md`
+3. `STATE_SCHEMA.md`
+4. `COMMAND_API.md`
+5. `DELIVERY_RULES.md`
+6. `README.md`
 
 `WORKFLOW_OS_V1_2.md` governs how work is executed.
 It does not override the product/runtime canon above.
@@ -36,6 +35,9 @@ It does not override the product/runtime canon above.
 - Follow strict JSON command surfaces as the primary truth source.
 - Do not infer success from cached state, logs, narrative memory, or exit code
   alone when command packets exist.
+- Do not create or rely on repo-resident master plans, roadmaps, next-contour
+  queues, or repair plans. Active planning belongs outside the repo; this repo
+  keeps canon, contracts, implementation, tests, and completed evidence.
 
 ## Current Repo Boundaries
 
@@ -67,6 +69,8 @@ Until that token is truthfully earned:
   for expensive-to-reverse decisions.
 - Use the closeout template at [templates/CLOSEOUT_TEMPLATE.md](templates/CLOSEOUT_TEMPLATE.md)
   for completed contours.
+- Contour/spec/closeout artifacts may document admitted scope and completed
+  evidence. They must not become a forward roadmap or master plan.
 
 ## Stop Token
 

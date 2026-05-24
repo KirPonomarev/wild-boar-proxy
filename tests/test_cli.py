@@ -1158,6 +1158,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(artifact_path.is_file())
         self.assertTrue(manifest_path.is_file())
         self.assertTrue(metadata_path.is_file())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        self.assertEqual(metadata["repo_plan_files_allowed"], "false")
+        self.assertNotIn("plan_version", metadata)
+        self.assertNotIn("plan_date", metadata)
         self.assertCountEqual(
             payload["changed_files"],
             [str(artifact_path), str(manifest_path), str(metadata_path)],
@@ -1489,6 +1493,10 @@ class CliTests(unittest.TestCase):
         self.assertTrue(artifact_path.is_dir())
         self.assertTrue(manifest_path.is_file())
         self.assertTrue(metadata_path.is_file())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        self.assertEqual(metadata["repo_plan_files_allowed"], "false")
+        self.assertNotIn("plan_version", metadata)
+        self.assertNotIn("plan_date", metadata)
         self.assertCountEqual(
             payload["changed_files"],
             [str(artifact_path), str(manifest_path), str(metadata_path)],

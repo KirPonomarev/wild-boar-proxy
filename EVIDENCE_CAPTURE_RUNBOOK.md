@@ -184,7 +184,7 @@ Before any dry-run or live step:
 3. Confirm the command contract exists:
 
    ```sh
-   rg -n "rollout evidence capture 16|field_evidence_observed_only" COMMAND_API.md MASTER_PLAN.md
+   rg -n "rollout evidence capture 16|field_evidence_observed_only" COMMAND_API.md CANON.md RUNTIME_CONTRACT.md
    ```
 
 4. Confirm forbidden claims are not introduced as successful outcomes.

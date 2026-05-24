@@ -161,7 +161,7 @@ Use explicit decision ownership.
 
 - local implementation choices inside approved scope
 - narrow internal naming/structure decisions
-- task decomposition inside an agreed plan
+- task decomposition inside approved scope
 
 If ownership is unclear, do not continue as if it were obvious.
 
@@ -363,10 +363,13 @@ Require it after a completed contour.
 
 ## 19. Staleness Rule
 
-If `rules`, `spec`, `ADR`, `runbook`, or `plan` no longer reflect reality, they
-are `suspect until refreshed`.
+If `rules`, `spec`, `ADR`, or `runbook` no longer reflect reality, they are
+`suspect until refreshed`.
 
 Old text does not become authoritative merely by existing in the repo.
+
+Planning documents are not repository truth. Do not store master plans,
+roadmaps, next-contour queues, or repair plans in the repo.
 
 ## 20. Process Override Rule
 

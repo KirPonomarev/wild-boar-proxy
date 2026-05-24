@@ -9,12 +9,11 @@ Scope: isolated `external_agent_lab` lane only
 Decision order used:
 
 1. `CANON.md`
-2. `MASTER_PLAN.md`
-3. `RUNTIME_CONTRACT.md`
-4. `STATE_SCHEMA.md`
-5. `COMMAND_API.md`
-6. `DELIVERY_RULES.md`
-7. `README.md`
+2. `RUNTIME_CONTRACT.md`
+3. `STATE_SCHEMA.md`
+4. `COMMAND_API.md`
+5. `DELIVERY_RULES.md`
+6. `README.md`
 
 Boundary status:
 

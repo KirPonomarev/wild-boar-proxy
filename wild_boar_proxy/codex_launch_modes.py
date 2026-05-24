@@ -618,7 +618,7 @@ def build_safe_app_copy_bounded_helper_execution_packet(
         "block_reason_code": "",
         "final_verdict": "WEB_SAFE_APP_COPY_BOUNDED_HELPER_EXECUTION_READY",
         "human_message": "Bounded helper execution succeeded and cleanup was proven.",
-        "next_action": "return_to_master_plan_account_connect_dry_run",
+        "next_action": "return_to_owner_task_account_connect_dry_run",
     }
 
 

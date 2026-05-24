@@ -27,12 +27,12 @@ The project does not replace the proxy engine. It owns the control layer:
 
 This repository is the bootstrap for the public experimental project.
 
-Current next contour is execution-core repair for reserve-first stage-20
-re-entry.
-The runtime can be live and useful while the formal stage-20 owner path remains
-blocked by proof-posture drift.
-Basic companion UI work stays gated behind
-`EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY`.
+The repository does not store master plans, roadmaps, or next-contour queues.
+Active planning lives outside the repo in the current task thread, handoff, or
+issue tracker.
+
+Repository truth is limited to canon, contracts, implementation, tests, and
+completed evidence.
 
 ## Managed pool capacity
 

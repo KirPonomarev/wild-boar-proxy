@@ -142,7 +142,7 @@ It must emit:
 - a package artifact (`tar.gz` or `zip`) built from allowlisted repo
   source/docs material only
 - a checksum manifest for the artifact
-- metadata with plan version/date when available
+- metadata with repository truth policy when available
 
 The package surface must not include runtime/private data such as auth files,
 runtime dumps, logs, `.env`, or `~/.codex-custom-cli` material.
@@ -1415,7 +1415,7 @@ It must expose explicit machine-readable separation between:
 - observed stable inventory reporting
 - registry source-copy inputs
 - approved repair-target contract surface
-- future target reconciliation plan
+- future target reconciliation steps
 - repair apply authority
 
 Required stable-repair contract groups:
