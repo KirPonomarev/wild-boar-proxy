@@ -5604,6 +5604,125 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
             },
         )
 
+    def test_codex_custom_recovery_rollback_point_dry_run_endpoint_is_readonly(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(live_payloads())),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/rollback-point-dry-run")
+                )
+                forbidden_posts: dict[str, int] = {}
+                for suffix in (
+                    "rollback-point-dry-run",
+                    "rollback-point",
+                    "snapshot",
+                    "rollback",
+                    "apply",
+                    "cleanup-path",
+                    "kill",
+                ):
+                    try:
+                        post_json(f"{base}/api/codex/custom/recovery/{suffix}", {})
+                    except urllib.error.HTTPError as exc:
+                        forbidden_posts[suffix] = exc.code
+                    else:  # pragma: no cover - defensive assertion branch
+                        forbidden_posts[suffix] = HTTPStatus.OK
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_DRY_RUN_CONTRACT")
+        self.assertEqual(packet["claim_scope"], "custom_codex_recovery_rollback_point_dry_run_only")
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        for forbidden_field in (
+            "path",
+            "snapshot_path",
+            "rollback_target",
+            "pid",
+            "process_id",
+            "CODEX_HOME",
+            "HOME",
+        ):
+            self.assertIn(forbidden_field, packet["forbidden_browser_fields"])
+        self.assertTrue(packet["rollback_point_contract_defined"])
+        self.assertFalse(packet["rollback_point_present"])
+        self.assertFalse(packet["rollback_point_create_admitted"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertTrue(packet["rollback_write_surfaces_contract_defined"])
+        self.assertFalse(packet["rollback_write_surfaces_machine_checked"])
+        self.assertTrue(packet["rollback_write_surfaces_dry_run_checked"])
+        self.assertTrue(packet["rollback_verification_packet_defined"])
+        self.assertFalse(packet["rollback_verification_packet_present"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_operator_ready"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_operator_ready"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["process_kill_admitted"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["snapshot_file_created"])
+        self.assertFalse(packet["snapshot_create_admitted"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["current_codex_home_touched"])
+        self.assertFalse(packet["current_codex_home_allowed_surface"])
+        self.assertFalse(packet["auth_material_allowed_surface"])
+        self.assertFalse(packet["arbitrary_path_accepted"])
+        self.assertFalse(packet["arbitrary_path_allowed_surface"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertFalse(packet["dangerous_action_mutation_allowed"])
+        self.assertEqual(
+            packet["allowed_write_surface_ids"],
+            [
+                "owned_temp_session_root",
+                "owned_wbp_runtime_state",
+                "owned_generated_recovery_artifact",
+            ],
+        )
+        for forbidden_surface in (
+            "current_codex_home",
+            "current_codex_process",
+            "auth_material",
+            "arbitrary_path",
+        ):
+            self.assertIn(forbidden_surface, packet["forbidden_surfaces"])
+        actions = {action["id"]: action for action in packet["actions"]}
+        self.assertFalse(actions["rollback_point_create"]["mutation_allowed"])
+        self.assertFalse(actions["rollback_point_create"]["browser_payload_allowed"])
+        self.assertFalse(actions["rollback_point_create"]["admitted"])
+        self.assertFalse(actions["rollback_apply"]["mutation_allowed"])
+        self.assertFalse(actions["rollback_apply"]["admitted"])
+        self.assertEqual(
+            packet["next_contour"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_ADMISSION_PASS",
+        )
+        self.assertFalse(packet["next_contour_claimed"])
+        self.assertEqual(
+            forbidden_posts,
+            {
+                "rollback-point-dry-run": HTTPStatus.NOT_FOUND,
+                "rollback-point": HTTPStatus.NOT_FOUND,
+                "snapshot": HTTPStatus.NOT_FOUND,
+                "rollback": HTTPStatus.NOT_FOUND,
+                "apply": HTTPStatus.NOT_FOUND,
+                "cleanup-path": HTTPStatus.NOT_FOUND,
+                "kill": HTTPStatus.NOT_FOUND,
+            },
+        )
+
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))

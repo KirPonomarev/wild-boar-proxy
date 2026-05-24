@@ -553,6 +553,7 @@
             <div>Contract owner</div><div id="codexCustomRecoveryContractOwner">contract pending</div>
             <div>Session actions</div><div id="codexCustomRecoveryAdmittedSessionActions">selected session required · readiness pending</div>
             <div>Rollback/process</div><div id="codexCustomRecoveryRollbackProcessOwner">dry-run contract pending</div>
+            <div>Rollback point</div><div id="codexCustomRecoveryRollbackPoint">dry-run contract pending</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -577,6 +578,10 @@
               <button id="codexCustomRecoveryRollbackProcessOwnerAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
                 <span>Rollback/process contract</span>
+              </button>
+              <button id="codexCustomRecoveryRollbackPointAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/info.png" alt="" aria-hidden="true">
+                <span>Rollback point dry-run</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -645,6 +650,32 @@
   "diagnostics_counted_as_recovery_action": false,
   "readonly_checks_counted_as_mutation": false,
   "session_create_counted_as_recovery_action": false
+}</pre>
+          <pre id="codexCustomRecoveryRollbackPointPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ROLLBACK_POINT_DRY_RUN_NOT_LOADED",
+  "claim_scope": "custom_codex_recovery_rollback_point_dry_run_only",
+  "rollback_point_contract_defined": false,
+  "rollback_point_present": false,
+  "rollback_point_create_admitted": false,
+  "rollback_apply_admitted": false,
+  "rollback_live_ready": false,
+  "rollback_write_surfaces_contract_defined": false,
+  "rollback_write_surfaces_machine_checked": false,
+  "rollback_write_surfaces_dry_run_checked": false,
+  "rollback_verification_packet_defined": false,
+  "recovery_operator_ready": false,
+  "filesystem_write_performed": false,
+  "snapshot_file_created": false,
+  "browser_payload_allowed": false,
+  "browser_payload_allowed_keys": [],
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "current_codex_home_touched": false,
+  "auth_material_allowed_surface": false,
+  "arbitrary_path_accepted": false,
+  "arbitrary_path_allowed_surface": false,
+  "dangerous_actions_disabled": true
 }</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",

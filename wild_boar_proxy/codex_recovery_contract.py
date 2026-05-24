@@ -13,6 +13,8 @@ FORBIDDEN_BROWSER_FIELDS = [
     "backend_id",
     "route_id",
     "path",
+    "snapshot_path",
+    "rollback_target",
     "pid",
     "process_id",
     "token",
@@ -646,5 +648,245 @@ def build_custom_recovery_rollback_process_owner_contract_packet(
             },
         ],
         "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _rollback_process_owner_contract_ready(packet: dict[str, Any]) -> bool:
+    required_false_fields = [
+        "contract_endpoint_mutation_allowed",
+        "browser_payload_allowed",
+        "rollback_live_ready",
+        "rollback_apply_admitted",
+        "rollback_point_present",
+        "rollback_write_surfaces_declared",
+        "rollback_verification_packet_present",
+        "process_kill_live_ready",
+        "process_kill_admitted",
+        "owned_process_identity_present",
+        "current_codex_process_excluded",
+        "current_codex_process_candidate",
+        "recovery_operator_ready",
+        "operator_ready_claimed",
+        "rollback_operator_ready",
+        "rollback_claimed",
+        "process_kill_operator_ready",
+        "process_kill_claimed",
+        "diagnostics_counted_as_recovery_action",
+        "readonly_checks_counted_as_mutation",
+        "session_create_counted_as_recovery_action",
+        "current_codex_touched",
+        "original_codex_touched",
+        "current_codex_home_touched",
+        "arbitrary_path_accepted",
+        "arbitrary_process_kill_allowed",
+        "arbitrary_path_cleanup_allowed",
+        "dangerous_action_mutation_allowed",
+        "next_contour_claimed",
+    ]
+    required_true_fields = [
+        "rollback_contract_defined",
+        "rollback_point_required",
+        "rollback_write_surfaces_required",
+        "rollback_verification_packet_required",
+        "process_owner_contract_defined",
+        "owned_process_identity_required",
+        "current_codex_process_exclusion_required",
+        "diagnostics_support_artifact_only",
+        "dangerous_actions_disabled",
+    ]
+    forbidden_fields = packet.get("forbidden_browser_fields")
+    readonly = packet.get("readonly_sources")
+    prerequisites = packet.get("prerequisites")
+    actions = packet.get("actions")
+    action_by_id = {
+        action.get("id"): action
+        for action in actions
+        if isinstance(action, dict) and isinstance(action.get("id"), str)
+    } if isinstance(actions, list) else {}
+    rollback_action = action_by_id.get("rollback_readiness", {})
+    kill_action = action_by_id.get("stuck_process_kill_readiness", {})
+    cleanup_path_action = action_by_id.get("cleanup_arbitrary_path", {})
+    return (
+        packet.get("status") == "ok"
+        and packet.get("machine_error_code") == "ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT"
+        and packet.get("claim_scope")
+        == "custom_codex_recovery_rollback_process_owner_dry_run_contract_only"
+        and packet.get("browser_payload_allowed_keys") == []
+        and all(packet.get(field) is False for field in required_false_fields)
+        and all(packet.get(field) is True for field in required_true_fields)
+        and packet.get("contract_readonly_sources_ok") is True
+        and isinstance(readonly, dict)
+        and readonly.get("original_status_ok") is True
+        and readonly.get("custom_status_ok") is True
+        and readonly.get("accounts_readonly_ok") is True
+        and readonly.get("api_readonly_ok") is True
+        and isinstance(forbidden_fields, list)
+        and all(field in forbidden_fields for field in FORBIDDEN_BROWSER_FIELDS)
+        and isinstance(prerequisites, list)
+        and {
+            item.get("id")
+            for item in prerequisites
+            if isinstance(item, dict)
+            and item.get("required") is True
+            and item.get("present") is False
+            and item.get("blocks_live_ready") is True
+        }
+        >= {
+            "rollback_point",
+            "rollback_write_surfaces",
+            "rollback_verification_packet",
+            "owned_process_identity",
+            "current_codex_process_exclusion",
+        }
+        and isinstance(actions, list)
+        and rollback_action.get("status") == "dry_run_only"
+        and kill_action.get("status") == "dry_run_only"
+        and cleanup_path_action.get("status") == "disabled"
+        and not any(
+            isinstance(action, dict)
+            and (
+                action.get("mutation_allowed") is True
+                or action.get("browser_payload_allowed") is True
+                or action.get("live_ready") is True
+                or action.get("admitted") is True
+            )
+            for action in actions
+        )
+    )
+
+
+def build_custom_recovery_rollback_point_dry_run_packet(
+    *,
+    rollback_process_owner_contract: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the dry-run-only rollback point contract packet."""
+
+    upstream = rollback_process_owner_contract if isinstance(rollback_process_owner_contract, dict) else {}
+    upstream_ok = _rollback_process_owner_contract_ready(upstream)
+    allowed_surfaces = [
+        {
+            "id": "owned_temp_session_root",
+            "owner": "codex_custom_session_manager",
+            "status": "contract_metadata_only",
+            "filesystem_write_admitted": False,
+            "machine_checked": False,
+        },
+        {
+            "id": "owned_wbp_runtime_state",
+            "owner": "wbp_control_layer",
+            "status": "contract_metadata_only",
+            "filesystem_write_admitted": False,
+            "machine_checked": False,
+        },
+        {
+            "id": "owned_generated_recovery_artifact",
+            "owner": "wbp_control_layer",
+            "status": "contract_metadata_only",
+            "filesystem_write_admitted": False,
+            "machine_checked": False,
+        },
+    ]
+    forbidden_surfaces = [
+        "current_codex_home",
+        "current_codex_process",
+        "original_codex_profile",
+        "host_codex_profile",
+        "arbitrary_path",
+        "auth_material",
+        "token_store",
+        "secret_file",
+        "global_runtime_reset",
+        "external_account_state",
+        "external_api_route_secret",
+    ]
+    return {
+        "schema_version": 1,
+        "status": "ok" if upstream_ok else "blocked",
+        "machine_error_code": (
+            "ROLLBACK_POINT_DRY_RUN_CONTRACT"
+            if upstream_ok
+            else "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED"
+        ),
+        "block_reason_code": "" if upstream_ok else "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED",
+        "captured_at_utc": utc_now(),
+        "claim_scope": "custom_codex_recovery_rollback_point_dry_run_only",
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-point-dry-run",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-process-owner-contract",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS,
+        "browser_forbidden_fields_rejected": True,
+        "rollback_point_contract_defined": upstream_ok,
+        "rollback_point_present": False,
+        "rollback_point_create_admitted": False,
+        "rollback_apply_admitted": False,
+        "rollback_live_ready": False,
+        "rollback_write_surfaces_contract_defined": True,
+        "rollback_write_surfaces_machine_checked": False,
+        "rollback_write_surfaces_dry_run_checked": True,
+        "rollback_verification_packet_defined": True,
+        "rollback_verification_packet_present": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "filesystem_write_performed": False,
+        "snapshot_file_created": False,
+        "snapshot_create_admitted": False,
+        "snapshot_target_browser_supplied": False,
+        "diagnostics_support_artifact_only": True,
+        "diagnostics_counted_as_recovery_action": False,
+        "readonly_checks_counted_as_mutation": False,
+        "session_create_counted_as_recovery_action": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "current_codex_home_allowed_surface": False,
+        "auth_material_allowed_surface": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "allowed_write_surfaces": allowed_surfaces,
+        "allowed_write_surface_ids": [surface["id"] for surface in allowed_surfaces],
+        "forbidden_surfaces": forbidden_surfaces,
+        "missing_prerequisites": [
+            "rollback_point_create_admission",
+            "rollback_point_live_creation",
+            "rollback_verification_packet_instance",
+        ],
+        "actions": [
+            {
+                "id": "rollback_point_create",
+                "status": "dry_run_only",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "disabled_reason_code": "ROLLBACK_POINT_CREATE_NOT_ADMITTED",
+            },
+            {
+                "id": "rollback_snapshot_create",
+                "status": "dry_run_only",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "disabled_reason_code": "SNAPSHOT_CREATE_NOT_ADMITTED",
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "disabled_reason_code": "ROLLBACK_APPLY_NOT_ADMITTED",
+            },
+        ],
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_ADMISSION_PASS",
         "next_contour_claimed": False,
     }

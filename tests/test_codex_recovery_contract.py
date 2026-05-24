@@ -8,6 +8,7 @@ import unittest
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
+    build_custom_recovery_rollback_point_dry_run_packet,
     build_custom_recovery_rollback_process_owner_contract_packet,
 )
 
@@ -310,6 +311,189 @@ class CodexRecoveryContractTests(unittest.TestCase):
         self.assertFalse(packet["recovery_operator_ready"])
         self.assertFalse(packet["rollback_apply_admitted"])
         self.assertFalse(packet["process_kill_admitted"])
+
+    def test_rollback_point_dry_run_contract_is_metadata_only_without_writes(self) -> None:
+        contract = build_custom_recovery_contract_packet(
+            original_status={"status": "ok"},
+            custom_status={"status": "ok"},
+            accounts_readonly=ok_readonly("accounts_readonly"),
+            api_readonly=ok_readonly("api_connections_readonly"),
+        )
+        process_owner = build_custom_recovery_rollback_process_owner_contract_packet(
+            contract_packet=contract,
+        )
+
+        packet = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract=process_owner,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_POINT_DRY_RUN_CONTRACT")
+        self.assertEqual(packet["claim_scope"], "custom_codex_recovery_rollback_point_dry_run_only")
+        self.assertEqual(
+            packet["contract_endpoint"],
+            "/api/codex/custom/recovery/rollback-point-dry-run",
+        )
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        for forbidden_field in (
+            "path",
+            "snapshot_path",
+            "rollback_target",
+            "pid",
+            "process_id",
+            "CODEX_HOME",
+            "HOME",
+        ):
+            self.assertIn(forbidden_field, packet["forbidden_browser_fields"])
+        self.assertTrue(packet["rollback_point_contract_defined"])
+        self.assertFalse(packet["rollback_point_present"])
+        self.assertFalse(packet["rollback_point_create_admitted"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertTrue(packet["rollback_write_surfaces_contract_defined"])
+        self.assertFalse(packet["rollback_write_surfaces_machine_checked"])
+        self.assertTrue(packet["rollback_write_surfaces_dry_run_checked"])
+        self.assertTrue(packet["rollback_verification_packet_defined"])
+        self.assertFalse(packet["rollback_verification_packet_present"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_operator_ready"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_operator_ready"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["process_kill_admitted"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["snapshot_file_created"])
+        self.assertFalse(packet["snapshot_create_admitted"])
+        self.assertFalse(packet["snapshot_target_browser_supplied"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["current_codex_home_touched"])
+        self.assertFalse(packet["current_codex_home_allowed_surface"])
+        self.assertFalse(packet["auth_material_allowed_surface"])
+        self.assertFalse(packet["arbitrary_path_accepted"])
+        self.assertFalse(packet["arbitrary_path_allowed_surface"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertFalse(packet["dangerous_action_mutation_allowed"])
+        self.assertEqual(
+            packet["allowed_write_surface_ids"],
+            [
+                "owned_temp_session_root",
+                "owned_wbp_runtime_state",
+                "owned_generated_recovery_artifact",
+            ],
+        )
+        self.assertNotIn("current_codex_home", packet["allowed_write_surface_ids"])
+        for surface in packet["allowed_write_surfaces"]:
+            self.assertEqual(surface["status"], "contract_metadata_only")
+            self.assertFalse(surface["filesystem_write_admitted"])
+            self.assertFalse(surface["machine_checked"])
+        for forbidden_surface in (
+            "current_codex_home",
+            "current_codex_process",
+            "auth_material",
+            "token_store",
+            "arbitrary_path",
+            "external_api_route_secret",
+        ):
+            self.assertIn(forbidden_surface, packet["forbidden_surfaces"])
+        actions = {action["id"]: action for action in packet["actions"]}
+        self.assertEqual(actions["rollback_point_create"]["status"], "dry_run_only")
+        self.assertFalse(actions["rollback_point_create"]["mutation_allowed"])
+        self.assertFalse(actions["rollback_point_create"]["browser_payload_allowed"])
+        self.assertFalse(actions["rollback_point_create"]["admitted"])
+        self.assertEqual(actions["rollback_apply"]["status"], "disabled")
+        self.assertFalse(actions["rollback_apply"]["mutation_allowed"])
+        self.assertFalse(actions["rollback_apply"]["admitted"])
+        self.assertEqual(
+            packet["next_contour"],
+            "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_CREATE_ADMISSION_PASS",
+        )
+        self.assertFalse(packet["next_contour_claimed"])
+
+    def test_rollback_point_dry_run_blocks_without_process_owner_contract(self) -> None:
+        packet = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract={"status": "blocked"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED")
+        self.assertEqual(packet["block_reason_code"], "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED")
+        self.assertFalse(packet["rollback_point_contract_defined"])
+        self.assertFalse(packet["rollback_point_create_admitted"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertTrue(packet["rollback_write_surfaces_contract_defined"])
+        self.assertFalse(packet["rollback_write_surfaces_machine_checked"])
+        self.assertTrue(packet["rollback_write_surfaces_dry_run_checked"])
+        self.assertTrue(packet["rollback_verification_packet_defined"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["snapshot_file_created"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+
+    def test_rollback_point_dry_run_rejects_shallow_green_process_owner_packet(self) -> None:
+        packet = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract={
+                "status": "ok",
+                "machine_error_code": "ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED")
+        self.assertFalse(packet["rollback_point_contract_defined"])
+        self.assertFalse(packet["rollback_point_present"])
+        self.assertFalse(packet["rollback_point_create_admitted"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["snapshot_file_created"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["original_codex_touched"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+
+    def test_rollback_point_dry_run_rejects_green_packet_without_source_actions(self) -> None:
+        contract = build_custom_recovery_contract_packet(
+            original_status={"status": "ok"},
+            custom_status={"status": "ok"},
+            accounts_readonly=ok_readonly("accounts_readonly"),
+            api_readonly=ok_readonly("api_connections_readonly"),
+        )
+        process_owner = build_custom_recovery_rollback_process_owner_contract_packet(
+            contract_packet=contract,
+        )
+        forged_process_owner = {
+            **process_owner,
+            "readonly_sources": {
+                "original_status_ok": True,
+                "custom_status_ok": True,
+                "accounts_readonly_ok": True,
+                "api_readonly_ok": True,
+            },
+            "actions": [],
+        }
+
+        packet = build_custom_recovery_rollback_point_dry_run_packet(
+            rollback_process_owner_contract=forged_process_owner,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_CONTRACT_REQUIRED")
+        self.assertFalse(packet["rollback_point_contract_defined"])
+        self.assertFalse(packet["rollback_point_create_admitted"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertFalse(packet["filesystem_write_performed"])
+        self.assertFalse(packet["snapshot_file_created"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["browser_payload_allowed"])
 
 
 if __name__ == "__main__":
