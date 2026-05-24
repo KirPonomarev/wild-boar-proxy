@@ -1,0 +1,89 @@
+{
+  "verdict": "PASS",
+  "blockers": [],
+  "findings": [
+    {
+      "id": "canon_server_owned_opaque_token_only",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py adds LegacyImportTokenRecord with only token_ref, source_kind, source_dir",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py adds LegacyImportTokenStore as main-process-owned in-memory store",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py materializes token_ref as opaque server-issued lid-* value via uuid, not browser-supplied path truth",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py _legacy_import_reference_packet exposes token-bound reference packet with token_server_owned=true and no raw path in response payload"
+      ]
+    },
+    {
+      "id": "canon_no_browser_path_truth",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py rejects browser-owned source/path fields for legacy_import_discovery with UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py rejects any legacy_import payload fields except ui_action and token_ref with UI_LEGACY_IMPORT_BROWSER_FIELDS_FORBIDDEN",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py validates token_ref with SESSION_ID_SAFE_CHARS and length <= 64",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py includes negative tests test_legacy_import_discovery_rejects_browser_owned_path_fields and test_legacy_import_rejects_browser_owned_source_fields"
+      ]
+    },
+    {
+      "id": "canon_no_import_execution",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py _legacy_import_discovery_packet_with_store only annotates packet and token state; no runner command execution",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py _legacy_import_reference_packet returns changed_files=[] and import_execution_claimed=false",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py UI allowlist text for legacy_import says final import execution remains outside contour",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py token-foundation tests assert runner.calls == []"
+      ]
+    },
+    {
+      "id": "canon_no_selection_or_workflow_semantics",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py discovery packet keeps selection_persisted=false",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py reference packet keeps confirm_semantics_claimed=false",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py allowlist scope for legacy_import limits contour to packet-owned foundation truth only; confirm and collision handling remain out of scope"
+      ]
+    },
+    {
+      "id": "canon_no_broad_session_framework",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py adds a narrow LegacyImportTokenStore with a single active record, clear/materialize/resolve methods, and no general session registry or workflow engine",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py build_handler instantiates exactly one closure-scoped LegacyImportTokenStore for this contour",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py does not add new generic session endpoints or cross-subsystem framework surfaces for this token lane"
+      ]
+    },
+    {
+      "id": "shared_handler_token_store_wiring_api_action_and_api_actions",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py build_handler creates legacy_import_token_store once in handler closure",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py GET /api/actions passes the same legacy_import_token_store into ui_action_metadata(...)",
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py POST /api/action passes the same legacy_import_token_store into run_ui_action(...)",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py test_http_legacy_import_token_persists_across_action_requests proves discovery via /api/action makes legacy_import available via /api/actions and then usable again via /api/action"
+      ]
+    },
+    {
+      "id": "current_runtime_layout_not_reused_as_import_truth",
+      "status": "pass",
+      "evidence": [
+        "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py _legacy_import_discovery_packet blocks source_dir_resolved == current_profile_resolved with UI_LEGACY_IMPORT_DISCOVERY_SOURCE_UNSAFE",
+        "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py test_legacy_import_discovery_blocks_current_runtime_layout_reuse covers that rejection path"
+      ]
+    }
+  ],
+  "files_checked": [
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/web_design_live_server.py",
+    "/Volumes/Work/wild-boar-proxy/tests/test_web_design_live_server.py"
+  ],
+  "risks": [
+    "LegacyImportTokenStore currently holds only one active token record per handler instance; later contours that need multiple concurrent import candidates would require a deliberate contract change",
+    "The token store is process-memory only; server restart clears token state, which is consistent with current foundation scope but should remain explicit if later flows depend on persistence",
+    "The token-bound reference packet still uses ui_action name legacy_import; although behavior remains non-mutating in current diff, future contours must avoid treating this foundation lane as execution admission by name alone"
+  ],
+  "stays_within_canon": {
+    "server_owned_opaque_token_only": true,
+    "no_browser_path_truth": true,
+    "no_import_execution": true,
+    "no_selection_workflow_semantics": true,
+    "no_broad_session_framework": true,
+    "shared_handler_token_store_wired_across_api_action_and_api_actions": true
+  }
+}

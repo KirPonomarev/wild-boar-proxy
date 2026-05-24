@@ -14,8 +14,10 @@ import mimetypes
 import os
 from pathlib import Path
 import subprocess
+from threading import RLock
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+import uuid
 
 from wild_boar_proxy.ui_shell import (
     JsonCommandRunner,
@@ -644,6 +646,9 @@ SETUP_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_SETUP_DISCOVERY_SOURCE_UNSAFE"
 LEGACY_IMPORT_DISCOVERY_SOURCE_KIND = "known_owned_legacy_import_source"
 LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE = "server_owned_import_source_discovery_only"
 LEGACY_IMPORT_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_LEGACY_IMPORT_DISCOVERY_SOURCE_UNSAFE"
+LEGACY_IMPORT_TOKEN_REQUIRED_CODE = "UI_LEGACY_IMPORT_TOKEN_REQUIRED"
+LEGACY_IMPORT_TOKEN_INVALID_CODE = "UI_LEGACY_IMPORT_TOKEN_INVALID"
+LEGACY_IMPORT_TOKEN_UNKNOWN_CODE = "UI_LEGACY_IMPORT_TOKEN_UNKNOWN"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
@@ -655,6 +660,57 @@ class LaunchCopyContract:
     copy_port: int | None = None
     action_server_port: int | None = None
     helper_execution_provenance: str | None = None
+
+
+@dataclass(frozen=True)
+class LegacyImportTokenRecord:
+    token_ref: str
+    source_kind: str
+    source_dir: Path
+
+
+class LegacyImportTokenStore:
+    """Main-process-owned in-memory token store for import-existing contours."""
+
+    def __init__(self) -> None:
+        self._record: LegacyImportTokenRecord | None = None
+        self._lock = RLock()
+
+    def has_active_token(self) -> bool:
+        with self._lock:
+            return self._record is not None
+
+    def active_record(self) -> LegacyImportTokenRecord | None:
+        with self._lock:
+            return self._record
+
+    def clear(self) -> None:
+        with self._lock:
+            self._record = None
+
+    def materialize(self, *, source_kind: str, source_dir: Path) -> LegacyImportTokenRecord:
+        with self._lock:
+            record = self._record
+            if (
+                record is not None
+                and record.source_kind == source_kind
+                and record.source_dir == source_dir
+            ):
+                return record
+            record = LegacyImportTokenRecord(
+                token_ref=f"lid-{uuid.uuid4().hex[:20]}",
+                source_kind=source_kind,
+                source_dir=source_dir,
+            )
+            self._record = record
+            return record
+
+    def resolve(self, token_ref: str) -> LegacyImportTokenRecord | None:
+        with self._lock:
+            record = self._record
+            if record is None or record.token_ref != token_ref:
+                return None
+            return record
 
 
 def _launch_copy_preflight(contract: LaunchCopyContract | None) -> dict[str, Any]:
@@ -964,6 +1020,7 @@ def _legacy_import_discovery_packet() -> dict[str, Any]:
                     "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
                     "browser_path_intake": False,
                     "selection_persisted": False,
+                    "session_token_materialized": False,
                     "filesystem_mutation_performed": False,
                     "import_execution_claimed": False,
                     "candidate_marker_count": 0,
@@ -989,6 +1046,7 @@ def _legacy_import_discovery_packet() -> dict[str, Any]:
                     "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
                     "browser_path_intake": False,
                     "selection_persisted": False,
+                    "session_token_materialized": False,
                     "filesystem_mutation_performed": False,
                     "import_execution_claimed": False,
                     "candidate_marker_count": 0,
@@ -1035,10 +1093,111 @@ def _legacy_import_discovery_packet() -> dict[str, Any]:
                 "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
                 "browser_path_intake": False,
                 "selection_persisted": False,
+                "session_token_materialized": False,
                 "filesystem_mutation_performed": False,
                 "import_execution_claimed": False,
                 "candidate_marker_count": candidate_marker_count,
                 "current_runtime_layout_reused": False,
+            }
+        },
+    )
+
+
+def _legacy_import_discovery_packet_with_store(
+    token_store: LegacyImportTokenStore | None,
+) -> dict[str, Any]:
+    packet = _legacy_import_discovery_packet()
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return packet
+    if token_store is None:
+        return packet
+    if data.get("discovery_state") != "discovered":
+        token_store.clear()
+        data["session_token_materialized"] = False
+        return packet
+    source_dir = _legacy_import_discovery_source_dir()
+    record = token_store.materialize(
+        source_kind=LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+        source_dir=source_dir.resolve(strict=False),
+    )
+    data["session_token_materialized"] = True
+    data["token_ref"] = record.token_ref
+    data["token_server_owned"] = True
+    data["token_status"] = "active"
+    return packet
+
+
+def _legacy_import_reference_packet(
+    token_store: LegacyImportTokenStore | None,
+    *,
+    token_ref: str,
+) -> dict[str, Any]:
+    if token_store is None:
+        return build_command_payload(
+            ok=False,
+            human_message="Legacy import reference requires a server-owned discovery token.",
+            machine_error_code=LEGACY_IMPORT_TOKEN_REQUIRED_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "reference_state": "blocked",
+                    "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "session_token_materialized": False,
+                    "token_server_owned": False,
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "confirm_semantics_claimed": False,
+                }
+            },
+        )
+    record = token_store.resolve(token_ref)
+    if record is None:
+        return build_command_payload(
+            ok=False,
+            human_message="Legacy import reference token is missing or no longer active.",
+            machine_error_code=LEGACY_IMPORT_TOKEN_UNKNOWN_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "reference_state": "blocked",
+                    "source_kind": LEGACY_IMPORT_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "session_token_materialized": False,
+                    "token_server_owned": False,
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "confirm_semantics_claimed": False,
+                }
+            },
+        )
+    return build_command_payload(
+        ok=True,
+        human_message="Legacy import token-bound reference is available. No write performed.",
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "data": {
+                "reference_state": "import_capable",
+                "source_kind": record.source_kind,
+                "browser_path_intake": False,
+                "session_token_materialized": True,
+                "token_ref": record.token_ref,
+                "token_server_owned": True,
+                "token_status": "active",
+                "filesystem_mutation_performed": False,
+                "import_execution_claimed": False,
+                "confirm_semantics_claimed": False,
             }
         },
     )
@@ -1871,6 +2030,7 @@ def run_ui_action(
     launch_client_path: str | None = None,
     launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = FULL_ACTION_PHASE,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return _blocked_action("unknown", "Payload UI-действия должен быть объектом.")
@@ -1893,6 +2053,41 @@ def run_ui_action(
                 "UI_LEGACY_IMPORT_DISCOVERY_BROWSER_PATH_FORBIDDEN",
                 availability_state=LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE,
                 disabled_reasons=("browser_path_forbidden",),
+            )
+    if ui_action == "legacy_import":
+        forbidden_browser_fields = tuple(
+            field
+            for field in payload
+            if field not in {"ui_action", "token_ref"}
+        )
+        if forbidden_browser_fields:
+            return _unavailable_action(
+                ui_action,
+                "Legacy import reference accepts only a server-owned token_ref.",
+                "UI_LEGACY_IMPORT_BROWSER_FIELDS_FORBIDDEN",
+                availability_state="token_required",
+                disabled_reasons=("browser_fields_forbidden",),
+            )
+        token_ref = payload.get("token_ref")
+        if not isinstance(token_ref, str) or not token_ref.strip():
+            return _unavailable_action(
+                ui_action,
+                "Legacy import requires a server-owned discovery token.",
+                LEGACY_IMPORT_TOKEN_REQUIRED_CODE,
+                availability_state="token_required",
+                disabled_reasons=("token_missing",),
+            )
+        token_ref = token_ref.strip()
+        if (
+            len(token_ref) > 64
+            or any(char not in SESSION_ID_SAFE_CHARS for char in token_ref)
+        ):
+            return _unavailable_action(
+                ui_action,
+                "Legacy import token_ref is not safe.",
+                LEGACY_IMPORT_TOKEN_INVALID_CODE,
+                availability_state="token_required",
+                disabled_reasons=("token_invalid",),
             )
 
     action_spec = UI_ACTION_ALLOWLIST.get(ui_action)
@@ -1922,13 +2117,23 @@ def run_ui_action(
         return _direct_ui_action_packet_response(
             ui_action,
             action_spec=action_spec,
-            packet=_legacy_import_discovery_packet(),
+            packet=_legacy_import_discovery_packet_with_store(legacy_import_token_store),
+        )
+    if ui_action == "legacy_import":
+        return _direct_ui_action_packet_response(
+            ui_action,
+            action_spec=action_spec,
+            packet=_legacy_import_reference_packet(
+                legacy_import_token_store,
+                token_ref=str(payload.get("token_ref") or ""),
+            ),
         )
     if not _action_available(
         ui_action,
         launch_client_path=launch_client_path,
         launch_copy_contract=launch_copy_contract,
         action_phase=action_phase,
+        legacy_import_token_store=legacy_import_token_store,
     ):
         return _unavailable_action(
             ui_action,
@@ -1937,24 +2142,28 @@ def run_ui_action(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
             _action_unavailable_code(
                 ui_action,
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
             availability_state=_action_availability_state(
                 ui_action,
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
             disabled_reasons=_action_disabled_reasons(
                 ui_action,
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
         )
 
@@ -2050,6 +2259,7 @@ def ui_action_metadata(
     launch_client_path: str | None = None,
     launch_copy_contract: LaunchCopyContract | None = None,
     action_phase: str = LIVE_READONLY_ACTION_PHASE,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> dict[str, Any]:
     actions: dict[str, dict[str, Any]] = {}
     for ui_action, action_spec in sorted(UI_ACTION_ALLOWLIST.items()):
@@ -2058,6 +2268,7 @@ def ui_action_metadata(
             launch_client_path=launch_client_path,
             launch_copy_contract=launch_copy_contract,
             action_phase=action_phase,
+            legacy_import_token_store=legacy_import_token_store,
         )
         actions[ui_action] = {
             "ui_action": ui_action,
@@ -2076,12 +2287,14 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
             "disabled_reason_code": _action_unavailable_code(
                 ui_action,
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             )
             if not available
             else "",
@@ -2090,6 +2303,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             )
             if not available
             else [],
@@ -2098,6 +2312,7 @@ def ui_action_metadata(
                 launch_client_path=launch_client_path,
                 launch_copy_contract=launch_copy_contract,
                 action_phase=action_phase,
+                legacy_import_token_store=legacy_import_token_store,
             ),
         }
         if ui_action == "launch_client_dispatch":
@@ -2134,6 +2349,7 @@ def build_handler(
     action_runner = command_runner
     operator_surface_session = OperatorSurfaceSession()
     codex_custom_sessions = CodexCustomSessionManager()
+    legacy_import_token_store = LegacyImportTokenStore()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
     command_review_apply_context = review_apply_context
@@ -2441,6 +2657,7 @@ def build_handler(
                         launch_client_path=launch_client_path,
                         launch_copy_contract=launch_copy_contract,
                         action_phase=action_phase,
+                        legacy_import_token_store=legacy_import_token_store,
                     )
                 )
                 return
@@ -2837,6 +3054,7 @@ def build_handler(
                     launch_client_path=launch_client_path,
                     launch_copy_contract=launch_copy_contract,
                     action_phase=action_phase,
+                    legacy_import_token_store=legacy_import_token_store,
                 )
             )
 
@@ -3495,11 +3713,14 @@ def _action_available(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> bool:
     if ui_action == "setup_discovery":
         return True
     if ui_action == "legacy_import_discovery":
         return True
+    if ui_action == "legacy_import":
+        return bool(legacy_import_token_store and legacy_import_token_store.has_active_token())
     if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
         return False
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3520,13 +3741,18 @@ def _action_availability_state(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "setup_discovery":
         return SETUP_DISCOVERY_AVAILABLE_STATE
     if ui_action == "legacy_import_discovery":
         return LEGACY_IMPORT_DISCOVERY_AVAILABLE_STATE
     if ui_action == "legacy_import":
-        return "foundation_import_capable_only"
+        return (
+            "token_bound_import_capable"
+            if legacy_import_token_store and legacy_import_token_store.has_active_token()
+            else "token_required"
+        )
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return "disabled_live_action"
@@ -3550,9 +3776,12 @@ def _action_unavailable_code(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "legacy_import_discovery":
         return ""
+    if ui_action == "legacy_import":
+        return LEGACY_IMPORT_TOKEN_REQUIRED_CODE
     if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
         return SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3577,11 +3806,16 @@ def _action_disabled_reasons(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> tuple[str, ...]:
     if ui_action == "legacy_import_discovery":
         return ()
     if ui_action == "legacy_import":
-        return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_DISABLED_REASONS
+        return (
+            ()
+            if legacy_import_token_store and legacy_import_token_store.has_active_token()
+            else ("token_missing",)
+        )
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return LIVE_READONLY_ACTION_DISABLED_REASONS
@@ -3608,13 +3842,14 @@ def _action_unavailable_reason(
     launch_client_path: str | None,
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
+    legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> str:
     if ui_action == "setup_discovery":
         return ""
     if ui_action == "legacy_import_discovery":
         return ""
     if ui_action == "legacy_import":
-        return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE
+        return "Legacy import requires a server-owned discovery token before import-capable reference truth is admitted."
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE

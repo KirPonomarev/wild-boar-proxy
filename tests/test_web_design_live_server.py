@@ -31,7 +31,6 @@ from wild_boar_proxy.web_design_live_server import (
     PARKED_IN_LIVE_READONLY_ACTIONS,
     READONLY_COMMAND_IDS,
     SANDBOX_ACTION_PHASE,
-    SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
     LaunchCopyContract,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
@@ -911,11 +910,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertEqual(
             metadata["actions"]["legacy_import"]["availability_state"],
-            "foundation_import_capable_only",
+            "token_required",
         )
         self.assertEqual(
             metadata["actions"]["legacy_import"]["disabled_reason_code"],
-            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+            live_server.LEGACY_IMPORT_TOKEN_REQUIRED_CODE,
         )
         self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
         self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
@@ -1132,10 +1131,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(setup_discovery["result"]["data"]["candidate_marker_count"], 0)
         self.assertEqual(legacy_import["status"], "integration_failure")
         self.assertEqual(legacy_import["ui_action"], "legacy_import")
-        self.assertEqual(legacy_import["availability_state"], "foundation_import_capable_only")
+        self.assertEqual(legacy_import["availability_state"], "token_required")
         self.assertEqual(
             legacy_import["result"]["machine_error_code"],
-            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+            live_server.LEGACY_IMPORT_TOKEN_REQUIRED_CODE,
         )
         self.assertEqual(legacy_import["result"]["changed_files"], [])
         self.assertEqual(runner.calls, [])
@@ -1189,6 +1188,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertFalse(legacy_discovery["result"]["data"]["browser_path_intake"])
         self.assertFalse(legacy_discovery["result"]["data"]["selection_persisted"])
+        self.assertFalse(legacy_discovery["result"]["data"]["session_token_materialized"])
         self.assertFalse(
             legacy_discovery["result"]["data"]["current_runtime_layout_reused"]
         )
@@ -1197,6 +1197,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
 
     def test_legacy_import_discovery_returns_discovered_packet_from_known_owned_source(self) -> None:
         runner = MappingRunner(live_payloads())
+        token_store = live_server.LegacyImportTokenStore()
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             candidate_dir = root / ".codex-custom-cli"
@@ -1216,7 +1217,9 @@ class WebDesignLiveServerTests(unittest.TestCase):
             }
             with mock.patch.dict(os.environ, env_updates, clear=False):
                 legacy_discovery = run_ui_action(
-                    runner, {"ui_action": "legacy_import_discovery"}
+                    runner,
+                    {"ui_action": "legacy_import_discovery"},
+                    legacy_import_token_store=token_store,
                 )
 
         self.assertEqual(legacy_discovery["status"], "ok")
@@ -1229,6 +1232,10 @@ class WebDesignLiveServerTests(unittest.TestCase):
             legacy_discovery["result"]["data"]["filesystem_mutation_performed"]
         )
         self.assertFalse(legacy_discovery["result"]["data"]["import_execution_claimed"])
+        self.assertTrue(legacy_discovery["result"]["data"]["session_token_materialized"])
+        self.assertTrue(legacy_discovery["result"]["data"]["token_server_owned"])
+        self.assertEqual(legacy_discovery["result"]["data"]["token_status"], "active")
+        self.assertTrue(str(legacy_discovery["result"]["data"]["token_ref"]).startswith("lid-"))
         self.assertFalse(
             legacy_discovery["result"]["data"]["current_runtime_layout_reused"]
         )
@@ -1282,6 +1289,146 @@ class WebDesignLiveServerTests(unittest.TestCase):
         )
         self.assertEqual(legacy_discovery["disabled_reasons"], ["browser_path_forbidden"])
         self.assertEqual(legacy_discovery["result"]["changed_files"], [])
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_accepts_only_server_owned_token_reference(self) -> None:
+        runner = MappingRunner(live_payloads())
+        token_store = live_server.LegacyImportTokenStore()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            candidate_dir = root / ".codex-custom-cli"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "backend-registry.json").write_text(
+                json.dumps({"backends": []}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "supervisor-state.json").write_text(
+                json.dumps({"schema_version": 1}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "config.toml").write_text('model = "gpt-5.4"\n', encoding="utf-8")
+            env_updates = {
+                "HOME": str(root),
+                "WBP_PROFILE_DIR": str(root / "profile"),
+                "WBP_MANAGED_DIR": str(root / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                discovery = run_ui_action(
+                    runner,
+                    {"ui_action": "legacy_import_discovery"},
+                    legacy_import_token_store=token_store,
+                )
+                token_ref = str(discovery["result"]["data"]["token_ref"])
+                legacy_import = run_ui_action(
+                    runner,
+                    {"ui_action": "legacy_import", "token_ref": token_ref},
+                    legacy_import_token_store=token_store,
+                )
+                metadata = ui_action_metadata(legacy_import_token_store=token_store)
+
+        self.assertEqual(legacy_import["status"], "ok")
+        self.assertEqual(legacy_import["result"]["machine_error_code"], "OK")
+        self.assertEqual(legacy_import["result"]["data"]["reference_state"], "import_capable")
+        self.assertTrue(legacy_import["result"]["data"]["session_token_materialized"])
+        self.assertTrue(legacy_import["result"]["data"]["token_server_owned"])
+        self.assertEqual(legacy_import["result"]["data"]["token_ref"], token_ref)
+        self.assertFalse(legacy_import["result"]["data"]["filesystem_mutation_performed"])
+        self.assertFalse(legacy_import["result"]["data"]["import_execution_claimed"])
+        self.assertFalse(legacy_import["result"]["data"]["confirm_semantics_claimed"])
+        self.assertTrue(metadata["actions"]["legacy_import"]["available"])
+        self.assertEqual(
+            metadata["actions"]["legacy_import"]["availability_state"],
+            "token_bound_import_capable",
+        )
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_blocks_unknown_token_reference(self) -> None:
+        runner = MappingRunner(live_payloads())
+        token_store = live_server.LegacyImportTokenStore()
+        legacy_import = run_ui_action(
+            runner,
+            {"ui_action": "legacy_import", "token_ref": "lid-unknown-token"},
+            legacy_import_token_store=token_store,
+        )
+
+        self.assertEqual(legacy_import["status"], "command_error")
+        self.assertEqual(
+            legacy_import["result"]["machine_error_code"],
+            live_server.LEGACY_IMPORT_TOKEN_UNKNOWN_CODE,
+        )
+        self.assertEqual(legacy_import["result"]["changed_files"], [])
+        self.assertEqual(runner.calls, [])
+
+    def test_legacy_import_rejects_browser_owned_source_fields(self) -> None:
+        runner = MappingRunner(live_payloads())
+        legacy_import = run_ui_action(
+            runner,
+            {
+                "ui_action": "legacy_import",
+                "token_ref": "lid-browser",
+                "source_dir": "/tmp/legacy-source",
+            },
+        )
+
+        self.assertEqual(legacy_import["status"], "integration_failure")
+        self.assertEqual(
+            legacy_import["result"]["machine_error_code"],
+            "UI_LEGACY_IMPORT_BROWSER_FIELDS_FORBIDDEN",
+        )
+        self.assertEqual(legacy_import["availability_state"], "token_required")
+        self.assertEqual(legacy_import["disabled_reasons"], ["browser_fields_forbidden"])
+        self.assertEqual(runner.calls, [])
+
+    def test_http_legacy_import_token_persists_across_action_requests(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            candidate_dir = root / ".codex-custom-cli"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "backend-registry.json").write_text(
+                json.dumps({"backends": []}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "supervisor-state.json").write_text(
+                json.dumps({"schema_version": 1}) + "\n", encoding="utf-8"
+            )
+            (candidate_dir / "config.toml").write_text('model = "gpt-5.4"\n', encoding="utf-8")
+            env_updates = {
+                "HOME": str(root),
+                "WBP_PROFILE_DIR": str(root / "profile"),
+                "WBP_MANAGED_DIR": str(root / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(runner=runner, action_phase=FULL_ACTION_PHASE),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_address[1]}"
+                try:
+                    discovery = json.loads(
+                        post_json(f"{base}/api/action", {"ui_action": "legacy_import_discovery"})
+                    )
+                    token_ref = str(discovery["result"]["data"]["token_ref"])
+                    metadata = json.loads(fetch(f"{base}/api/actions"))
+                    legacy_import = json.loads(
+                        post_json(
+                            f"{base}/api/action",
+                            {"ui_action": "legacy_import", "token_ref": token_ref},
+                        )
+                    )
+                finally:
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=5)
+
+        self.assertEqual(discovery["status"], "ok")
+        self.assertTrue(discovery["result"]["data"]["session_token_materialized"])
+        self.assertTrue(metadata["actions"]["legacy_import"]["available"])
+        self.assertEqual(
+            metadata["actions"]["legacy_import"]["availability_state"],
+            "token_bound_import_capable",
+        )
+        self.assertEqual(legacy_import["status"], "ok")
+        self.assertEqual(legacy_import["result"]["data"]["token_ref"], token_ref)
         self.assertEqual(runner.calls, [])
 
     def test_setup_discovery_blocks_relative_server_owned_runtime_paths(self) -> None:
