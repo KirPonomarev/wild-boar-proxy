@@ -30,6 +30,7 @@ from wild_boar_proxy.codex_launch_modes import (
     build_launch_modes_packet,
     build_original_launch_dry_run_packet,
     build_original_status_packet,
+    build_safe_app_copy_live_admission_packet,
     build_safe_app_copy_launch_dry_run_packet,
     build_safe_app_copy_launch_live_packet,
 )
@@ -2224,8 +2225,21 @@ def build_handler(
             if parsed.path == "/api/codex/app-copy/launch-dry-run":
                 self._send_json(build_safe_app_copy_launch_dry_run_packet(self._read_json_body()))
                 return
+            if parsed.path == "/api/codex/app-copy/live-admission":
+                self._send_json(
+                    build_safe_app_copy_live_admission_packet(
+                        self._read_json_body(),
+                        _launch_copy_preflight(launch_copy_contract),
+                    )
+                )
+                return
             if parsed.path == "/api/codex/app-copy/launch":
-                self._send_json(build_safe_app_copy_launch_live_packet(self._read_json_body()))
+                self._send_json(
+                    build_safe_app_copy_launch_live_packet(
+                        self._read_json_body(),
+                        _launch_copy_preflight(launch_copy_contract),
+                    )
+                )
                 return
             if parsed.path == "/api/codex/custom/model-dry-run":
                 self._send_json(

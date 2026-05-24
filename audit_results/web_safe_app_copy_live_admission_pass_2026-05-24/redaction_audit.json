@@ -1,0 +1,23 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_PASS",
+  "checked_artifacts": [
+    "spec.md",
+    "live_admission_packet.json",
+    "launch_blocked_packet.json",
+    "forbidden_payload_packet.json",
+    "browser_projection_proof.json",
+    "verification_summary.json",
+    "independent_audit.json",
+    "closeout.md"
+  ],
+  "raw_secret_values_recorded": false,
+  "raw_auth_values_recorded": false,
+  "raw_token_values_recorded": false,
+  "raw_pid_values_recorded": false,
+  "raw_process_path_values_recorded": false,
+  "raw_home_values_recorded": false,
+  "raw_codex_home_values_recorded": false,
+  "raw_env_values_recorded": false,
+  "artifact_paths_are_repo_relative": true,
+  "final_verdict": "PASS"
+}

@@ -4968,6 +4968,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 app_copy_dry_run = json.loads(
                     post_json(f"{base}/api/codex/app-copy/launch-dry-run", {})
                 )
+                app_copy_admission = json.loads(
+                    post_json(f"{base}/api/codex/app-copy/live-admission", {})
+                )
                 app_copy_live = json.loads(
                     post_json(f"{base}/api/codex/app-copy/launch", {})
                 )
@@ -5040,6 +5043,14 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
             "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
         )
         self.assertFalse(app_copy_live["launch_performed"])
+        self.assertEqual(app_copy_admission["status"], "blocked")
+        self.assertEqual(
+            app_copy_admission["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+        )
+        self.assertEqual(app_copy_admission["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
+        self.assertFalse(app_copy_admission["launch_ready_claimed"])
+        self.assertFalse(app_copy_admission["bounded_live_launch_execution_ready"])
         self.assertTrue(app_copy_live["pid_not_exposed_to_browser"])
         self.assertEqual(app_copy_live["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
         self.assertEqual(app_copy_live["dry_run_final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY")
@@ -5057,6 +5068,75 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(app_copy_rejected["browser_forbidden_fields_rejected"])
         self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
         self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
+
+    def test_app_copy_live_admission_uses_server_owned_contract_without_launching(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            contract = LaunchCopyContract(
+                client_path="/bin/sh",
+                profile_dir=str(temp_path / "profile"),
+                data_dir=str(temp_path / "data"),
+                copy_port=9321,
+                action_server_port=8788,
+            )
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                build_handler(launch_copy_contract=contract),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                admission = json.loads(
+                    post_json(f"{base}/api/codex/app-copy/live-admission", {})
+                )
+                live = json.loads(post_json(f"{base}/api/codex/app-copy/launch", {}))
+                rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/app-copy/live-admission",
+                        {"path": "/tmp/app", "pid": 123, "env": {"HOME": "/tmp/home"}},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(admission["status"], "ok")
+        self.assertEqual(
+            admission["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+        )
+        self.assertEqual(admission["final_verdict"], "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY")
+        self.assertTrue(admission["live_launch_admitted"])
+        self.assertTrue(admission["owner_preflight_target_exists"])
+        self.assertEqual(admission["owner_preflight_target_kind"], "executable")
+        self.assertTrue(admission["owner_preflight_separate_profile"])
+        self.assertTrue(admission["owner_preflight_separate_data_dir"])
+        self.assertTrue(admission["owner_preflight_separate_port"])
+        self.assertFalse(admission["launch_performed"])
+        self.assertFalse(admission["launch_ready_claimed"])
+        self.assertFalse(admission["bounded_live_launch_execution_ready"])
+        self.assertFalse(admission["raw_path_exposed"])
+        self.assertFalse(admission["raw_pid_exposed"])
+        self.assertEqual(live["status"], "blocked")
+        self.assertEqual(
+            live["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+        )
+        self.assertTrue(live["live_launch_admitted"])
+        self.assertFalse(live["launch_performed"])
+        self.assertEqual(rejected["status"], "blocked")
+        self.assertEqual(
+            rejected["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        )
+        self.assertEqual(rejected["forbidden_fields"], ["path", "pid", "env", "env.HOME"])
+        self.assertFalse(rejected["live_launch_admitted"])
+        self.assertEqual(
+            rejected["block_reason_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        )
 
 
 class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):

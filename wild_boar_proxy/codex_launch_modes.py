@@ -66,18 +66,25 @@ APP_COPY_FORBIDDEN_BROWSER_FIELDS = {
     "api_key",
     "apikey",
     "app_path",
+    "argv",
     "auth",
     "authorization",
     "backend_id",
+    "cleanup_path",
     "codex_home",
+    "command",
     "data_dir",
     "endpoint",
     "env",
+    "executable",
     "home",
     "model",
     "path",
     "pid",
     "port",
+    "process_id",
+    "process_path",
+    "process_root",
     "profile",
     "profile_root",
     "route_id",
@@ -324,6 +331,9 @@ def _app_copy_plan_base() -> dict[str, Any]:
         "browser_payload_allowed": False,
         "browser_payload_allowed_keys": [],
         "browser_forbidden_field_policy_enforced": True,
+        "owner_contract_required": True,
+        "owner_contract_source": "server_only",
+        "owner_contract_status": "not_evaluated",
         "app_path_source": "server_owned_default_app_copy_candidate",
         "app_path_redacted": True,
         "isolated_profile_root_redacted": True,
@@ -342,7 +352,45 @@ def _app_copy_plan_base() -> dict[str, Any]:
         "raw_pid_exposed": False,
         "raw_env_exposed": False,
         "pid_not_exposed_to_browser": True,
+        "declared_write_surfaces": [
+            "server_owned_profile_dir",
+            "server_owned_data_dir",
+            "server_allocated_port",
+            "launch_receipt",
+        ],
+        "forbidden_surfaces": [
+            "current_codex_process",
+            "current_codex_home",
+            "current_home",
+            "~/.codex",
+            "auth_files",
+            "browser_supplied_paths",
+            "browser_supplied_env",
+            "browser_supplied_pid",
+        ],
+        "cleanup_required_before_launch_ready": True,
         "launch_performed": False,
+    }
+
+
+def _safe_app_copy_browser_rejected_packet(
+    *,
+    base: dict[str, Any],
+    forbidden: list[str],
+) -> dict[str, Any]:
+    return {
+        **base,
+        "status": "blocked",
+        "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        "browser_forbidden_fields_rejected": True,
+        "browser_forbidden_fields_absent": False,
+        "forbidden_fields": forbidden,
+        "server_issued_plan": False,
+        "owner_contract_status": "rejected",
+        "live_launch_admitted": False,
+        "block_reason_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+        "next_action": "remove_browser_payload_fields",
     }
 
 
@@ -356,17 +404,7 @@ def build_safe_app_copy_launch_dry_run_packet(payload: dict[str, Any]) -> dict[s
         "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
     }
     if forbidden:
-        return {
-            **base,
-            "status": "blocked",
-            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
-            "browser_forbidden_fields_rejected": True,
-            "browser_forbidden_fields_absent": False,
-            "forbidden_fields": forbidden,
-            "server_issued_plan": False,
-            "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-            "next_action": "remove_browser_payload_fields",
-        }
+        return _safe_app_copy_browser_rejected_packet(base=base, forbidden=forbidden)
     return {
         **base,
         "status": "ok",
@@ -379,38 +417,92 @@ def build_safe_app_copy_launch_dry_run_packet(payload: dict[str, Any]) -> dict[s
     }
 
 
-def build_safe_app_copy_launch_live_packet(payload: dict[str, Any]) -> dict[str, Any]:
+def build_safe_app_copy_live_admission_packet(
+    payload: dict[str, Any],
+    owner_preflight: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     forbidden = forbidden_app_copy_launch_fields(payload)
+    owner_preflight = owner_preflight if isinstance(owner_preflight, dict) else {}
+    owner_status = str(owner_preflight.get("status", "denied"))
+    owner_machine_error_code = str(
+        owner_preflight.get("machine_error_code", "WEB_SAFE_APP_COPY_OWNER_CONTRACT_MISSING")
+    )
+    owner_admitted = owner_status == "admitted" and owner_machine_error_code == "OK"
     base = {
         **_app_copy_plan_base(),
         "dry_run": False,
-        "live_launch_admitted": False,
-        "block_reason_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
-        "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+        "live_admission_check": True,
+        "live_launch_admitted": owner_admitted,
+        "owner_contract_status": "admitted" if owner_admitted else "blocked",
+        "owner_preflight_machine_error_code": owner_machine_error_code,
+        "owner_preflight_target_exists": owner_preflight.get("target_exists") is True,
+        "owner_preflight_target_kind": str(owner_preflight.get("target_kind", "unknown")),
+        "owner_preflight_separate_profile": owner_preflight.get("separate_profile") is True,
+        "owner_preflight_separate_data_dir": owner_preflight.get("separate_data_dir") is True,
+        "owner_preflight_separate_port": owner_preflight.get("separate_port") is True,
+        "owner_preflight_process_confirmation_possible": (
+            owner_preflight.get("process_confirmation_possible") is True
+        ),
+        "owner_preflight_current_session_untouched": (
+            owner_preflight.get("current_session_untouched") is True
+        ),
+        "block_reason_code": "" if owner_admitted else owner_machine_error_code,
+        "final_verdict": (
+            "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY"
+            if owner_admitted
+            else "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED"
+        ),
         "dry_run_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
         "cleanup_or_stop_instruction": "no_process_launched",
+        "bounded_live_launch_execution_ready": False,
+        "launch_ready_claimed": False,
     }
     if forbidden:
+        return _safe_app_copy_browser_rejected_packet(base=base, forbidden=forbidden)
+    if owner_admitted:
         return {
             **base,
-            "status": "blocked",
-            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
-            "browser_forbidden_fields_rejected": True,
-            "browser_forbidden_fields_absent": False,
-            "forbidden_fields": forbidden,
-            "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
-            "next_action": "remove_browser_payload_fields",
+            "status": "ok",
+            "machine_error_code": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+            "browser_forbidden_fields_rejected": False,
+            "browser_forbidden_fields_absent": True,
+            "forbidden_fields": [],
+            "human_message": (
+                "Safe app copy live admission is ready, but no process was launched in this contour."
+            ),
+            "next_action": "run_separate_bounded_live_launch_execution_contour",
         }
     return {
         **base,
         "status": "blocked",
         "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
-        "browser_forbidden_fields_rejected": True,
+        "browser_forbidden_fields_rejected": False,
         "browser_forbidden_fields_absent": True,
         "forbidden_fields": [],
         "human_message": "Live app copy launch is blocked until a server-owned app copy contract is proven.",
         "next_action": "prove_app_copy_owner_contract",
     }
+
+
+def build_safe_app_copy_launch_live_packet(
+    payload: dict[str, Any],
+    owner_preflight: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    packet = build_safe_app_copy_live_admission_packet(payload, owner_preflight)
+    if packet.get("status") == "ok":
+        return {
+            **packet,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+            "live_launch_admitted": True,
+            "block_reason_code": "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+            "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+            "human_message": (
+                "Live app copy execution is blocked in this contour; admission is proven separately."
+            ),
+            "next_action": "run_separate_bounded_live_launch_execution_contour",
+        }
+    return packet
 
 
 def load_last_process_isolation_proof(

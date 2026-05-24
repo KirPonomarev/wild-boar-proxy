@@ -14,6 +14,7 @@ from wild_boar_proxy.codex_launch_modes import (
     build_launch_modes_packet,
     build_original_launch_dry_run_packet,
     build_original_status_packet,
+    build_safe_app_copy_live_admission_packet,
     build_safe_app_copy_launch_dry_run_packet,
     build_safe_app_copy_launch_live_packet,
     forbidden_app_copy_launch_fields,
@@ -210,6 +211,69 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertEqual(packet["cleanup_or_stop_instruction"], "no_process_launched")
         self.assertEqual(packet["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
         self.assertEqual(packet["dry_run_final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY")
+        self.assertFalse(packet["launch_ready_claimed"])
+        self.assertFalse(packet["bounded_live_launch_execution_ready"])
+
+    def test_safe_app_copy_live_admission_ready_does_not_claim_launch_ready(self) -> None:
+        packet = build_safe_app_copy_live_admission_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+        )
+        self.assertEqual(packet["final_verdict"], "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY")
+        self.assertTrue(packet["live_launch_admitted"])
+        self.assertEqual(packet["owner_contract_status"], "admitted")
+        self.assertTrue(packet["owner_preflight_target_exists"])
+        self.assertEqual(packet["owner_preflight_target_kind"], "executable")
+        self.assertTrue(packet["owner_preflight_separate_profile"])
+        self.assertTrue(packet["owner_preflight_separate_data_dir"])
+        self.assertTrue(packet["owner_preflight_separate_port"])
+        self.assertFalse(packet["launch_performed"])
+        self.assertFalse(packet["bounded_live_launch_execution_ready"])
+        self.assertFalse(packet["launch_ready_claimed"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["raw_path_exposed"])
+
+    def test_safe_app_copy_live_execution_remains_blocked_after_admission(self) -> None:
+        packet = build_safe_app_copy_launch_live_packet(
+            {},
+            {
+                "status": "admitted",
+                "machine_error_code": "OK",
+                "target_exists": True,
+                "target_kind": "executable",
+                "separate_profile": True,
+                "separate_data_dir": True,
+                "separate_port": True,
+                "process_confirmation_possible": True,
+                "current_session_untouched": True,
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_EXECUTION_NOT_IN_CONTOUR",
+        )
+        self.assertTrue(packet["live_launch_admitted"])
+        self.assertFalse(packet["launch_performed"])
+        self.assertEqual(packet["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
+        self.assertFalse(packet["launch_ready_claimed"])
 
     def test_safe_app_copy_live_launch_rejects_browser_fields(self) -> None:
         packet = build_safe_app_copy_launch_live_packet(
@@ -224,10 +288,15 @@ class CodexLaunchModesTests(unittest.TestCase):
         self.assertTrue(packet["browser_forbidden_fields_rejected"])
         self.assertFalse(packet["browser_forbidden_fields_absent"])
         self.assertFalse(packet["launch_performed"])
+        self.assertFalse(packet["live_launch_admitted"])
         self.assertEqual(packet["forbidden_fields"], ["app_path", "CODEX_HOME", "auth"])
 
     def test_forbidden_app_copy_launch_fields_rejects_unknown_keys_too(self) -> None:
         self.assertEqual(forbidden_app_copy_launch_fields({"dry_run": True}), ["dry_run"])
+        self.assertEqual(
+            forbidden_app_copy_launch_fields({"process_id": 123, "command": "run"}),
+            ["process_id", "command"],
+        )
 
     def test_custom_status_treats_previous_isolation_proof_as_not_fresh_truth(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

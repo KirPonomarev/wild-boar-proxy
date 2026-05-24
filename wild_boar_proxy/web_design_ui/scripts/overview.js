@@ -856,14 +856,39 @@ function renderSafeAppCopyLaunchPacket(packet) {
     && packet?.raw_pid_exposed === false
     && packet?.raw_env_exposed === false
     && packet?.pid_not_exposed_to_browser === true;
-  const liveAdmitted = dryRunReady && packet?.live_launch_admitted === true;
+  const admissionReady = packet?.status === "ok"
+    && packet?.machine_error_code === "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY"
+    && packet?.final_verdict === "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY"
+    && packet?.live_launch_admitted === true
+    && packet?.launch_performed === false
+    && packet?.server_issued_plan === true
+    && packet?.current_codex_touched === false
+    && packet?.uses_current_home === false
+    && packet?.uses_current_codex_home === false
+    && packet?.raw_path_exposed === false
+    && packet?.raw_pid_exposed === false
+    && packet?.raw_env_exposed === false
+    && packet?.pid_not_exposed_to_browser === true
+    && packet?.bounded_live_launch_execution_ready === false
+    && packet?.launch_ready_claimed === false;
+  const launchReady = packet?.status === "ok"
+    && packet?.machine_error_code === "WEB_SAFE_APP_COPY_LAUNCH_READY"
+    && packet?.final_verdict === "WEB_SAFE_APP_COPY_LAUNCH_READY"
+    && packet?.launch_performed === true
+    && packet?.current_codex_touched === false;
   codexLaunchSetChip(
-    dryRunReady ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
-    dryRunReady ? "app copy dry-run ready" : (packet?.status || "failed")
+    dryRunReady || admissionReady ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
+    dryRunReady ? "app copy dry-run ready" : (admissionReady ? "app copy admission ready" : (packet?.status || "failed"))
   );
   codexLaunchSetText(
     "safeAppCopyStatus",
     `${packet?.status || "unknown"} · ${packet?.final_verdict || packet?.machine_error_code || "UNKNOWN"}`
+  );
+  codexLaunchSetText(
+    "safeAppCopyAdmission",
+    packet?.live_launch_admitted === true
+      ? `${packet?.owner_contract_status || "unknown"} · execution separate`
+      : `${packet?.owner_contract_status || "unknown"} · ${packet?.block_reason_code || packet?.machine_error_code || "UNKNOWN"}`
   );
   codexLaunchSetText(
     "safeAppCopyIsolation",
@@ -873,8 +898,8 @@ function renderSafeAppCopyLaunchPacket(packet) {
   );
   const liveButton = document.getElementById("safeAppCopyLaunchAction");
   if (liveButton) {
-    liveButton.disabled = !liveAdmitted;
-    if (liveAdmitted) {
+    liveButton.disabled = !launchReady;
+    if (launchReady) {
       liveButton.classList.remove("disabled");
     } else {
       liveButton.classList.add("disabled");
@@ -902,6 +927,17 @@ function renderSafeAppCopyLaunchPacket(packet) {
       uses_current_codex_home: packet?.uses_current_codex_home === true,
       proxy_env_injected: packet?.proxy_env_injected === true,
       live_launch_admitted: packet?.live_launch_admitted === true,
+      live_admission_check: packet?.live_admission_check === true,
+      owner_contract_status: packet?.owner_contract_status || "",
+      owner_preflight_machine_error_code: packet?.owner_preflight_machine_error_code || "",
+      owner_preflight_target_exists: packet?.owner_preflight_target_exists === true,
+      owner_preflight_target_kind: packet?.owner_preflight_target_kind || "",
+      owner_preflight_separate_profile: packet?.owner_preflight_separate_profile === true,
+      owner_preflight_separate_data_dir: packet?.owner_preflight_separate_data_dir === true,
+      owner_preflight_separate_port: packet?.owner_preflight_separate_port === true,
+      owner_preflight_current_session_untouched: packet?.owner_preflight_current_session_untouched === true,
+      bounded_live_launch_execution_ready: packet?.bounded_live_launch_execution_ready === true,
+      launch_ready_claimed: packet?.launch_ready_claimed === true,
       block_reason_code: packet?.block_reason_code || "",
       raw_path_exposed: packet?.raw_path_exposed === true,
       raw_pid_exposed: packet?.raw_pid_exposed === true,
@@ -910,6 +946,46 @@ function renderSafeAppCopyLaunchPacket(packet) {
       final_verdict: packet?.final_verdict || "",
       next_action: packet?.next_action || "",
     }, null, 2);
+  }
+}
+
+async function runSafeAppCopyLiveAdmission() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("safeAppCopyLiveAdmissionAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "checking admission");
+  try {
+    const response = await fetch("api/codex/app-copy/live-admission", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`app copy admission http ${response.status}`);
+    }
+    renderSafeAppCopyLaunchPacket(await response.json());
+  } catch (error) {
+    renderSafeAppCopyLaunchPacket({
+      status: "failed",
+      machine_error_code: "WEB_SAFE_APP_COPY_LIVE_ADMISSION_FETCH_FAILED",
+      dry_run: false,
+      live_admission_check: true,
+      launch_performed: false,
+      server_issued_plan: false,
+      current_codex_touched: false,
+      uses_current_home: false,
+      uses_current_codex_home: false,
+      bounded_live_launch_execution_ready: false,
+      launch_ready_claimed: false,
+      final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+      next_action: error.message
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("safeAppCopyLiveAdmissionAction")?.removeAttribute("disabled");
   }
 }
 
@@ -9913,6 +9989,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
   document.getElementById("codexCustomLaunchDryRunAction")?.addEventListener("click", () => runCodexCustomLaunchDryRun());
   document.getElementById("safeAppCopyLaunchDryRunAction")?.addEventListener("click", () => runSafeAppCopyLaunchDryRun());
+  document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());

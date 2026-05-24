@@ -1,0 +1,31 @@
+{
+  "contour": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_PASS",
+  "browser_url": "http://127.0.0.1:8791/",
+  "actions": [
+    "click safeAppCopyLaunchDryRunAction",
+    "click safeAppCopyLiveAdmissionAction"
+  ],
+  "ui_observed": {
+    "safeAppCopyStatus": "ok · WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+    "safeAppCopyAdmission": "admitted · execution separate",
+    "safeAppCopyIsolation": "current Codex untouched",
+    "safeAppCopyLaunchAction_disabled": true,
+    "safeAppCopyLaunchAction_class": "button disabled"
+  },
+  "projected_packet": {
+    "status": "ok",
+    "machine_error_code": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+    "final_verdict": "WEB_SAFE_APP_COPY_LIVE_ADMISSION_READY",
+    "launch_performed": false,
+    "launch_ready_claimed": false,
+    "bounded_live_launch_execution_ready": false,
+    "current_codex_touched": false,
+    "uses_current_home": false,
+    "uses_current_codex_home": false,
+    "raw_path_exposed": false,
+    "raw_pid_exposed": false,
+    "raw_env_exposed": false,
+    "pid_not_exposed_to_browser": true
+  },
+  "server_stopped_after_proof": true
+}
