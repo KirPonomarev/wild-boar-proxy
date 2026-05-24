@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT_PASS",
+  "captured_at_utc": "2026-05-24T10:14:58Z",
+  "auditors": [
+    {
+      "agent": "Hegel",
+      "model": "gpt-5.4-mini",
+      "role": "read_only_scanner",
+      "verdict": "informational",
+      "findings": [
+        "Minimal touch set is codex_recovery_contract.py, web_design_live_server.py, web_design_ui, and matching tests.",
+        "False-green hazard was the old next_contour string pointing at full operator-ready.",
+        "Rollback/process-owner contract must remain dry-run only and must not infer operator readiness from action rows."
+      ]
+    },
+    {
+      "agent": "Chandrasekhar",
+      "model": "gpt-5.4-mini",
+      "role": "independent_diff_audit",
+      "verdict": "pass",
+      "findings": [
+        {
+          "id": "false_green_guards",
+          "status": "pass",
+          "evidence": "rollback_live_ready, rollback_apply_admitted, process_kill_live_ready, process_kill_admitted, recovery_operator_ready, and current_codex_process_candidate remain false."
+        },
+        {
+          "id": "forbidden_browser_fields",
+          "status": "pass",
+          "evidence": "path, pid, process_id, backend_id, route_id, token, auth, api_key, secret, CODEX_HOME, and HOME are forbidden in packet/UI fallback."
+        },
+        {
+          "id": "no_post_widening",
+          "status": "pass",
+          "evidence": "new rollback/process-owner contract is GET-only and do_POST has no matching recovery mutation handler."
+        },
+        {
+          "id": "layer_boundary",
+          "status": "pass",
+          "evidence": "contour.md and spec.md keep WBP as control-layer owner and browser as renderer-only."
+        }
+      ]
+    }
+  ],
+  "final_verdict": "passed",
+  "blockers_open": []
+}

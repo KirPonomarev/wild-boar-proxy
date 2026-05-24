@@ -5512,6 +5512,98 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertFalse(after_cleanup["session_admitted_actions_ready"])
         self.assertEqual(post_rejected_status, HTTPStatus.NOT_FOUND)
 
+    def test_codex_custom_recovery_rollback_process_owner_contract_endpoint_is_dry_run_only(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", ReadyFakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(live_payloads())),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                packet = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/rollback-process-owner-contract")
+                )
+                forbidden_posts: dict[str, int] = {}
+                for suffix in (
+                    "rollback-process-owner-contract",
+                    "rollback",
+                    "kill",
+                    "cleanup-path",
+                    "snapshot",
+                ):
+                    try:
+                        post_json(f"{base}/api/codex/custom/recovery/{suffix}", {})
+                    except urllib.error.HTTPError as exc:
+                        forbidden_posts[suffix] = exc.code
+                    else:  # pragma: no cover - defensive assertion branch
+                        forbidden_posts[suffix] = HTTPStatus.OK
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT")
+        self.assertEqual(
+            packet["claim_scope"],
+            "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+        )
+        self.assertTrue(packet["rollback_contract_defined"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertTrue(packet["rollback_point_required"])
+        self.assertFalse(packet["rollback_point_present"])
+        self.assertTrue(packet["rollback_write_surfaces_required"])
+        self.assertFalse(packet["rollback_write_surfaces_declared"])
+        self.assertTrue(packet["rollback_verification_packet_required"])
+        self.assertFalse(packet["rollback_verification_packet_present"])
+        self.assertTrue(packet["process_owner_contract_defined"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["process_kill_admitted"])
+        self.assertTrue(packet["owned_process_identity_required"])
+        self.assertFalse(packet["owned_process_identity_present"])
+        self.assertTrue(packet["current_codex_process_exclusion_required"])
+        self.assertFalse(packet["current_codex_process_excluded"])
+        self.assertFalse(packet["current_codex_process_candidate"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_operator_ready"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_operator_ready"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertFalse(packet["diagnostics_counted_as_recovery_action"])
+        self.assertFalse(packet["readonly_checks_counted_as_mutation"])
+        self.assertFalse(packet["session_create_counted_as_recovery_action"])
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        self.assertIn("pid", packet["forbidden_browser_fields"])
+        self.assertIn("process_id", packet["forbidden_browser_fields"])
+        self.assertIn("path", packet["forbidden_browser_fields"])
+        self.assertFalse(packet["arbitrary_path_accepted"])
+        self.assertFalse(packet["arbitrary_process_kill_allowed"])
+        self.assertFalse(packet["arbitrary_path_cleanup_allowed"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertFalse(packet["dangerous_action_mutation_allowed"])
+        prerequisites = {item["id"]: item for item in packet["prerequisites"]}
+        self.assertFalse(prerequisites["rollback_point"]["present"])
+        self.assertTrue(prerequisites["rollback_point"]["blocks_live_ready"])
+        self.assertFalse(prerequisites["rollback_point"]["blocks_contract_definition"])
+        self.assertEqual(packet["next_contour"], "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS")
+        self.assertFalse(packet["next_contour_claimed"])
+        self.assertEqual(
+            forbidden_posts,
+            {
+                "rollback-process-owner-contract": HTTPStatus.NOT_FOUND,
+                "rollback": HTTPStatus.NOT_FOUND,
+                "kill": HTTPStatus.NOT_FOUND,
+                "cleanup-path": HTTPStatus.NOT_FOUND,
+                "snapshot": HTTPStatus.NOT_FOUND,
+            },
+        )
+
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))

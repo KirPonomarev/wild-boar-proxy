@@ -552,6 +552,7 @@
             <div>Diagnostics</div><div id="codexCustomRecoveryDiagnostics">support artifact only · availability from action metadata</div>
             <div>Contract owner</div><div id="codexCustomRecoveryContractOwner">contract pending</div>
             <div>Session actions</div><div id="codexCustomRecoveryAdmittedSessionActions">selected session required · readiness pending</div>
+            <div>Rollback/process</div><div id="codexCustomRecoveryRollbackProcessOwner">dry-run contract pending</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -572,6 +573,10 @@
               <button id="codexCustomRecoverySessionActionsAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
                 <span>Session actions</span>
+              </button>
+              <button id="codexCustomRecoveryRollbackProcessOwnerAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Rollback/process contract</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -619,6 +624,24 @@
   "recovery_operator_ready": false,
   "rollback_operator_ready": false,
   "process_kill_operator_ready": false,
+  "diagnostics_counted_as_recovery_action": false,
+  "readonly_checks_counted_as_mutation": false,
+  "session_create_counted_as_recovery_action": false
+}</pre>
+          <pre id="codexCustomRecoveryRollbackProcessOwnerPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ROLLBACK_PROCESS_OWNER_CONTRACT_NOT_LOADED",
+  "claim_scope": "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+  "rollback_contract_defined": false,
+  "rollback_live_ready": false,
+  "rollback_apply_admitted": false,
+  "process_owner_contract_defined": false,
+  "process_kill_live_ready": false,
+  "process_kill_admitted": false,
+  "recovery_operator_ready": false,
+  "dangerous_actions_disabled": true,
+  "browser_payload_allowed": false,
+  "browser_payload_allowed_keys": [],
   "diagnostics_counted_as_recovery_action": false,
   "readonly_checks_counted_as_mutation": false,
   "session_create_counted_as_recovery_action": false

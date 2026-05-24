@@ -1706,6 +1706,140 @@ function renderCodexCustomRecoveryAdmittedSessionActions(packet) {
   }
 }
 
+function renderCodexCustomRecoveryRollbackProcessOwnerContract(packet) {
+  const response = document.getElementById("codexCustomRecoveryRollbackProcessOwnerPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const rollbackDefined = packet?.rollback_contract_defined === true;
+  const processDefined = packet?.process_owner_contract_defined === true;
+  const liveReady = packet?.rollback_live_ready === true || packet?.process_kill_live_ready === true;
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryRollbackProcessOwner",
+    `${status} · rollback ${rollbackDefined ? "defined" : "missing"} · process ${processDefined ? "defined" : "missing"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryLiveReady",
+    `${liveReady} · rollback/process dry-run only`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${packet?.recovery_operator_ready === true} · not claimed`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: packet?.block_reason_code || "",
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/rollback-process-owner-contract",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/contract",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      rollback_contract_defined: rollbackDefined,
+      rollback_live_ready: packet?.rollback_live_ready === true,
+      rollback_apply_admitted: packet?.rollback_apply_admitted === true,
+      rollback_point_required: packet?.rollback_point_required === true,
+      rollback_point_present: packet?.rollback_point_present === true,
+      rollback_write_surfaces_required: packet?.rollback_write_surfaces_required === true,
+      rollback_write_surfaces_declared: packet?.rollback_write_surfaces_declared === true,
+      rollback_verification_packet_required: packet?.rollback_verification_packet_required === true,
+      rollback_verification_packet_present: packet?.rollback_verification_packet_present === true,
+      process_owner_contract_defined: processDefined,
+      process_kill_live_ready: packet?.process_kill_live_ready === true,
+      process_kill_admitted: packet?.process_kill_admitted === true,
+      owned_process_identity_required: packet?.owned_process_identity_required === true,
+      owned_process_identity_present: packet?.owned_process_identity_present === true,
+      current_codex_process_exclusion_required: packet?.current_codex_process_exclusion_required === true,
+      current_codex_process_excluded: packet?.current_codex_process_excluded === true,
+      current_codex_process_candidate: packet?.current_codex_process_candidate === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      diagnostics_support_artifact_only: packet?.diagnostics_support_artifact_only !== false,
+      diagnostics_counted_as_recovery_action: packet?.diagnostics_counted_as_recovery_action === true,
+      readonly_checks_counted_as_mutation: packet?.readonly_checks_counted_as_mutation === true,
+      session_create_counted_as_recovery_action: packet?.session_create_counted_as_recovery_action === true,
+      contract_readonly_sources_ok: packet?.contract_readonly_sources_ok === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+      arbitrary_process_kill_allowed: packet?.arbitrary_process_kill_allowed === true,
+      arbitrary_path_cleanup_allowed: packet?.arbitrary_path_cleanup_allowed === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled !== false,
+      dangerous_action_mutation_allowed: packet?.dangerous_action_mutation_allowed === true,
+      prerequisites: Array.isArray(packet?.prerequisites) ? packet.prerequisites : [],
+      actions: Array.isArray(packet?.actions) ? packet.actions : [],
+      next_contour: packet?.next_contour || "",
+      next_contour_claimed: packet?.next_contour_claimed === true,
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomRecoveryRollbackProcessOwnerContract() {
+  try {
+    renderCodexCustomRecoveryRollbackProcessOwnerContract(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/rollback-process-owner-contract")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryRollbackProcessOwnerContract({
+      status: "failed",
+      machine_error_code: "ROLLBACK_PROCESS_OWNER_CONTRACT_FETCH_FAILED",
+      block_reason_code: "ROLLBACK_PROCESS_OWNER_CONTRACT_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+      contract_endpoint: "/api/codex/custom/recovery/rollback-process-owner-contract",
+      contract_source_endpoint: "/api/codex/custom/recovery/contract",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      browser_forbidden_fields_rejected: true,
+      rollback_contract_defined: false,
+      rollback_live_ready: false,
+      rollback_apply_admitted: false,
+      rollback_point_required: true,
+      rollback_point_present: false,
+      rollback_write_surfaces_required: true,
+      rollback_write_surfaces_declared: false,
+      rollback_verification_packet_required: true,
+      rollback_verification_packet_present: false,
+      process_owner_contract_defined: false,
+      process_kill_live_ready: false,
+      process_kill_admitted: false,
+      owned_process_identity_required: true,
+      owned_process_identity_present: false,
+      current_codex_process_exclusion_required: true,
+      current_codex_process_excluded: false,
+      current_codex_process_candidate: false,
+      recovery_operator_ready: false,
+      operator_ready_claimed: false,
+      rollback_operator_ready: false,
+      rollback_claimed: false,
+      process_kill_operator_ready: false,
+      process_kill_claimed: false,
+      diagnostics_support_artifact_only: true,
+      diagnostics_counted_as_recovery_action: false,
+      readonly_checks_counted_as_mutation: false,
+      session_create_counted_as_recovery_action: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      current_codex_home_touched: false,
+      arbitrary_path_accepted: false,
+      arbitrary_process_kill_allowed: false,
+      arbitrary_path_cleanup_allowed: false,
+      dangerous_actions_disabled: true,
+      dangerous_action_mutation_allowed: false,
+      next_contour_claimed: false,
+    });
+  }
+}
+
 async function refreshCodexCustomRecoveryAdmittedSessionActions() {
   try {
     renderCodexCustomRecoveryAdmittedSessionActions(
@@ -1723,7 +1857,7 @@ async function refreshCodexCustomRecoveryAdmittedSessionActions() {
       contract_endpoint_mutation_allowed: false,
       browser_payload_allowed: false,
       browser_payload_allowed_keys: [],
-      forbidden_browser_fields: ["backend_id", "route_id", "path", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
       browser_forbidden_fields_rejected: true,
       session_admitted_actions_ready: false,
       selected_session_cancel_ready: false,
@@ -1774,7 +1908,7 @@ async function refreshCodexCustomRecoveryContract() {
       browser_forbidden_fields_rejected: true,
       browser_payload_allowed: false,
       browser_payload_allowed_keys: [],
-      forbidden_browser_fields: ["backend_id", "route_id", "path", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
       fresh_truth: false,
       historical_isolation_proof_only: true,
       dangerous_actions_disabled: true,
@@ -8017,6 +8151,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoveryContractAction")?.addEventListener("click", () => refreshCodexCustomRecoveryContract());
   document.getElementById("codexCustomRecoveryCheckAllAction")?.addEventListener("click", () => runCodexCustomRecoveryChecks());
   document.getElementById("codexCustomRecoverySessionActionsAction")?.addEventListener("click", () => refreshCodexCustomRecoveryAdmittedSessionActions());
+  document.getElementById("codexCustomRecoveryRollbackProcessOwnerAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackProcessOwnerContract());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());

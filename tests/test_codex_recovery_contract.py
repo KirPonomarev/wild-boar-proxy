@@ -8,6 +8,7 @@ import unittest
 from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_admitted_session_actions_packet,
     build_custom_recovery_contract_packet,
+    build_custom_recovery_rollback_process_owner_contract_packet,
 )
 
 
@@ -63,6 +64,7 @@ class CodexRecoveryContractTests(unittest.TestCase):
         )
         self.assertEqual(actions["cleanup_arbitrary_path"]["status"], "disabled")
         self.assertEqual(actions["touch_original_codex_profile"]["status"], "disabled")
+        self.assertEqual(packet["next_contour"], "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS")
 
     def test_readonly_integration_failure_blocks_contract_status(self) -> None:
         packet = build_custom_recovery_contract_packet(
@@ -211,6 +213,103 @@ class CodexRecoveryContractTests(unittest.TestCase):
         self.assertFalse(packet["recovery_operator_ready"])
         self.assertFalse(packet["rollback_operator_ready"])
         self.assertFalse(packet["process_kill_operator_ready"])
+
+    def test_rollback_process_owner_contract_is_dry_run_only(self) -> None:
+        contract = build_custom_recovery_contract_packet(
+            original_status={"status": "ok"},
+            custom_status={"status": "ok"},
+            accounts_readonly=ok_readonly("accounts_readonly"),
+            api_readonly=ok_readonly("api_connections_readonly"),
+        )
+
+        packet = build_custom_recovery_rollback_process_owner_contract_packet(
+            contract_packet=contract,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT")
+        self.assertEqual(
+            packet["claim_scope"],
+            "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+        )
+        self.assertTrue(packet["rollback_contract_defined"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertTrue(packet["rollback_point_required"])
+        self.assertFalse(packet["rollback_point_present"])
+        self.assertTrue(packet["rollback_write_surfaces_required"])
+        self.assertFalse(packet["rollback_write_surfaces_declared"])
+        self.assertTrue(packet["rollback_verification_packet_required"])
+        self.assertFalse(packet["rollback_verification_packet_present"])
+        self.assertTrue(packet["process_owner_contract_defined"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["process_kill_admitted"])
+        self.assertTrue(packet["owned_process_identity_required"])
+        self.assertFalse(packet["owned_process_identity_present"])
+        self.assertTrue(packet["current_codex_process_exclusion_required"])
+        self.assertFalse(packet["current_codex_process_excluded"])
+        self.assertFalse(packet["current_codex_process_candidate"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["operator_ready_claimed"])
+        self.assertFalse(packet["rollback_operator_ready"])
+        self.assertFalse(packet["rollback_claimed"])
+        self.assertFalse(packet["process_kill_operator_ready"])
+        self.assertFalse(packet["process_kill_claimed"])
+        self.assertTrue(packet["diagnostics_support_artifact_only"])
+        self.assertFalse(packet["diagnostics_counted_as_recovery_action"])
+        self.assertFalse(packet["readonly_checks_counted_as_mutation"])
+        self.assertFalse(packet["session_create_counted_as_recovery_action"])
+        self.assertFalse(packet["contract_endpoint_mutation_allowed"])
+        self.assertFalse(packet["browser_payload_allowed"])
+        self.assertEqual(packet["browser_payload_allowed_keys"], [])
+        self.assertIn("path", packet["forbidden_browser_fields"])
+        self.assertIn("pid", packet["forbidden_browser_fields"])
+        self.assertIn("process_id", packet["forbidden_browser_fields"])
+        self.assertIn("CODEX_HOME", packet["forbidden_browser_fields"])
+        self.assertFalse(packet["current_codex_touched"])
+        self.assertFalse(packet["current_codex_home_touched"])
+        self.assertFalse(packet["arbitrary_path_accepted"])
+        self.assertFalse(packet["arbitrary_process_kill_allowed"])
+        self.assertFalse(packet["arbitrary_path_cleanup_allowed"])
+        self.assertTrue(packet["dangerous_actions_disabled"])
+        self.assertFalse(packet["dangerous_action_mutation_allowed"])
+        prerequisites = {item["id"]: item for item in packet["prerequisites"]}
+        self.assertFalse(prerequisites["rollback_point"]["present"])
+        self.assertTrue(prerequisites["rollback_point"]["blocks_live_ready"])
+        self.assertFalse(prerequisites["rollback_point"]["blocks_contract_definition"])
+        self.assertFalse(prerequisites["current_codex_process_exclusion"]["present"])
+        actions = {action["id"]: action for action in packet["actions"]}
+        self.assertFalse(actions["rollback_readiness"]["live_ready"])
+        self.assertFalse(actions["rollback_readiness"]["admitted"])
+        self.assertFalse(actions["stuck_process_kill_readiness"]["live_ready"])
+        self.assertFalse(actions["stuck_process_kill_readiness"]["admitted"])
+        self.assertFalse(actions["cleanup_arbitrary_path"]["admitted"])
+        self.assertEqual(packet["next_contour"], "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS")
+        self.assertFalse(packet["next_contour_claimed"])
+
+    def test_rollback_process_owner_contract_blocks_if_base_actions_are_missing(self) -> None:
+        packet = build_custom_recovery_rollback_process_owner_contract_packet(
+            contract_packet={
+                "status": "ok",
+                "rollback_claimed": False,
+                "process_kill_claimed": False,
+                "dangerous_actions_disabled": True,
+                "browser_payload_allowed": False,
+                "readonly_sources": {},
+                "actions": [],
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["machine_error_code"], "ROLLBACK_PROCESS_OWNER_CONTRACT_INCOMPLETE")
+        self.assertEqual(packet["block_reason_code"], "ROLLBACK_PROCESS_OWNER_ACTIONS_MISSING")
+        self.assertFalse(packet["rollback_contract_defined"])
+        self.assertFalse(packet["process_owner_contract_defined"])
+        self.assertFalse(packet["rollback_live_ready"])
+        self.assertFalse(packet["process_kill_live_ready"])
+        self.assertFalse(packet["recovery_operator_ready"])
+        self.assertFalse(packet["rollback_apply_admitted"])
+        self.assertFalse(packet["process_kill_admitted"])
 
 
 if __name__ == "__main__":

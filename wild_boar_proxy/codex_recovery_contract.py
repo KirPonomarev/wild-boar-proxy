@@ -13,6 +13,8 @@ FORBIDDEN_BROWSER_FIELDS = [
     "backend_id",
     "route_id",
     "path",
+    "pid",
+    "process_id",
     "token",
     "auth",
     "api_key",
@@ -297,7 +299,7 @@ def build_custom_recovery_contract_packet(
             "api_readonly_ok": api_ok,
         },
         "actions": _actions(),
-        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_AND_OPERATOR_READY_PASS",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS",
         "next_contour_precondition": (
             "Only actions with machine-backed owner contract and dry-run proof may be promoted."
         ),
@@ -486,6 +488,163 @@ def build_custom_recovery_admitted_session_actions_packet(
                 "ready": False,
             },
         ],
-        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_AND_OPERATOR_READY_PASS",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def build_custom_recovery_rollback_process_owner_contract_packet(
+    *,
+    contract_packet: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the dry-run-only rollback/process-owner recovery contract."""
+
+    contract = contract_packet if isinstance(contract_packet, dict) else {}
+    readonly = contract.get("readonly_sources") if isinstance(contract.get("readonly_sources"), dict) else {}
+    actions = contract.get("actions") if isinstance(contract.get("actions"), list) else []
+    rollback_action = _action_by_id(actions, "rollback_readiness")
+    kill_action = _action_by_id(actions, "stuck_process_kill_readiness")
+    cleanup_path_action = _action_by_id(actions, "cleanup_arbitrary_path")
+    touch_original_action = _action_by_id(actions, "touch_original_codex_profile")
+    rollback_contract_defined = (
+        rollback_action.get("status") == "dry_run_only"
+        and rollback_action.get("mutation_allowed") is False
+        and rollback_action.get("browser_payload_allowed") is False
+    )
+    process_owner_contract_defined = (
+        kill_action.get("status") == "dry_run_only"
+        and kill_action.get("mutation_allowed") is False
+        and kill_action.get("browser_payload_allowed") is False
+    )
+    dangerous_actions_disabled = (
+        not _non_admitted_mutation(rollback_action)
+        and not _non_admitted_mutation(kill_action)
+        and not _non_admitted_mutation(cleanup_path_action)
+        and not _non_admitted_mutation(touch_original_action)
+        and contract.get("rollback_claimed") is False
+        and contract.get("process_kill_claimed") is False
+        and contract.get("dangerous_actions_disabled") is True
+    )
+    contract_defined = rollback_contract_defined and process_owner_contract_defined
+    machine_error_code = (
+        "ROLLBACK_PROCESS_OWNER_DRY_RUN_CONTRACT"
+        if contract_defined
+        else "ROLLBACK_PROCESS_OWNER_CONTRACT_INCOMPLETE"
+    )
+    return {
+        "schema_version": 1,
+        "status": "ok" if contract_defined else "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": "" if contract_defined else "ROLLBACK_PROCESS_OWNER_ACTIONS_MISSING",
+        "captured_at_utc": utc_now(),
+        "claim_scope": "custom_codex_recovery_rollback_process_owner_dry_run_contract_only",
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-process-owner-contract",
+        "contract_source_endpoint": "/api/codex/custom/recovery/contract",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS,
+        "browser_forbidden_fields_rejected": True,
+        "rollback_contract_defined": rollback_contract_defined,
+        "rollback_live_ready": False,
+        "rollback_apply_admitted": False,
+        "rollback_point_required": True,
+        "rollback_point_present": False,
+        "rollback_write_surfaces_required": True,
+        "rollback_write_surfaces_declared": False,
+        "rollback_verification_packet_required": True,
+        "rollback_verification_packet_present": False,
+        "process_owner_contract_defined": process_owner_contract_defined,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "owned_process_identity_required": True,
+        "owned_process_identity_present": False,
+        "current_codex_process_exclusion_required": True,
+        "current_codex_process_excluded": False,
+        "current_codex_process_candidate": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "diagnostics_support_artifact_only": True,
+        "diagnostics_counted_as_recovery_action": False,
+        "readonly_checks_counted_as_mutation": False,
+        "session_create_counted_as_recovery_action": False,
+        "contract_readonly_sources_ok": contract.get("status") == "ok",
+        "readonly_sources": readonly,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_process_kill_allowed": False,
+        "arbitrary_path_cleanup_allowed": False,
+        "dangerous_actions_disabled": dangerous_actions_disabled,
+        "dangerous_action_mutation_allowed": False,
+        "prerequisites": [
+            {
+                "id": "rollback_point",
+                "required": True,
+                "present": False,
+                "blocks_live_ready": True,
+                "blocks_contract_definition": False,
+            },
+            {
+                "id": "rollback_write_surfaces",
+                "required": True,
+                "present": False,
+                "blocks_live_ready": True,
+                "blocks_contract_definition": False,
+            },
+            {
+                "id": "rollback_verification_packet",
+                "required": True,
+                "present": False,
+                "blocks_live_ready": True,
+                "blocks_contract_definition": False,
+            },
+            {
+                "id": "owned_process_identity",
+                "required": True,
+                "present": False,
+                "blocks_live_ready": True,
+                "blocks_contract_definition": False,
+            },
+            {
+                "id": "current_codex_process_exclusion",
+                "required": True,
+                "present": False,
+                "blocks_live_ready": True,
+                "blocks_contract_definition": False,
+            },
+        ],
+        "actions": [
+            {
+                "id": rollback_action.get("id") or "rollback_readiness",
+                "status": rollback_action.get("status") or "missing",
+                "mutation_allowed": rollback_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": rollback_action.get("browser_payload_allowed") is True,
+                "live_ready": False,
+                "admitted": False,
+            },
+            {
+                "id": kill_action.get("id") or "stuck_process_kill_readiness",
+                "status": kill_action.get("status") or "missing",
+                "mutation_allowed": kill_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": kill_action.get("browser_payload_allowed") is True,
+                "live_ready": False,
+                "admitted": False,
+            },
+            {
+                "id": cleanup_path_action.get("id") or "cleanup_arbitrary_path",
+                "status": cleanup_path_action.get("status") or "missing",
+                "mutation_allowed": cleanup_path_action.get("mutation_allowed") is True,
+                "browser_payload_allowed": cleanup_path_action.get("browser_payload_allowed") is True,
+                "live_ready": False,
+                "admitted": False,
+            },
+        ],
+        "next_contour": "CUSTOM_CODEX_RECOVERY_ROLLBACK_POINT_DRY_RUN_PASS",
         "next_contour_claimed": False,
     }
