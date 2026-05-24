@@ -1,0 +1,47 @@
+{
+  "contour_id": "SETUP_IMPORT_SERVER_OWNED_DISCOVERY_SOURCE_FOUNDATION_PASS",
+  "date": "2026-05-25",
+  "status": "PASS",
+  "verification": {
+    "tests": [
+      {
+        "name": "tests.test_web_design_live_server",
+        "result": "OK",
+        "count": 103,
+        "notes": "Executed via inline unittest launcher with an ephemeral tkinter stub because local python3 lacks _tkinter."
+      },
+      {
+        "name": "tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_screens_are_inert_skeletons",
+        "result": "OK",
+        "count": 1,
+        "notes": "Executed via inline unittest launcher with an ephemeral PIL.Image stub because local python3 lacks Pillow."
+      },
+      {
+        "name": "tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_routes_are_static_only",
+        "result": "OK",
+        "count": 1,
+        "notes": "Executed via inline unittest launcher with an ephemeral PIL.Image stub because local python3 lacks Pillow."
+      }
+    ],
+    "build": [
+      {
+        "name": "py_compile",
+        "result": "OK",
+        "command": "python3 -m py_compile wild_boar_proxy/web_design_live_server.py tests/test_web_design_live_server.py"
+      },
+      {
+        "name": "git diff --check",
+        "result": "OK",
+        "command": "git diff --check"
+      }
+    ]
+  },
+  "manual": {
+    "run": false,
+    "notes": "Not run for this contour."
+  },
+  "environment_notes": [
+    "Local python3 environment lacks _tkinter.",
+    "Local python3 environment lacks Pillow."
+  ]
+}

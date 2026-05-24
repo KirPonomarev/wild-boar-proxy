@@ -893,15 +893,12 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("installer_init", metadata["actions"])
         self.assertIn("setup_discovery", metadata["actions"])
         self.assertIn("legacy_import", metadata["actions"])
-        self.assertFalse(metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(metadata["actions"]["setup_discovery"]["available"])
         self.assertEqual(
             metadata["actions"]["setup_discovery"]["availability_state"],
-            "foundation_preview_only",
+            live_server.SETUP_DISCOVERY_AVAILABLE_STATE,
         )
-        self.assertEqual(
-            metadata["actions"]["setup_discovery"]["disabled_reason_code"],
-            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
-        )
+        self.assertEqual(metadata["actions"]["setup_discovery"]["disabled_reason_code"], "")
         self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertEqual(
             metadata["actions"]["legacy_import"]["availability_state"],
@@ -938,13 +935,13 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
-        self.assertFalse(sandbox_blocked["actions"]["setup_discovery"]["available"])
+        self.assertTrue(sandbox_blocked["actions"]["setup_discovery"]["available"])
         self.assertFalse(sandbox_blocked["actions"]["legacy_import"]["available"])
-        self.assertFalse(sandbox_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(sandbox_metadata["actions"]["setup_discovery"]["available"])
         self.assertFalse(sandbox_metadata["actions"]["legacy_import"]["available"])
-        self.assertFalse(full_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(full_metadata["actions"]["setup_discovery"]["available"])
         self.assertFalse(full_metadata["actions"]["legacy_import"]["available"])
-        self.assertFalse(bounded_metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(bounded_metadata["actions"]["setup_discovery"]["available"])
         self.assertFalse(bounded_metadata["actions"]["legacy_import"]["available"])
 
         self.assertEqual(sandbox_blocked["action_phase"], SANDBOX_ACTION_PHASE)
@@ -1099,20 +1096,27 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(validate["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
         self.assertEqual(runner.calls, [])
 
-    def test_setup_import_foundation_actions_return_unavailable_packets_without_execution(self) -> None:
+    def test_setup_discovery_returns_zero_write_none_packet_without_execution(self) -> None:
         runner = MappingRunner(live_payloads())
-
-        setup_discovery = run_ui_action(runner, {"ui_action": "setup_discovery"})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_updates = {
+                "WBP_PROFILE_DIR": str(root / "profile"),
+                "WBP_MANAGED_DIR": str(root / "managed"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                setup_discovery = run_ui_action(runner, {"ui_action": "setup_discovery"})
         legacy_import = run_ui_action(runner, {"ui_action": "legacy_import"})
 
-        self.assertEqual(setup_discovery["status"], "integration_failure")
+        self.assertEqual(setup_discovery["status"], "ok")
         self.assertEqual(setup_discovery["ui_action"], "setup_discovery")
-        self.assertEqual(setup_discovery["availability_state"], "foundation_preview_only")
-        self.assertEqual(
-            setup_discovery["result"]["machine_error_code"],
-            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
-        )
+        self.assertEqual(setup_discovery["result"]["machine_error_code"], "OK")
         self.assertEqual(setup_discovery["result"]["changed_files"], [])
+        self.assertEqual(setup_discovery["result"]["data"]["discovery_state"], "none")
+        self.assertEqual(setup_discovery["result"]["data"]["source_kind"], live_server.SETUP_DISCOVERY_SOURCE_KIND)
+        self.assertFalse(setup_discovery["result"]["data"]["browser_path_intake"])
+        self.assertFalse(setup_discovery["result"]["data"]["selection_persisted"])
+        self.assertEqual(setup_discovery["result"]["data"]["candidate_marker_count"], 0)
         self.assertEqual(legacy_import["status"], "integration_failure")
         self.assertEqual(legacy_import["ui_action"], "legacy_import")
         self.assertEqual(legacy_import["availability_state"], "foundation_import_capable_only")
@@ -1121,6 +1125,48 @@ class WebDesignLiveServerTests(unittest.TestCase):
             SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
         )
         self.assertEqual(legacy_import["result"]["changed_files"], [])
+        self.assertEqual(runner.calls, [])
+
+    def test_setup_discovery_returns_discovered_packet_from_current_owned_runtime_layout(self) -> None:
+        runner = MappingRunner(live_payloads())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            profile_dir = root / "profile"
+            data_dir = root / "managed"
+            env_updates = {
+                "WBP_PROFILE_DIR": str(profile_dir),
+                "WBP_MANAGED_DIR": str(data_dir),
+                "WBP_EXTERNAL_MODELS_DIR": str(data_dir / "external-models"),
+            }
+            with mock.patch.dict(os.environ, env_updates, clear=False):
+                install_payload = run_installer_init(RuntimePaths.from_env())
+                self.assertEqual(install_payload["status"], "ok")
+                setup_discovery = run_ui_action(runner, {"ui_action": "setup_discovery"})
+
+        self.assertEqual(setup_discovery["status"], "ok")
+        self.assertEqual(setup_discovery["result"]["machine_error_code"], "OK")
+        self.assertEqual(setup_discovery["result"]["data"]["discovery_state"], "discovered")
+        self.assertGreater(setup_discovery["result"]["data"]["candidate_marker_count"], 0)
+        self.assertFalse(setup_discovery["result"]["data"]["filesystem_mutation_performed"])
+        self.assertFalse(setup_discovery["result"]["data"]["import_execution_claimed"])
+        self.assertEqual(runner.calls, [])
+
+    def test_setup_discovery_blocks_relative_server_owned_runtime_paths(self) -> None:
+        runner = MappingRunner(live_payloads())
+        env_updates = {
+            "WBP_PROFILE_DIR": "relative-profile",
+            "WBP_MANAGED_DIR": "relative-managed",
+        }
+        with mock.patch.dict(os.environ, env_updates, clear=False):
+            setup_discovery = run_ui_action(runner, {"ui_action": "setup_discovery"})
+
+        self.assertEqual(setup_discovery["status"], "command_error")
+        self.assertEqual(
+            setup_discovery["result"]["machine_error_code"],
+            live_server.SETUP_DISCOVERY_SOURCE_BLOCKED_CODE,
+        )
+        self.assertEqual(setup_discovery["result"]["data"]["discovery_state"], "blocked")
+        self.assertFalse(setup_discovery["result"]["data"]["browser_path_intake"])
         self.assertEqual(runner.calls, [])
 
     def test_http_actions_endpoint_reports_sandbox_phase_and_opens_only_admitted_actions(self) -> None:
@@ -4185,7 +4231,7 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("setup_discovery", metadata["actions"])
         self.assertNotIn("select_client", metadata["actions"])
         self.assertIn("legacy_import", metadata["actions"])
-        self.assertFalse(metadata["actions"]["setup_discovery"]["available"])
+        self.assertTrue(metadata["actions"]["setup_discovery"]["available"])
         self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertNotIn("api_route_create", metadata["actions"])
         self.assertNotIn("api_route_update", metadata["actions"])

@@ -64,7 +64,11 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_stop_cleanup_preflight_packet,
     custom_recovery_session_ref,
 )
-from wild_boar_proxy.runtime import DEFAULT_LAUNCHER_SCRIPT_NAME
+from wild_boar_proxy.runtime import (
+    DEFAULT_LAUNCHER_SCRIPT_NAME,
+    RuntimePaths,
+    build_command_payload,
+)
 from wild_boar_proxy.review_bridge_apply_admission import (
     ReviewApplyContext,
     default_review_apply_context,
@@ -516,9 +520,9 @@ UI_ACTION_ALLOWLIST = {
         "affects_primary_truth": False,
         "confirmation_required": False,
         "post_action_refresh_required": False,
-        "action_claim_scope": "только packet-owned foundation truth для setup/import discovery; filesystem discovery, selection persistence и runtime mutation не включены",
+        "action_claim_scope": "только bounded server-owned discovery truth для current runtime layout; selection persistence и runtime mutation не включены",
         "display_name": "Проверить setup/import foundation",
-        "human_meaning": "Показать admitted packet path для setup/import discovery без browser paths, filesystem discovery или runtime mutation.",
+        "human_meaning": "Показать bounded server-owned discovery truth для setup/import без browser paths, selection persistence или runtime mutation.",
     },
     "legacy_import": {
         "adapter_command_id": "legacy_import",
@@ -622,6 +626,9 @@ SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE = (
     "Confirm semantics, collision resolution и final import execution остаются вне admitted web path."
 )
 SETUP_IMPORT_FOUNDATION_ACTIONS = frozenset({"setup_discovery", "legacy_import"})
+SETUP_DISCOVERY_SOURCE_KIND = "current_runtime_owned_layout"
+SETUP_DISCOVERY_AVAILABLE_STATE = "server_owned_discovery_only"
+SETUP_DISCOVERY_SOURCE_BLOCKED_CODE = "UI_SETUP_DISCOVERY_SOURCE_UNSAFE"
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
@@ -839,6 +846,113 @@ def _current_runtime_target_paths() -> tuple[Path, Path]:
     profile_dir = Path(os.environ.get("WBP_PROFILE_DIR", default_profile)).expanduser()
     data_dir = Path(os.environ.get("WBP_MANAGED_DIR", str(profile_dir / "managed"))).expanduser()
     return profile_dir, data_dir
+
+
+def _setup_discovery_packet() -> dict[str, Any]:
+    paths = RuntimePaths.from_env()
+    if not paths.profile_dir.is_absolute() or not paths.managed_dir.is_absolute():
+        return build_command_payload(
+            ok=False,
+            human_message=(
+                "Setup discovery requires absolute server-owned runtime target paths. "
+                "Browser path intake remains forbidden."
+            ),
+            machine_error_code=SETUP_DISCOVERY_SOURCE_BLOCKED_CODE,
+            liveness="unknown",
+            severity="recoverable",
+            operator_action="user_action",
+            changed_files=[],
+            extra={
+                "data": {
+                    "discovery_state": "blocked",
+                    "source_kind": SETUP_DISCOVERY_SOURCE_KIND,
+                    "browser_path_intake": False,
+                    "selection_persisted": False,
+                    "session_token_materialized": False,
+                    "filesystem_mutation_performed": False,
+                    "import_execution_claimed": False,
+                    "candidate_marker_count": 0,
+                }
+            },
+        )
+
+    candidate_marker_count = sum(
+        1
+        for candidate in (
+            paths.config_toml,
+            paths.registry_file,
+            paths.state_file,
+            paths.runtime_mode_file,
+            paths.runtime_effective_mode_file,
+            paths.launcher_script,
+            paths.managed_dir / "bin",
+        )
+        if candidate.exists()
+    )
+    discovery_state = "discovered" if candidate_marker_count else "none"
+    human_message = (
+        "Setup discovery found one bounded server-owned runtime layout. No write performed."
+        if discovery_state == "discovered"
+        else "Setup discovery found no current server-owned runtime layout candidate. No write performed."
+    )
+    return build_command_payload(
+        ok=True,
+        human_message=human_message,
+        machine_error_code="OK",
+        liveness="unknown",
+        severity="recoverable",
+        operator_action="none",
+        changed_files=[],
+        extra={
+            "data": {
+                "discovery_state": discovery_state,
+                "source_kind": SETUP_DISCOVERY_SOURCE_KIND,
+                "browser_path_intake": False,
+                "selection_persisted": False,
+                "session_token_materialized": False,
+                "filesystem_mutation_performed": False,
+                "import_execution_claimed": False,
+                "candidate_marker_count": candidate_marker_count,
+            }
+        },
+    )
+
+
+def _direct_ui_action_packet_response(
+    ui_action: str,
+    *,
+    action_spec: dict[str, Any],
+    packet: dict[str, Any],
+) -> dict[str, Any]:
+    ok = (
+        packet.get("status") == "ok"
+        and packet.get("exit_code") == 0
+        and packet.get("machine_error_code") == "OK"
+    )
+    return {
+        "schema_version": 1,
+        "status": "ok" if ok else "command_error",
+        "source": "ui_action",
+        "ui_action": ui_action,
+        "action_role": action_spec["action_role"],
+        "mutates_runtime": action_spec["mutates_runtime"],
+        "affects_primary_truth": action_spec["affects_primary_truth"],
+        "confirmation_required": action_spec["confirmation_required"],
+        "post_action_refresh_required": action_spec["post_action_refresh_required"],
+        "action_claim_scope": action_spec["action_claim_scope"],
+        "mutation_class": action_spec.get("mutation_class", ""),
+        "account_id": "",
+        "route_id": "",
+        "session_id": "",
+        "result": {
+            "status": str(packet.get("status", "error")),
+            "machine_error_code": str(packet.get("machine_error_code", "")),
+            "human_message": str(packet.get("human_message", "")),
+            "next_action": str(packet.get("next_action", "")),
+            "changed_files": list(packet.get("changed_files", [])),
+            "data": packet.get("data", {}) if isinstance(packet.get("data"), dict) else {},
+        },
+    }
 
 
 def _sandbox_action_preflight(contract: LaunchCopyContract | None) -> dict[str, Any]:
@@ -1658,6 +1772,12 @@ def run_ui_action(
         launch_preflight = _launch_copy_preflight(launch_copy_contract)
         if launch_preflight["status"] != "admitted":
             return _launch_copy_preflight_denied(ui_action, launch_preflight)
+    if ui_action == "setup_discovery":
+        return _direct_ui_action_packet_response(
+            ui_action,
+            action_spec=action_spec,
+            packet=_setup_discovery_packet(),
+        )
     if not _action_available(
         ui_action,
         launch_client_path=launch_client_path,
@@ -3230,6 +3350,8 @@ def _action_available(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> bool:
+    if ui_action == "setup_discovery":
+        return True
     if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
         return False
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3252,7 +3374,7 @@ def _action_availability_state(
     action_phase: str,
 ) -> str:
     if ui_action == "setup_discovery":
-        return "foundation_preview_only"
+        return SETUP_DISCOVERY_AVAILABLE_STATE
     if ui_action == "legacy_import":
         return "foundation_import_capable_only"
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3304,8 +3426,6 @@ def _action_disabled_reasons(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> tuple[str, ...]:
-    if ui_action == "setup_discovery":
-        return SETUP_IMPORT_DISCOVERY_FOUNDATION_DISABLED_REASONS
     if ui_action == "legacy_import":
         return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_DISABLED_REASONS
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
@@ -3336,7 +3456,7 @@ def _action_unavailable_reason(
     action_phase: str,
 ) -> str:
     if ui_action == "setup_discovery":
-        return SETUP_IMPORT_DISCOVERY_FOUNDATION_UNAVAILABLE_MESSAGE
+        return ""
     if ui_action == "legacy_import":
         return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
