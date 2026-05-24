@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from wild_boar_proxy.review_bridge_apply_admission import ReviewApplyContext
 from wild_boar_proxy.review_bridge_packet_import import (
     ReviewImportContext,
     ReviewPacketImportError,
@@ -45,7 +46,7 @@ ALLOWLIST: dict[str, ReviewCommandSpec] = {
     ),
     "apply_exact_text_change": ReviewCommandSpec(
         command_id="apply_exact_text_change",
-        runtime_enabled=False,
+        runtime_enabled=True,
     ),
 }
 
@@ -77,6 +78,7 @@ def execute_review_command(
     *,
     payload: dict[str, Any] | None = None,
     import_context: ReviewImportContext | None = None,
+    apply_context: ReviewApplyContext | None = None,
 ) -> dict[str, Any]:
     body = payload or {}
     try:
@@ -90,6 +92,30 @@ def execute_review_command(
                 machine_error_code="REVIEW_APPLY_NOT_ENABLED",
                 next_action="wait_for_contour_04",
                 data={"command_id": command_id},
+            )
+        if command_id == "apply_exact_text_change":
+            result, updated_record = store._run_exact_text_apply(context=apply_context)
+            if updated_record is not None:
+                data = {
+                    "command_id": command_id,
+                    "session_present": True,
+                    "session_record": asdict(updated_record),
+                    **result.data,
+                }
+            else:
+                data = {
+                    "command_id": command_id,
+                    "session_present": store.has_active_session(),
+                    **result.data,
+                }
+            return _packet(
+                status=result.status,
+                exit_code=result.exit_code,
+                human_message=result.human_message,
+                machine_error_code=result.machine_error_code,
+                next_action=result.next_action,
+                data=data,
+                changed_files=result.changed_files,
             )
         if command_id == "clear_review_session":
             had_active = store._clear_active_session()
@@ -175,13 +201,14 @@ def _packet(
     machine_error_code: str,
     next_action: str,
     data: dict[str, Any],
+    changed_files: list[str] | None = None,
 ) -> dict[str, Any]:
     packet = {
         "status": status,
         "exit_code": exit_code,
         "human_message": human_message,
         "machine_error_code": machine_error_code,
-        "changed_files": [],
+        "changed_files": changed_files or [],
         "next_action": next_action,
         "data": data,
     }

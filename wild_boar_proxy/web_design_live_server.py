@@ -1828,14 +1828,15 @@ def build_handler(
     codex_custom_sessions = CodexCustomSessionManager()
     review_session_store = ReviewSessionStore()
     bounded_review_import_context = review_import_context or default_review_import_context(ROOT)
-    bounded_review_apply_context = review_apply_context
-    if bounded_review_apply_context is None:
+    command_review_apply_context = review_apply_context
+    query_review_apply_context = review_apply_context
+    if query_review_apply_context is None:
         default_apply_context = default_review_apply_context(ROOT)
         if default_apply_context.source_status == "ok":
-            bounded_review_apply_context = default_apply_context
+            query_review_apply_context = default_apply_context
     review_query_bridge = ReviewQueryBridge(
         review_session_store,
-        review_apply_context=bounded_review_apply_context,
+        review_apply_context=query_review_apply_context,
     )
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
@@ -2393,6 +2394,7 @@ def build_handler(
                         command_id,
                         payload=command_payload if isinstance(command_payload, dict) else {},
                         import_context=bounded_review_import_context,
+                        apply_context=command_review_apply_context,
                     )
                 )
                 return
