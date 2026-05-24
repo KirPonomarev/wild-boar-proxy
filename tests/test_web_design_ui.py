@@ -2219,6 +2219,27 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn("not exposed to browser UI", settings_markup)
         self.assertIn("CLIProxyAPI boundary", settings_markup)
         self.assertIn("desktop owner-gated", settings_markup)
+        self.assertIn("review packet preview", settings_markup)
+        self.assertIn("supported · local JSON review packet only", settings_markup)
+        self.assertIn("exact-text safe apply", settings_markup)
+        self.assertIn(
+            "supported · one exact text change only, with receipt and recovery",
+            settings_markup,
+        )
+        self.assertIn("import-existing lane", settings_markup)
+        self.assertIn(
+            "supported · explicit confirm required, narrow lane only",
+            settings_markup,
+        )
+        self.assertIn("DOCX export baseline", settings_markup)
+        self.assertIn("Markdown export", settings_markup)
+        self.assertIn("Text export", settings_markup)
+        self.assertIn("DOCX review import", settings_markup)
+        self.assertIn("not supported yet", settings_markup)
+        self.assertIn("Word / Google Docs roundtrip", settings_markup)
+        self.assertIn("Structural auto-apply", settings_markup)
+        self.assertIn("Mass apply", settings_markup)
+        self.assertIn("Full sync", settings_markup)
         self.assertIn("readonly metadata", settings_markup)
         self.assertIn("About does not read runtime state, git metadata, or package metadata.", settings_markup)
         self.assertIn("Демо-режим настроек", settings_markup + js)
@@ -2378,6 +2399,69 @@ if (nodes.diagnosticsRecordsModeChip.lastElementChild.textContent !== "отло�
         self.assertIn(".settings-accounts-policy", css)
         self.assertIn(".accounts-policy-grid", css)
         self.assertIn(".accounts-policy-disabled-list", css)
+
+    def test_first_useful_release_claim_matrix_is_user_facing_and_narrow(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        readme = (ROOT / "README.md").read_text()
+        combined = readme + "\n" + html
+
+        self.assertIn("## First useful release claim matrix", readme)
+        self.assertIn(
+            "`Review packet preview`: supported; local JSON review packet only",
+            readme,
+        )
+        self.assertIn(
+            "`Exact-text safe apply`: supported; one exact text change only, with receipt and recovery",
+            readme,
+        )
+        self.assertIn(
+            "`Import-existing lane`: supported; explicit confirm required, narrow lane only",
+            readme,
+        )
+        self.assertIn(
+            "`DOCX export baseline`: not claimed in this first useful release",
+            readme,
+        )
+        self.assertIn(
+            "`Markdown export`: not claimed in this first useful release",
+            readme,
+        )
+        self.assertIn(
+            "`Text export`: not claimed in this first useful release",
+            readme,
+        )
+        self.assertIn("`DOCX review import`: not supported yet", readme)
+        self.assertIn("`Word / Google Docs roundtrip`: not claimed", readme)
+        self.assertIn("`Structural auto-apply`: not claimed", readme)
+        self.assertIn("`Mass apply`: not claimed", readme)
+        self.assertIn("`Full sync`: not claimed", readme)
+
+        self.assertIn(
+            "supported · local JSON review packet only",
+            html,
+        )
+        self.assertIn(
+            "supported · one exact text change only, with receipt and recovery",
+            html,
+        )
+        self.assertIn(
+            "supported · explicit confirm required, narrow lane only",
+            html,
+        )
+        self.assertIn("DOCX review import", html)
+        self.assertIn("not supported yet", html)
+        self.assertIn("Word / Google Docs roundtrip", html)
+        self.assertIn("not claimed", html)
+
+        for forbidden in (
+            "DOCX review import supported",
+            "Word / Google Docs roundtrip supported",
+            "structural auto-apply supported",
+            "mass apply supported",
+            "full sync supported",
+            "import-existing lane supported without explicit confirm",
+        ):
+            self.assertNotIn(forbidden, combined)
 
     def test_settings_data_layout_subflow_is_bounded_and_section_routed(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

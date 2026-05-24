@@ -1,0 +1,45 @@
+{
+  "contour": "CONTOUR_07: HONEST_RELEASE_CLAIM_MATRIX",
+  "branch": "codex/external-agent-lab-isolated",
+  "head_pre_commit": "1d884ec0",
+  "changed_files": [
+    "README.md",
+    "tests/test_web_design_ui.py",
+    "wild_boar_proxy/web_design_ui/index.html"
+  ],
+  "commands": [
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m py_compile tests/test_web_design_ui.py",
+      "status": "passed"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_ui.WebDesignUiTests.test_settings_screen_is_readonly_with_safe_actions_and_deferred_controls tests.test_web_design_ui.WebDesignUiTests.test_first_useful_release_claim_matrix_is_user_facing_and_narrow tests.test_web_design_ui.WebDesignUiTests.test_import_existing_transaction_wizard_is_bounded_preview tests.test_web_design_ui.WebDesignUiTests.test_setup_select_import_routes_are_static_only -q",
+      "status": "passed",
+      "details": "Ran 4 tests in 0.022s"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_web_design_ui -q",
+      "status": "passed",
+      "details": "Ran 73 tests in 2.035s"
+    },
+    {
+      "command": "/Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -B -m unittest tests.test_review_bridge_command_bus.ReviewBridgeCommandBusTests.test_import_review_packet_is_admitted_through_command_bus tests.test_review_bridge_command_bus.ReviewBridgeCommandBusTests.test_apply_exact_text_change_updates_one_file_and_refreshes_surface tests.test_web_design_live_server.WebDesignLiveServerTests.test_legacy_import_confirmed_token_executes_owner_import_and_consumes_token -q",
+      "status": "passed",
+      "details": "Ran 3 tests in 0.013s"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "scope_checks": {
+    "runtime_files_changed": false,
+    "ui_text_only": true,
+    "new_command_surfaces_added": false
+  },
+  "independent_audit": {
+    "status": "PASS",
+    "report": "audit_results/honest_release_claim_matrix_pass_2026-05-25/evidence/independent_audit_report.json"
+  },
+  "generated_at_utc": "2026-05-24T23:12:10Z"
+}

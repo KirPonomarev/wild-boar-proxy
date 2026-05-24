@@ -5,8 +5,10 @@
 
 Wild Boar Proxy is an experimental companion control app for Codex.
 
-It helps a user manage their own local Codex setup from one place: account
-lifecycle, launch configuration, runtime modes, diagnostics, and recovery.
+The broader control surface in this repo spans account lifecycle, launch
+configuration, runtime modes, diagnostics, and recovery. The current first
+useful release claim is narrower; see `First useful release claim matrix`
+below.
 
 It does not modify Codex, replace the Codex client, or provide shared account
 access for other users.
@@ -33,6 +35,20 @@ issue tracker.
 
 Repository truth is limited to canon, contracts, implementation, tests, and
 completed evidence.
+
+## First useful release claim matrix
+
+- `Review packet preview`: supported; local JSON review packet only
+- `Exact-text safe apply`: supported; one exact text change only, with receipt and recovery
+- `Import-existing lane`: supported; explicit confirm required, narrow lane only
+- `DOCX export baseline`: not claimed in this first useful release
+- `Markdown export`: not claimed in this first useful release
+- `Text export`: not claimed in this first useful release
+- `DOCX review import`: not supported yet
+- `Word / Google Docs roundtrip`: not claimed
+- `Structural auto-apply`: not claimed
+- `Mass apply`: not claimed
+- `Full sync`: not claimed
 
 ## Managed pool capacity
 
