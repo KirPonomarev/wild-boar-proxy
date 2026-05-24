@@ -1,0 +1,72 @@
+{
+  "live_metadata": {
+    "action_phase": "live_readonly",
+    "setup_discovery": {
+      "action_role": "setup_import_discovery_foundation",
+      "available": false,
+      "availability_state": "foundation_preview_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+      "disabled_reasons": [
+        "setup_import_foundation_only",
+        "preview_discovery_metadata_only"
+      ],
+      "confirmation_required": false,
+      "post_action_refresh_required": false
+    },
+    "legacy_import": {
+      "action_role": "setup_import_import_capable_foundation",
+      "available": false,
+      "availability_state": "foundation_import_capable_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+      "disabled_reasons": [
+        "setup_import_foundation_only",
+        "import_capable_metadata_only"
+      ],
+      "confirmation_required": true,
+      "post_action_refresh_required": false
+    }
+  },
+  "sandbox_metadata": {
+    "action_phase": "sandbox_actions",
+    "setup_discovery": {
+      "available": false,
+      "availability_state": "foundation_preview_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY"
+    },
+    "legacy_import": {
+      "available": false,
+      "availability_state": "foundation_import_capable_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY"
+    }
+  },
+  "full_metadata": {
+    "action_phase": "full",
+    "setup_discovery": {
+      "available": false,
+      "availability_state": "foundation_preview_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY"
+    },
+    "legacy_import": {
+      "available": false,
+      "availability_state": "foundation_import_capable_only",
+      "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY"
+    }
+  },
+  "setup_discovery_packet": {
+    "status": "integration_failure",
+    "availability_state": "foundation_preview_only",
+    "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+    "machine_error_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+    "next_action": "user_action",
+    "changed_files": []
+  },
+  "legacy_import_packet": {
+    "status": "integration_failure",
+    "availability_state": "foundation_import_capable_only",
+    "disabled_reason_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+    "machine_error_code": "UI_SETUP_IMPORT_FOUNDATION_ONLY",
+    "next_action": "user_action",
+    "changed_files": []
+  },
+  "runner_calls": []
+}

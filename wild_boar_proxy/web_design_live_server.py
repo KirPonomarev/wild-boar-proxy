@@ -508,6 +508,30 @@ UI_ACTION_ALLOWLIST = {
         "display_name": "Запустить внешний клиент",
         "human_meaning": "Запросить bounded запуск внешнего клиента, затем обновить live overview truth.",
     },
+    "setup_discovery": {
+        "adapter_command_id": "installer_init",
+        "action_role": "setup_import_discovery_foundation",
+        "mutation_class": "setup_import_admission",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": False,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только packet-owned foundation truth для setup/import discovery; filesystem discovery, selection persistence и runtime mutation не включены",
+        "display_name": "Проверить setup/import foundation",
+        "human_meaning": "Показать admitted packet path для setup/import discovery без browser paths, filesystem discovery или runtime mutation.",
+    },
+    "legacy_import": {
+        "adapter_command_id": "legacy_import",
+        "action_role": "setup_import_import_capable_foundation",
+        "mutation_class": "setup_import_admission",
+        "mutates_runtime": False,
+        "affects_primary_truth": False,
+        "confirmation_required": True,
+        "post_action_refresh_required": False,
+        "action_claim_scope": "только packet-owned foundation truth для import-capable lane; confirm, collision handling и final import execution остаются вне этого контура",
+        "display_name": "Показать import-capable lane",
+        "human_meaning": "Показать admitted packet path для import-capable lane без final confirm semantics и без выполнения legacy import.",
+    },
 }
 
 LIVE_READONLY_ACTION_PHASE = "live_readonly"
@@ -580,6 +604,24 @@ SANDBOX_ACTION_PHASE_UNAVAILABLE_MESSAGE = (
 )
 SANDBOX_ACTION_PHASE_DISABLED_REASON_CODE = "UI_ACTION_PHASE_NOT_ADMITTED"
 SANDBOX_ACTION_PHASE_DISABLED_REASONS = ("sandbox_phase_limited",)
+SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE = "UI_SETUP_IMPORT_FOUNDATION_ONLY"
+SETUP_IMPORT_DISCOVERY_FOUNDATION_DISABLED_REASONS = (
+    "setup_import_foundation_only",
+    "preview_discovery_metadata_only",
+)
+SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_DISABLED_REASONS = (
+    "setup_import_foundation_only",
+    "import_capable_metadata_only",
+)
+SETUP_IMPORT_DISCOVERY_FOUNDATION_UNAVAILABLE_MESSAGE = (
+    "Setup/import discovery surface admitted only as packet truth in this contour. "
+    "Filesystem discovery, candidate proof и selection persistence остаются вне admitted web execution path."
+)
+SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE = (
+    "Setup/import import-capable lane admitted only as packet truth in this contour. "
+    "Confirm semantics, collision resolution и final import execution остаются вне admitted web path."
+)
+SETUP_IMPORT_FOUNDATION_ACTIONS = frozenset({"setup_discovery", "legacy_import"})
 SAFE_APP_COPY_HELPER_PROVENANCE = "server_owned_bounded_helper"
 
 
@@ -3188,6 +3230,8 @@ def _action_available(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> bool:
+    if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
+        return False
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return False
@@ -3207,6 +3251,10 @@ def _action_availability_state(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
+    if ui_action == "setup_discovery":
+        return "foundation_preview_only"
+    if ui_action == "legacy_import":
+        return "foundation_import_capable_only"
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return "disabled_live_action"
@@ -3231,6 +3279,8 @@ def _action_unavailable_code(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
+    if ui_action in SETUP_IMPORT_FOUNDATION_ACTIONS:
+        return SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return LIVE_READONLY_ACTION_DISABLED_REASON_CODE
@@ -3254,6 +3304,10 @@ def _action_disabled_reasons(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> tuple[str, ...]:
+    if ui_action == "setup_discovery":
+        return SETUP_IMPORT_DISCOVERY_FOUNDATION_DISABLED_REASONS
+    if ui_action == "legacy_import":
+        return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_DISABLED_REASONS
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return LIVE_READONLY_ACTION_DISABLED_REASONS
@@ -3281,6 +3335,10 @@ def _action_unavailable_reason(
     launch_copy_contract: LaunchCopyContract | None,
     action_phase: str,
 ) -> str:
+    if ui_action == "setup_discovery":
+        return SETUP_IMPORT_DISCOVERY_FOUNDATION_UNAVAILABLE_MESSAGE
+    if ui_action == "legacy_import":
+        return SETUP_IMPORT_IMPORT_CAPABLE_FOUNDATION_UNAVAILABLE_MESSAGE
     if ui_action in PARKED_IN_LIVE_READONLY_ACTIONS:
         if action_phase == LIVE_READONLY_ACTION_PHASE:
             return LIVE_READONLY_ACTION_UNAVAILABLE_MESSAGE

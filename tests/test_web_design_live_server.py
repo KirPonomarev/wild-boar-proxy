@@ -31,6 +31,7 @@ from wild_boar_proxy.web_design_live_server import (
     PARKED_IN_LIVE_READONLY_ACTIONS,
     READONLY_COMMAND_IDS,
     SANDBOX_ACTION_PHASE,
+    SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
     LaunchCopyContract,
     build_api_connections_readonly_snapshot,
     build_accounts_readonly_snapshot,
@@ -885,13 +886,31 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertNotIn("save_settings", metadata["actions"])
         self.assertNotIn("update_settings", metadata["actions"])
         self.assertNotIn("settings_write", metadata["actions"])
-        self.assertNotIn("setup_discovery", metadata["actions"])
         self.assertNotIn("select_client", metadata["actions"])
         self.assertNotIn("save_selection", metadata["actions"])
         self.assertNotIn("verify_path", metadata["actions"])
-        self.assertNotIn("legacy_import", metadata["actions"])
         self.assertNotIn("import_apply", metadata["actions"])
         self.assertNotIn("installer_init", metadata["actions"])
+        self.assertIn("setup_discovery", metadata["actions"])
+        self.assertIn("legacy_import", metadata["actions"])
+        self.assertFalse(metadata["actions"]["setup_discovery"]["available"])
+        self.assertEqual(
+            metadata["actions"]["setup_discovery"]["availability_state"],
+            "foundation_preview_only",
+        )
+        self.assertEqual(
+            metadata["actions"]["setup_discovery"]["disabled_reason_code"],
+            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+        )
+        self.assertFalse(metadata["actions"]["legacy_import"]["available"])
+        self.assertEqual(
+            metadata["actions"]["legacy_import"]["availability_state"],
+            "foundation_import_capable_only",
+        )
+        self.assertEqual(
+            metadata["actions"]["legacy_import"]["disabled_reason_code"],
+            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+        )
         self.assertFalse(metadata["actions"]["refresh_health_detail"]["available"])
         self.assertFalse(metadata["actions"]["stable_repair_plan"]["available"])
         self.assertFalse(metadata["actions"]["export_diagnostics"]["available"])
@@ -919,6 +938,14 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertIn("live-readonly", metadata["actions"]["export_diagnostics"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["sync_runtime"]["unavailable_reason"])
         self.assertIn("live-readonly", metadata["actions"]["launch_client_dispatch"]["unavailable_reason"])
+        self.assertFalse(sandbox_blocked["actions"]["setup_discovery"]["available"])
+        self.assertFalse(sandbox_blocked["actions"]["legacy_import"]["available"])
+        self.assertFalse(sandbox_metadata["actions"]["setup_discovery"]["available"])
+        self.assertFalse(sandbox_metadata["actions"]["legacy_import"]["available"])
+        self.assertFalse(full_metadata["actions"]["setup_discovery"]["available"])
+        self.assertFalse(full_metadata["actions"]["legacy_import"]["available"])
+        self.assertFalse(bounded_metadata["actions"]["setup_discovery"]["available"])
+        self.assertFalse(bounded_metadata["actions"]["legacy_import"]["available"])
 
         self.assertEqual(sandbox_blocked["action_phase"], SANDBOX_ACTION_PHASE)
         self.assertEqual(sandbox_blocked["sandbox_preflight"]["status"], "denied")
@@ -1070,6 +1097,30 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(diagnostics["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
         self.assertEqual(validate["status"], "integration_failure")
         self.assertEqual(validate["result"]["machine_error_code"], LIVE_READONLY_ACTION_DISABLED_REASON_CODE)
+        self.assertEqual(runner.calls, [])
+
+    def test_setup_import_foundation_actions_return_unavailable_packets_without_execution(self) -> None:
+        runner = MappingRunner(live_payloads())
+
+        setup_discovery = run_ui_action(runner, {"ui_action": "setup_discovery"})
+        legacy_import = run_ui_action(runner, {"ui_action": "legacy_import"})
+
+        self.assertEqual(setup_discovery["status"], "integration_failure")
+        self.assertEqual(setup_discovery["ui_action"], "setup_discovery")
+        self.assertEqual(setup_discovery["availability_state"], "foundation_preview_only")
+        self.assertEqual(
+            setup_discovery["result"]["machine_error_code"],
+            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+        )
+        self.assertEqual(setup_discovery["result"]["changed_files"], [])
+        self.assertEqual(legacy_import["status"], "integration_failure")
+        self.assertEqual(legacy_import["ui_action"], "legacy_import")
+        self.assertEqual(legacy_import["availability_state"], "foundation_import_capable_only")
+        self.assertEqual(
+            legacy_import["result"]["machine_error_code"],
+            SETUP_IMPORT_FOUNDATION_ONLY_UNAVAILABLE_CODE,
+        )
+        self.assertEqual(legacy_import["result"]["changed_files"], [])
         self.assertEqual(runner.calls, [])
 
     def test_http_actions_endpoint_reports_sandbox_phase_and_opens_only_admitted_actions(self) -> None:
@@ -4131,9 +4182,11 @@ class WebDesignLiveServerTests(unittest.TestCase):
         self.assertEqual(api_connections["status"], "ok")
         self.assertEqual(api_connections["source"], "api_connections_readonly")
         self.assertNotIn("adapter_command_id", json.dumps(metadata))
-        self.assertNotIn("setup_discovery", metadata["actions"])
+        self.assertIn("setup_discovery", metadata["actions"])
         self.assertNotIn("select_client", metadata["actions"])
-        self.assertNotIn("legacy_import", metadata["actions"])
+        self.assertIn("legacy_import", metadata["actions"])
+        self.assertFalse(metadata["actions"]["setup_discovery"]["available"])
+        self.assertFalse(metadata["actions"]["legacy_import"]["available"])
         self.assertNotIn("api_route_create", metadata["actions"])
         self.assertNotIn("api_route_update", metadata["actions"])
         self.assertNotIn("api_route_draft", metadata["actions"])
