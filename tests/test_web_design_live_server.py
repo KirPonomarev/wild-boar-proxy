@@ -4965,6 +4965,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
                 dry_run = json.loads(post_json(f"{base}/api/codex/original/launch-dry-run", {}))
                 custom_dry_run = json.loads(post_json(f"{base}/api/codex/custom/launch-dry-run", {}))
+                app_copy_dry_run = json.loads(
+                    post_json(f"{base}/api/codex/app-copy/launch-dry-run", {})
+                )
+                app_copy_live = json.loads(
+                    post_json(f"{base}/api/codex/app-copy/launch", {})
+                )
                 rejected = json.loads(
                     post_json(
                         f"{base}/api/codex/original/launch-dry-run",
@@ -4975,6 +4981,12 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                     post_json(
                         f"{base}/api/codex/custom/launch-dry-run",
                         {"model": "gpt-5.3-codex", "route_id": "route", "codex_home": "/tmp/home"},
+                    )
+                )
+                app_copy_rejected = json.loads(
+                    post_json(
+                        f"{base}/api/codex/app-copy/launch-dry-run",
+                        {"path": "/tmp/app", "port": 1234, "env": {"HOME": "/tmp/home"}},
                     )
                 )
             finally:
@@ -5009,12 +5021,42 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(custom_dry_run["real_launch_attempted"])
         self.assertFalse(custom_dry_run["prompt_attempted"])
         self.assertEqual(custom_dry_run["token_burn"], 0)
+        self.assertEqual(app_copy_dry_run["status"], "ok")
+        self.assertEqual(
+            app_copy_dry_run["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+        )
+        self.assertTrue(app_copy_dry_run["server_issued_plan"])
+        self.assertFalse(app_copy_dry_run["browser_forbidden_fields_rejected"])
+        self.assertTrue(app_copy_dry_run["browser_forbidden_fields_absent"])
+        self.assertFalse(app_copy_dry_run["launch_performed"])
+        self.assertFalse(app_copy_dry_run["live_launch_admitted"])
+        self.assertTrue(app_copy_dry_run["app_path_redacted"])
+        self.assertFalse(app_copy_dry_run["current_codex_touched"])
+        self.assertFalse(app_copy_dry_run["uses_current_home"])
+        self.assertEqual(app_copy_live["status"], "blocked")
+        self.assertEqual(
+            app_copy_live["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+        )
+        self.assertFalse(app_copy_live["launch_performed"])
+        self.assertTrue(app_copy_live["pid_not_exposed_to_browser"])
+        self.assertEqual(app_copy_live["final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED")
+        self.assertEqual(app_copy_live["dry_run_final_verdict"], "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY")
         self.assertEqual(rejected["status"], "rejected")
         self.assertEqual(rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(rejected["forbidden_fields"], ["model_id", "route_id", "CODEX_HOME"])
         self.assertEqual(custom_rejected["status"], "rejected")
         self.assertEqual(custom_rejected["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(custom_rejected["forbidden_fields"], ["model", "route_id", "codex_home"])
+        self.assertEqual(app_copy_rejected["status"], "blocked")
+        self.assertEqual(
+            app_copy_rejected["machine_error_code"],
+            "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+        )
+        self.assertTrue(app_copy_rejected["browser_forbidden_fields_rejected"])
+        self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
+        self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
 
 
 class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):

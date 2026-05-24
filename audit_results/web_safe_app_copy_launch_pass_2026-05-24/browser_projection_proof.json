@@ -1,0 +1,43 @@
+{
+  "artifact_payload_sha256": "8244036faab90d90a11a03d6975b59998dd2bbf6ddc5fb129728415c66fbd151",
+  "forbidden_probe": {
+    "forbidden_fields": [
+      "path",
+      "port",
+      "env",
+      "env.HOME",
+      "token"
+    ],
+    "launch_performed": false,
+    "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+    "status": "blocked"
+  },
+  "live_probe": {
+    "dry_run_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+    "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+    "launch_performed": false,
+    "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+    "pid_not_exposed_to_browser": true,
+    "status": "blocked"
+  },
+  "schema_version": 1,
+  "status": "passed",
+  "tool": "Browser plugin via in-app browser",
+  "ui_proof": {
+    "browser_forbidden_fields_absent": true,
+    "ids_present": {
+      "safeAppCopyIsolation": true,
+      "safeAppCopyLaunchAction": true,
+      "safeAppCopyLaunchDryRunAction": true,
+      "safeAppCopyStatus": true
+    },
+    "isolation_text": "current Codex untouched",
+    "live_button_disabled": true,
+    "packet_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+    "packet_machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+    "raw_env_exposed": false,
+    "raw_path_exposed": false,
+    "raw_pid_exposed": false,
+    "status_text": "ok \u00b7 WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY"
+  }
+}

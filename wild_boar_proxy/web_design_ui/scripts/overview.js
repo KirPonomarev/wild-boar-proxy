@@ -843,6 +843,76 @@ function renderCodexCustomLaunchDryRun(packet) {
   }
 }
 
+function renderSafeAppCopyLaunchPacket(packet) {
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  const dryRunReady = packet?.status === "ok"
+    && packet?.machine_error_code === "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY"
+    && packet?.dry_run === true
+    && packet?.server_issued_plan === true
+    && packet?.current_codex_touched === false
+    && packet?.uses_current_home === false
+    && packet?.uses_current_codex_home === false
+    && packet?.raw_path_exposed === false
+    && packet?.raw_pid_exposed === false
+    && packet?.raw_env_exposed === false
+    && packet?.pid_not_exposed_to_browser === true;
+  const liveAdmitted = dryRunReady && packet?.live_launch_admitted === true;
+  codexLaunchSetChip(
+    dryRunReady ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
+    dryRunReady ? "app copy dry-run ready" : (packet?.status || "failed")
+  );
+  codexLaunchSetText(
+    "safeAppCopyStatus",
+    `${packet?.status || "unknown"} · ${packet?.final_verdict || packet?.machine_error_code || "UNKNOWN"}`
+  );
+  codexLaunchSetText(
+    "safeAppCopyIsolation",
+    packet?.current_codex_touched === false && packet?.uses_current_home === false
+      ? "current Codex untouched"
+      : "isolation check failed"
+  );
+  const liveButton = document.getElementById("safeAppCopyLaunchAction");
+  if (liveButton) {
+    liveButton.disabled = !liveAdmitted;
+    if (liveAdmitted) {
+      liveButton.classList.remove("disabled");
+    } else {
+      liveButton.classList.add("disabled");
+    }
+  }
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      launch_mode: packet?.launch_mode || "separate_app_copy",
+      dry_run: packet?.dry_run === true,
+      launch_performed: packet?.launch_performed === true,
+      server_issued_plan: packet?.server_issued_plan === true,
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      browser_forbidden_fields_absent: packet?.browser_forbidden_fields_absent === true,
+      browser_forbidden_field_policy_enforced: packet?.browser_forbidden_field_policy_enforced === true,
+      app_path_redacted: packet?.app_path_redacted === true,
+      isolated_profile_root_redacted: packet?.isolated_profile_root_redacted === true,
+      isolated_data_dir_redacted: packet?.isolated_data_dir_redacted === true,
+      isolated_port_source: packet?.isolated_port_source || "",
+      isolated_port_redacted: packet?.isolated_port_redacted === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      uses_current_home: packet?.uses_current_home === true,
+      uses_current_codex_home: packet?.uses_current_codex_home === true,
+      proxy_env_injected: packet?.proxy_env_injected === true,
+      live_launch_admitted: packet?.live_launch_admitted === true,
+      block_reason_code: packet?.block_reason_code || "",
+      raw_path_exposed: packet?.raw_path_exposed === true,
+      raw_pid_exposed: packet?.raw_pid_exposed === true,
+      raw_env_exposed: packet?.raw_env_exposed === true,
+      pid_not_exposed_to_browser: packet?.pid_not_exposed_to_browser === true,
+      final_verdict: packet?.final_verdict || "",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
 async function runOriginalCodexDryRun() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -908,6 +978,77 @@ async function runCodexCustomLaunchDryRun() {
   } finally {
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runSafeAppCopyLaunchDryRun() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("safeAppCopyLaunchDryRunAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "checking");
+  try {
+    const response = await fetch("api/codex/app-copy/launch-dry-run", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`app copy dry-run http ${response.status}`);
+    }
+    renderSafeAppCopyLaunchPacket(await response.json());
+  } catch (error) {
+    renderSafeAppCopyLaunchPacket({
+      status: "failed",
+      machine_error_code: "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_FETCH_FAILED",
+      dry_run: true,
+      launch_performed: false,
+      server_issued_plan: false,
+      current_codex_touched: false,
+      uses_current_home: false,
+      uses_current_codex_home: false,
+      final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+      next_action: error.message
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("safeAppCopyLaunchDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runSafeAppCopyLaunch() {
+  const button = document.getElementById("safeAppCopyLaunchAction");
+  if (button?.disabled) {
+    return;
+  }
+  button.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "launch checking");
+  try {
+    const response = await fetch("api/codex/app-copy/launch", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`app copy launch http ${response.status}`);
+    }
+    renderSafeAppCopyLaunchPacket(await response.json());
+  } catch (error) {
+    renderSafeAppCopyLaunchPacket({
+      status: "failed",
+      machine_error_code: "WEB_SAFE_APP_COPY_LAUNCH_FETCH_FAILED",
+      dry_run: false,
+      launch_performed: false,
+      server_issued_plan: false,
+      current_codex_touched: false,
+      uses_current_home: false,
+      uses_current_codex_home: false,
+      final_verdict: "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+      next_action: error.message
+    });
   }
 }
 
@@ -9771,6 +9912,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexLaunchModesRefreshAction")?.addEventListener("click", () => refreshCodexLaunchModesPanel());
   document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
   document.getElementById("codexCustomLaunchDryRunAction")?.addEventListener("click", () => runCodexCustomLaunchDryRun());
+  document.getElementById("safeAppCopyLaunchDryRunAction")?.addEventListener("click", () => runSafeAppCopyLaunchDryRun());
+  document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());
   document.getElementById("codexCustomModelsRefreshAction")?.addEventListener("click", () => refreshCodexCustomModelsPanel());
   document.getElementById("codexCustomModelDryRunAction")?.addEventListener("click", () => runCodexCustomModelDryRun());
   document.getElementById("codexCustomAccountsRefreshAction")?.addEventListener("click", () => refreshCodexCustomAccountsPanel());

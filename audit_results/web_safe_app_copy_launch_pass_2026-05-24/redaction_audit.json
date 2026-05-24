@@ -1,0 +1,21 @@
+{
+  "artifact_payload_sha256": "437e374f17a6e9d53f5918c50211784a8dde1c3665108bf77dd681f587c44008",
+  "findings": [],
+  "notes": [
+    "forbidden field probe includes literal field names only; no secret values are stored"
+  ],
+  "scanned_files": [
+    "browser_projection_proof.json",
+    "closeout.md",
+    "isolation_proof_packet.json",
+    "launch_dry_run_packet.json",
+    "launch_live_or_blocked_packet.json",
+    "redaction_audit.json",
+    "spec.md",
+    "verification_summary.json"
+  ],
+  "schema_version": 1,
+  "secret_leak": false,
+  "secret_value_recorded": false,
+  "status": "passed"
+}

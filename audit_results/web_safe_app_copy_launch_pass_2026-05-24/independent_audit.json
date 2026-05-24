@@ -1,0 +1,18 @@
+{
+  "artifact_payload_sha256": "122e039929dacf722d7019fc4133a59eb1ec2279b32f0c6129b7f66bad37ac95",
+  "auditor": "gpt-5.4-mini explorer",
+  "initial_blockers": [
+    "blocked live launch carried dry-run-ready final verdict"
+  ],
+  "initial_verdict": "fail",
+  "remaining_blockers": [],
+  "repair_verdict": "pass",
+  "resolved_findings": [
+    "blocked live launch now carries WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+    "dry-run success distinguishes forbidden fields absent vs rejected",
+    "UI green predicate includes raw path/pid/env exposure sentinels",
+    "tests pin app-copy boundaries"
+  ],
+  "schema_version": 1,
+  "status": "passed_after_repair"
+}

@@ -61,6 +61,29 @@ CUSTOM_LAUNCH_FORBIDDEN_BROWSER_FIELDS = {
     "codex_home",
     "runtime_config",
 }
+APP_COPY_FORBIDDEN_BROWSER_FIELDS = {
+    "account_id",
+    "api_key",
+    "apikey",
+    "app_path",
+    "auth",
+    "authorization",
+    "backend_id",
+    "codex_home",
+    "data_dir",
+    "endpoint",
+    "env",
+    "home",
+    "model",
+    "path",
+    "pid",
+    "port",
+    "profile",
+    "profile_root",
+    "route_id",
+    "secret",
+    "token",
+}
 DEFAULT_CUSTOM_WBP_ENDPOINT = "http://127.0.0.1:8318/v1"
 
 
@@ -99,6 +122,23 @@ def forbidden_custom_launch_fields(payload: Any, prefix: str = "") -> list[str]:
     elif isinstance(payload, list):
         for index, value in enumerate(payload):
             findings.extend(forbidden_custom_launch_fields(value, f"{prefix}[{index}]"))
+    return findings
+
+
+def forbidden_app_copy_launch_fields(payload: Any, prefix: str = "") -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if key_text.lower() in APP_COPY_FORBIDDEN_BROWSER_FIELDS:
+                findings.append(key_path)
+            else:
+                findings.append(key_path)
+            findings.extend(forbidden_app_copy_launch_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(forbidden_app_copy_launch_fields(value, f"{prefix}[{index}]"))
     return findings
 
 
@@ -145,6 +185,19 @@ def build_launch_modes_packet(operator_status: dict[str, Any] | None = None) -> 
                 "launch_dry_run_available": True,
                 "live_prompt_requires_authorization": True,
                 "launch_claim_scope": "readonly_readiness_only",
+            },
+            {
+                "id": "safe_app_copy",
+                "label": "Safe App Copy",
+                "role": "separate_copy_launch_surface",
+                "proxy_allowed": False,
+                "proxy_enabled": False,
+                "custom_home": True,
+                "current_home_allowed": False,
+                "current_codex_home_allowed": False,
+                "launch_dry_run_available": True,
+                "live_launch_available": False,
+                "launch_claim_scope": "separate_app_copy_dry_run_only",
             },
         ],
     }
@@ -257,6 +310,106 @@ def build_custom_launch_dry_run_packet(payload: dict[str, Any]) -> dict[str, Any
         "forbidden_fields": [],
         "forbidden_fields_rejected": False,
         "next_action": "live_launch_contour_with_owner_authorization",
+    }
+
+
+def _app_copy_plan_base() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "mode_id": "safe_app_copy",
+        "launch_mode": "separate_app_copy",
+        "launch_claim_scope": "separate_app_copy_dry_run_only",
+        "server_issued_plan": True,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "browser_forbidden_field_policy_enforced": True,
+        "app_path_source": "server_owned_default_app_copy_candidate",
+        "app_path_redacted": True,
+        "isolated_profile_root_redacted": True,
+        "isolated_data_dir_redacted": True,
+        "isolated_port_source": "server_allocated",
+        "isolated_port_redacted": True,
+        "separate_profile_required": True,
+        "separate_data_dir_required": True,
+        "separate_process_required": True,
+        "current_codex_touched": False,
+        "current_codex_home_touched": False,
+        "uses_current_home": False,
+        "uses_current_codex_home": False,
+        "proxy_env_injected": False,
+        "raw_path_exposed": False,
+        "raw_pid_exposed": False,
+        "raw_env_exposed": False,
+        "pid_not_exposed_to_browser": True,
+        "launch_performed": False,
+    }
+
+
+def build_safe_app_copy_launch_dry_run_packet(payload: dict[str, Any]) -> dict[str, Any]:
+    forbidden = forbidden_app_copy_launch_fields(payload)
+    base = {
+        **_app_copy_plan_base(),
+        "dry_run": True,
+        "live_launch_admitted": False,
+        "block_reason_code": "LIVE_LAUNCH_REQUIRES_APP_COPY_OWNER_CONTRACT",
+        "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+            "browser_forbidden_fields_rejected": True,
+            "browser_forbidden_fields_absent": False,
+            "forbidden_fields": forbidden,
+            "server_issued_plan": False,
+            "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+            "next_action": "remove_browser_payload_fields",
+        }
+    return {
+        **base,
+        "status": "ok",
+        "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+        "browser_forbidden_fields_rejected": False,
+        "browser_forbidden_fields_absent": True,
+        "forbidden_fields": [],
+        "human_message": "Safe app copy launch dry-run is server-issued and did not launch or touch current Codex.",
+        "next_action": "add_app_copy_owner_contract_before_live_launch",
+    }
+
+
+def build_safe_app_copy_launch_live_packet(payload: dict[str, Any]) -> dict[str, Any]:
+    forbidden = forbidden_app_copy_launch_fields(payload)
+    base = {
+        **_app_copy_plan_base(),
+        "dry_run": False,
+        "live_launch_admitted": False,
+        "block_reason_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+        "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_LIVE_BLOCKED",
+        "dry_run_final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_DRY_RUN_READY",
+        "cleanup_or_stop_instruction": "no_process_launched",
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_BROWSER_FIELD_REJECTED",
+            "browser_forbidden_fields_rejected": True,
+            "browser_forbidden_fields_absent": False,
+            "forbidden_fields": forbidden,
+            "final_verdict": "WEB_SAFE_APP_COPY_LAUNCH_BLOCKED",
+            "next_action": "remove_browser_payload_fields",
+        }
+    return {
+        **base,
+        "status": "blocked",
+        "machine_error_code": "WEB_SAFE_APP_COPY_LAUNCH_NOT_ADMITTED",
+        "browser_forbidden_fields_rejected": True,
+        "browser_forbidden_fields_absent": True,
+        "forbidden_fields": [],
+        "human_message": "Live app copy launch is blocked until a server-owned app copy contract is proven.",
+        "next_action": "prove_app_copy_owner_contract",
     }
 
 
