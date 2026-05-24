@@ -584,6 +584,23 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("rollback_apply_completed_scope: completedScope", js)
         self.assertIn("recovery_operator_ready: packet?.recovery_operator_ready === true", js)
         self.assertIn("process_kill_performed: packet?.process_kill_performed === true", js)
+        self.assertIn('"machine_error_code": "ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_RUN"', html)
+        self.assertIn('"claim_scope": "custom_codex_recovery_rollback_apply_receipt_verify_only"', html)
+        self.assertIn('"receipt_verify_performed": false', html)
+        self.assertIn('"receipt_verified": false', html)
+        self.assertIn('"rollback_apply_receipt_verified": false', html)
+        self.assertIn('"verified_scope": "not_verified"', html)
+        self.assertIn('"human_summary": "receipt verified · not system recovery"', html)
+        self.assertIn("verifyCodexCustomRecoveryRollbackApplyReceipt()", js)
+        self.assertIn(
+            'fetchCodexLaunchJson("api/codex/custom/recovery/rollback-apply/receipt/verify")',
+            js,
+        )
+        self.assertIn("renderCodexCustomRecoveryRollbackApplyReceiptVerify", js)
+        self.assertIn("receipt_verify_performed: packet?.receipt_verify_performed === true", js)
+        self.assertIn("rollback_apply_receipt_verified: packet?.rollback_apply_receipt_verified === true", js)
+        self.assertIn("verified_scope: scope", js)
+        self.assertIn("not system recovery", js)
         self.assertIn("rollback_point_required: packet?.rollback_point_required === true", js)
         self.assertIn("rollback_point_present: packet?.rollback_point_present === true", js)
         self.assertIn("process_owner_contract_defined: processDefined", js)

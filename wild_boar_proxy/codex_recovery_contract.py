@@ -45,7 +45,17 @@ ROLLBACK_APPLY_LIVE_PREFLIGHT_CLAIM_SCOPE = (
 ROLLBACK_APPLY_BOUNDED_LIVE_CLAIM_SCOPE = (
     "custom_codex_recovery_rollback_apply_bounded_live_only"
 )
+ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE = (
+    "custom_codex_recovery_rollback_apply_receipt_verify_only"
+)
 ROLLBACK_APPLY_RECEIPT_ARTIFACT_KIND = "custom_codex_recovery_rollback_apply_receipt"
+ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS = [
+    "receipt_id",
+    "receipt_path",
+    "artifact_id",
+    "artifact_path",
+    "digest",
+]
 
 ROLLBACK_POINT_ALLOWED_WRITE_SURFACES = {
     "owned_temp_session_root": {
@@ -3015,6 +3025,7 @@ def build_custom_recovery_rollback_apply_bounded_live_packet(
         "created_at_utc": now,
         "claim_scope": ROLLBACK_APPLY_BOUNDED_LIVE_CLAIM_SCOPE,
         "source_preflight_sha256": source_preflight_sha,
+        "source_preflight_packet": preflight,
         "source_rollback_point_ref": source_ref,
         "source_rollback_point_sha256_present": False,
         "write_surface_id": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
@@ -3174,5 +3185,383 @@ def build_custom_recovery_rollback_apply_bounded_live_packet(
         ],
         "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_BOUNDED_LIVE_PERFORMED",
         "next_contour": "CUSTOM_CODEX_RECOVERY_APPLY_RECEIPT_VERIFY_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _rollback_apply_receipt_verify_failure_packet(
+    *,
+    machine_error_code: str,
+    block_reason_code: str,
+    forbidden_fields: list[str] | None = None,
+    receipt_id: str = "",
+    receipt_digest: str = "",
+    read_attempted: bool = False,
+    selection_ambiguous: bool = False,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "blocked",
+        "machine_error_code": machine_error_code,
+        "block_reason_code": block_reason_code,
+        "captured_at_utc": utc_now(),
+        "claim_scope": ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE,
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-apply/receipt/verify",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-apply",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS,
+        "forbidden_fields": forbidden_fields or [],
+        "browser_forbidden_fields_rejected": True,
+        "receipt_verify_performed": False,
+        "receipt_verified": False,
+        "rollback_apply_receipt_verified": False,
+        "verified_scope": "not_verified",
+        "receipt_selection_source": "server_owned_latest_valid_receipt",
+        "receipt_selection_ambiguous": selection_ambiguous,
+        "receipt_id": receipt_id,
+        "receipt_path_redacted": True,
+        "receipt_ref": f"rollback-apply-receipt:{receipt_digest[:16]}" if receipt_digest else "",
+        "receipt_digest_present": bool(receipt_digest),
+        "receipt_sha256": receipt_digest,
+        "receipt_payload_digest_verified": False,
+        "receipt_provenance_verified": False,
+        "source_preflight_sha256_present": False,
+        "source_rollback_point_ref_present": False,
+        "filesystem_read_performed": read_attempted,
+        "filesystem_read_scope": (
+            ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE if read_attempted else ""
+        ),
+        "filesystem_write_performed": False,
+        "rollback_apply_performed": False,
+        "rollback_apply_completed_scope": "not_completed",
+        "rollback_completed": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "process_kill_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "auth_material_allowed_surface": False,
+        "secret_value_recorded": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "actions": [
+            {
+                "id": "rollback_apply_receipt_verify",
+                "status": "blocked",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": False,
+                "verified": False,
+                "disabled_reason_code": block_reason_code,
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": False,
+                "disabled_reason_code": "RECEIPT_VERIFY_READ_ONLY",
+            },
+            {
+                "id": "process_kill",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "performed": False,
+                "disabled_reason_code": "PROCESS_KILL_NOT_ADMITTED",
+            },
+        ],
+        "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_RECEIPT_VERIFY_BLOCKED",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
+        "next_contour_claimed": False,
+    }
+
+
+def _read_rollback_apply_receipt_artifact(
+    path: Path,
+    root: Path,
+) -> tuple[dict[str, Any] | None, str]:
+    if not _path_under_root(path, root):
+        return None, "ROLLBACK_APPLY_RECEIPT_VERIFY_FORBIDDEN_SURFACE"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None, "ROLLBACK_APPLY_RECEIPT_VERIFY_SCHEMA_INVALID"
+    if not isinstance(payload, dict):
+        return None, "ROLLBACK_APPLY_RECEIPT_VERIFY_SCHEMA_INVALID"
+    return payload, ""
+
+
+def _rollback_point_ref_exists(root: Path, expected_ref: str) -> bool:
+    if not expected_ref.startswith("rollback-point:"):
+        return False
+    for path in root.glob("crp-*.json"):
+        if not path.is_file():
+            continue
+        artifact_path = path.resolve()
+        artifact, read_error = _read_rollback_point_artifact(artifact_path, root)
+        if read_error or artifact is None:
+            continue
+        if _rollback_point_payload_error(artifact):
+            continue
+        if f"rollback-point:{_sha256_file(artifact_path)[:16]}" == expected_ref:
+            return True
+    return False
+
+
+def _rollback_apply_receipt_payload_error(payload: dict[str, Any], root: Path) -> str:
+    if payload.get("schema_version") != 1:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_SCHEMA_INVALID"
+    if payload.get("artifact_kind") != ROLLBACK_APPLY_RECEIPT_ARTIFACT_KIND:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_KIND_INVALID"
+    if payload.get("claim_scope") != ROLLBACK_APPLY_BOUNDED_LIVE_CLAIM_SCOPE:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_SCOPE_INVALID"
+    if not _rollback_point_created_at_valid(payload.get("created_at_utc")):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_TIMESTAMP_INVALID"
+    if payload.get("rollback_apply_completed_scope") != "bounded_apply_receipt_only":
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_SCOPE_INVALID"
+    source_preflight_sha = payload.get("source_preflight_sha256")
+    source_preflight_sha_valid = (
+        isinstance(source_preflight_sha, str)
+        and len(source_preflight_sha) == 64
+        and all(character in "0123456789abcdef" for character in source_preflight_sha)
+    )
+    if not source_preflight_sha_valid:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    source_preflight = payload.get("source_preflight_packet")
+    if not isinstance(source_preflight, dict):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    if _stable_digest(source_preflight) != source_preflight_sha:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_DIGEST_MISMATCH"
+    if not _rollback_apply_live_preflight_ready(source_preflight):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    source_ref = payload.get("source_rollback_point_ref")
+    if not isinstance(source_ref, str) or not source_ref.startswith("rollback-point:"):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    if source_preflight.get("rollback_point_artifact_ref") != source_ref:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    if not _rollback_point_ref_exists(root, source_ref):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING"
+    if payload.get("write_surface_id") != ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_FORBIDDEN_SURFACE"
+    expected_scope = ROLLBACK_POINT_ALLOWED_WRITE_SURFACES[
+        ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE
+    ]["scope"]
+    if payload.get("write_surface_scope") != expected_scope:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_FORBIDDEN_SURFACE"
+    if payload.get("current_codex_touched") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_TOUCH_FLAG_DETECTED"
+    if payload.get("original_codex_touched") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_TOUCH_FLAG_DETECTED"
+    if payload.get("current_codex_home_touched") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_TOUCH_FLAG_DETECTED"
+    if payload.get("auth_material_touched") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_SECRET_LEAK_DETECTED"
+    if payload.get("secret_value_recorded") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_SECRET_LEAK_DETECTED"
+    if payload.get("process_kill_performed") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_PROCESS_KILL_DETECTED"
+    if payload.get("recovery_operator_ready") is not False:
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_OPERATOR_READY_CLAIMED"
+    if payload.get("receipt_payload_sha256") != _stable_digest(
+        {
+            key: value
+            for key, value in payload.items()
+            if key != "receipt_payload_sha256"
+        }
+    ):
+        return "ROLLBACK_APPLY_RECEIPT_VERIFY_DIGEST_MISMATCH"
+    return ""
+
+
+def build_custom_recovery_rollback_apply_receipt_verify_packet(
+    *,
+    artifact_root: Path | None = None,
+    browser_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Verify the latest server-owned bounded apply receipt without writing."""
+
+    payload = browser_payload if isinstance(browser_payload, dict) else {}
+    forbidden_payload_fields = sorted(set(_forbidden_payload_fields(payload)))
+    if forbidden_payload_fields:
+        return _rollback_apply_receipt_verify_failure_packet(
+            machine_error_code="ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+            block_reason_code="ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+            forbidden_fields=forbidden_payload_fields,
+        )
+
+    root = _rollback_point_artifact_root_readonly(artifact_root)
+    if not root.exists() or not root.is_dir():
+        return _rollback_apply_receipt_verify_failure_packet(
+            machine_error_code="ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+            block_reason_code="ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+        )
+
+    paths = sorted(
+        (path.resolve() for path in root.glob("rap-*.json") if path.is_file()),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    if not paths:
+        return _rollback_apply_receipt_verify_failure_packet(
+            machine_error_code="ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+            block_reason_code="ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+        )
+
+    candidates: list[tuple[Path, dict[str, Any], str]] = []
+    first_error = ""
+    first_receipt_id = ""
+    first_receipt_sha = ""
+    for path in paths:
+        receipt_id = path.stem
+        payload, read_error = _read_rollback_apply_receipt_artifact(path, root)
+        file_sha = _sha256_file(path) if path.exists() else ""
+        if read_error:
+            if not first_error:
+                first_error = read_error
+                first_receipt_id = receipt_id
+                first_receipt_sha = file_sha
+            continue
+        assert payload is not None
+        payload_error = _rollback_apply_receipt_payload_error(payload, root)
+        if payload_error:
+            if not first_error:
+                first_error = payload_error
+                first_receipt_id = receipt_id
+                first_receipt_sha = file_sha
+            continue
+        created_at = str(payload.get("created_at_utc") or "")
+        candidates.append((path, payload, created_at))
+
+    if not candidates:
+        error = first_error or "ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND"
+        return _rollback_apply_receipt_verify_failure_packet(
+            machine_error_code=error,
+            block_reason_code=error,
+            receipt_id=first_receipt_id,
+            receipt_digest=first_receipt_sha,
+            read_attempted=bool(first_receipt_id),
+        )
+
+    candidates.sort(key=lambda item: (item[2], item[0].name), reverse=True)
+    newest_created_at = candidates[0][2]
+    ambiguous = len([item for item in candidates if item[2] == newest_created_at]) > 1
+    if ambiguous:
+        return _rollback_apply_receipt_verify_failure_packet(
+            machine_error_code="ROLLBACK_APPLY_RECEIPT_VERIFY_AMBIGUOUS_SELECTION",
+            block_reason_code="ROLLBACK_APPLY_RECEIPT_VERIFY_AMBIGUOUS_SELECTION",
+            receipt_id=candidates[0][0].stem,
+            receipt_digest=_sha256_file(candidates[0][0]),
+            read_attempted=True,
+            selection_ambiguous=True,
+        )
+
+    selected_path, selected_payload, _created_at = candidates[0]
+    receipt_sha = _sha256_file(selected_path)
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "machine_error_code": "ROLLBACK_APPLY_RECEIPT_VERIFY_READY",
+        "block_reason_code": "",
+        "captured_at_utc": utc_now(),
+        "claim_scope": ROLLBACK_APPLY_RECEIPT_VERIFY_CLAIM_SCOPE,
+        "contract_endpoint": "/api/codex/custom/recovery/rollback-apply/receipt/verify",
+        "contract_source_endpoint": "/api/codex/custom/recovery/rollback-apply",
+        "contract_endpoint_mutation_allowed": False,
+        "browser_payload_allowed": False,
+        "browser_payload_allowed_keys": [],
+        "forbidden_browser_fields": FORBIDDEN_BROWSER_FIELDS
+        + ROLLBACK_APPLY_RECEIPT_VERIFY_EXTRA_FORBIDDEN_FIELDS,
+        "forbidden_fields": [],
+        "browser_forbidden_fields_rejected": True,
+        "receipt_verify_performed": True,
+        "receipt_verified": True,
+        "rollback_apply_receipt_verified": True,
+        "verified_scope": "bounded_apply_receipt_only",
+        "receipt_selection_source": "server_owned_latest_valid_receipt",
+        "receipt_selection_ambiguous": False,
+        "receipt_id": selected_path.stem,
+        "receipt_path_redacted": True,
+        "receipt_ref": f"rollback-apply-receipt:{receipt_sha[:16]}",
+        "receipt_digest_present": True,
+        "receipt_sha256": receipt_sha,
+        "receipt_payload_digest_verified": True,
+        "receipt_provenance_verified": True,
+        "source_preflight_sha256_present": True,
+        "source_rollback_point_ref_present": True,
+        "source_rollback_point_ref": str(selected_payload.get("source_rollback_point_ref") or ""),
+        "filesystem_read_performed": True,
+        "filesystem_read_scope": ROLLBACK_POINT_CREATE_SELECTED_WRITE_SURFACE,
+        "filesystem_write_performed": False,
+        "rollback_apply_performed": False,
+        "rollback_apply_completed_scope": "not_performed_by_verify",
+        "rollback_completed": False,
+        "rollback_live_ready": False,
+        "recovery_operator_ready": False,
+        "operator_ready_claimed": False,
+        "rollback_operator_ready": False,
+        "rollback_claimed": False,
+        "process_kill_operator_ready": False,
+        "process_kill_claimed": False,
+        "process_kill_live_ready": False,
+        "process_kill_admitted": False,
+        "process_kill_performed": False,
+        "current_codex_touched": False,
+        "original_codex_touched": False,
+        "current_codex_home_touched": False,
+        "auth_material_touched": False,
+        "auth_material_allowed_surface": False,
+        "secret_value_recorded": False,
+        "arbitrary_path_accepted": False,
+        "arbitrary_path_allowed_surface": False,
+        "dangerous_actions_disabled": True,
+        "dangerous_action_mutation_allowed": False,
+        "human_summary": "receipt verified · not system recovery",
+        "actions": [
+            {
+                "id": "rollback_apply_receipt_verify",
+                "status": "verified",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": True,
+                "verified": True,
+                "verified_scope": "bounded_apply_receipt_only",
+                "disabled_reason_code": "",
+            },
+            {
+                "id": "rollback_apply",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "performed": False,
+                "disabled_reason_code": "RECEIPT_VERIFY_READ_ONLY",
+            },
+            {
+                "id": "process_kill",
+                "status": "disabled",
+                "mutation_allowed": False,
+                "browser_payload_allowed": False,
+                "admitted": False,
+                "performed": False,
+                "disabled_reason_code": "PROCESS_KILL_NOT_ADMITTED",
+            },
+        ],
+        "result_token": "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_RECEIPT_VERIFY_READY",
+        "next_contour": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_PASS",
         "next_contour_claimed": False,
     }

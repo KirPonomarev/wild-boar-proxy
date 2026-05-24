@@ -5740,6 +5740,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     "rollback-point/verify",
                     "rollback-apply/admission-dry-run",
                     "rollback-apply/live-preflight",
+                    "rollback-apply/receipt/verify",
                     "snapshot",
                     "rollback",
                     "apply",
@@ -5853,6 +5854,34 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                     .read()
                     .decode("utf-8")
                 )
+                receipt_verify_packet = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/receipt/verify"
+                    )
+                )
+                receipt_verify_with_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/receipt/verify"
+                        "?receipt_id=browser&receipt_path=/tmp/receipt"
+                        "&artifact_id=browser&artifact_path=/tmp/artifact"
+                        "&path=/tmp/forbidden&snapshot_path=/tmp/snapshot"
+                        "&rollback_target=/tmp/target&digest=browser"
+                        "&session_id=ccs-browser&backend_id=browser-backend"
+                        "&route_id=browser-route&pid=123&process_id=456"
+                        "&CODEX_HOME=/tmp/codex&HOME=/tmp/home"
+                        "&auth=browser-auth&token=browser-token"
+                        "&api_key=browser-key&secret=browser-secret"
+                    )
+                )
+                receipt_verify_blank_query = json.loads(
+                    fetch(
+                        f"{base}/api/codex/custom/recovery/"
+                        "rollback-apply/receipt/verify"
+                        "?backend_id=&session_id=&auth=&path="
+                    )
+                )
             finally:
                 server.shutdown()
                 thread.join(timeout=2)
@@ -5923,6 +5952,7 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
                 "rollback-point/verify": HTTPStatus.NOT_FOUND,
                 "rollback-apply/admission-dry-run": HTTPStatus.NOT_FOUND,
                 "rollback-apply/live-preflight": HTTPStatus.NOT_FOUND,
+                "rollback-apply/receipt/verify": HTTPStatus.NOT_FOUND,
                 "snapshot": HTTPStatus.NOT_FOUND,
                 "rollback": HTTPStatus.NOT_FOUND,
                 "apply": HTTPStatus.NOT_FOUND,
@@ -6220,6 +6250,92 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         )
         self.assertIn("invalid_body", non_object_apply["forbidden_fields"])
         self.assertFalse(non_object_apply["filesystem_write_performed"])
+        self.assertEqual(receipt_verify_packet["status"], "ok")
+        self.assertEqual(
+            receipt_verify_packet["machine_error_code"],
+            "ROLLBACK_APPLY_RECEIPT_VERIFY_READY",
+        )
+        self.assertEqual(
+            receipt_verify_packet["claim_scope"],
+            "custom_codex_recovery_rollback_apply_receipt_verify_only",
+        )
+        self.assertTrue(receipt_verify_packet["receipt_verify_performed"])
+        self.assertTrue(receipt_verify_packet["receipt_verified"])
+        self.assertTrue(receipt_verify_packet["rollback_apply_receipt_verified"])
+        self.assertEqual(receipt_verify_packet["verified_scope"], "bounded_apply_receipt_only")
+        self.assertEqual(
+            receipt_verify_packet["receipt_selection_source"],
+            "server_owned_latest_valid_receipt",
+        )
+        self.assertFalse(receipt_verify_packet["receipt_selection_ambiguous"])
+        self.assertTrue(receipt_verify_packet["receipt_path_redacted"])
+        self.assertTrue(receipt_verify_packet["receipt_digest_present"])
+        self.assertTrue(receipt_verify_packet["receipt_payload_digest_verified"])
+        self.assertTrue(receipt_verify_packet["receipt_provenance_verified"])
+        self.assertTrue(receipt_verify_packet["source_preflight_sha256_present"])
+        self.assertTrue(receipt_verify_packet["source_rollback_point_ref_present"])
+        self.assertTrue(receipt_verify_packet["filesystem_read_performed"])
+        self.assertEqual(
+            receipt_verify_packet["filesystem_read_scope"],
+            "owned_generated_recovery_artifact",
+        )
+        self.assertFalse(receipt_verify_packet["filesystem_write_performed"])
+        self.assertFalse(receipt_verify_packet["rollback_apply_performed"])
+        self.assertFalse(receipt_verify_packet["rollback_completed"])
+        self.assertFalse(receipt_verify_packet["rollback_live_ready"])
+        self.assertFalse(receipt_verify_packet["process_kill_performed"])
+        self.assertFalse(receipt_verify_packet["recovery_operator_ready"])
+        self.assertFalse(receipt_verify_packet["current_codex_touched"])
+        self.assertFalse(receipt_verify_packet["original_codex_touched"])
+        self.assertFalse(receipt_verify_packet["current_codex_home_touched"])
+        self.assertFalse(receipt_verify_packet["auth_material_touched"])
+        self.assertFalse(receipt_verify_packet["secret_value_recorded"])
+        self.assertEqual(
+            receipt_verify_packet["human_summary"],
+            "receipt verified · not system recovery",
+        )
+        self.assertNotIn("/tmp/", json.dumps(receipt_verify_packet))
+        self.assertEqual(receipt_verify_with_query["status"], "blocked")
+        self.assertEqual(
+            receipt_verify_with_query["machine_error_code"],
+            "ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+        )
+        for field in (
+            "receipt_id",
+            "receipt_path",
+            "artifact_id",
+            "artifact_path",
+            "path",
+            "snapshot_path",
+            "rollback_target",
+            "digest",
+            "session_id",
+            "backend_id",
+            "route_id",
+            "pid",
+            "process_id",
+            "CODEX_HOME",
+            "HOME",
+            "auth",
+            "token",
+            "api_key",
+            "secret",
+        ):
+            self.assertIn(field, receipt_verify_with_query["forbidden_fields"])
+        self.assertFalse(receipt_verify_with_query["filesystem_read_performed"])
+        self.assertFalse(receipt_verify_with_query["filesystem_write_performed"])
+        self.assertFalse(receipt_verify_with_query["receipt_verified"])
+        self.assertEqual(receipt_verify_blank_query["status"], "blocked")
+        self.assertEqual(
+            receipt_verify_blank_query["machine_error_code"],
+            "ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+        )
+        self.assertIn("backend_id", receipt_verify_blank_query["forbidden_fields"])
+        self.assertIn("session_id", receipt_verify_blank_query["forbidden_fields"])
+        self.assertIn("auth", receipt_verify_blank_query["forbidden_fields"])
+        self.assertIn("path", receipt_verify_blank_query["forbidden_fields"])
+        self.assertFalse(receipt_verify_blank_query["filesystem_read_performed"])
+        self.assertFalse(receipt_verify_blank_query["receipt_verified"])
 
     def test_codex_custom_session_create_rejects_free_form_model_and_backend(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):

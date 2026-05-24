@@ -560,6 +560,7 @@
             <div>Rollback apply admission</div><div id="codexCustomRecoveryRollbackApplyAdmission">dry-run not evaluated</div>
             <div>Rollback apply preflight</div><div id="codexCustomRecoveryRollbackApplyPreflight">preflight not evaluated</div>
             <div>Rollback apply receipt</div><div id="codexCustomRecoveryRollbackApplyReceipt">bounded apply not run</div>
+            <div>Rollback apply receipt verify</div><div id="codexCustomRecoveryRollbackApplyReceiptVerify">receipt verify not run</div>
             <div>Live ready</div><div id="codexCustomRecoveryLiveReady">false · dry-run only</div>
             <div>Operator ready</div><div id="codexCustomRecoveryOperatorReady">false · not claimed</div>
           </div>
@@ -612,6 +613,10 @@
               <button id="codexCustomRecoveryRollbackApplyReceiptAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/check-circle.png" alt="" aria-hidden="true">
                 <span>Apply receipt</span>
+              </button>
+              <button id="codexCustomRecoveryRollbackApplyReceiptVerifyAction" class="button ghost" type="button">
+                <img class="ui-icon button-icon" src="assets/icons/phosphor/shield-check.png" alt="" aria-hidden="true">
+                <span>Verify receipt</span>
               </button>
               <button id="codexCustomRecoveryCancelAction" class="button ghost" type="button">
                 <img class="ui-icon button-icon" src="assets/icons/phosphor/x-circle.png" alt="" aria-hidden="true">
@@ -890,6 +895,38 @@
   "secret_value_recorded": false,
   "browser_payload_allowed": false,
   "dangerous_actions_disabled": true
+}</pre>
+          <pre id="codexCustomRecoveryRollbackApplyReceiptVerifyPacket" class="mono-value">{
+  "status": "pending",
+  "machine_error_code": "ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_RUN",
+  "claim_scope": "custom_codex_recovery_rollback_apply_receipt_verify_only",
+  "receipt_verify_performed": false,
+  "receipt_verified": false,
+  "rollback_apply_receipt_verified": false,
+  "verified_scope": "not_verified",
+  "receipt_selection_ambiguous": false,
+  "receipt_path_redacted": true,
+  "receipt_digest_present": false,
+  "receipt_payload_digest_verified": false,
+  "receipt_provenance_verified": false,
+  "source_preflight_sha256_present": false,
+  "source_rollback_point_ref_present": false,
+  "filesystem_read_performed": false,
+  "filesystem_read_scope": "",
+  "filesystem_write_performed": false,
+  "rollback_apply_performed": false,
+  "rollback_completed": false,
+  "rollback_live_ready": false,
+  "process_kill_performed": false,
+  "recovery_operator_ready": false,
+  "current_codex_touched": false,
+  "original_codex_touched": false,
+  "current_codex_home_touched": false,
+  "auth_material_touched": false,
+  "secret_value_recorded": false,
+  "browser_payload_allowed": false,
+  "dangerous_actions_disabled": true,
+  "human_summary": "receipt verified · not system recovery"
 }</pre>
           <pre id="codexCustomRecoveryPacket" class="mono-value">{
   "status": "display_only",

@@ -47,6 +47,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
     build_custom_recovery_rollback_apply_bounded_live_packet,
+    build_custom_recovery_rollback_apply_receipt_verify_packet,
     build_custom_recovery_rollback_apply_live_preflight_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
@@ -1973,6 +1974,17 @@ def build_handler(
                 self._send_json(
                     build_rollback_apply_live_preflight_packet(
                         browser_payload=parse_qs(parsed.query) if parsed.query else None,
+                    )
+                )
+                return
+            if parsed.path == "/api/codex/custom/recovery/rollback-apply/receipt/verify":
+                self._send_json(
+                    build_custom_recovery_rollback_apply_receipt_verify_packet(
+                        browser_payload=(
+                            parse_qs(parsed.query, keep_blank_values=True)
+                            if parsed.query
+                            else None
+                        ),
                     )
                 )
                 return

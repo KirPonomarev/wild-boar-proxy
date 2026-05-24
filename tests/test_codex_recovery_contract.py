@@ -14,6 +14,7 @@ from wild_boar_proxy.codex_recovery_contract import (
     build_custom_recovery_contract_packet,
     build_custom_recovery_rollback_apply_admission_dry_run_packet,
     build_custom_recovery_rollback_apply_bounded_live_packet,
+    build_custom_recovery_rollback_apply_receipt_verify_packet,
     build_custom_recovery_rollback_apply_live_preflight_packet,
     build_custom_recovery_rollback_point_create_admission_packet,
     build_custom_recovery_rollback_point_create_live_packet,
@@ -99,6 +100,16 @@ def rewrite_artifact(path: Path, payload: dict[str, object]) -> None:
     payload = dict(payload)
     payload.pop("artifact_payload_sha256", None)
     payload["artifact_payload_sha256"] = stable_digest(payload)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def rewrite_receipt(path: Path, payload: dict[str, object]) -> None:
+    payload = dict(payload)
+    payload.pop("receipt_payload_sha256", None)
+    payload["receipt_payload_sha256"] = stable_digest(payload)
     path.write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
@@ -1543,6 +1554,7 @@ class CodexRecoveryContractTests(unittest.TestCase):
                 "custom_codex_recovery_rollback_apply_bounded_live_only",
             )
             self.assertEqual(receipt["source_preflight_sha256"], stable_digest(preflight))
+            self.assertEqual(receipt["source_preflight_packet"], preflight)
             self.assertEqual(
                 receipt["source_rollback_point_ref"],
                 packet["source_rollback_point_ref"],
@@ -1659,6 +1671,293 @@ class CodexRecoveryContractTests(unittest.TestCase):
             self.assertFalse(packet["filesystem_write_performed"])
             self.assertFalse(packet["process_kill_performed"])
             self.assertFalse(packet["recovery_operator_ready"])
+
+    def test_rollback_apply_receipt_verify_reads_latest_valid_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight = rollback_apply_live_preflight_packet(root)
+            apply = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=preflight,
+                browser_payload={},
+                artifact_root=root,
+            )
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=root,
+            )
+
+            self.assertEqual(apply["status"], "ok")
+            self.assertEqual(packet["status"], "ok")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_READY",
+            )
+            self.assertEqual(
+                packet["claim_scope"],
+                "custom_codex_recovery_rollback_apply_receipt_verify_only",
+            )
+            self.assertEqual(
+                packet["result_token"],
+                "CUSTOM_CODEX_RECOVERY_ROLLBACK_APPLY_RECEIPT_VERIFY_READY",
+            )
+            self.assertTrue(packet["receipt_verify_performed"])
+            self.assertTrue(packet["receipt_verified"])
+            self.assertTrue(packet["rollback_apply_receipt_verified"])
+            self.assertEqual(packet["verified_scope"], "bounded_apply_receipt_only")
+            self.assertEqual(
+                packet["receipt_selection_source"],
+                "server_owned_latest_valid_receipt",
+            )
+            self.assertFalse(packet["receipt_selection_ambiguous"])
+            self.assertTrue(packet["receipt_path_redacted"])
+            self.assertTrue(packet["receipt_digest_present"])
+            self.assertRegex(packet["receipt_sha256"], r"^[0-9a-f]{64}$")
+            self.assertTrue(packet["receipt_payload_digest_verified"])
+            self.assertTrue(packet["receipt_provenance_verified"])
+            self.assertTrue(packet["source_preflight_sha256_present"])
+            self.assertTrue(packet["source_rollback_point_ref_present"])
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertEqual(packet["filesystem_read_scope"], "owned_generated_recovery_artifact")
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["rollback_apply_performed"])
+            self.assertFalse(packet["rollback_completed"])
+            self.assertFalse(packet["rollback_live_ready"])
+            self.assertFalse(packet["recovery_operator_ready"])
+            self.assertFalse(packet["process_kill_performed"])
+            self.assertFalse(packet["current_codex_touched"])
+            self.assertFalse(packet["original_codex_touched"])
+            self.assertFalse(packet["current_codex_home_touched"])
+            self.assertFalse(packet["auth_material_touched"])
+            self.assertFalse(packet["secret_value_recorded"])
+            self.assertEqual(packet["human_summary"], "receipt verified · not system recovery")
+            self.assertNotIn("/tmp/", json.dumps(packet))
+            actions = {action["id"]: action for action in packet["actions"]}
+            self.assertEqual(actions["rollback_apply_receipt_verify"]["status"], "verified")
+            self.assertEqual(
+                actions["rollback_apply_receipt_verify"]["verified_scope"],
+                "bounded_apply_receipt_only",
+            )
+            self.assertFalse(actions["rollback_apply"]["performed"])
+            self.assertFalse(actions["process_kill"]["performed"])
+
+    def test_rollback_apply_receipt_verify_blocks_missing_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=Path(tmp),
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_NOT_FOUND",
+            )
+            self.assertFalse(packet["receipt_verified"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+            self.assertFalse(packet["rollback_apply_performed"])
+
+    def test_rollback_apply_receipt_verify_rejects_browser_query_without_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=Path(tmp),
+                browser_payload={
+                    "receipt_id": "browser",
+                    "receipt_path": "/tmp/receipt",
+                    "artifact_id": "browser",
+                    "artifact_path": "/tmp/artifact",
+                    "path": "/tmp/forbidden",
+                    "snapshot_path": "/tmp/snapshot",
+                    "rollback_target": "/tmp/target",
+                    "digest": "browser",
+                    "session_id": "ccs-browser",
+                    "backend_id": "browser-backend",
+                    "route_id": "browser-route",
+                    "pid": "123",
+                    "process_id": "456",
+                    "CODEX_HOME": "/tmp/codex",
+                    "HOME": "/tmp/home",
+                    "auth": "browser-auth",
+                    "token": "browser-token",
+                    "api_key": "browser-key",
+                    "secret": "browser-secret",
+                },
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+            )
+            for field in (
+                "receipt_id",
+                "receipt_path",
+                "artifact_id",
+                "artifact_path",
+                "path",
+                "snapshot_path",
+                "rollback_target",
+                "digest",
+                "session_id",
+                "backend_id",
+                "route_id",
+                "pid",
+                "process_id",
+                "CODEX_HOME",
+                "HOME",
+                "auth",
+                "token",
+                "api_key",
+                "secret",
+            ):
+                self.assertIn(field, packet["forbidden_fields"])
+            self.assertFalse(packet["receipt_verify_performed"])
+            self.assertFalse(packet["filesystem_read_performed"])
+            self.assertFalse(packet["filesystem_write_performed"])
+
+    def test_rollback_apply_receipt_verify_blocks_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight = rollback_apply_live_preflight_packet(root)
+            apply = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=preflight,
+                browser_payload={},
+                artifact_root=root,
+            )
+            receipt_path = root / f"{apply['rollback_apply_receipt_id']}.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["unexpected_extra_field"] = True
+            receipt_path.write_text(
+                json.dumps(receipt, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=root,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_DIGEST_MISMATCH",
+            )
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertFalse(packet["receipt_verified"])
+            self.assertFalse(packet["filesystem_write_performed"])
+
+    def test_rollback_apply_receipt_verify_blocks_forged_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            forged = {
+                "schema_version": 1,
+                "artifact_kind": "custom_codex_recovery_rollback_apply_receipt",
+                "created_at_utc": "2026-05-24T00:00:00Z",
+                "claim_scope": "custom_codex_recovery_rollback_apply_bounded_live_only",
+                "source_preflight_sha256": "a" * 64,
+                "source_rollback_point_ref": "rollback-point:forged",
+                "source_rollback_point_sha256_present": False,
+                "write_surface_id": "owned_generated_recovery_artifact",
+                "write_surface_scope": "server_owned_generated_recovery_artifact",
+                "rollback_apply_completed_scope": "bounded_apply_receipt_only",
+                "current_codex_touched": False,
+                "original_codex_touched": False,
+                "current_codex_home_touched": False,
+                "auth_material_touched": False,
+                "secret_value_recorded": False,
+                "process_kill_performed": False,
+                "recovery_operator_ready": False,
+            }
+            rewrite_receipt(root / "rap-forged.json", forged)
+
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=root,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_PROVENANCE_MISSING",
+            )
+            self.assertFalse(packet["receipt_verified"])
+            self.assertFalse(packet["filesystem_write_performed"])
+
+    def test_rollback_apply_receipt_verify_blocks_touched_operator_or_kill_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for field, value, expected in (
+                (
+                    "current_codex_touched",
+                    True,
+                    "ROLLBACK_APPLY_RECEIPT_VERIFY_TOUCH_FLAG_DETECTED",
+                ),
+                (
+                    "original_codex_touched",
+                    True,
+                    "ROLLBACK_APPLY_RECEIPT_VERIFY_TOUCH_FLAG_DETECTED",
+                ),
+                (
+                    "auth_material_touched",
+                    True,
+                    "ROLLBACK_APPLY_RECEIPT_VERIFY_SECRET_LEAK_DETECTED",
+                ),
+                (
+                    "recovery_operator_ready",
+                    True,
+                    "ROLLBACK_APPLY_RECEIPT_VERIFY_OPERATOR_READY_CLAIMED",
+                ),
+                (
+                    "process_kill_performed",
+                    True,
+                    "ROLLBACK_APPLY_RECEIPT_VERIFY_PROCESS_KILL_DETECTED",
+                ),
+            ):
+                preflight = rollback_apply_live_preflight_packet(root)
+                apply = build_custom_recovery_rollback_apply_bounded_live_packet(
+                    rollback_apply_live_preflight=preflight,
+                    browser_payload={},
+                    artifact_root=root,
+                )
+                receipt_path = root / f"{apply['rollback_apply_receipt_id']}.json"
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                receipt[field] = value
+                rewrite_receipt(receipt_path, receipt)
+
+                packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                    artifact_root=root,
+                )
+
+                self.assertEqual(packet["status"], "blocked")
+                self.assertEqual(packet["machine_error_code"], expected)
+                self.assertFalse(packet["receipt_verified"])
+                self.assertFalse(packet["filesystem_write_performed"])
+                receipt_path.unlink()
+
+    def test_rollback_apply_receipt_verify_blocks_ambiguous_latest_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preflight = rollback_apply_live_preflight_packet(root)
+            apply = build_custom_recovery_rollback_apply_bounded_live_packet(
+                rollback_apply_live_preflight=preflight,
+                browser_payload={},
+                artifact_root=root,
+            )
+            first = root / f"{apply['rollback_apply_receipt_id']}.json"
+            payload = json.loads(first.read_text(encoding="utf-8"))
+            payload["created_at_utc"] = "2026-05-24T00:00:00Z"
+            rewrite_receipt(first, payload)
+            second = root / "rap-ambiguous.json"
+            rewrite_receipt(second, payload)
+
+            packet = build_custom_recovery_rollback_apply_receipt_verify_packet(
+                artifact_root=root,
+            )
+
+            self.assertEqual(packet["status"], "blocked")
+            self.assertEqual(
+                packet["machine_error_code"],
+                "ROLLBACK_APPLY_RECEIPT_VERIFY_AMBIGUOUS_SELECTION",
+            )
+            self.assertTrue(packet["receipt_selection_ambiguous"])
+            self.assertTrue(packet["filesystem_read_performed"])
+            self.assertFalse(packet["receipt_verified"])
 
     def test_rollback_point_create_live_rejects_shallow_admission_without_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

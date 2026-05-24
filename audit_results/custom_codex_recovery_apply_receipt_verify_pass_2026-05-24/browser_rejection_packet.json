@@ -1,0 +1,27 @@
+{
+  "blank_query_filesystem_read_performed": false,
+  "blank_query_machine_error_code": "ROLLBACK_APPLY_RECEIPT_VERIFY_BROWSER_FIELD_REJECTED",
+  "blank_query_receipt_verified": false,
+  "forbidden_fields_checked": [
+    "receipt_id",
+    "receipt_path",
+    "artifact_id",
+    "artifact_path",
+    "path",
+    "snapshot_path",
+    "rollback_target",
+    "digest",
+    "session_id",
+    "backend_id",
+    "route_id",
+    "pid",
+    "process_id",
+    "CODEX_HOME",
+    "HOME",
+    "auth",
+    "token",
+    "api_key",
+    "secret"
+  ],
+  "status": "blocked"
+}
