@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "contour": "WEB_CUSTOM_CODEX_CONTROL_SURFACE_COMPLETION_PASS",
+  "captured_at_local_date": "2026-05-24",
+  "auditor_model": "gpt-5.4-mini",
+  "initial_verdict": "fail",
+  "initial_findings": [
+    {
+      "severity": "medium",
+      "finding": "New server endpoint read previous load artifacts and mixed runtime server with bounded artifact display."
+    },
+    {
+      "severity": "medium",
+      "finding": "Bounded proof packet used status ok and machine_error_code OK despite bounded-only claim scope."
+    }
+  ],
+  "fixes_after_initial_audit": [
+    "Removed bounded-load-proof server endpoint and server-side artifact ingestion.",
+    "Converted UI bounded proof to inert static display-only summary.",
+    "Changed bounded proof packet text to status display_only and machine_error_code BOUNDED_ARTIFACT_DISPLAY_ONLY.",
+    "Removed refresh/action wiring for the bounded proof display.",
+    "Updated tests and artifacts to assert no endpoint, no fetch, no refresh button, and display-only machine code."
+  ],
+  "reaudit_verdict": "pass",
+  "reaudit_findings": [],
+  "reaudit_non_findings": [
+    "No current-diff server endpoint or server-side ingestion path for bounded-load-proof.",
+    "No false-green OK claim in the bounded-proof UI packet.",
+    "UI bounded proof surface is static display-only and has no refresh/action control.",
+    "Sanitized contour artifacts contain no raw user paths, authorization references, server URL fields, or prompt hash fields."
+  ]
+}

@@ -393,6 +393,31 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertNotIn("postCodexCustomSessionAction(\"prompt\", { prompt: promptNode ? promptNode.value : \"\", model_id", js)
         self.assertNotIn("postCodexCustomSessionAction(\"cleanup\", { path", js)
 
+    def test_codex_custom_bounded_load_proof_ui_is_bounded_display_only(self) -> None:
+        html = (WEB_DESIGN_UI / "index.html").read_text()
+        js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
+
+        self.assertIn('id="codexCustomBoundedLoadProofPanel"', html)
+        self.assertIn('id="codexCustomBoundedProofPacket"', html)
+        self.assertIn('"status": "display_only"', html)
+        self.assertIn('"machine_error_code": "BOUNDED_ARTIFACT_DISPLAY_ONLY"', html)
+        self.assertIn("bounded_summary_only_not_rotation_ready", html)
+        self.assertIn("CODEX_CUSTOM_LOAD_READY", html)
+        self.assertIn("CODEX_CUSTOM_ROTATION_READY", html)
+        self.assertIn("not rotation ready", html)
+        self.assertIn("bounded proof only", html)
+        self.assertIn("current touch 0", html)
+        self.assertIn("401 0", html)
+        self.assertIn("leaks none", html)
+        self.assertNotIn("fetchCodexLaunchJson(\"api/codex/custom/bounded-load-proof\")", js)
+        self.assertNotIn("codexCustomBoundedProofRefreshAction", html + js)
+        self.assertNotIn('fetch("api/codex/custom/load"', js)
+        self.assertNotIn('data-ui-action="codex_custom_load"', html)
+        self.assertNotIn('data-ui-action="run_load"', html)
+        self.assertNotIn("CODEX_CUSTOM_FULL_SESSION_MANAGER_READY", html + js)
+        self.assertIn("EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY", html)
+        self.assertIn('"EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"', html)
+
     def test_overview_nav_and_action_hierarchy_are_product_first(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         css = (WEB_DESIGN_UI / "styles" / "overview.css").read_text()

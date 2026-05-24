@@ -533,6 +533,53 @@
           <pre id="codexCustomSessionTranscript" class="mono-value">service ledger pending</pre>
         </section>
 
+        <section id="codexCustomBoundedLoadProofPanel" class="card log-card">
+          <div class="log-head">
+            <div>
+              <div class="card-title">Codex Custom Bounded Proof</div>
+              <div id="codexCustomBoundedProofSummary" class="secondary">23/23 succeeded · artifact account_rotation_and_moderate_load_pass_2026-05-24 · not rotation ready</div>
+            </div>
+            <span id="codexCustomBoundedProofChip" class="chip blue"><span class="dot"></span><span>bounded proof only</span></span>
+          </div>
+          <div class="action-panel-grid">
+            <div>Claim scope</div><div id="codexCustomBoundedProofScope">bounded_summary_only_not_rotation_ready</div>
+            <div>Requests</div><div id="codexCustomBoundedProofRequests">23 total · 23 ok · 0 failed</div>
+            <div>Concurrency</div><div id="codexCustomBoundedProofConcurrency">2 moderate · canary 3 · moderate 20</div>
+            <div>Trace / isolation</div><div id="codexCustomBoundedProofTrace">trace yes · isolated yes · current touch 0 · locks 0</div>
+            <div>Errors</div><div id="codexCustomBoundedProofErrors">401 0 · 403 0 · 429 0 · leaks none</div>
+            <div>Post-load truth</div><div id="codexCustomBoundedProofPostload">bounded artifact says coherent · current baseline still rechecked separately</div>
+          </div>
+          <div class="action-summary-footer">
+            <div>
+              <span>latency p50: <strong id="codexCustomBoundedProofLatencyP50">15113 ms</strong></span>
+              <span>forbidden claims: <strong id="codexCustomBoundedProofForbiddenClaims">4 blocked claims</strong></span>
+            </div>
+          </div>
+          <pre id="codexCustomBoundedProofPacket" class="mono-value">{
+  "status": "display_only",
+  "machine_error_code": "BOUNDED_ARTIFACT_DISPLAY_ONLY",
+  "source": "bounded_audit_artifact",
+  "claim_scope": "bounded_summary_only_not_rotation_ready",
+  "total_requests": 23,
+  "success_count": 23,
+  "failure_count": 0,
+  "moderate_concurrency": 2,
+  "current_codex_touch_count": 0,
+  "upstream_401_count": 0,
+  "upstream_403_count": 0,
+  "upstream_429_count": 0,
+  "secret_leak_count": 0,
+  "raw_backend_or_auth_leak_count": 0,
+  "raw_prompt_stored_in_results": false,
+  "forbidden_claims": [
+    "CODEX_CUSTOM_ROTATION_READY",
+    "CODEX_CUSTOM_LOAD_READY",
+    "CODEX_CUSTOM_DESKTOP_READY",
+    "EXECUTION_CORE_REPAIR_CLOSED_AND_DESIGN_GATE_READY"
+  ]
+}</pre>
+        </section>
+
         <section id="operatorPanel" class="card log-card">
           <div class="log-head">
             <div>
