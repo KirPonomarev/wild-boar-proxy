@@ -1859,6 +1859,132 @@ function renderCodexCustomRecoveryRollbackPointDryRun(packet) {
   }
 }
 
+function renderCodexCustomRecoveryRollbackPointCreateAdmission(packet) {
+  const response = document.getElementById("codexCustomRecoveryRollbackPointAdmissionPacket");
+  const status = packet?.status || "unknown";
+  const machineCode = packet?.machine_error_code || "UNKNOWN";
+  const admissionDefined = packet?.rollback_point_create_admission_defined === true;
+  const admitted = packet?.rollback_point_create_admitted === true;
+  const performed = packet?.rollback_point_create_performed === true;
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryRollbackPointAdmission",
+    `${status} · admission ${admissionDefined ? "defined" : "missing"} · create ${admitted ? "next-contour admitted" : "blocked"}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryLiveReady",
+    `${packet?.rollback_live_ready === true} · admission only · performed ${performed}`
+  );
+  codexCustomRecoverySetText(
+    "codexCustomRecoveryOperatorReady",
+    `${packet?.recovery_operator_ready === true} · not claimed`
+  );
+  if (response) {
+    response.textContent = JSON.stringify({
+      status,
+      machine_error_code: machineCode,
+      block_reason_code: packet?.block_reason_code || "",
+      claim_scope: packet?.claim_scope || "custom_codex_recovery_rollback_point_create_admission_only",
+      contract_endpoint: packet?.contract_endpoint || "/api/codex/custom/recovery/rollback-point-create-admission",
+      contract_source_endpoint: packet?.contract_source_endpoint || "/api/codex/custom/recovery/rollback-point-dry-run",
+      contract_endpoint_mutation_allowed: packet?.contract_endpoint_mutation_allowed === true,
+      browser_payload_allowed: packet?.browser_payload_allowed === true,
+      browser_payload_allowed_keys: packet?.browser_payload_allowed_keys || [],
+      forbidden_browser_fields: packet?.forbidden_browser_fields || [],
+      browser_forbidden_fields_rejected: packet?.browser_forbidden_fields_rejected === true,
+      rollback_point_dry_run_contract_valid: packet?.rollback_point_dry_run_contract_valid === true,
+      rollback_point_create_admission_defined: admissionDefined,
+      rollback_point_create_admitted: admitted,
+      rollback_point_create_admitted_scope: packet?.rollback_point_create_admitted_scope || "",
+      rollback_point_create_admitted_for_current_contour: packet?.rollback_point_create_admitted_for_current_contour === true,
+      rollback_point_create_performed: performed,
+      rollback_point_created: packet?.rollback_point_created === true,
+      snapshot_file_created: packet?.snapshot_file_created === true,
+      filesystem_write_performed: packet?.filesystem_write_performed === true,
+      write_surface_machine_check_performed: packet?.write_surface_machine_check_performed === true,
+      write_surfaces_all_eligible: packet?.write_surfaces_all_eligible === true,
+      allowed_write_surfaces: Array.isArray(packet?.allowed_write_surfaces) ? packet.allowed_write_surfaces : [],
+      allowed_write_surface_ids: Array.isArray(packet?.allowed_write_surface_ids) ? packet.allowed_write_surface_ids : [],
+      forbidden_surfaces: Array.isArray(packet?.forbidden_surfaces) ? packet.forbidden_surfaces : [],
+      rollback_apply_admitted: packet?.rollback_apply_admitted === true,
+      rollback_live_ready: packet?.rollback_live_ready === true,
+      recovery_operator_ready: packet?.recovery_operator_ready === true,
+      operator_ready_claimed: packet?.operator_ready_claimed === true,
+      rollback_operator_ready: packet?.rollback_operator_ready === true,
+      rollback_claimed: packet?.rollback_claimed === true,
+      process_kill_operator_ready: packet?.process_kill_operator_ready === true,
+      process_kill_claimed: packet?.process_kill_claimed === true,
+      process_kill_live_ready: packet?.process_kill_live_ready === true,
+      process_kill_admitted: packet?.process_kill_admitted === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      original_codex_touched: packet?.original_codex_touched === true,
+      current_codex_home_touched: packet?.current_codex_home_touched === true,
+      current_codex_home_allowed_surface: packet?.current_codex_home_allowed_surface === true,
+      auth_material_allowed_surface: packet?.auth_material_allowed_surface === true,
+      arbitrary_path_accepted: packet?.arbitrary_path_accepted === true,
+      arbitrary_path_allowed_surface: packet?.arbitrary_path_allowed_surface === true,
+      dangerous_actions_disabled: packet?.dangerous_actions_disabled !== false,
+      dangerous_action_mutation_allowed: packet?.dangerous_action_mutation_allowed === true,
+      actions: Array.isArray(packet?.actions) ? packet.actions : [],
+      result_token: packet?.result_token || "",
+      next_contour: packet?.next_contour || "",
+      next_contour_claimed: packet?.next_contour_claimed === true,
+    }, null, 2);
+  }
+}
+
+async function refreshCodexCustomRecoveryRollbackPointCreateAdmission() {
+  try {
+    renderCodexCustomRecoveryRollbackPointCreateAdmission(
+      await fetchCodexLaunchJson("api/codex/custom/recovery/rollback-point-create-admission")
+    );
+  } catch (error) {
+    renderCodexCustomRecoveryRollbackPointCreateAdmission({
+      status: "failed",
+      machine_error_code: "ROLLBACK_POINT_CREATE_ADMISSION_FETCH_FAILED",
+      block_reason_code: "ROLLBACK_POINT_CREATE_ADMISSION_FETCH_FAILED",
+      claim_scope: "custom_codex_recovery_rollback_point_create_admission_only",
+      contract_endpoint: "/api/codex/custom/recovery/rollback-point-create-admission",
+      contract_source_endpoint: "/api/codex/custom/recovery/rollback-point-dry-run",
+      contract_endpoint_mutation_allowed: false,
+      browser_payload_allowed: false,
+      browser_payload_allowed_keys: [],
+      forbidden_browser_fields: ["backend_id", "route_id", "path", "snapshot_path", "rollback_target", "pid", "process_id", "token", "auth", "api_key", "secret", "CODEX_HOME", "HOME"],
+      browser_forbidden_fields_rejected: true,
+      rollback_point_dry_run_contract_valid: false,
+      rollback_point_create_admission_defined: false,
+      rollback_point_create_admitted: false,
+      rollback_point_create_admitted_scope: "not_admitted",
+      rollback_point_create_admitted_for_current_contour: false,
+      rollback_point_create_performed: false,
+      rollback_point_created: false,
+      snapshot_file_created: false,
+      filesystem_write_performed: false,
+      write_surface_machine_check_performed: false,
+      write_surfaces_all_eligible: false,
+      rollback_apply_admitted: false,
+      rollback_live_ready: false,
+      recovery_operator_ready: false,
+      operator_ready_claimed: false,
+      rollback_operator_ready: false,
+      rollback_claimed: false,
+      process_kill_operator_ready: false,
+      process_kill_claimed: false,
+      process_kill_live_ready: false,
+      process_kill_admitted: false,
+      current_codex_touched: false,
+      original_codex_touched: false,
+      current_codex_home_touched: false,
+      current_codex_home_allowed_surface: false,
+      auth_material_allowed_surface: false,
+      arbitrary_path_accepted: false,
+      arbitrary_path_allowed_surface: false,
+      dangerous_actions_disabled: true,
+      dangerous_action_mutation_allowed: false,
+      next_contour_claimed: false,
+    });
+  }
+}
+
 async function refreshCodexCustomRecoveryRollbackPointDryRun() {
   try {
     renderCodexCustomRecoveryRollbackPointDryRun(
@@ -8288,6 +8414,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("codexCustomRecoverySessionActionsAction")?.addEventListener("click", () => refreshCodexCustomRecoveryAdmittedSessionActions());
   document.getElementById("codexCustomRecoveryRollbackProcessOwnerAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackProcessOwnerContract());
   document.getElementById("codexCustomRecoveryRollbackPointAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackPointDryRun());
+  document.getElementById("codexCustomRecoveryRollbackPointAdmissionAction")?.addEventListener("click", () => refreshCodexCustomRecoveryRollbackPointCreateAdmission());
   document.getElementById("codexCustomRecoveryCancelAction")?.addEventListener("click", () => cancelCodexCustomRecoverySession());
   document.getElementById("codexCustomRecoveryCleanupAction")?.addEventListener("click", () => cleanupCodexCustomRecoverySession());
   document.getElementById("operatorRefreshAction")?.addEventListener("click", () => refreshOperatorPanel());
