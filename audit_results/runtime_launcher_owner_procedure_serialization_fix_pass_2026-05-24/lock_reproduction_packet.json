@@ -1,0 +1,21 @@
+{
+  "artifact_payload_sha256": "fff2cfa127e7f219ec26fcc04a917866d95a293cfea1f041dee8adf07dcd5b83",
+  "codex_home_touched": false,
+  "contour": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_PASS",
+  "current_codex_touched": false,
+  "layer_scope": "runtime_only",
+  "observed_lock_model": {
+    "expected_during_launcher_subprocess": {
+      "launcher_lock_file_exists": true,
+      "shared_sync_lock_file_exists": false
+    },
+    "launcher_owner_lock": "paths.launcher_lock_file",
+    "shared_mutation_lock": "paths.lock_file",
+    "true_concurrent_launcher_expected_machine_error_code": "LOCK_HELD"
+  },
+  "pre_fix_risk": "launcher subprocess could be mistaken for shared sync lock ownership if serialized_lock widened around subprocess.run",
+  "schema_version": 1,
+  "source": "tests.test_cli.CliTests.test_stable_runtime_launcher_attempt_does_not_hold_shared_sync_lock",
+  "status": "observed",
+  "ui_changed": false
+}

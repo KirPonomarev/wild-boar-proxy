@@ -17163,6 +17163,8 @@ class CliTests(unittest.TestCase):
                 launcher_thread = threading.Thread(target=run_attempt, daemon=True)
                 launcher_thread.start()
                 self.assertTrue(launcher_started.wait(timeout=2))
+                self.assertTrue(paths.launcher_lock_file.exists())
+                self.assertFalse(paths.lock_file.exists())
                 payload = runtime_mod.run_sync(paths)
                 release_launcher.set()
                 launcher_thread.join(timeout=5)

@@ -1,0 +1,28 @@
+{
+  "artifact_payload_sha256": "2dc935b0dc3335495279aebebd8ad26e1240f2485767d35e718a0d4f95e2f675",
+  "assertions_added": [
+    "launcher_lock_file exists while launcher subprocess is running",
+    "shared sync lock_file does not exist while launcher subprocess is running",
+    "run_sync during launcher subprocess does not return LOCK_HELD",
+    "concurrent launcher attempts still return LOCK_HELD on launcher procedure lock"
+  ],
+  "implementation_change": "regression_hardening_only",
+  "machine_error_code": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_READY",
+  "non_claims": [
+    "RUNTIME_READY",
+    "WEB_SAFE_APP_COPY_READY",
+    "DESIGN_GATE_READY",
+    "STAGE_READY",
+    "PILOT_READY",
+    "SCALE_READY",
+    "PRODUCTION_READY",
+    "DESKTOP_READY"
+  ],
+  "runtime_code_rewrite_required": false,
+  "schema_version": 1,
+  "status": "passed",
+  "tests_observed": {
+    "stable_runtime_k_tests": "6 tests passed",
+    "targeted_two_tests": "passed"
+  }
+}

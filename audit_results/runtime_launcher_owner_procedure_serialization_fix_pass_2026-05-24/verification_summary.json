@@ -1,0 +1,46 @@
+{
+  "artifact_payload_sha256": "abde7de0abab7fcb42ae87c2f84ff5121090f7a4668e359877c39b51d4317055",
+  "codex_home_touched": false,
+  "commands": [
+    {
+      "cmd": "git status -sb --untracked-files=no",
+      "result": "clean tracked preflight at HEAD 363ddd3a"
+    },
+    {
+      "cmd": "python3 -m wild_boar_proxy status --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "python3 -m wild_boar_proxy healthcheck --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "python3 -m wild_boar_proxy invariant-check --json",
+      "result": "status ok machine_error_code OK"
+    },
+    {
+      "cmd": "bundled python -B -m unittest targeted launcher serialization tests -q",
+      "result": "2 tests OK"
+    },
+    {
+      "cmd": "bundled python -B -m unittest tests.test_cli -k stable_runtime -q",
+      "result": "6 tests OK"
+    }
+  ],
+  "current_codex_touched": false,
+  "final_verdict": "RUNTIME_LAUNCHER_OWNER_PROCEDURE_SERIALIZATION_FIX_READY",
+  "non_claims": [
+    "RUNTIME_READY",
+    "WEB_SAFE_APP_COPY_READY",
+    "DESIGN_GATE_READY",
+    "STAGE_READY",
+    "PILOT_READY",
+    "SCALE_READY",
+    "PRODUCTION_READY",
+    "DESKTOP_READY"
+  ],
+  "schema_version": 1,
+  "scope": "runtime_only",
+  "status": "passed",
+  "ui_changed": false
+}
