@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-25T14:41:48.482236Z",
+  "filesystem_retry_attempted": false,
+  "final_verdict": "fresh_context_still_hosted_by_protected_codex",
+  "fresh_context_proven_by_host_detachment_only": true,
+  "fresh_context_verified": false,
+  "host_process_chain_length": 4,
+  "hosted_by_protected_codex_session": true,
+  "launch_attempted": false,
+  "note": "A new thread alone is not proof of fresh context; host-process detachment is required and failed here.",
+  "operator_action_required": true,
+  "phase7_retry_admissible": false,
+  "quiescent_current_codex_precondition_satisfied": false,
+  "quiescent_precondition_verified": false,
+  "reason_class": "FRESH_CONTEXT_NOT_ESTABLISHED",
+  "status": "blocked"
+}

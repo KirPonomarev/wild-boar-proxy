@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-25T14:41:48.482204Z",
+  "fresh_context_verified": false,
+  "host_process_chain": [
+    {
+      "command": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/Work/wild-boar-proxy/tools/native_fresh_context_entry_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence",
+      "pid": 2501,
+      "ppid": 41308
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+      "pid": 41308,
+      "ppid": 41266
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/MacOS/Codex",
+      "pid": 41266,
+      "ppid": 1
+    },
+    {
+      "command": "/sbin/launchd",
+      "pid": 1,
+      "ppid": 0
+    }
+  ],
+  "hosted_by_protected_codex_session": true
+}

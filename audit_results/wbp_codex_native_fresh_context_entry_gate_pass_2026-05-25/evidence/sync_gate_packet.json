@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-25T14:41:48.351062Z",
+  "git_head": "d2ebf6f52b202bf7e3476ef7b072bdc8283acd08",
+  "git_status_short_branch": [
+    "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated",
+    " M tests/test_native_filesystem_probe.py",
+    " M wild_boar_proxy/native_filesystem_probe.py",
+    "?? tools/native_fresh_context_entry_probe.py"
+  ],
+  "note": "Captured after bounded contour edits were already present; not admissible as start-of-contour sync-pass proof.",
+  "reason_class": "WORKTREE_DIRTY_DURING_CAPTURE",
+  "status": "blocked"
+}

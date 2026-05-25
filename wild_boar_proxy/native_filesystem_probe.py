@@ -779,3 +779,50 @@ def classify_quiescent_handoff_admission(
         "hosted_by_protected_codex_session": False,
         "verdict": "quiescent_unverified",
     }
+
+
+def classify_fresh_context_entry(
+    *,
+    host_process_chain: list[dict[str, Any]],
+    quiescent_precondition_packet: dict[str, Any],
+) -> dict[str, Any]:
+    hosted_by_codex = any(
+        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
+        or "codex app-server" in entry.get("command", "")
+        for entry in host_process_chain
+    )
+    quiescent_verified = bool(
+        quiescent_precondition_packet.get("quiescent_current_codex_precondition_satisfied")
+    )
+    if hosted_by_codex:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "FRESH_CONTEXT_NOT_ESTABLISHED",
+            "fresh_context_verified": False,
+            "hosted_by_protected_codex_session": True,
+            "quiescent_precondition_verified": quiescent_verified,
+            "phase7_retry_admissible": False,
+            "verdict": "fresh_context_still_hosted_by_protected_codex",
+        }
+    if not quiescent_verified:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "QUIESCENT_PRECONDITION_STILL_FAILED",
+            "fresh_context_verified": True,
+            "hosted_by_protected_codex_session": False,
+            "quiescent_precondition_verified": False,
+            "phase7_retry_admissible": False,
+            "verdict": "fresh_context_present_but_quiescent_precondition_failed",
+        }
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "ok",
+        "reason_class": "",
+        "fresh_context_verified": True,
+        "hosted_by_protected_codex_session": False,
+        "quiescent_precondition_verified": True,
+        "phase7_retry_admissible": True,
+        "verdict": "FRESH_CONTEXT_ENTRY_ADMISSIBLE",
+    }

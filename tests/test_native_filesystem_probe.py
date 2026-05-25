@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_fresh_context_entry,
     classify_quiescent_handoff_admission,
     classify_quiescent_current_codex_precondition,
     classify_current_codex_delta,
@@ -233,6 +234,44 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["verdict"], "QUIESCENT_HANDOFF_ADMISSIBLE")
         self.assertTrue(packet["same_thread_admissible"])
         self.assertFalse(packet["fresh_context_required"])
+
+    def test_fresh_context_entry_blocks_when_hosted_by_protected_codex(self) -> None:
+        packet = classify_fresh_context_entry(
+            host_process_chain=[
+                {"command": "/Applications/Codex.app/Contents/Resources/codex app-server"},
+                {"command": "/Applications/Codex.app/Contents/MacOS/Codex"},
+            ],
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "FRESH_CONTEXT_NOT_ESTABLISHED")
+        self.assertFalse(packet["fresh_context_verified"])
+        self.assertFalse(packet["phase7_retry_admissible"])
+
+    def test_fresh_context_entry_blocks_when_quiescent_precondition_fails(self) -> None:
+        packet = classify_fresh_context_entry(
+            host_process_chain=[{"command": "/usr/bin/python3"}],
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "QUIESCENT_PRECONDITION_STILL_FAILED")
+        self.assertTrue(packet["fresh_context_verified"])
+        self.assertFalse(packet["phase7_retry_admissible"])
+
+    def test_fresh_context_entry_does_not_attempt_live_launch(self) -> None:
+        packet = classify_fresh_context_entry(
+            host_process_chain=[{"command": "/usr/bin/python3"}],
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": True
+            },
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["verdict"], "FRESH_CONTEXT_ENTRY_ADMISSIBLE")
+        self.assertTrue(packet["phase7_retry_admissible"])
 
 
 if __name__ == "__main__":
