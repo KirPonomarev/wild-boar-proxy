@@ -165,45 +165,9 @@ def _build_current_codex_running_state_packet(inventory: dict[str, object]) -> d
 
 def _build_summary(
     *,
-    host_negative_packet: dict[str, object],
-    precondition_packet: dict[str, object],
-    acquisition_packet: dict[str, object],
-    ambient_env_packet: dict[str, object],
+    summary_packet: dict[str, object],
 ) -> dict[str, object]:
-    admissible = bool(acquisition_packet.get("status") == "ok")
-    blocked_reason = (
-        acquisition_packet.get("reason_class")
-        or precondition_packet.get("reason_class")
-        or host_negative_packet.get("reason_class")
-        or ambient_env_packet.get("reason_class")
-        or ""
-    )
-    return {
-        "captured_at_utc": _utc_now(),
-        "status": "ok" if admissible else "blocked",
-        "final_verdict": (
-            "FRESH_DETACHED_CONTEXT_ADMISSIBLE_FOR_NATIVE_FILESYSTEM_RETRY"
-            if admissible
-            else "NATIVE_FILESYSTEM_RETRY_BLOCKED_BY_CONTEXT_ADMISSION"
-        ),
-        "reason_class": "" if admissible else blocked_reason,
-        "hosted_by_protected_codex_session": host_negative_packet.get(
-            "hosted_by_protected_codex_session"
-        ),
-        "fresh_context_verified": acquisition_packet.get("fresh_context_verified"),
-        "operator_action_required": acquisition_packet.get("operator_action_required"),
-        "operator_action_performed": acquisition_packet.get("operator_action_performed"),
-        "quiescent_current_codex_precondition_satisfied": precondition_packet.get(
-            "quiescent_current_codex_precondition_satisfied"
-        ),
-        "phase7_retry_admissible": acquisition_packet.get("phase7_retry_admissible"),
-        "ambient_env_ok": ambient_env_packet.get("status") == "ok",
-        "consumer_launch_performed": False,
-        "native_launch_performed": False,
-        "filesystem_retry_attempted": False,
-        "protected_surface_mutation_performed": False,
-        "forbidden_claims_present": False,
-    }
+    return dict(summary_packet)
 
 
 def _build_independent_audit(
@@ -220,9 +184,9 @@ def _build_independent_audit(
         "captured_at_utc": _utc_now(),
         "status": "ok",
         "final_verdict": (
-            "fresh_detached_context_admission_supported"
+            "external_detached_context_proof_supported"
             if summary_packet.get("status") == "ok"
-            else "fresh_detached_context_admission_block_supported"
+            else "external_detached_context_proof_block_supported"
         ),
         "supported_reason_class": summary_packet.get("reason_class", ""),
         "findings": [
@@ -333,6 +297,7 @@ def main() -> int:
         sys.path.insert(0, str(repo_root))
 
     from wild_boar_proxy.native_filesystem_probe import (
+        classify_external_detached_context_outcome,
         classify_fresh_context_acquisition,
         classify_fresh_context_entry,
         classify_protected_codex_host_negative,
@@ -365,10 +330,12 @@ def main() -> int:
     sync_packet = _build_sync_packet(repo_root)
     version_packet = _build_version_packet(repo_root)
     summary_packet = _build_summary(
-        host_negative_packet=host_negative_packet,
-        precondition_packet=precondition_packet,
-        acquisition_packet=acquisition_packet,
-        ambient_env_packet=ambient_env_packet,
+        summary_packet=classify_external_detached_context_outcome(
+            host_negative_packet=host_negative_packet,
+            precondition_packet=precondition_packet,
+            acquisition_packet=acquisition_packet,
+            ambient_env_packet=ambient_env_packet,
+        )
     )
     audit_packet = _build_independent_audit(
         evidence_dir=evidence_dir,

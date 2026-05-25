@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_external_detached_context_outcome,
     classify_protected_codex_host_negative,
     classify_fresh_context_acquisition,
     classify_fresh_context_entry,
@@ -376,6 +377,86 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["reason_class"], "")
         self.assertFalse(packet["ambient_openai_api_key_present"])
         self.assertFalse(packet["unexplained_authority_present"])
+
+    def test_external_detached_context_outcome_blocks_when_context_not_proven(self) -> None:
+        packet = classify_external_detached_context_outcome(
+            host_negative_packet={
+                "reason_class": "PROTECTED_CODEX_SESSION_DETECTED",
+                "hosted_by_protected_codex_session": True,
+                "protected_codex_ancestry_disproven": False,
+            },
+            precondition_packet={
+                "reason_class": "CURRENT_CODEX_NOT_QUIESCENT",
+                "quiescent_current_codex_precondition_satisfied": False,
+            },
+            acquisition_packet={
+                "reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED",
+                "fresh_context_verified": False,
+                "operator_action_required": True,
+                "operator_action_performed": False,
+                "phase7_retry_admissible": False,
+            },
+            ambient_env_packet={"status": "ok", "reason_class": ""},
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["final_verdict"], "EXTERNAL_DETACHED_CONTEXT_NOT_PROVEN")
+        self.assertEqual(packet["reason_class"], "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED")
+
+    def test_external_detached_context_outcome_marks_phase7_admissible(self) -> None:
+        packet = classify_external_detached_context_outcome(
+            host_negative_packet={
+                "reason_class": "",
+                "hosted_by_protected_codex_session": False,
+                "protected_codex_ancestry_disproven": True,
+            },
+            precondition_packet={
+                "reason_class": "",
+                "quiescent_current_codex_precondition_satisfied": True,
+            },
+            acquisition_packet={
+                "reason_class": "",
+                "fresh_context_verified": True,
+                "operator_action_required": True,
+                "operator_action_performed": True,
+                "phase7_retry_admissible": True,
+            },
+            ambient_env_packet={"status": "ok", "reason_class": ""},
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(
+            packet["final_verdict"],
+            "EXTERNAL_DETACHED_CONTEXT_PROVEN_AND_PHASE7_ADMISSIBLE",
+        )
+        self.assertTrue(packet["phase7_retry_admissible"])
+
+    def test_external_detached_context_outcome_preserves_separate_quiescent_blocker(
+        self,
+    ) -> None:
+        packet = classify_external_detached_context_outcome(
+            host_negative_packet={
+                "reason_class": "",
+                "hosted_by_protected_codex_session": False,
+                "protected_codex_ancestry_disproven": True,
+            },
+            precondition_packet={
+                "reason_class": "CURRENT_CODEX_NOT_QUIESCENT",
+                "quiescent_current_codex_precondition_satisfied": False,
+            },
+            acquisition_packet={
+                "reason_class": "QUIESCENT_PRECONDITION_STILL_FAILED",
+                "fresh_context_verified": True,
+                "operator_action_required": True,
+                "operator_action_performed": True,
+                "phase7_retry_admissible": False,
+            },
+            ambient_env_packet={"status": "ok", "reason_class": ""},
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(
+            packet["final_verdict"],
+            "EXTERNAL_DETACHED_CONTEXT_PROVEN_BUT_PHASE7_NOT_ADMISSIBLE",
+        )
+        self.assertTrue(packet["protected_codex_ancestry_disproven"])
 
 
 if __name__ == "__main__":

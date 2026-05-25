@@ -972,3 +972,68 @@ def classify_fresh_context_acquisition(
             "verdict", "fresh_context_verification_failed"
         ),
     }
+
+
+def classify_external_detached_context_outcome(
+    *,
+    host_negative_packet: dict[str, Any],
+    precondition_packet: dict[str, Any],
+    acquisition_packet: dict[str, Any],
+    ambient_env_packet: dict[str, Any],
+) -> dict[str, Any]:
+    host_proven = bool(host_negative_packet.get("protected_codex_ancestry_disproven"))
+    fresh_context_verified = bool(acquisition_packet.get("fresh_context_verified"))
+    quiescent_satisfied = bool(
+        precondition_packet.get("quiescent_current_codex_precondition_satisfied")
+    )
+    phase7_admissible = bool(acquisition_packet.get("phase7_retry_admissible"))
+    ambient_env_ok = ambient_env_packet.get("status") == "ok"
+
+    blocked_reason = (
+        acquisition_packet.get("reason_class")
+        or precondition_packet.get("reason_class")
+        or host_negative_packet.get("reason_class")
+        or ambient_env_packet.get("reason_class")
+        or ""
+    )
+
+    if not host_proven or not fresh_context_verified:
+        final_verdict = "EXTERNAL_DETACHED_CONTEXT_NOT_PROVEN"
+        status = "blocked"
+        reason_class = blocked_reason
+    elif phase7_admissible and quiescent_satisfied:
+        final_verdict = "EXTERNAL_DETACHED_CONTEXT_PROVEN_AND_PHASE7_ADMISSIBLE"
+        status = "ok"
+        reason_class = ""
+    elif not quiescent_satisfied or not phase7_admissible:
+        final_verdict = "EXTERNAL_DETACHED_CONTEXT_PROVEN_BUT_PHASE7_NOT_ADMISSIBLE"
+        status = "blocked"
+        reason_class = blocked_reason
+    else:
+        final_verdict = "EXTERNAL_DETACHED_CONTEXT_PROVEN"
+        status = "ok"
+        reason_class = ""
+
+    return {
+        "captured_at_utc": utc_now(),
+        "status": status,
+        "final_verdict": final_verdict,
+        "reason_class": reason_class,
+        "hosted_by_protected_codex_session": host_negative_packet.get(
+            "hosted_by_protected_codex_session"
+        ),
+        "protected_codex_ancestry_disproven": host_negative_packet.get(
+            "protected_codex_ancestry_disproven"
+        ),
+        "fresh_context_verified": fresh_context_verified,
+        "operator_action_required": acquisition_packet.get("operator_action_required"),
+        "operator_action_performed": acquisition_packet.get("operator_action_performed"),
+        "quiescent_current_codex_precondition_satisfied": quiescent_satisfied,
+        "phase7_retry_admissible": phase7_admissible,
+        "ambient_env_ok": ambient_env_ok,
+        "consumer_launch_performed": False,
+        "native_launch_performed": False,
+        "filesystem_retry_attempted": False,
+        "protected_surface_mutation_performed": False,
+        "forbidden_claims_present": False,
+    }
