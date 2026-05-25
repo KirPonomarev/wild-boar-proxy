@@ -16,7 +16,7 @@ blocked packet.
 
 - goal: prove whether the `openrouter` owner env credential is now present and unblock external API live proof only if it is
 - branch: `codex/external-agent-lab-isolated`
-- head: `b89ae92e272690b92691fc49264e4d1a91a94767`
+- head: `c9da772cd01cca65103aa51bd69233399f0fe4ea`
 - touched files: `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/spec.md`, `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/evidence/credential_status_packet.json`, `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/evidence/credential_admit_blocked_packet.json`, `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/evidence/verification_summary.json`, `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/evidence/independent_audit_report.json`, `audit_results/codex_custom_external_api_owner_credential_unblock_and_live_proof_pass_2026-05-25/closeout.md`
 - tests run: `git diff --check`
 - blocked risks: owner-side `openrouter` credential is still absent; external route connect and live prompt remain forbidden to claim without owner-side change; retry without owner-side change would overstate repo truth
@@ -45,12 +45,12 @@ blocked packet.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: not created in this pass
-- pushed: no
+- commit: `c9da772cd01cca65103aa51bd69233399f0fe4ea` (integration commit carrying this blocked-pass artifact set alongside active `8B` artifacts)
+- pushed: yes
 
 ## Scope Check
 
-- unrelated work mixed in: no; this pass only captured blocker truth and audit artifacts
+- unrelated work mixed in: repo integration commit also carried active `8B` implementation/evidence; this blocked-pass contour itself remained limited to its own `audit_results/...` artifact set
 - private-data risk reviewed: yes; no secret value was materialized and all packets remain redacted to credential refs only
 
 ## Notes
