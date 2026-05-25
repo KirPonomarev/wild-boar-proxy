@@ -1,0 +1,59 @@
+{
+  "statusCode": 200,
+  "ok": true,
+  "body": {
+    "browser_payload_allowed_keys": [],
+    "captured_at_utc": "2026-05-25T00:27:41.316242Z",
+    "current_codex_touched": false,
+    "custom_codex_home_present": false,
+    "custom_home_present": false,
+    "dispatch_exit_code": 0,
+    "dispatch_observed": true,
+    "dry_run": false,
+    "human_message": "Original Codex launch dispatched without proxy/custom env injection.",
+    "launch_claim_scope": "owner_authorized_baseline_launch",
+    "launch_source": "wbp_web_ui",
+    "machine_error_code": "OK",
+    "mode_id": "original_codex",
+    "next_action": "none",
+    "owner_authorization_phrase_present": true,
+    "protected_surface_comparisons": {
+      "codex_auth": {
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": true,
+        "size_unchanged": true
+      },
+      "codex_config": {
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": true,
+        "size_unchanged": true
+      },
+      "default_app_support_codex": {
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": null,
+        "size_unchanged": true
+      },
+      "default_cache_codex": {
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": null,
+        "size_unchanged": true
+      },
+      "default_httpstorage_codex": {
+        "exists_unchanged": true,
+        "mtime_ns_unchanged": true,
+        "sha256_unchanged": null,
+        "size_unchanged": true
+      }
+    },
+    "protected_surfaces_unchanged": true,
+    "proxy_env_present": false,
+    "running_status": true,
+    "schema_version": 1,
+    "status": "ok",
+    "wbp_endpoint_injected": false
+  }
+}

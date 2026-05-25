@@ -174,6 +174,8 @@ class CodexCustomSessionManager:
         payload: dict[str, Any],
         commands: dict[str, dict[str, Any]],
         operator_status: dict[str, Any] | None,
+        *,
+        selection: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         forbidden = forbidden_session_create_fields(payload)
         if forbidden:
@@ -187,7 +189,7 @@ class CodexCustomSessionManager:
                 "model_server_issued": False,
                 "next_action": "select_model_from_server_registry",
             }
-        selection = build_account_selection_packet(commands, operator_status)
+        selection = selection or build_account_selection_packet(commands, operator_status)
         if selection.get("selection_proven") is not True:
             return {
                 **self._base_packet(

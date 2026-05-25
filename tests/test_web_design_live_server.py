@@ -5579,6 +5579,25 @@ class ReadyFakeOperatorSurfaceSession(FakeOperatorSurfaceSession):
         return payload
 
 
+class ExternalRouteFakeOperatorSurfaceSession(ReadyFakeOperatorSurfaceSession):
+    def status_payload(self) -> dict[str, object]:
+        payload = dict(super().status_payload())
+        payload["models"] = {
+            "ok": True,
+            "model_ids": ["gpt-5.3-codex", "wbp-deepseek-v3"],
+            "server_issued": True,
+        }
+        return payload
+
+    def probe_models(self) -> dict[str, object]:
+        return {
+            "ok": True,
+            "captured_at_utc": "2026-05-23T00:00:00Z",
+            "model_ids": ["gpt-5.3-codex", "wbp-deepseek-v3"],
+            "server_issued": True,
+        }
+
+
 class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
     def test_operator_endpoints_expose_status_models_transcript_and_run(self) -> None:
         created_sessions: list[FakeOperatorSurfaceSession] = []
@@ -5627,7 +5646,7 @@ class WebDesignOperatorSurfaceEndpointTests(unittest.TestCase):
 
 
 class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
-    def test_codex_launch_mode_endpoints_are_bounded_and_readonly(self) -> None:
+    def test_codex_launch_mode_endpoints_expose_live_launch_surfaces_without_overclaim(self) -> None:
         with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
             server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=mock.Mock()))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -5638,7 +5657,9 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
                 original_status = json.loads(fetch(f"{base}/api/codex/original/status"))
                 custom_status = json.loads(fetch(f"{base}/api/codex/custom/status"))
                 dry_run = json.loads(post_json(f"{base}/api/codex/original/launch-dry-run", {}))
+                original_launch = json.loads(post_json(f"{base}/api/codex/original/launch", {}))
                 custom_dry_run = json.loads(post_json(f"{base}/api/codex/custom/launch-dry-run", {}))
+                custom_launch = json.loads(post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.3-codex"}))
                 app_copy_dry_run = json.loads(
                     post_json(f"{base}/api/codex/app-copy/launch-dry-run", {})
                 )
@@ -5674,16 +5695,17 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         modes = {mode["id"]: mode for mode in launch_modes["modes"]}
         self.assertFalse(modes["original_codex"]["proxy_enabled"])
         self.assertFalse(modes["original_codex"]["proxy_allowed"])
-        self.assertEqual(modes["original_codex"]["launch_claim_scope"], "dry_run_guard_only")
+        self.assertTrue(modes["original_codex"]["live_launch_available"])
+        self.assertEqual(modes["original_codex"]["launch_claim_scope"], "owner_authorized_baseline_launch")
         self.assertTrue(modes["codex_custom"]["proxy_enabled"])
         self.assertTrue(modes["codex_custom"]["custom_codex_home_required"])
         self.assertFalse(modes["codex_custom"]["current_codex_home_allowed"])
-        self.assertFalse(modes["codex_custom"]["custom_session_available"])
+        self.assertTrue(modes["codex_custom"]["custom_session_available"])
         self.assertFalse(original_status["proxy_injection_allowed"])
         self.assertFalse(original_status["proxy_allowed"])
         self.assertFalse(original_status["custom_home_allowed"])
         self.assertEqual(original_status["browser_payload_allowed_keys"], [])
-        self.assertEqual(custom_status["launch_claim_scope"], "readonly_readiness_only")
+        self.assertEqual(custom_status["launch_claim_scope"], "isolated_session_workbench_launch_ready")
         self.assertFalse(custom_status["current_codex_home_allowed"])
         self.assertFalse(custom_status["last_process_isolation_proof"]["fresh_truth"])
         self.assertEqual(dry_run["status"], "ok")
@@ -5691,6 +5713,10 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(dry_run["dispatch_plan_safe"])
         self.assertFalse(dry_run["proxy_env_injected"])
         self.assertFalse(dry_run["custom_home_injected"])
+        self.assertEqual(original_launch["status"], "blocked")
+        self.assertEqual(original_launch["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertFalse(original_launch["running_status"])
+        self.assertFalse(original_launch["owner_authorization_phrase_present"])
         self.assertEqual(custom_dry_run["status"], "ok")
         self.assertTrue(custom_dry_run["dry_run"])
         self.assertTrue(custom_dry_run["custom_launch_plan_safe"])
@@ -5698,6 +5724,11 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertFalse(custom_dry_run["real_launch_attempted"])
         self.assertFalse(custom_dry_run["prompt_attempted"])
         self.assertEqual(custom_dry_run["token_burn"], 0)
+        self.assertEqual(custom_launch["status"], "blocked")
+        self.assertEqual(custom_launch["machine_error_code"], "OWNER_AUTHORIZATION_REQUIRED")
+        self.assertFalse(custom_launch["running_status"])
+        self.assertFalse(custom_launch["workbench_ready"])
+        self.assertFalse(custom_launch["owner_authorization_phrase_present"])
         self.assertEqual(app_copy_dry_run["status"], "ok")
         self.assertEqual(
             app_copy_dry_run["machine_error_code"],
@@ -5742,6 +5773,93 @@ class WebDesignCodexLaunchModeEndpointTests(unittest.TestCase):
         self.assertTrue(app_copy_rejected["browser_forbidden_fields_rejected"])
         self.assertFalse(app_copy_rejected["browser_forbidden_fields_absent"])
         self.assertEqual(app_copy_rejected["forbidden_fields"], ["path", "port", "env", "env.HOME"])
+
+    def test_original_and_custom_launch_endpoints_prove_authorized_baseline_and_workbench(self) -> None:
+        created_sessions: list[FakeOperatorSurfaceSession] = []
+
+        def factory() -> FakeOperatorSurfaceSession:
+            session = ReadyFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        review_import_context = live_server.default_review_import_context(ROOT)
+        review_apply_context = live_server.default_review_apply_context(ROOT)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app_bundle = Path(temp_dir) / "Codex.app"
+            (app_bundle / "Contents" / "Resources").mkdir(parents=True)
+            fake_binary = app_bundle / "Contents" / "Resources" / "codex"
+            fake_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            fake_binary.chmod(0o755)
+            protected = {"codex_config": {"exists": True, "mtime_ns": 1, "size": 1, "sha256": "a"}}
+            with (
+                mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory),
+                mock.patch.object(live_server, "DEFAULT_CODEX_BIN", str(fake_binary)),
+                mock.patch.object(live_server, "protected_snapshot", side_effect=[protected, protected]),
+                mock.patch.object(live_server, "compare_snapshots", return_value={"codex_config": {"exists_unchanged": True, "mtime_ns_unchanged": True, "size_unchanged": True, "sha256_unchanged": True}}),
+                mock.patch.object(live_server, "protected_surfaces_unchanged", return_value=True),
+                mock.patch.object(live_server.subprocess, "run", return_value=live_server.subprocess.CompletedProcess(args=["open"], returncode=0, stdout="", stderr="")),
+            ):
+                server = ThreadingHTTPServer(
+                    ("127.0.0.1", free_port()),
+                    build_handler(
+                        runner=MappingRunner(payloads),
+                        owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                        review_import_context=review_import_context,
+                        review_apply_context=review_apply_context,
+                    ),
+                )
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                base = f"http://127.0.0.1:{server.server_port}"
+                try:
+                    original_launch = json.loads(post_json(f"{base}/api/codex/original/launch", {}))
+                    custom_launch = json.loads(
+                        post_json(f"{base}/api/codex/custom/launch", {"model_id": "gpt-5.3-codex"})
+                    )
+                    sessions = json.loads(fetch(f"{base}/api/codex/custom/sessions"))
+                finally:
+                    server.shutdown()
+                    thread.join(timeout=2)
+                    server.server_close()
+
+        self.assertEqual(original_launch["status"], "ok")
+        self.assertEqual(original_launch["machine_error_code"], "OK")
+        self.assertTrue(original_launch["owner_authorization_phrase_present"])
+        self.assertTrue(original_launch["running_status"])
+        self.assertFalse(original_launch["proxy_env_present"])
+        self.assertFalse(original_launch["wbp_endpoint_injected"])
+        self.assertFalse(original_launch["custom_home_present"])
+        self.assertFalse(original_launch["custom_codex_home_present"])
+        self.assertFalse(original_launch["current_codex_touched"])
+        self.assertEqual(custom_launch["status"], "ok")
+        self.assertTrue(custom_launch["owner_authorization_phrase_present"])
+        self.assertTrue(custom_launch["session_created"])
+        self.assertTrue(custom_launch["running_status"])
+        self.assertTrue(custom_launch["isolated_home"])
+        self.assertTrue(custom_launch["isolated_codex_home"])
+        self.assertTrue(custom_launch["isolated_workdir"])
+        self.assertTrue(custom_launch["server_issued_model_list"])
+        self.assertTrue(custom_launch["wbp_endpoint_configured"])
+        self.assertFalse(custom_launch["browser_route_injection"])
+        self.assertFalse(custom_launch["browser_backend_injection"])
+        self.assertFalse(custom_launch["current_codex_touched"])
+        self.assertTrue(custom_launch["workbench_ready"])
+        self.assertEqual(custom_launch["selection_packet"]["selected_source_class"], "gpt_account")
+        self.assertEqual(sessions["session_count"], 1)
+        self.assertEqual(created_sessions[0].run_payloads, [])
 
     def test_app_copy_live_admission_and_bounded_helper_launch_use_server_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -7983,6 +8101,74 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(
             created_sessions[0].run_payloads,
             [{"prompt": "Reply with exactly WBP_LIVE_OK.", "model_id": "gpt-5.3-codex"}],
+        )
+
+    def test_codex_custom_launch_and_prompt_support_route_backed_external_model(self) -> None:
+        created_sessions: list[ExternalRouteFakeOperatorSurfaceSession] = []
+
+        def factory() -> ExternalRouteFakeOperatorSurfaceSession:
+            session = ExternalRouteFakeOperatorSurfaceSession()
+            created_sessions.append(session)
+            return session
+
+        payloads = live_payloads()
+        payloads[("status", "--json")] = status_packet(
+            claim_gate={"status": "ok"},
+            pool_summary={"selected_backend_ids": ["acct-active"]},
+            auth_pool_hygiene={
+                "status": "launch_capable_available",
+                "selection_alignment_status": "aligned",
+            },
+        )
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", side_effect=factory):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(
+                    runner=MappingRunner(payloads),
+                    owner_authorization_phrase="разрешаю тебе любые законные действия в рамках разработки проекта",
+                ),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                launched = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/launch",
+                        {"model_id": "wbp-deepseek-v3"},
+                    )
+                )
+                session_id = launched["session"]["session_id"]
+                proof = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions/{session_id}/prompt",
+                        {"prompt": "Reply with exactly WBP_CUSTOM_EXTERNAL_API_OK."},
+                    )
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(launched["status"], "ok")
+        self.assertTrue(launched["running_status"])
+        self.assertTrue(launched["workbench_ready"])
+        self.assertEqual(launched["selection_packet"]["selected_source_class"], "route_backed")
+        self.assertTrue(launched["selection_packet"]["selected_route_server_issued"])
+        self.assertTrue(launched["selection_packet"]["route_provenance_required"])
+        self.assertTrue(launched["selection_packet"]["route_provenance_proven"])
+        self.assertEqual(launched["selection_packet"]["source_provenance_status"], "route_proven")
+        self.assertEqual(proof["status"], "ok")
+        self.assertEqual(proof["machine_error_code"], "OK")
+        self.assertEqual(proof["selected_source_provenance"], "route_proven")
+        self.assertTrue(proof["live_prompt_full_success"])
+        self.assertFalse(proof["current_codex_touched"])
+        self.assertEqual(
+            created_sessions[0].run_payloads,
+            [{"prompt": "Reply with exactly WBP_CUSTOM_EXTERNAL_API_OK.", "model_id": "wbp-deepseek-v3"}],
         )
 
     def test_codex_custom_prompt_endpoint_rejects_near_miss_authorization_phrase(self) -> None:

@@ -326,13 +326,15 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("token_burn: packet?.token_burn ?? 0", js)
         self.assertNotIn('fetch("api/codex/custom/session"', js)
 
-    def test_codex_launch_mode_split_ui_has_original_and_custom_dry_run_only(self) -> None:
+    def test_codex_launch_mode_split_ui_has_launch_and_dry_run_surfaces(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()
         js = (WEB_DESIGN_UI / "scripts" / "overview.js").read_text()
 
         self.assertIn('id="codexLaunchModesPanel"', html)
         self.assertIn('id="originalCodexDryRunAction"', html)
+        self.assertIn('id="originalCodexLaunchAction"', html)
         self.assertIn('id="codexCustomLaunchDryRunAction"', html)
+        self.assertIn('id="codexCustomLaunchAction"', html)
         self.assertIn('id="safeAppCopyLaunchDryRunAction"', html)
         self.assertIn('id="safeAppCopyLiveAdmissionAction"', html)
         self.assertIn('id="safeAppCopyLaunchAction"', html)
@@ -343,7 +345,9 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("fetchCodexLaunchJson(\"api/codex/original/status\")", js)
         self.assertIn("fetchCodexLaunchJson(\"api/codex/custom/status\")", js)
         self.assertIn('fetch("api/codex/original/launch-dry-run"', js)
+        self.assertIn('fetch("api/codex/original/launch"', js)
         self.assertIn('fetch("api/codex/custom/launch-dry-run"', js)
+        self.assertIn('fetch("api/codex/custom/launch"', js)
         self.assertIn('fetch("api/codex/app-copy/launch-dry-run"', js)
         self.assertIn('fetch("api/codex/app-copy/live-admission"', js)
         self.assertIn('fetch("api/codex/app-copy/launch"', js)
@@ -368,8 +372,10 @@ class WebDesignUiTests(unittest.TestCase):
         self.assertIn("current_codex_home_allowed: packet?.current_codex_home_allowed === true", js)
         self.assertIn("real_launch_attempted: packet?.real_launch_attempted === true", js)
         self.assertIn("prompt_attempted: packet?.prompt_attempted === true", js)
-        self.assertNotIn('fetch("api/codex/original/launch",', js)
-        self.assertNotIn('fetch("api/codex/custom/launch",', js)
+        self.assertIn("running_status: packet?.running_status === true", js)
+        self.assertIn("workbench_ready: packet?.workbench_ready === true", js)
+        self.assertIn("browser_route_injection: packet?.browser_route_injection === true", js)
+        self.assertIn("browser_backend_injection: packet?.browser_backend_injection === true", js)
 
     def test_codex_custom_accounts_ui_is_selection_not_inference(self) -> None:
         html = (WEB_DESIGN_UI / "index.html").read_text()

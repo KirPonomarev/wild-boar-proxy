@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
 import json
 import mimetypes
 import os
@@ -36,6 +38,8 @@ from wild_boar_proxy.codex_launch_modes import (
     build_safe_app_copy_live_admission_packet,
     build_safe_app_copy_launch_dry_run_packet,
     build_safe_app_copy_launch_live_packet,
+    forbidden_custom_launch_fields,
+    forbidden_original_fields,
 )
 from wild_boar_proxy.codex_account_selection import (
     build_account_selection_packet,
@@ -89,7 +93,14 @@ from wild_boar_proxy.review_bridge_session_store import (
     ReviewSessionStore,
 )
 from wild_boar_proxy.web_design_command_adapter import CommandRunner, execute_command
-from wild_boar_proxy.operator_surface import OperatorSurfaceSession
+from wild_boar_proxy.operator_surface import (
+    DEFAULT_CODEX_BIN,
+    OperatorSurfaceSession,
+    clean_env,
+    compare_snapshots,
+    protected_snapshot,
+    protected_surfaces_unchanged,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -169,6 +180,12 @@ OWNER_STANDING_AUTHORIZATION_PHRASE = "разрешаю тебе любые за
 
 def owner_authorization_phrase_present(value: str | None) -> bool:
     return isinstance(value, str) and value.strip() == OWNER_STANDING_AUTHORIZATION_PHRASE
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 UI_ACTION_ALLOWLIST = {
     "refresh_health_detail": {
         "adapter_command_id": "healthcheck",
@@ -1924,6 +1941,351 @@ def _api_route_secret_ref_from_snapshot(
     return _server_owned_api_route_secret_ref(runner)
 
 
+def _redacted_route_ref(route_id: str) -> str:
+    return hashlib.sha256(route_id.encode("utf-8")).hexdigest() if route_id else ""
+
+
+def _selection_packet_for_external_route(
+    *,
+    model_id: str,
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    claim_gate_status = "not_reported"
+    claim_gate = (operator_status or {}).get("claim_gate")
+    if isinstance(claim_gate, dict):
+        claim_gate_status = str(claim_gate.get("status") or "not_reported")
+    route = None
+    routes = api_snapshot.get("routes") if isinstance(api_snapshot, dict) else None
+    if isinstance(routes, list):
+        for item in routes:
+            if isinstance(item, dict) and str(item.get("route_id") or "") == model_id:
+                route = item
+                break
+    if not isinstance(route, dict):
+        return {
+            "schema_version": 1,
+            "status": "degraded",
+            "machine_error_code": "EXTERNAL_API_ROUTE_NOT_VISIBLE",
+            "captured_at_utc": utc_now(),
+            "mode_id": "codex_custom",
+            "selection_dry_run_proven": False,
+            "live_selection_proven": False,
+            "selection_proven": False,
+            "inference_proven": False,
+            "selected_source_class": "none",
+            "selected_backend_id": "",
+            "selected_backend_ref": "",
+            "selected_backend_id_redacted": True,
+            "selected_backend_server_issued": False,
+            "selected_backend_source": "none",
+            "selected_route_ref": "",
+            "selected_route_server_issued": False,
+            "route_provenance_required": False,
+            "route_provenance_proven": False,
+            "source_provenance_status": "not_proven",
+            "browser_selected_backend": False,
+            "selection_reason": "selected external model is not visible in current server-owned API route snapshot",
+            "claim_gate_status": claim_gate_status,
+            "token_burn": 0,
+            "selection_not_inference": True,
+            "network_calls_made": False,
+            "provider_called": False,
+        }
+    route_id = str(route.get("route_id") or "")
+    secret_ref = str(route.get("secret_ref") or "")
+    enabled = route.get("enabled") is True
+    proven = enabled and bool(secret_ref)
+    status = "ok" if proven and "blocked" not in claim_gate_status else "degraded"
+    machine_error_code = (
+        "OK"
+        if proven and "blocked" not in claim_gate_status
+        else (
+            "CLAIM_GATE_BLOCKED"
+            if proven
+            else ("EXTERNAL_API_ROUTE_SECRET_REF_MISSING" if not secret_ref else "EXTERNAL_API_ROUTE_DISABLED")
+        )
+    )
+    route_ref = _redacted_route_ref(route_id)
+    return {
+        "schema_version": 1,
+        "status": status,
+        "machine_error_code": machine_error_code,
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "selection_dry_run_proven": proven,
+        "live_selection_proven": False,
+        "selection_proven": proven,
+        "inference_proven": False,
+        "selected_source_class": "route_backed" if proven else "none",
+        "selected_backend_id": "",
+        "selected_backend_ref": "",
+        "selected_backend_id_redacted": True,
+        "selected_backend_server_issued": False,
+        "selected_backend_source": "none",
+        "selected_route_ref": route_ref,
+        "selected_route_server_issued": proven,
+        "route_provenance_required": proven,
+        "route_provenance_proven": proven,
+        "source_provenance_status": "route_proven" if proven else "route_provenance_missing",
+        "browser_selected_backend": False,
+        "selection_reason": "server-owned external route matched selected model_id",
+        "claim_gate_status": claim_gate_status,
+        "selected_route_provider": str(route.get("provider") or ""),
+        "selected_route_primary": route.get("primary") is True or route.get("is_primary") is True,
+        "selected_route_secret_ref_present": bool(secret_ref),
+        "token_burn": 0,
+        "selection_not_inference": True,
+        "network_calls_made": False,
+        "provider_called": False,
+    }
+
+
+def _codex_custom_selection_packet(
+    *,
+    model_id: str,
+    commands: dict[str, dict[str, Any]],
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    if model_id.startswith("gpt-"):
+        return build_account_selection_packet(commands, operator_status)
+    return _selection_packet_for_external_route(
+        model_id=model_id,
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+    )
+
+
+def _owner_authorization_required_packet(*, mode_id: str, next_action: str) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "status": "blocked",
+        "machine_error_code": "OWNER_AUTHORIZATION_REQUIRED",
+        "captured_at_utc": utc_now(),
+        "mode_id": mode_id,
+        "owner_authorization_phrase_present": False,
+        "human_message": "Live launch requires exact owner authorization in the active thread.",
+        "next_action": next_action,
+    }
+
+
+def _forbidden_custom_live_launch_fields(payload: Any, prefix: str = "") -> list[str]:
+    findings: list[str] = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_text = str(key)
+            key_path = f"{prefix}.{key_text}" if prefix else key_text
+            if prefix or key_text != "model_id":
+                findings.append(key_path)
+            findings.extend(_forbidden_custom_live_launch_fields(value, key_path))
+    elif isinstance(payload, list):
+        for index, value in enumerate(payload):
+            findings.extend(_forbidden_custom_live_launch_fields(value, f"{prefix}[{index}]"))
+    return findings
+
+
+def _launch_original_codex_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    app_bundle_path: Path | None = None,
+) -> dict[str, Any]:
+    forbidden = forbidden_original_fields(payload)
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "mode_id": "original_codex",
+        "dry_run": False,
+        "launch_source": "wbp_web_ui",
+        "proxy_env_present": False,
+        "wbp_endpoint_injected": False,
+        "custom_home_present": False,
+        "custom_codex_home_present": False,
+        "current_codex_touched": False,
+        "running_status": False,
+        "launch_claim_scope": "owner_authorized_baseline_launch",
+        "browser_payload_allowed_keys": [],
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Original launch accepts no browser-controlled fields.",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not owner_authorized:
+        return {
+            **base,
+            **_owner_authorization_required_packet(
+                mode_id="original_codex",
+                next_action="provide_exact_owner_authorization_phrase",
+            ),
+        }
+    app_bundle = app_bundle_path or Path(DEFAULT_CODEX_BIN).resolve().parents[2]
+    if not app_bundle.exists():
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "ORIGINAL_CODEX_APP_UNAVAILABLE",
+            "human_message": "Original Codex app bundle is unavailable on this host.",
+            "next_action": "repair_original_codex_bundle_path",
+        }
+    open_bin = Path("/usr/bin/open")
+    if not open_bin.exists():
+        return {
+            **base,
+            "status": "blocked",
+            "machine_error_code": "SYSTEM_OPEN_UNAVAILABLE",
+            "human_message": "System app launch helper is unavailable on this host.",
+            "next_action": "repair_system_open_binary",
+        }
+    env = clean_env()
+    for key in list(env):
+        if key == "HOME" or key.startswith("WBP_") or key.startswith("OPENAI_"):
+            env.pop(key, None)
+    env.pop("CODEX_HOME", None)
+    before = protected_snapshot()
+    try:
+        launch = subprocess.run(
+            [str(open_bin), "-a", str(app_bundle)],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+    except OSError as exc:
+        return {
+            **base,
+            "status": "failed",
+            "machine_error_code": "ORIGINAL_CODEX_LAUNCH_FAILED",
+            "human_message": f"Original Codex launch failed: {type(exc).__name__}.",
+            "error_class": type(exc).__name__,
+            "next_action": "retry_original_launch",
+        }
+    after = protected_snapshot()
+    comparisons = compare_snapshots(before, after)
+    untouched = protected_surfaces_unchanged(comparisons)
+    running_status = launch.returncode == 0 and untouched
+    return {
+        **base,
+        "status": "ok" if running_status else "blocked",
+        "machine_error_code": "OK" if running_status else ("CURRENT_CODEX_TOUCHED" if not untouched else "ORIGINAL_CODEX_LAUNCH_FAILED"),
+        "human_message": (
+            "Original Codex launch dispatched without proxy/custom env injection."
+            if running_status
+            else "Original Codex launch did not satisfy protected-baseline proof."
+        ),
+        "owner_authorization_phrase_present": True,
+        "dispatch_observed": launch.returncode == 0,
+        "dispatch_exit_code": launch.returncode,
+        "running_status": running_status,
+        "proxy_env_present": False,
+        "wbp_endpoint_injected": False,
+        "custom_home_present": False,
+        "custom_codex_home_present": False,
+        "current_codex_touched": not untouched,
+        "protected_surfaces_unchanged": untouched,
+        "protected_surface_comparisons": comparisons,
+        "next_action": "none" if running_status else ("stop_and_diagnose_current_codex_touch" if not untouched else "retry_original_launch"),
+    }
+
+
+def _launch_custom_codex_packet(
+    payload: dict[str, Any],
+    *,
+    owner_authorized: bool,
+    session_manager: CodexCustomSessionManager,
+    commands: dict[str, dict[str, Any]],
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    forbidden = _forbidden_custom_live_launch_fields(payload)
+    base = {
+        "schema_version": 1,
+        "captured_at_utc": utc_now(),
+        "mode_id": "codex_custom",
+        "dry_run": False,
+        "launch_source": "wbp_web_ui",
+        "running_status": False,
+        "isolated_home": False,
+        "isolated_codex_home": False,
+        "isolated_workdir": False,
+        "server_issued_model_list": False,
+        "wbp_endpoint_configured": False,
+        "browser_route_injection": False,
+        "browser_backend_injection": False,
+        "current_codex_touched": False,
+        "workbench_ready": False,
+        "launch_claim_scope": "isolated_session_workbench_launch",
+    }
+    if forbidden:
+        return {
+            **base,
+            "status": "rejected",
+            "machine_error_code": "FORBIDDEN_BROWSER_FIELD",
+            "human_message": "Codex Custom launch accepts no browser-controlled route, backend, auth, path, or home fields.",
+            "forbidden_fields": forbidden,
+            "next_action": "remove_browser_payload_fields",
+        }
+    if not owner_authorized:
+        return {
+            **base,
+            **_owner_authorization_required_packet(
+                mode_id="codex_custom",
+                next_action="provide_exact_owner_authorization_phrase",
+            ),
+        }
+    model_id = payload.get("model_id")
+    if not isinstance(model_id, str) or not model_id:
+        registry = build_custom_model_registry_packet(operator_status)
+        model_id = str(
+            registry.get("recommended_default_model")
+            or registry.get("recommended_model")
+            or ""
+        )
+    selection = _codex_custom_selection_packet(
+        model_id=model_id,
+        commands=commands,
+        operator_status=operator_status,
+        api_snapshot=api_snapshot,
+    )
+    created = session_manager.create_packet(
+        {"model_id": model_id},
+        commands,
+        operator_status,
+        selection=selection,
+    )
+    session = created.get("session") if isinstance(created.get("session"), dict) else {}
+    session_root_ready = bool(session.get("session_root_digest"))
+    codex_home_ready = bool(session.get("codex_home_digest"))
+    workbench_ready = created.get("status") == "ok" and session_root_ready and codex_home_ready
+    model_registry = build_custom_model_registry_packet(operator_status)
+    return {
+        **created,
+        **base,
+        "status": created.get("status"),
+        "machine_error_code": created.get("machine_error_code"),
+        "human_message": created.get("human_message", "Codex Custom launch evaluated."),
+        "owner_authorization_phrase_present": True,
+        "session_created": created.get("session_created") is True,
+        "running_status": workbench_ready,
+        "isolated_home": workbench_ready,
+        "isolated_codex_home": workbench_ready,
+        "isolated_workdir": workbench_ready,
+        "server_issued_model_list": bool(model_registry.get("available_models")),
+        "wbp_endpoint_configured": str(model_registry.get("endpoint") or "").startswith("http://127.0.0.1:"),
+        "browser_route_injection": False,
+        "browser_backend_injection": False,
+        "current_codex_touched": False,
+        "workbench_ready": workbench_ready,
+        "selection_packet": created.get("selection_packet", selection),
+        "next_action": "prompt" if workbench_ready else created.get("next_action", "repair_custom_launch"),
+    }
+
+
 def _runtime_check_all_component(snapshot: dict[str, Any]) -> dict[str, Any]:
     if snapshot.get("status") != "ok":
         return {
@@ -3067,8 +3429,43 @@ def build_handler(
             if parsed.path == "/api/codex/original/launch-dry-run":
                 self._send_json(build_original_launch_dry_run_packet(self._read_json_body()))
                 return
+            if parsed.path == "/api/codex/original/launch":
+                self._send_json(
+                    _launch_original_codex_packet(
+                        self._read_json_body(),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                    )
+                )
+                return
             if parsed.path == "/api/codex/custom/launch-dry-run":
                 self._send_json(build_custom_launch_dry_run_packet(self._read_json_body()))
+                return
+            if parsed.path == "/api/codex/custom/launch":
+                operator_status = (
+                    operator_surface_session.status_payload()
+                    if codex_custom_live_prompt_authorized
+                    else None
+                )
+                account_commands = (
+                    self._codex_account_commands()
+                    if codex_custom_live_prompt_authorized
+                    else {}
+                )
+                api_snapshot = (
+                    build_api_connections_readonly_snapshot(api_connections_readonly_runner)
+                    if codex_custom_live_prompt_authorized
+                    else None
+                )
+                self._send_json(
+                    _launch_custom_codex_packet(
+                        self._read_json_body(),
+                        owner_authorized=codex_custom_live_prompt_authorized,
+                        session_manager=codex_custom_sessions,
+                        commands=account_commands,
+                        operator_status=operator_status,
+                        api_snapshot=api_snapshot,
+                    )
+                )
                 return
             if parsed.path == "/api/codex/app-copy/launch-dry-run":
                 self._send_json(build_safe_app_copy_launch_dry_run_packet(self._read_json_body()))
@@ -3115,11 +3512,24 @@ def build_handler(
                 )
                 return
             if parsed.path == "/api/codex/custom/sessions":
+                operator_status = operator_surface_session.status_payload()
+                payload = self._read_json_body()
+                model_id = payload.get("model_id")
+                if not isinstance(model_id, str):
+                    model_id = ""
+                account_commands = self._codex_account_commands()
+                api_snapshot = build_api_connections_readonly_snapshot(api_connections_readonly_runner)
                 self._send_json(
                     codex_custom_sessions.create_packet(
-                        self._read_json_body(),
-                        self._codex_account_commands(),
-                        operator_surface_session.status_payload(),
+                        payload,
+                        account_commands,
+                        operator_status,
+                        selection=_codex_custom_selection_packet(
+                            model_id=model_id,
+                            commands=account_commands,
+                            operator_status=operator_status,
+                            api_snapshot=api_snapshot,
+                        ),
                     )
                 )
                 return

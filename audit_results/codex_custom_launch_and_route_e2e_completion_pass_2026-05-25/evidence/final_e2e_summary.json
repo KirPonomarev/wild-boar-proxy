@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "status": "partial_blocked",
+  "contour": "CODEX_CUSTOM_LAUNCH_AND_ROUTE_E2E_COMPLETION_PASS",
+  "full_pass_achieved": false,
+  "original_launch_proven": true,
+  "original_proxy_env_present": false,
+  "original_current_codex_touched": false,
+  "custom_launch_proven": true,
+  "custom_isolated_home": true,
+  "gpt_prompt_ok": true,
+  "gpt_route_class": "gpt_account",
+  "gpt_wbp_path_proven": true,
+  "cleanup_ok": true,
+  "cleanup_current_codex_home_touched": false,
+  "operator_ready_claimed": null,
+  "external_api_route_ok": false,
+  "external_api_blocker_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING",
+  "external_api_blocker_reason": "Owner credential source is missing for provider: openrouter",
+  "blocking_reason": "owner_env_credential_missing_for_server_owned_external_api_route",
+  "next_owner_action": "owner_action",
+  "screenshots": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/01_launch_mode_selector.png",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/02_original_baseline_status.png",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/03_custom_launch_ready_or_running.png",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/04_custom_session_prompt_success_gpt.png",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/05_custom_session_prompt_success_external_api.png",
+    "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/screenshots/06_transcript_cleanup_isolation.png"
+  ],
+  "packet_files": [
+    "launch_modes_packet.json",
+    "original_launch_proof.json",
+    "custom_launch_proof.json",
+    "gpt_account_prompt_packet.json",
+    "transcript_packet.json",
+    "cleanup_packet.json",
+    "isolation_check_packet.json",
+    "operator_matrix_packet.json",
+    "external_api_route_blocked_packet.json"
+  ]
+}

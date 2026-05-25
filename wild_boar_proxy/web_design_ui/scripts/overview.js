@@ -831,6 +831,37 @@ function renderOriginalCodexDryRun(packet) {
   }
 }
 
+function renderOriginalCodexLaunch(packet) {
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  const ok = packet?.status === "ok"
+    && packet?.running_status === true
+    && packet?.proxy_env_present === false
+    && packet?.wbp_endpoint_injected === false
+    && packet?.custom_home_present === false
+    && packet?.custom_codex_home_present === false
+    && packet?.current_codex_touched === false;
+  codexLaunchSetChip(
+    ok ? "green" : (packet?.status === "blocked" ? "amber" : "red"),
+    ok ? "original launch proven" : (packet?.status || "failed")
+  );
+  codexLaunchSetText("originalCodexStatus", `${packet?.status || "unknown"} · ${packet?.launch_claim_scope || "baseline_launch"}`);
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      running_status: packet?.running_status === true,
+      proxy_env_present: packet?.proxy_env_present === true,
+      wbp_endpoint_injected: packet?.wbp_endpoint_injected === true,
+      custom_home_present: packet?.custom_home_present === true,
+      custom_codex_home_present: packet?.custom_codex_home_present === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      protected_surfaces_unchanged: packet?.protected_surfaces_unchanged === true,
+      launch_claim_scope: packet?.launch_claim_scope || "",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
 function renderCodexCustomLaunchDryRun(packet) {
   const response = document.getElementById("codexLaunchDryRunResponse");
   const ok = packet?.status === "ok" && packet?.dry_run === true && packet?.custom_launch_plan_safe === true;
@@ -849,6 +880,49 @@ function renderCodexCustomLaunchDryRun(packet) {
       wbp_endpoint_configured: packet?.wbp_endpoint_configured || "",
       current_codex_home_allowed: packet?.current_codex_home_allowed === true,
       current_codex_touch_risk: packet?.current_codex_touch_risk || "unknown",
+      launch_claim_scope: packet?.launch_claim_scope || "",
+      next_action: packet?.next_action || "",
+    }, null, 2);
+  }
+}
+
+function renderCodexCustomLaunch(packet) {
+  const response = document.getElementById("codexLaunchDryRunResponse");
+  const ok = packet?.status === "ok"
+    && packet?.running_status === true
+    && packet?.isolated_home === true
+    && packet?.isolated_codex_home === true
+    && packet?.isolated_workdir === true
+    && packet?.server_issued_model_list === true
+    && packet?.wbp_endpoint_configured === true
+    && packet?.browser_route_injection === false
+    && packet?.browser_backend_injection === false
+    && packet?.current_codex_touched === false
+    && packet?.workbench_ready === true;
+  codexLaunchSetChip(
+    ok ? "green" : (packet?.status === "blocked" || packet?.status === "rejected" ? "amber" : "red"),
+    ok ? "custom workbench ready" : (packet?.status || "failed")
+  );
+  codexLaunchSetText("customCodexStatus", `${packet?.status || "unknown"} · ${packet?.launch_claim_scope || "custom_launch"}`);
+  codexLaunchSetText("customCodexSession", ok ? "workbench ready" : (packet?.next_action || "launch blocked"));
+  if (response) {
+    response.textContent = JSON.stringify({
+      status: packet?.status || "unknown",
+      machine_error_code: packet?.machine_error_code || "UNKNOWN",
+      session_created: packet?.session_created === true,
+      running_status: packet?.running_status === true,
+      isolated_home: packet?.isolated_home === true,
+      isolated_codex_home: packet?.isolated_codex_home === true,
+      isolated_workdir: packet?.isolated_workdir === true,
+      server_issued_model_list: packet?.server_issued_model_list === true,
+      wbp_endpoint_configured: packet?.wbp_endpoint_configured === true,
+      browser_route_injection: packet?.browser_route_injection === true,
+      browser_backend_injection: packet?.browser_backend_injection === true,
+      current_codex_touched: packet?.current_codex_touched === true,
+      workbench_ready: packet?.workbench_ready === true,
+      selected_source_class: packet?.selection_packet?.selected_source_class || "",
+      selected_route_digest: packet?.selection_packet?.selected_route_digest || "",
+      source_provenance_status: packet?.selection_packet?.source_provenance_status || "",
       launch_claim_scope: packet?.launch_claim_scope || "",
       next_action: packet?.next_action || "",
     }, null, 2);
@@ -1056,6 +1130,43 @@ async function runOriginalCodexDryRun() {
   }
 }
 
+async function runOriginalCodexLaunch() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("originalCodexLaunchAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "launching");
+  try {
+    const response = await fetch("api/codex/original/launch", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    if (!response.ok) {
+      throw new Error(`original launch http ${response.status}`);
+    }
+    renderOriginalCodexLaunch(await response.json());
+  } catch (error) {
+    renderOriginalCodexLaunch({
+      status: "failed",
+      machine_error_code: "ORIGINAL_LAUNCH_FETCH_FAILED",
+      human_message: error.message,
+      running_status: false,
+      proxy_env_present: false,
+      wbp_endpoint_injected: false,
+      custom_home_present: false,
+      custom_codex_home_present: false,
+      current_codex_touched: false,
+      launch_claim_scope: "owner_authorized_baseline_launch"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("originalCodexLaunchAction")?.removeAttribute("disabled");
+  }
+}
+
 async function runCodexCustomLaunchDryRun() {
   if (codexLaunchDryRunInFlight) {
     return;
@@ -1088,6 +1199,58 @@ async function runCodexCustomLaunchDryRun() {
   } finally {
     codexLaunchDryRunInFlight = false;
     document.getElementById("codexCustomLaunchDryRunAction")?.removeAttribute("disabled");
+  }
+}
+
+async function runCodexCustomLaunch() {
+  if (codexLaunchDryRunInFlight) {
+    return;
+  }
+  const modelNode = document.getElementById("codexCustomModelSelect");
+  let modelId = modelNode ? modelNode.value : "";
+  if (!modelId) {
+    await refreshCodexCustomModelsPanel();
+    modelId = modelNode ? modelNode.value : "";
+  }
+  codexLaunchDryRunInFlight = true;
+  document.getElementById("codexCustomLaunchAction")?.setAttribute("disabled", "disabled");
+  codexLaunchSetChip("neutral", "launching");
+  try {
+    const response = await fetch("api/codex/custom/launch", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId })
+    });
+    if (!response.ok) {
+      throw new Error(`custom launch http ${response.status}`);
+    }
+    const packet = await response.json();
+    renderCodexCustomLaunch(packet);
+    if (packet?.session_created === true) {
+      await refreshCodexCustomSessionsPanel();
+    }
+  } catch (error) {
+    renderCodexCustomLaunch({
+      status: "failed",
+      machine_error_code: "CUSTOM_LAUNCH_FETCH_FAILED",
+      human_message: error.message,
+      session_created: false,
+      running_status: false,
+      isolated_home: false,
+      isolated_codex_home: false,
+      isolated_workdir: false,
+      server_issued_model_list: false,
+      wbp_endpoint_configured: false,
+      browser_route_injection: false,
+      browser_backend_injection: false,
+      current_codex_touched: false,
+      workbench_ready: false,
+      launch_claim_scope: "isolated_session_workbench_launch"
+    });
+  } finally {
+    codexLaunchDryRunInFlight = false;
+    document.getElementById("codexCustomLaunchAction")?.removeAttribute("disabled");
   }
 }
 
@@ -10450,7 +10613,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("actionOpenLedgerAction")?.addEventListener("click", () => openActionLedgerPanel());
   document.getElementById("codexLaunchModesRefreshAction")?.addEventListener("click", () => refreshCodexLaunchModesPanel());
   document.getElementById("originalCodexDryRunAction")?.addEventListener("click", () => runOriginalCodexDryRun());
+  document.getElementById("originalCodexLaunchAction")?.addEventListener("click", () => runOriginalCodexLaunch());
   document.getElementById("codexCustomLaunchDryRunAction")?.addEventListener("click", () => runCodexCustomLaunchDryRun());
+  document.getElementById("codexCustomLaunchAction")?.addEventListener("click", () => runCodexCustomLaunch());
   document.getElementById("safeAppCopyLaunchDryRunAction")?.addEventListener("click", () => runSafeAppCopyLaunchDryRun());
   document.getElementById("safeAppCopyLiveAdmissionAction")?.addEventListener("click", () => runSafeAppCopyLiveAdmission());
   document.getElementById("safeAppCopyLaunchAction")?.addEventListener("click", () => runSafeAppCopyLaunch());

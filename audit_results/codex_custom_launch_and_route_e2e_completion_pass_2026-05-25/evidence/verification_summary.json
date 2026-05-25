@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "checks": [
+    {
+      "kind": "syntax",
+      "cmd": "python3 -m py_compile wild_boar_proxy/codex_launch_modes.py wild_boar_proxy/codex_custom_sessions.py wild_boar_proxy/web_design_live_server.py tests/test_codex_launch_modes.py tests/test_web_design_live_server.py tests/test_web_design_ui.py",
+      "result": "ok"
+    },
+    {
+      "kind": "syntax",
+      "cmd": "node --check wild_boar_proxy/web_design_ui/scripts/overview.js",
+      "result": "ok"
+    },
+    {
+      "kind": "tests",
+      "cmd": "PYTHONPATH=/tmp/wbp_test_stubs python3 -m unittest tests.test_codex_launch_modes tests.test_web_design_live_server tests.test_web_design_ui -q",
+      "result": "ok",
+      "details": "Ran 208 tests in 30.656s"
+    },
+    {
+      "kind": "diff",
+      "cmd": "git diff --check",
+      "result": "ok"
+    }
+  ],
+  "contour_status": "partial_blocked",
+  "blocker_code": "EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING"
+}
