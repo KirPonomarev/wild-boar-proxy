@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-25T15:25:19.341038Z",
+  "cliproxyapi_version_status": "repo_runtime_engine_not_probed_in_admission_contour",
+  "codex_app_bundle_identifier": "com.openai.codex",
+  "codex_app_bundle_name": "Codex",
+  "codex_app_bundle_version": "3044",
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.41501",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "config_schema_basis_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_provider_contract_syntax_proof_pass_2026-05-25/evidence/version_pinning_packet.json",
+  "config_schema_retrieval_date_utc": "2026-05-25T12:21:10.005100Z",
+  "config_schema_sha256": "ee66ce87a31cfb9c1ae6642459cb36d9c583d86128a8d2d5c2549ba0579b5e6b",
+  "config_schema_source": "https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json",
+  "machine_error_code": "OK",
+  "packet_kind": "version_pinning",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok",
+  "wbp_git_commit": "0536d98df805261d46ea391195e1dc7cd91ada02"
+}
