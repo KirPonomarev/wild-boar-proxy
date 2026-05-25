@@ -1,0 +1,27 @@
+{
+  "captured_at_utc": "2026-05-25T13:20:37.400059Z",
+  "checks": {
+    "cleanup_artifact_present": true,
+    "full_pass_not_overclaimed": true,
+    "non_native_machine_claim_preserved": true,
+    "route_backed_selection_proven": true,
+    "targeted_current_codex_unchanged": true,
+    "transcript_artifact_present": true
+  },
+  "findings": [
+    "Command surface remains explicitly non-native in machine-readable packet fields.",
+    "Reusable runner launch surface, transcript artifact, and cleanup artifact are present in live packet truth.",
+    "Direct-egress negative proof remained unproven with safe tooling, so full pass would be an overclaim."
+  ],
+  "machine_error_code": "OK",
+  "packet_kind": "independent_cli_runner_audit",
+  "required_evidence_files": [
+    "cli_runner_live_packet.json",
+    "cli_runner_direct_egress_negative_packet.json",
+    "cli_runner_summary.json",
+    "current_codex_observation_packet.json"
+  ],
+  "secret_value_recorded": false,
+  "status": "ok",
+  "verdict": "BLOCKED_BUT_FUNCTIONAL_RUNNER_PROVEN"
+}

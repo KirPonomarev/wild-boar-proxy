@@ -490,6 +490,23 @@ The plain `token` surface is allowed to emit the bearer token only to stdout for
 its trusted machine consumer. It is not a packet truth surface and must not be
 used as evidence by itself.
 
+## Additional Codex CLI runner surface
+
+`codex-runner smoke --json --prompt <text>` is a bounded non-native Codex CLI
+runner surface.
+
+It must remain explicitly non-native and machine-readably enforce:
+
+- `consumer_kind=codex_cli_runner`
+- `native_app_claimed=false`
+- reusable runner launch surface classification
+- isolated session root / `CODEX_HOME` ownership via session packet truth
+- transcript packet present
+- cleanup packet present
+
+This surface is not native `Codex.app`, not a window proof surface, and not an
+Original-via-WBP surface.
+
 ## Additional external-models route verification surfaces
 
 `external-models routes validate --route <id> --json` is the owner surface for

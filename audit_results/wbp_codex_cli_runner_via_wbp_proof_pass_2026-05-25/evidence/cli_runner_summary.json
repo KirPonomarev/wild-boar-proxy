@@ -1,0 +1,22 @@
+{
+  "blocked_reason": "global direct-egress negative proof remained unproven with safe tooling",
+  "captured_at_utc": "2026-05-25T13:20:26.420744Z",
+  "cleanup_performed": true,
+  "consumer_kind": "codex_cli_runner",
+  "direct_egress_negative_status": "blocked",
+  "final_verdict": "CODEX_CLI_RUNNER_VIA_WBP_NOT_PROVEN",
+  "functional_runner_proven": true,
+  "machine_error_code": "DIRECT_EGRESS_UNPROVEN",
+  "native_app_claimed": false,
+  "packet_kind": "cli_runner_summary",
+  "reusable_runner_launch_surface": true,
+  "runner_launch_surface": "wild-boar-proxy codex-runner smoke --json --prompt <text>",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "selected_model_id": "wbp-web-primary-openrouter",
+  "selected_source_class": "route_backed",
+  "status": "blocked",
+  "targeted_files_unchanged": true,
+  "transcript_kind": "service_ledger_only",
+  "wbp_trace_forwarded": true
+}

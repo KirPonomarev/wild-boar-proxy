@@ -8,6 +8,7 @@ import json
 import sys
 from typing import Any
 
+from .cli_runner import run_codex_cli_runner_smoke
 from .external_models import run_external_models_command
 from .runtime import (
     RuntimeErrorInfo,
@@ -100,6 +101,14 @@ def build_parser() -> argparse.ArgumentParser:
     launch_client = launch_subparsers.add_parser("client")
     launch_client.add_argument("--client-path", required=True)
     launch_client.add_argument("--json", action="store_true", required=True)
+
+    codex_runner = subparsers.add_parser("codex-runner")
+    codex_runner_subparsers = codex_runner.add_subparsers(
+        dest="codex_runner_command", required=True
+    )
+    codex_runner_smoke = codex_runner_subparsers.add_parser("smoke")
+    codex_runner_smoke.add_argument("--prompt", required=True)
+    codex_runner_smoke.add_argument("--json", action="store_true", required=True)
 
     accounts = subparsers.add_parser("accounts")
     accounts_subparsers = accounts.add_subparsers(dest="accounts_command", required=True)
@@ -391,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(run_launch_smoke(paths))
         if args.command == "launch" and args.launch_command == "client":
             return emit_json(run_launch_client(paths, args.client_path))
+        if args.command == "codex-runner" and args.codex_runner_command == "smoke":
+            return emit_json(run_codex_cli_runner_smoke(paths, args.prompt))
         if args.command == "accounts" and args.accounts_command == "list":
             return emit_json(list_accounts(paths))
         if args.command == "accounts" and args.accounts_command == "validate":
