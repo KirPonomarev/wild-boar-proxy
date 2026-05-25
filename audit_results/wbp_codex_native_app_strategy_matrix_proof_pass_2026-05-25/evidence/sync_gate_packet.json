@@ -1,0 +1,25 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "declared_write_surfaces": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence"
+  ],
+  "forbidden_runtime_write_surfaces": [
+    "/Users/kirillponomarev/.codex",
+    "/Users/kirillponomarev/Library/Application Support/Codex",
+    "/Users/kirillponomarev/Library/Caches/com.openai.codex",
+    "/Users/kirillponomarev/Library/HTTPStorages/com.openai.codex",
+    "/Applications/Codex.app"
+  ],
+  "git_remote_sync_state": "synced_with_origin_at_contour_start",
+  "git_status_porcelain": "",
+  "head": "1f7cc809710c1b907be1fbfb22c937673d6dc975",
+  "live_launch_performed": false,
+  "machine_error_code": "OK",
+  "owner_authorization_scope": "read_only_preflight_only",
+  "read_only_contour": true,
+  "runtime_mutation_performed": false,
+  "schema_version": 1,
+  "status": "ok"
+}

@@ -1,0 +1,24 @@
+{
+  "bundle_metadata_launch_performed": false,
+  "bundle_metadata_refs": [
+    "/Applications/Codex.app/Contents/Info.plist",
+    "/Applications/Codex.app/Contents/Resources/app.asar",
+    "/Applications/Codex.app/Contents/Resources/codex"
+  ],
+  "captured_at_utc": "2026-05-25T13:52:12.267366Z",
+  "cliproxyapi_version_status": "engine_boundary_only_not_live_attested_in_this_contour",
+  "codex_app_app_asar_sha256": "91bd615ccbed8b9e02a9ecd5c142687d021c6aac67edd9eb5a50f0ba29a9c5c8",
+  "codex_app_build": "3044",
+  "codex_app_bundle_identifier": "com.openai.codex",
+  "codex_app_executable": "/Applications/Codex.app/Contents/MacOS/Codex",
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.41501",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "config_schema_commit_or_retrieval_date": "2026-05-25",
+  "config_schema_source": "local repo canon + local codex pinned observations",
+  "machine_error_code": "OK",
+  "schema_version": 1,
+  "status": "ok",
+  "wbp_git_commit": "1f7cc809710c1b907be1fbfb22c937673d6dc975"
+}
