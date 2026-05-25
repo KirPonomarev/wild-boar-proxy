@@ -14,7 +14,7 @@ Close the local desktop-launch gap inside active `CODEX_CUSTOM_LAUNCH_AND_ROUTE_
 
 - goal: prove repeated bounded desktop-client launch alongside repeated GPT-account workbench success and bounded cleanup
 - branch: `codex/external-agent-lab-isolated`
-- head: `c424c85444a4a0803cd5c77e5b1ceb3db462f089` before this contour commit
+- head: `02d18ad9b739c86a37e8abe73a69e69d057d3e38`
 - touched files:
   - `wild_boar_proxy/runtime.py`
   - `wild_boar_proxy/web_design_live_server.py`
@@ -69,8 +69,8 @@ Close the local desktop-launch gap inside active `CODEX_CUSTOM_LAUNCH_AND_ROUTE_
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: pending before contour commit
-- pushed: pending before contour push
+- commit: `02d18ad9b739c86a37e8abe73a69e69d057d3e38 Close local Codex Custom desktop launch gap`
+- pushed: pushed and in sync with `origin/codex/external-agent-lab-isolated`
 
 ## Scope Check
 
@@ -84,4 +84,3 @@ Close the local desktop-launch gap inside active `CODEX_CUSTOM_LAUNCH_AND_ROUTE_
   - the live accounts packet stayed degraded because `rollout_rotation_inspect` reported `ROTATION_EVIDENCE_STALE`
   - the external API lane remained blocked by missing owner credential and was not upgraded
 - resume from here: CLOSED
-

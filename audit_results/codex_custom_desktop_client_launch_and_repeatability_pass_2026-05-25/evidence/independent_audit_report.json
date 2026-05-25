@@ -18,7 +18,7 @@
     "The evidence does not support a strong claim that API connections are live-ready; repeated API connection packets are synthetic/read-only, show `adapter_state=stopped`, `runtime_claim_blocked=true`, and `routes_count=0`.",
     "The evidence does not support a claim that operator/recovery readiness is fully proven in this slice; `recovery_stop_cleanup_live_packet.json` is blocked with `CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_NOT_READY`.",
     "The evidence does not support a claim that overall `8B` is complete; the strongest honest status in the summary remains `partial_blocked` with the external gap still blocked.",
-    "The evidence does not support a claim that this slice is already integrated in committed repo history; the supporting source changes are present only in the current modified working tree."
+    "The evidence does not support a claim that this slice closes overall `8B`; the desktop-launch slice is committed, but the external API blocker still keeps active `8B` partial_blocked."
   ],
   "evidence_refs": [
     "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_desktop_client_launch_and_repeatability_pass_2026-05-25/evidence/desktop_launch_repeatability_summary.json",
@@ -34,6 +34,6 @@
     "Browser proof is internally bounded: `desktop_launch_repeatability_summary.json` says DOM snapshots exist but `png_screenshots_captured=false`, and `screenshot_blocked_packet.json` forbids any full PNG browser-proof claim.",
     "Repeated accounts checks are weaker than a live-health claim: the packets are stable but `degraded`, and each accounts packet says `account_count_claim_scope=packet_shape_only` and `account_source=provided_packet_or_fake`.",
     "Repeated API checks are weaker than a live external-route claim: each API packet reports `adapter_state=stopped`, `runtime_claim_blocked=true`, and `routes_count=0`, while each external credential admit packet reports `EXTERNAL_MODELS_CREDENTIAL_SOURCE_MISSING`.",
-    "The supporting source changes are not yet committed: current repo state includes modified `wild_boar_proxy/runtime.py`, `wild_boar_proxy/web_design_live_server.py`, `tests/test_cli.py`, and `tests/test_web_design_live_server.py`, so any claim of already-integrated repo truth would overstate the current state."
+    "The desktop-launch slice is now committed and pushed at `02d18ad9`, but that integration does not change the stronger product truth: active `8B` remains `partial_blocked` because the external API lane is still blocked."
   ]
 }
