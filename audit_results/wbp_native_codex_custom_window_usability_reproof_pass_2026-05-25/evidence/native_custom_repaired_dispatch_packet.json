@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:35:53.767909Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_WINDOW_USABILITY_REPROOF_PASS_R2",
+  "dispatch_scope": "custom_only_phase_3_reproof",
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "route_inference_attempted": false,
+  "native_launch_complete": false,
+  "ui_mutation_performed": false,
+  "product_status_upgraded": false,
+  "packet_kind": "native_custom_repaired_dispatch",
+  "status": "blocked",
+  "machine_error_code": "CURRENT_CODEX_PROTECTION_NOT_PROVEN",
+  "authorization_packet_emitted": true,
+  "isolation_repair_consumed": true,
+  "active_launcher_repo_managed_marker_valid": true,
+  "active_launcher_repo_managed_marker_recognized": true,
+  "isolated_home_used": true,
+  "isolated_codex_home_used": true,
+  "real_home_launch_forbidden": true,
+  "wrapper_path": "/Users/kirillponomarev/Applications/Codex Custom.app/Contents/MacOS/CodexCustom",
+  "repo_owned_launcher_path": "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-window-reproof-0shs5cby/home/.codex-custom-cli/codex-custom-launch.sh",
+  "target_binary_path": "/Applications/Codex.app/Contents/MacOS/Codex",
+  "dispatch_attempted": true,
+  "dispatch_observed": true,
+  "root_pid": 98705,
+  "process_group_id": 98705,
+  "process_rows": [
+    {
+      "pid": 98705,
+      "ppid": 98704,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/MacOS/Codex"
+    },
+    {
+      "pid": 98773,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper"
+    },
+    {
+      "pid": 98775,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper.app/Contents/MacOS/Codex Helper"
+    },
+    {
+      "pid": 98786,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Resources/native/bare-modifier-monitor"
+    },
+    {
+      "pid": 98790,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Resources/codex"
+    },
+    {
+      "pid": 98802,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Applications/Codex.app/Contents/Frameworks/Codex Helper (Renderer).app/Contents/MacOS/Codex Helper (Renderer)"
+    },
+    {
+      "pid": 98810,
+      "ppid": 98790,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/bin/git"
+    },
+    {
+      "pid": 98811,
+      "ppid": 98810,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98812,
+      "ppid": 98811,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git-remote-https"
+    },
+    {
+      "pid": 98822,
+      "ppid": 98810,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98828,
+      "ppid": 98705,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/bin/git"
+    },
+    {
+      "pid": 98829,
+      "ppid": 98828,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git"
+    },
+    {
+      "pid": 98830,
+      "ppid": 98829,
+      "pgid": 98705,
+      "comm": "/Library/Developer/CommandLineTools/usr/libexec/git-core/git-remote-https"
+    }
+  ],
+  "window_observed": false,
+  "window_pid_bound_to_launch": false,
+  "native_window_usable": false,
+  "current_codex_touched": true,
+  "cleanup_or_rollback_status": "ok"
+}

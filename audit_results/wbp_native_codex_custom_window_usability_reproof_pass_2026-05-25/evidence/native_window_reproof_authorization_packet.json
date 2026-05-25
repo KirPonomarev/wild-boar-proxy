@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "packet_kind": "native_window_reproof_authorization",
+  "captured_at_utc": "2026-05-25T10:35:37.430296Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_WINDOW_USABILITY_REPROOF_PASS_R2",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "standing_owner_authorization_present": true,
+  "authorization_phrase": "разрешаю тебе любые законные действия в рамках разработки проекта",
+  "authorization_packet_emitted": true,
+  "live_runtime_authorized": true
+}

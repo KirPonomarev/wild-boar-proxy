@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-25T10:35:53.767909Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_WINDOW_USABILITY_REPROOF_PASS_R2",
+  "dispatch_scope": "custom_only_phase_3_reproof",
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "route_inference_attempted": false,
+  "native_launch_complete": false,
+  "ui_mutation_performed": false,
+  "product_status_upgraded": false,
+  "packet_kind": "native_repaired_window_observation",
+  "status": "blocked",
+  "machine_error_code": "NATIVE_WINDOW_OBSERVATION_NOT_PROVEN",
+  "window_observed": false,
+  "window_pid_bound_to_launch": false,
+  "window_pid": null,
+  "window_identity_chain": [
+    "WBP isolated launch action",
+    "/Users/kirillponomarev/Applications/Codex Custom.app/Contents/MacOS/CodexCustom",
+    "/var/folders/qq/p9w353w13lqb3n8vdv_lf2f80000gn/T/wbp-window-reproof-0shs5cby/home/.codex-custom-cli/codex-custom-launch.sh",
+    "/Applications/Codex.app/Contents/MacOS/Codex",
+    "process_group:98705",
+    "window_pid:unproven"
+  ],
+  "window_observation_source": "AX/System Events process by unix id over launch process group",
+  "admissible_equivalent_used": "",
+  "app_logs_used_as_window_proof": false,
+  "manual_visual_observation_used_as_window_proof": false,
+  "screenshot_used_as_window_proof": false,
+  "window_observations": [
+    {
+      "pid": 98705,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98705. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98773,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98773. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98775,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98775. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98786,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98786. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98790,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98790. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98802,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98802. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98810,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98810. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98811,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98811. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98812,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98812. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98822,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98822. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98828,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98828. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98829,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98829. (-1728)",
+      "window_count": null,
+      "window1": null
+    },
+    {
+      "pid": 98830,
+      "source": "AX/System Events process by unix id",
+      "rc": 1,
+      "stdout": "",
+      "stderr": "40:143: execution error: Не удается получить {\"loginwindow\", true, false, false, 0} whose unix id = 98830. (-1728)",
+      "window_count": null,
+      "window1": null
+    }
+  ]
+}
