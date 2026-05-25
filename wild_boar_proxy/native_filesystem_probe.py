@@ -680,3 +680,35 @@ def summarize_idle_baseline_windows(windows: list[dict[str, Any]]) -> dict[str, 
         "window_changed_surfaces": changed_surfaces_by_window,
         "current_codex_root_baseline_preserved": True,
     }
+
+
+def classify_quiescent_current_codex_precondition(
+    inventory: dict[str, Any],
+) -> dict[str, Any]:
+    root_pids = inventory.get("root_app_pids", [])
+    default_process_count = int(inventory.get("default_process_count", 0) or 0)
+    custom_process_count = int(inventory.get("custom_process_count", 0) or 0)
+    root_present = bool(root_pids)
+    default_processes_present = default_process_count > 0
+    quiescent = not root_present and not default_processes_present
+    failures: list[str] = []
+    if root_present:
+        failures.append("ROOT_APP_PID_PRESENT")
+    if default_processes_present:
+        failures.append("DEFAULT_CODEX_PROCESS_PRESENT")
+    if custom_process_count > 0:
+        failures.append("CUSTOM_PROCESS_PRESENT_DURING_PRECONDITION_CHECK")
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "ok" if quiescent else "blocked",
+        "reason_class": "" if quiescent else "CURRENT_CODEX_NOT_QUIESCENT",
+        "quiescent_current_codex_precondition_satisfied": quiescent,
+        "root_app_pid_present": root_present,
+        "default_codex_process_present": default_processes_present,
+        "custom_process_present": custom_process_count > 0,
+        "root_app_pids": root_pids,
+        "default_process_count": default_process_count,
+        "custom_process_count": custom_process_count,
+        "precondition_failures": failures,
+        "inventory": inventory,
+    }

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_quiescent_current_codex_precondition,
     classify_current_codex_delta,
     classify_user_data_dir_respected,
     diff_scans,
@@ -157,6 +158,38 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(summary["status"], "blocked")
         self.assertEqual(summary["final_verdict"], "INSUFFICIENT_OBSERVATION")
         self.assertEqual(summary["drift_repeatability"], "insufficient")
+
+    def test_quiescent_precondition_packet_blocks_when_default_codex_processes_present(
+        self,
+    ) -> None:
+        packet = classify_quiescent_current_codex_precondition(
+            {
+                "root_app_pids": [41266],
+                "default_process_count": 4,
+                "custom_process_count": 0,
+                "default_process_lines": ["gpu", "renderer"],
+            }
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "CURRENT_CODEX_NOT_QUIESCENT")
+        self.assertFalse(packet["quiescent_current_codex_precondition_satisfied"])
+        self.assertIn("ROOT_APP_PID_PRESENT", packet["precondition_failures"])
+        self.assertIn("DEFAULT_CODEX_PROCESS_PRESENT", packet["precondition_failures"])
+
+    def test_quiescent_precondition_packet_passes_when_no_default_processes_present(
+        self,
+    ) -> None:
+        packet = classify_quiescent_current_codex_precondition(
+            {
+                "root_app_pids": [],
+                "default_process_count": 0,
+                "custom_process_count": 0,
+                "default_process_lines": [],
+            }
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["reason_class"], "")
+        self.assertTrue(packet["quiescent_current_codex_precondition_satisfied"])
 
 
 if __name__ == "__main__":
