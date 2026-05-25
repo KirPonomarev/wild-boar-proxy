@@ -102,6 +102,10 @@ CUSTOM_PACKET_REQUIRED_FIELDS = {
     "isolated_home",
     "isolated_codex_home",
     "isolated_profile_dir",
+    "isolated_app_support_dir",
+    "isolated_cache_dir",
+    "isolated_runtime_dir",
+    "keychain_reset_prompt_observed",
     "server_owned_route_configuration",
 }
 
@@ -122,6 +126,10 @@ CUSTOM_ADMISSION_REQUIRED_PLAN_FIELDS = {
     "isolated_home_plan",
     "isolated_codex_home_plan",
     "isolated_profile_data_dir_plan",
+    "isolated_app_support_dir_plan",
+    "isolated_cache_dir_plan",
+    "isolated_runtime_dir_plan",
+    "keychain_reset_prompt_blocker_plan",
     "server_planned_route_endpoint",
     "port_separation_plan",
     "cleanup_command_plan",
@@ -340,6 +348,19 @@ def build_native_launch_admission_packet(
         "target_candidate_source": _safe_target_candidate_source(server_plan),
         "target_candidate_path_redacted": True,
         "route_endpoint_redacted": True,
+        "isolated_home_plan": server_plan.get("isolated_home_plan") is True,
+        "isolated_codex_home_plan": server_plan.get("isolated_codex_home_plan") is True,
+        "isolated_profile_data_dir_plan": server_plan.get("isolated_profile_data_dir_plan")
+        is True,
+        "isolated_app_support_dir_plan": server_plan.get("isolated_app_support_dir_plan")
+        is True,
+        "isolated_cache_dir_plan": server_plan.get("isolated_cache_dir_plan") is True,
+        "isolated_runtime_dir_plan": server_plan.get("isolated_runtime_dir_plan") is True,
+        "keychain_reset_prompt_blocker_plan": server_plan.get(
+            "keychain_reset_prompt_blocker_plan"
+        )
+        is True,
+        "server_planned_route_endpoint": server_plan.get("server_planned_route_endpoint") is True,
         "declared_write_surfaces": write_surfaces,
         "write_surfaces_declared": bool(write_surfaces),
         "cleanup_command_planned": server_plan.get("cleanup_command_plan") is True,
@@ -424,6 +445,13 @@ def _admission_failed_checks(mode: str, server_plan: dict[str, Any]) -> list[str
             ("isolated_home_plan", "custom_requires_isolated_home_plan"),
             ("isolated_codex_home_plan", "custom_requires_isolated_codex_home_plan"),
             ("isolated_profile_data_dir_plan", "custom_requires_isolated_profile_data_dir_plan"),
+            ("isolated_app_support_dir_plan", "custom_requires_isolated_app_support_dir_plan"),
+            ("isolated_cache_dir_plan", "custom_requires_isolated_cache_dir_plan"),
+            ("isolated_runtime_dir_plan", "custom_requires_isolated_runtime_dir_plan"),
+            (
+                "keychain_reset_prompt_blocker_plan",
+                "custom_requires_keychain_reset_prompt_blocker_plan",
+            ),
             ("server_planned_route_endpoint", "custom_requires_server_planned_route_endpoint"),
             ("port_separation_plan", "custom_requires_port_separation_plan"),
             ("current_codex_snapshot_plan", "custom_requires_current_codex_snapshot_plan"),
@@ -545,6 +573,14 @@ def _native_packet_failed_checks(packet: dict[str, Any]) -> list[str]:
             failed.append("custom_requires_isolated_codex_home")
         if packet.get("isolated_profile_dir") is not True:
             failed.append("custom_requires_isolated_profile_dir")
+        if packet.get("isolated_app_support_dir") is not True:
+            failed.append("custom_requires_isolated_app_support_dir")
+        if packet.get("isolated_cache_dir") is not True:
+            failed.append("custom_requires_isolated_cache_dir")
+        if packet.get("isolated_runtime_dir") is not True:
+            failed.append("custom_requires_isolated_runtime_dir")
+        if packet.get("keychain_reset_prompt_observed") is not False:
+            failed.append("custom_blocks_keychain_reset_prompt")
         if packet.get("server_owned_route_configuration") is not True:
             failed.append("custom_requires_server_owned_route_configuration")
     if mode == "ORIGINAL_CODEX_VIA_WBP":

@@ -60,6 +60,32 @@ def build_native_custom_dispatch_packet(
         owner_authorized=owner_authorized,
         admission_packet=admission_packet,
     )
+    isolated_home_used = _safe_admission_bool(admission_packet, "isolated_home_plan")
+    isolated_codex_home_used = _safe_admission_bool(admission_packet, "isolated_codex_home_plan")
+    isolated_profile_data_dir_used = _safe_admission_bool(
+        admission_packet,
+        "isolated_profile_data_dir_plan",
+    )
+    isolated_app_support_dir_used = _safe_admission_bool(
+        admission_packet,
+        "isolated_app_support_dir_plan",
+    )
+    isolated_cache_dir_used = _safe_admission_bool(
+        admission_packet,
+        "isolated_cache_dir_plan",
+    )
+    isolated_runtime_dir_used = _safe_admission_bool(
+        admission_packet,
+        "isolated_runtime_dir_plan",
+    )
+    keychain_reset_prompt_blocker_planned = _safe_admission_bool(
+        admission_packet,
+        "keychain_reset_prompt_blocker_plan",
+    )
+    server_owned_route_endpoint_carried = _safe_admission_bool(
+        admission_packet,
+        "server_planned_route_endpoint",
+    )
     base = {
         **_base_packet(packet_kind="native_custom_dispatch"),
         "launch_mode": CUSTOM_LAUNCH_MODE,
@@ -69,16 +95,14 @@ def build_native_custom_dispatch_packet(
             admission_packet,
             "target_candidate_source",
         ),
-        "isolated_home_used": _safe_admission_bool(admission_packet, "isolated_home_plan"),
-        "isolated_codex_home_used": _safe_admission_bool(admission_packet, "isolated_codex_home_plan"),
-        "isolated_profile_data_dir_used": _safe_admission_bool(
-            admission_packet,
-            "isolated_profile_data_dir_plan",
-        ),
-        "server_owned_route_endpoint_carried": _safe_admission_bool(
-            admission_packet,
-            "server_planned_route_endpoint",
-        ),
+        "isolated_home_used": isolated_home_used,
+        "isolated_codex_home_used": isolated_codex_home_used,
+        "isolated_profile_data_dir_used": isolated_profile_data_dir_used,
+        "isolated_app_support_dir_used": isolated_app_support_dir_used,
+        "isolated_cache_dir_used": isolated_cache_dir_used,
+        "isolated_runtime_dir_used": isolated_runtime_dir_used,
+        "keychain_reset_prompt_blocker_planned": keychain_reset_prompt_blocker_planned,
+        "server_owned_route_endpoint_carried": server_owned_route_endpoint_carried,
         "native_window_usable": False,
         "native_window_usable_claimed": False,
         "native_launch_complete": False,
@@ -122,6 +146,14 @@ def build_native_custom_dispatch_packet(
         dispatch_observed
         and process_observed
         and (window_observed or window_blocked)
+        and isolated_home_used
+        and isolated_codex_home_used
+        and isolated_profile_data_dir_used
+        and isolated_app_support_dir_used
+        and isolated_cache_dir_used
+        and isolated_runtime_dir_used
+        and keychain_reset_prompt_blocker_planned
+        and server_owned_route_endpoint_carried
         and native_window_usable
         and not current_codex_touched
         and cleanup_status == "ok"
@@ -131,6 +163,14 @@ def build_native_custom_dispatch_packet(
         process_observed=process_observed,
         window_observed=window_observed,
         window_blocked=window_blocked,
+        isolated_home_used=isolated_home_used,
+        isolated_codex_home_used=isolated_codex_home_used,
+        isolated_profile_data_dir_used=isolated_profile_data_dir_used,
+        isolated_app_support_dir_used=isolated_app_support_dir_used,
+        isolated_cache_dir_used=isolated_cache_dir_used,
+        isolated_runtime_dir_used=isolated_runtime_dir_used,
+        keychain_reset_prompt_blocker_planned=keychain_reset_prompt_blocker_planned,
+        server_owned_route_endpoint_carried=server_owned_route_endpoint_carried,
         native_window_usable=native_window_usable,
         current_codex_touched=current_codex_touched,
         cleanup_status=cleanup_status,
@@ -380,6 +420,14 @@ def _dispatch_failed_checks(
     process_observed: bool,
     window_observed: bool,
     window_blocked: bool,
+    isolated_home_used: bool,
+    isolated_codex_home_used: bool,
+    isolated_profile_data_dir_used: bool,
+    isolated_app_support_dir_used: bool,
+    isolated_cache_dir_used: bool,
+    isolated_runtime_dir_used: bool,
+    keychain_reset_prompt_blocker_planned: bool,
+    server_owned_route_endpoint_carried: bool,
     native_window_usable: bool,
     current_codex_touched: bool,
     cleanup_status: str,
@@ -391,6 +439,22 @@ def _dispatch_failed_checks(
         failed.append("process_observed_required")
     if not window_observed and not window_blocked:
         failed.append("window_observation_or_blocked_reason_required")
+    if not isolated_home_used:
+        failed.append("custom_requires_isolated_home_plan")
+    if not isolated_codex_home_used:
+        failed.append("custom_requires_isolated_codex_home_plan")
+    if not isolated_profile_data_dir_used:
+        failed.append("custom_requires_isolated_profile_data_dir_plan")
+    if not isolated_app_support_dir_used:
+        failed.append("custom_requires_isolated_app_support_dir_plan")
+    if not isolated_cache_dir_used:
+        failed.append("custom_requires_isolated_cache_dir_plan")
+    if not isolated_runtime_dir_used:
+        failed.append("custom_requires_isolated_runtime_dir_plan")
+    if not keychain_reset_prompt_blocker_planned:
+        failed.append("custom_requires_keychain_reset_prompt_blocker_plan")
+    if not server_owned_route_endpoint_carried:
+        failed.append("custom_requires_server_planned_route_endpoint")
     if not native_window_usable:
         failed.append("native_window_usability_required")
     if current_codex_touched:

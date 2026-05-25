@@ -56,6 +56,10 @@ def complete_custom_packet(**overrides: object) -> dict[str, object]:
         "isolated_home": True,
         "isolated_codex_home": True,
         "isolated_profile_dir": True,
+        "isolated_app_support_dir": True,
+        "isolated_cache_dir": True,
+        "isolated_runtime_dir": True,
+        "keychain_reset_prompt_observed": False,
         "server_owned_route_configuration": True,
     }
     packet.update(overrides)
@@ -114,6 +118,10 @@ def complete_custom_admission_plan(**overrides: object) -> dict[str, object]:
         "isolated_home_plan": True,
         "isolated_codex_home_plan": True,
         "isolated_profile_data_dir_plan": True,
+        "isolated_app_support_dir_plan": True,
+        "isolated_cache_dir_plan": True,
+        "isolated_runtime_dir_plan": True,
+        "keychain_reset_prompt_blocker_plan": True,
         "server_planned_route_endpoint": True,
         "port_separation_plan": True,
         "cleanup_command_plan": True,
@@ -124,6 +132,9 @@ def complete_custom_admission_plan(**overrides: object) -> dict[str, object]:
             "server_owned_temp_home",
             "server_owned_temp_codex_home",
             "server_owned_profile_dir",
+            "server_owned_app_support_dir",
+            "server_owned_cache_dir",
+            "server_owned_runtime_dir",
             "launch_receipt",
         ],
     }
@@ -395,6 +406,14 @@ class NativeLaunchContractTests(unittest.TestCase):
         self.assertEqual(packet["identity_chain_required_fields"], list(ADMISSION_IDENTITY_FIELDS))
         self.assertTrue(packet["target_candidate_path_redacted"])
         self.assertTrue(packet["route_endpoint_redacted"])
+        self.assertTrue(packet["isolated_home_plan"])
+        self.assertTrue(packet["isolated_codex_home_plan"])
+        self.assertTrue(packet["isolated_profile_data_dir_plan"])
+        self.assertTrue(packet["isolated_app_support_dir_plan"])
+        self.assertTrue(packet["isolated_cache_dir_plan"])
+        self.assertTrue(packet["isolated_runtime_dir_plan"])
+        self.assertTrue(packet["keychain_reset_prompt_blocker_plan"])
+        self.assertTrue(packet["server_planned_route_endpoint"])
 
     def test_custom_admission_allows_owner_admitted_external_candidate_source(self) -> None:
         packet = build_native_custom_preflight_packet(
@@ -440,6 +459,10 @@ class NativeLaunchContractTests(unittest.TestCase):
                 isolated_home_plan=False,
                 isolated_codex_home_plan=False,
                 isolated_profile_data_dir_plan=False,
+                isolated_app_support_dir_plan=False,
+                isolated_cache_dir_plan=False,
+                isolated_runtime_dir_plan=False,
+                keychain_reset_prompt_blocker_plan=False,
                 cleanup_command_plan=False,
                 rollback_expectation_declared=False,
                 declared_write_surfaces=[],
@@ -451,9 +474,32 @@ class NativeLaunchContractTests(unittest.TestCase):
         self.assertIn("custom_requires_isolated_home_plan", packet["failed_checks"])
         self.assertIn("custom_requires_isolated_codex_home_plan", packet["failed_checks"])
         self.assertIn("custom_requires_isolated_profile_data_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_app_support_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_cache_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_runtime_dir_plan", packet["failed_checks"])
+        self.assertIn(
+            "custom_requires_keychain_reset_prompt_blocker_plan",
+            packet["failed_checks"],
+        )
         self.assertIn("cleanup_command_plan_required", packet["failed_checks"])
         self.assertIn("rollback_expectation_required", packet["failed_checks"])
         self.assertIn("write_surfaces_required", packet["failed_checks"])
+
+    def test_custom_packet_blocks_default_app_support_cache_runtime_or_keychain_prompt(self) -> None:
+        packet = validate_native_launch_packet(
+            complete_custom_packet(
+                isolated_app_support_dir=False,
+                isolated_cache_dir=False,
+                isolated_runtime_dir=False,
+                keychain_reset_prompt_observed=True,
+            )
+        )
+
+        self.assertEqual(packet["status"], "rejected")
+        self.assertIn("custom_requires_isolated_app_support_dir", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_cache_dir", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_runtime_dir", packet["failed_checks"])
+        self.assertIn("custom_blocks_keychain_reset_prompt", packet["failed_checks"])
 
     def test_custom_admission_requires_classified_target_route_port_and_snapshot_plan(self) -> None:
         packet = build_native_custom_preflight_packet(

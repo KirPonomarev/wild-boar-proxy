@@ -365,6 +365,8 @@ def sanitized_env() -> dict[str, str]:
         "https_proxy",
         "all_proxy",
         CURRENT_PROXY_URL_HANDOFF_ENV,
+        "CODEX_HOME",
+        "OPENAI_API_KEY",
     ):
         env.pop(key, None)
     env["PATH"] = DETERMINISTIC_RUNTIME_PATH
@@ -966,9 +968,14 @@ def build_repo_owned_default_launcher_script_payload() -> str:
         [
             "set -eu",
             'mode="${1:-}"',
-            'PROFILE_DIR="$HOME/.codex-custom-cli"',
+            'PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"',
             'AUTH_FILE="$PROFILE_DIR/auth.json"',
             'APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"',
+            'APP_HOME="$PROFILE_DIR/home"',
+            'APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"',
+            'APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"',
+            'APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"',
+            'APP_TMP_DIR="$PROFILE_DIR/tmp"',
             'CODEX_APP_BIN="/Applications/Codex.app/Contents/MacOS/Codex"',
             'if [ -n "${WBP_CURRENT_PROXY_URL:-}" ]; then',
             "  proxy_env() {",
@@ -987,8 +994,12 @@ def build_repo_owned_default_launcher_script_payload() -> str:
             'if [ "$mode" = "desktop" ]; then',
             '  [ -f "$AUTH_FILE" ] || exit 9',
             '  [ -x "$CODEX_APP_BIN" ] || exit 9',
-            '  mkdir -p "$APP_USER_DATA_DIR"',
+            '  mkdir -p "$APP_USER_DATA_DIR" "$APP_SUPPORT_DIR" "$APP_CACHE_DIR" "$APP_HTTPSTORAGE_DIR" "$APP_TMP_DIR"',
             '  export CODEX_HOME="$PROFILE_DIR"',
+            '  export HOME="$APP_HOME"',
+            '  export XDG_CONFIG_HOME="$APP_HOME/.config"',
+            '  export XDG_CACHE_HOME="$APP_HOME/.cache"',
+            '  export TMPDIR="$APP_TMP_DIR"',
             '  export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3} - "$AUTH_FILE" <<\'PY\'',
             "import json",
             "import sys",

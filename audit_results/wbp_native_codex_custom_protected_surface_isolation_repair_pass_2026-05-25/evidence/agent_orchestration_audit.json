@@ -1,0 +1,38 @@
+{
+  "agent_reports_accepted_blindly": false,
+  "agents": [
+    {
+      "edit_performed": false,
+      "finding_used": "runtime launcher hardcoded profile and did not isolate HOME/CODEX_HOME for launch client env inheritance risk",
+      "live_launch_performed": false,
+      "nickname": "Bernoulli",
+      "role": "read_only_scanner"
+    },
+    {
+      "edit_performed": true,
+      "finding_used": "dispatch slice pass did not require carried isolation booleans; local integration expanded this to app-support/cache/runtime/keychain gates",
+      "live_launch_performed": false,
+      "nickname": "Parfit",
+      "role": "bounded_worker"
+    },
+    {
+      "critical_findings": [],
+      "edit_performed": false,
+      "live_launch_performed": false,
+      "nickname": "Aquinas",
+      "residual_risks": [
+        "launcher hygiene unit tests are mostly payload/materialization checks; bounded live proof covers actual desktop launcher execution",
+        "protected directory comparisons are metadata-based for directories, not recursive content hashes"
+      ],
+      "role": "independent_auditor"
+    }
+  ],
+  "captured_at_utc": "2026-05-25T11:05:30.242990Z",
+  "local_diff_review_performed": true,
+  "machine_error_code": "OK",
+  "max_parallel_agents_respected": true,
+  "packet_kind": "agent_orchestration_audit",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok"
+}

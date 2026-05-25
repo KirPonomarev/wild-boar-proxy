@@ -2729,6 +2729,8 @@ class CliTests(unittest.TestCase):
             "    'HTTPS_PROXY_present': 'HTTPS_PROXY' in os.environ,\n"
             "    'ALL_PROXY_present': 'ALL_PROXY' in os.environ,\n"
             "    'WBP_CURRENT_PROXY_URL_present': 'WBP_CURRENT_PROXY_URL' in os.environ,\n"
+            "    'CODEX_HOME_present': 'CODEX_HOME' in os.environ,\n"
+            "    'OPENAI_API_KEY_present': 'OPENAI_API_KEY' in os.environ,\n"
             "    'NO_PROXY': os.environ.get('NO_PROXY', ''),\n"
             "    'PATH': os.environ.get('PATH', ''),\n"
             "}\n"
@@ -17772,6 +17774,9 @@ class CliTests(unittest.TestCase):
         launcher_text = self.default_launcher_script.read_text(encoding="utf-8")
         self.assertIn('if [ "$mode" = "desktop" ]; then', launcher_text)
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', launcher_text)
+        self.assertIn('export HOME="$APP_HOME"', launcher_text)
+        self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', launcher_text)
+        self.assertIn('export TMPDIR="$APP_TMP_DIR"', launcher_text)
         self.assertIn(
             'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
             launcher_text,
@@ -17783,11 +17788,20 @@ class CliTests(unittest.TestCase):
         self,
     ) -> None:
         payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
-        self.assertIn('PROFILE_DIR="$HOME/.codex-custom-cli"', payload)
+        self.assertIn('PROFILE_DIR="${WBP_PROFILE_DIR:-$HOME/.codex-custom-cli}"', payload)
         self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
         self.assertIn('APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"', payload)
+        self.assertIn('APP_HOME="$PROFILE_DIR/home"', payload)
+        self.assertIn('APP_SUPPORT_DIR="$APP_HOME/Library/Application Support/Codex"', payload)
+        self.assertIn('APP_CACHE_DIR="$APP_HOME/Library/Caches/com.openai.codex"', payload)
+        self.assertIn('APP_HTTPSTORAGE_DIR="$APP_HOME/Library/HTTPStorages/com.openai.codex"', payload)
+        self.assertIn('APP_TMP_DIR="$PROFILE_DIR/tmp"', payload)
         self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
         self.assertIn('export CODEX_HOME="$PROFILE_DIR"', payload)
+        self.assertIn('export HOME="$APP_HOME"', payload)
+        self.assertIn('export XDG_CONFIG_HOME="$APP_HOME/.config"', payload)
+        self.assertIn('export XDG_CACHE_HOME="$APP_HOME/.cache"', payload)
+        self.assertIn('export TMPDIR="$APP_TMP_DIR"', payload)
         self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
         self.assertIn(
             'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
@@ -18176,6 +18190,8 @@ class CliTests(unittest.TestCase):
                     "HTTPS_PROXY": "http://example.invalid:2",
                     "ALL_PROXY": "http://example.invalid:3",
                     "WBP_CURRENT_PROXY_URL": "http://example.invalid:4",
+                    "CODEX_HOME": str(self.profile_dir / "ambient-codex-home"),
+                    "OPENAI_API_KEY": "ambient-secret",
                     "PATH": "/definitely/missing",
                 },
                 "launch",
@@ -18227,6 +18243,8 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_payload["HTTPS_PROXY_present"])
         self.assertFalse(trace_payload["ALL_PROXY_present"])
         self.assertFalse(trace_payload["WBP_CURRENT_PROXY_URL_present"])
+        self.assertFalse(trace_payload["CODEX_HOME_present"])
+        self.assertFalse(trace_payload["OPENAI_API_KEY_present"])
         self.assertEqual(trace_payload["NO_PROXY"], "127.0.0.1,localhost,::1")
         self.assertEqual(trace_payload["PATH"], runtime_mod.DETERMINISTIC_RUNTIME_PATH)
 

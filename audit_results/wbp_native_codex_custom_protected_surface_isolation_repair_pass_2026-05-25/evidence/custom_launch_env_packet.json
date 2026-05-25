@@ -1,0 +1,19 @@
+{
+  "ambient_codex_home_removed": true,
+  "ambient_openai_api_key_removed": true,
+  "captured_at_utc": "2026-05-25T10:59:29.253038Z",
+  "codex_home_is_profile_dir": true,
+  "home_is_profile_home": true,
+  "launch_attempted": true,
+  "machine_error_code": "OK",
+  "openai_api_key_from_profile_auth": true,
+  "packet_kind": "custom_launch_env",
+  "process_observed": true,
+  "profile_dir_redacted": "<temp-wbp-profile>",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok",
+  "tmpdir_is_profile_tmp": true,
+  "xdg_cache_home_is_profile_home": true,
+  "xdg_config_home_is_profile_home": true
+}

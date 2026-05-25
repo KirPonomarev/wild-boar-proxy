@@ -1,0 +1,16 @@
+{
+  "captured_at_utc": "2026-05-25T10:59:29.253102Z",
+  "current_codex_untouched": true,
+  "custom_app_support_isolated": true,
+  "custom_cache_isolated": true,
+  "custom_profile_isolated": true,
+  "custom_runtime_dir_isolated": true,
+  "keychain_reset_prompt_observed": true,
+  "machine_error_code": "CUSTOM_PROFILE_OR_KEYCHAIN_SAFETY_NOT_PROVEN",
+  "packet_kind": "custom_profile_isolation_repair",
+  "phase3_resume_allowed": false,
+  "repair_basis": "machine_backed_static_and_bounded_live_proof",
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "blocked"
+}

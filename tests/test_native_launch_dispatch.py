@@ -34,6 +34,10 @@ def custom_admission_plan(**overrides: object) -> dict[str, object]:
         "isolated_home_plan": True,
         "isolated_codex_home_plan": True,
         "isolated_profile_data_dir_plan": True,
+        "isolated_app_support_dir_plan": True,
+        "isolated_cache_dir_plan": True,
+        "isolated_runtime_dir_plan": True,
+        "keychain_reset_prompt_blocker_plan": True,
         "server_planned_route_endpoint": True,
         "port_separation_plan": True,
         "cleanup_command_plan": True,
@@ -44,6 +48,9 @@ def custom_admission_plan(**overrides: object) -> dict[str, object]:
             "server_owned_temp_home",
             "server_owned_temp_codex_home",
             "server_owned_profile_dir",
+            "server_owned_app_support_dir",
+            "server_owned_cache_dir",
+            "server_owned_runtime_dir",
             "launch_receipt",
         ],
     }
@@ -121,6 +128,10 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertTrue(packet["dispatch_observed"])
         self.assertTrue(packet["process_observed"])
         self.assertTrue(packet["window_observed"])
+        self.assertTrue(packet["isolated_app_support_dir_used"])
+        self.assertTrue(packet["isolated_cache_dir_used"])
+        self.assertTrue(packet["isolated_runtime_dir_used"])
+        self.assertTrue(packet["keychain_reset_prompt_blocker_planned"])
         self.assertTrue(packet["native_window_usable"])
         self.assertTrue(packet["native_window_usable_claimed"])
         self.assertFalse(packet["native_launch_complete"])
@@ -172,6 +183,44 @@ class NativeLaunchDispatchTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked")
         self.assertIn("window_observation_or_blocked_reason_required", packet["failed_checks"])
         self.assertFalse(packet["native_launch_complete"])
+
+    def test_custom_dispatch_requires_carried_isolation_and_server_route_plan(self) -> None:
+        admitted = admitted_custom_packet()
+        admitted["isolated_home_plan"] = False
+        admitted["isolated_codex_home_plan"] = False
+        admitted["isolated_profile_data_dir_plan"] = False
+        admitted["isolated_app_support_dir_plan"] = False
+        admitted["isolated_cache_dir_plan"] = False
+        admitted["isolated_runtime_dir_plan"] = False
+        admitted["keychain_reset_prompt_blocker_plan"] = False
+        admitted["server_planned_route_endpoint"] = False
+
+        packet = build_native_custom_dispatch_packet(
+            owner_authorized=True,
+            admission_packet=admitted,
+            dispatch_result={"dispatch_attempted": True, "dispatch_observed": True},
+            process_observation={"process_observed": True},
+            window_observation={"window_observed": True},
+            usability_observation={
+                "native_window_usable": True,
+                "native_window_usable_claimed": True,
+            },
+            protection_packet={"current_codex_touched": False},
+            cleanup_packet={"cleanup_or_rollback_status": "ok"},
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIn("custom_requires_isolated_home_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_codex_home_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_profile_data_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_app_support_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_cache_dir_plan", packet["failed_checks"])
+        self.assertIn("custom_requires_isolated_runtime_dir_plan", packet["failed_checks"])
+        self.assertIn(
+            "custom_requires_keychain_reset_prompt_blocker_plan",
+            packet["failed_checks"],
+        )
+        self.assertIn("custom_requires_server_planned_route_endpoint", packet["failed_checks"])
 
     def test_custom_dispatch_blocks_cleanup_failure(self) -> None:
         packet = build_native_custom_dispatch_packet(

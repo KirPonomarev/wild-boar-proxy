@@ -33,6 +33,10 @@
       "isolated_home",
       "isolated_codex_home",
       "isolated_profile_dir",
+      "isolated_app_support_dir",
+      "isolated_cache_dir",
+      "isolated_runtime_dir",
+      "keychain_reset_prompt_observed",
       "server_owned_route_configuration"
     ],
     "ORIGINAL_CODEX_VIA_WBP": [
