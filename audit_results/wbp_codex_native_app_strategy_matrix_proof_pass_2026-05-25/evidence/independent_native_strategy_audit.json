@@ -1,0 +1,32 @@
+{
+  "audit_result": "PASS",
+  "auditor": "Huygens",
+  "auditor_model_class": "gpt-5.4-mini_explorer",
+  "captured_at_utc": "2026-05-25T13:56:54.477082Z",
+  "checks": {
+    "a0_disqualification_overturned": false,
+    "a1_should_rank_higher": false,
+    "c_should_rank_higher": false,
+    "prior_contour_refs_missing": false,
+    "runtime_claims_smuggled": false
+  },
+  "findings": [
+    "A0 remains blocked, A1 remains blocked, C remains escalation_only, and repo_canonical_custom_proxy_auth_isolated_home remains first_candidate.",
+    "Prior contour evidence refs are present in native_strategy_matrix.json and native_strategy_summary.json.",
+    "Runtime-only claims remain deferred; no native launch/window/surface success is implied in this read-only contour."
+  ],
+  "machine_error_code": "OK",
+  "resolved_pre_fix_blockers": [
+    "prior contour refs added to matrix and summary so classification is self-contained enough for audit",
+    "closeout commit/push placeholders will be replaced during finalize step"
+  ],
+  "schema_version": 1,
+  "source_refs": [
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/native_strategy_matrix.json",
+    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/native_strategy_summary.json",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/native_launch_contract.py",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/runtime.py",
+    "/Volumes/Work/wild-boar-proxy/wild_boar_proxy/codex_launch_modes.py"
+  ],
+  "status": "ok"
+}

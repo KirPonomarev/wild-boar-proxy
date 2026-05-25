@@ -14,9 +14,9 @@ Choose the first safe native Codex.app strategy for later live proof using read-
 
 - goal: classify A0/A1/C native strategy candidates against current repo canon and identify the first admissible live native candidate without runtime launch
 - branch: codex/external-agent-lab-isolated
-- head: 1f7cc809710c1b907be1fbfb22c937673d6dc975
-- touched files: audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/*.json, audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/closeout.md
-- tests run: python3 -m unittest tests.test_repo_hygiene tests.test_closeout_resilience
+- head: 312dc52117c29321f70a5c055378d70ee4694028
+- touched files: audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/*.json, audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/independent_native_strategy_audit.json, audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/closeout.md
+- tests run: `python3 -m unittest tests.test_repo_hygiene tests.test_closeout_resilience`; JSON parse validation on all contour evidence packets; `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/closeout.md`
 - blocked risks: this contour does not prove native Codex.app runtime behavior, user-data-dir respect, Keychain safety, Application Support isolation, window presence, or route binding; the external A0(real HOME) strategy draft is disqualified by current repo contract and was not silently promoted
 - closure state: CLOSED
 
@@ -31,13 +31,13 @@ Choose the first safe native Codex.app strategy for later live proof using read-
 
 - spec: none; thread-owned contour plan only
 - packet: audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/native_strategy_matrix.json
-- report: audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/native_strategy_summary.json
+- report: audit_results/wbp_codex_native_app_strategy_matrix_proof_pass_2026-05-25/evidence/independent_native_strategy_audit.json
 
 ## Git
 
 - branch: codex/external-agent-lab-isolated
-- commit: PENDING
-- pushed: PENDING
+- commit: `312dc52117c29321f70a5c055378d70ee4694028`
+- pushed: yes
 
 ## Scope Check
 
