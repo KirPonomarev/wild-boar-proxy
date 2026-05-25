@@ -14,7 +14,7 @@ Resolve the blocked gate from the CLI runner contour by proving, or honestly cla
 
 - goal: prove the CLI runner egress gate with bounded owner-side process/network observation, without widening into native work or general observability architecture
 - branch: `codex/external-agent-lab-isolated`
-- head: `f9ad7ce0ab6783f4bd20bd51ae4f3f62d07a55bd`
+- head: `a2437ffc003ca0d7c1d699c5a3e22559eb6fb4d8`
 - touched files: `wild_boar_proxy/operator_surface.py`, `wild_boar_proxy/codex_custom_sessions.py`, `wild_boar_proxy/cli_runner.py`, `tests/test_operator_surface.py`, `tests/test_cli_runner.py`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/sync_gate_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/version_pinning_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_live_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_process_tree_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_network_observation_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_direct_egress_negative_packet_v2.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_wbp_trace_reconciliation_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/cli_runner_direct_egress_summary.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/current_codex_observation_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/independent_cli_runner_egress_audit.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/evidence/subagent_factcheck_packet.json`, `audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/closeout.md`
 - tests run: `python3 -m unittest tests.test_operator_surface tests.test_cli_runner tests.test_cli_token_command tests.test_repo_hygiene tests.test_closeout_resilience`; JSON parse validation on all contour evidence packets; `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/wbp_codex_cli_runner_direct_egress_negative_proof_pass_2026-05-25/closeout.md`
 - blocked risks: this contour does not prove native `Codex.app`, Original via WBP, final E2E, or upstream business success for the bounded runner prompt; it closes only the direct non-WBP model egress gate
@@ -36,8 +36,8 @@ Resolve the blocked gate from the CLI runner contour by proving, or honestly cla
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: not yet created at time of writing this closeout
-- pushed: no at time of writing this closeout
+- commit: `a2437ffc003ca0d7c1d699c5a3e22559eb6fb4d8`
+- pushed: yes
 
 ## Scope Check
 
