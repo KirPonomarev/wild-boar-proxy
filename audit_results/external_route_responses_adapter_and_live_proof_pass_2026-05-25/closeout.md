@@ -16,7 +16,7 @@ route, then prove one real external live prompt through the WBP web path.
 
 - goal: close the route-backed external prompt gap after credential admission by translating Codex `responses` traffic into provider `chat/completions` traffic and proving one live external prompt through the WBP web path
 - branch: `codex/external-agent-lab-isolated`
-- head: `ef2d23acdf3ee4034a6f147061686f40cc748c1c`
+- head: `a0a440523f312f4c8d4f5be31b0e608dd6e8b419`
 - touched files:
   - `/Volumes/Work/wild-boar-proxy/wild_boar_proxy/codex_model_registry.py`
   - `/Volumes/Work/wild-boar-proxy/wild_boar_proxy/codex_custom_sessions.py`
@@ -68,8 +68,8 @@ route, then prove one real external live prompt through the WBP web path.
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: `not created at artifact authoring time`
-- pushed: `no`
+- commit: `a0a440523f312f4c8d4f5be31b0e608dd6e8b419`
+- pushed: `yes`
 
 ## Scope Check
 
