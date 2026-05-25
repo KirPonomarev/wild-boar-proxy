@@ -446,6 +446,50 @@ Status success should expose:
 Admission and status packets must not expose token/secret/password values or
 raw owner-env dumps.
 
+## Additional local token owner surface
+
+`token --json` is the owner surface for bounded inspection of the local WBP
+token contract used by trusted machine consumers.
+
+`token` without `--json` is a machine-consumer surface for trusted local
+consumers such as Codex `auth.command`. It prints the plain local listener
+bearer token to stdout and must not be used as a browser surface.
+
+In the pinned local observation used by the auth-command contract proof contour
+(`codex-cli 0.128.0`), `auth.command` behaved as an exact executable string,
+not a command-plus-args packet surface. For that bounded observation, the
+repo-owned execution helper lives at the repository root:
+
+- `wbp_codex_auth_command.py`
+
+That helper is allowed to emit the plain local listener bearer token to stdout
+for its trusted machine consumer only. It is not a browser surface and it is
+not packet truth by itself.
+
+The token contract must remain bounded and machine-readably enforce:
+
+- source kind is the stable runtime generated config
+- output shape is `plain_token_stdout`
+- token is local-only
+- browser secret intake is false
+- browser path intake is false
+- JSON packet surfaces do not expose the token value
+
+`token --json` success should expose:
+
+- `next_action=none`
+- `data.token_source_kind=stable_runtime_generated_config`
+- `data.token_output_shape=plain_token_stdout`
+- `data.token_present=true`
+- `data.token_emitted=false`
+- `data.secret_value_exposed=false`
+- `data.scope=owner_local_listener`
+- `data.local_only=true`
+
+The plain `token` surface is allowed to emit the bearer token only to stdout for
+its trusted machine consumer. It is not a packet truth surface and must not be
+used as evidence by itself.
+
 ## Additional external-models route verification surfaces
 
 `external-models routes validate --route <id> --json` is the owner surface for

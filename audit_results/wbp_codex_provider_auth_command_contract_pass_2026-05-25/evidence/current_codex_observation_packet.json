@@ -1,0 +1,59 @@
+{
+  "packet_kind": "current_codex_observation",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "observed_files": [
+    "~/.codex/config.toml",
+    "~/.codex/auth.json"
+  ],
+  "comparisons": {
+    "codex_config": {
+      "before": {
+        "path_label": "~/.codex/config.toml",
+        "exists": true,
+        "is_dir": false,
+        "size": 5640,
+        "mtime_ns": 1779713298053578108,
+        "sha256": "780bbb8a90f98dc0e0ffa321c4251a63e32fc13ae7196c4733ecad457a41a2d5"
+      },
+      "after": {
+        "path_label": "~/.codex/config.toml",
+        "exists": true,
+        "is_dir": false,
+        "size": 5640,
+        "mtime_ns": 1779713298053578108,
+        "sha256": "780bbb8a90f98dc0e0ffa321c4251a63e32fc13ae7196c4733ecad457a41a2d5"
+      },
+      "exists_unchanged": true,
+      "size_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "codex_auth": {
+      "before": {
+        "path_label": "~/.codex/auth.json",
+        "exists": true,
+        "is_dir": false,
+        "size": 4697,
+        "mtime_ns": 1779424645682385204,
+        "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712"
+      },
+      "after": {
+        "path_label": "~/.codex/auth.json",
+        "exists": true,
+        "is_dir": false,
+        "size": 4697,
+        "mtime_ns": 1779424645682385204,
+        "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712"
+      },
+      "exists_unchanged": true,
+      "size_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "sha256_unchanged": true
+    }
+  },
+  "targeted_files_unchanged": true,
+  "captured_at_utc": "2026-05-25T12:57:35.133099Z",
+  "schema_version": 1,
+  "secret_value_recorded": false
+}

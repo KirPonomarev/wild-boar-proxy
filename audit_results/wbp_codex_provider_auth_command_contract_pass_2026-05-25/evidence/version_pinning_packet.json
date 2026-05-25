@@ -1,0 +1,15 @@
+{
+  "packet_kind": "version_pinning",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "wbp_head_commit": "1b1d8fbd34a9984a937142839dd4860be870a344",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "auth_command_helper_path": "/Volumes/Work/wild-boar-proxy/wbp_codex_auth_command.py",
+  "auth_command_helper_sha256": "18254ca49f5f644c2f2952b1ed9d368dfcecc39481da1e8ca9061f809716c1d8",
+  "auth_command_helper_executable": true,
+  "codex_app_version": null,
+  "captured_at_utc": "2026-05-25T12:57:08.919808Z",
+  "schema_version": 1,
+  "secret_value_recorded": false
+}

@@ -50,6 +50,7 @@ from .runtime import (
     run_sync,
     summarize_status,
 )
+from .token_command import emit_local_token, token_status_payload
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,6 +66,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     invariant_check = subparsers.add_parser("invariant-check")
     invariant_check.add_argument("--json", action="store_true", required=True)
+
+    token = subparsers.add_parser("token")
+    token.add_argument("--json", action="store_true")
 
     stable = subparsers.add_parser("stable")
     stable_subparsers = stable.add_subparsers(dest="stable_command", required=True)
@@ -360,6 +364,15 @@ def main(argv: list[str] | None = None) -> int:
             return emit_json(summarize_status(paths))
         if args.command == "invariant-check":
             return emit_json(run_invariant_check(paths))
+        if args.command == "token":
+            if args.json:
+                return emit_json(token_status_payload(paths))
+            try:
+                sys.stdout.write(emit_local_token(paths))
+                return 0
+            except RuntimeErrorInfo as exc:
+                sys.stderr.write(exc.message + "\n")
+                return exc.exit_code
         if args.command == "stable" and args.stable_command == "repair":
             if args.apply:
                 return emit_json(run_stable_repair_apply(paths))
