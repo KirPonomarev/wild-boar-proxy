@@ -137,6 +137,7 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
 
 
 def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
+    """Mechanism 0 (kept as fallback): pid-based AX front-window query."""
     script = (
         'tell application "System Events"\n'
         f'  set p to first process whose unix id is {observed_pid}\n'
@@ -162,6 +163,71 @@ def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
     return input_capable, stdout
 
 
+def _ax_input_capable_by_name(
+    observed_pid: int, process_name: str = "Codex"
+) -> tuple[bool, str]:
+    """Mechanism 1: AppleScript process-name UI scripting.
+
+    Targets the process by name rather than unix id. This can reach UI elements
+    that the pid-based `front window of p` query fails to access when System
+    Events reports `count of windows = 0` for the pid-resolved process object.
+    """
+    script = (
+        'tell application "System Events"\n'
+        f'  tell process "{process_name}"\n'
+        '    set w to front window\n'
+        '    set hasField to false\n'
+        '    try\n'
+        '      set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '    end try\n'
+        '    return {name of w, hasField}\n'
+        '  end tell\n'
+        'end tell\n'
+    )
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    stdout = result.stdout.strip()
+    if result.returncode != 0 or not stdout:
+        return False, str(result.stderr.strip() or "ax_query_by_name_failed")
+    parts = stdout.split(", ", 1)
+    input_capable = len(parts) == 2 and parts[1].strip().lower() == "true"
+    return input_capable, stdout
+
+
+def _cg_input_capable(observed_pid: int) -> tuple[bool, str]:
+    """Mechanism 2: CoreGraphics window list inspection.
+
+    Uses CGWindowListCopyWindowInfo to find on-screen windows owned by the
+    target pid. May expose windows that System Events does not report as
+    accessible.
+    """
+    try:
+        import Quartz  # type: ignore[import-untyped]
+    except ImportError:
+        return False, "cg_query_unavailable_pyobjc_framework_quartz_not_installed"
+    window_list = Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID
+    )
+    owned_windows = []
+    for window in window_list:
+        owner_pid = window.get("kCGWindowOwnerPID", 0)
+        if owner_pid == observed_pid:
+            owned_windows.append({
+                "window_name": window.get("kCGWindowName", ""),
+                "window_number": window.get("kCGWindowNumber", 0),
+                "window_layer": window.get("kCGWindowLayer", 0),
+                "window_owner_name": window.get("kCGWindowOwnerName", ""),
+                "window_bounds": window.get("kCGWindowBounds", {}),
+            })
+    if owned_windows:
+        return True, str(owned_windows[:5])
+    return False, "cg_query_no_windows_found_for_pid"
+
+
 def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
     if not window_observed:
@@ -177,7 +243,22 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
             input_capable_ui_observed=False,
             blocked_reason_class="observed_pid_missing_for_input_capable_query",
         )
-    input_capable, query_result = _ax_input_capable(observed_pid)
+    input_capable_m1, result_m1 = _ax_input_capable_by_name(observed_pid)
+    if input_capable_m1:
+        packet = build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=True,
+            blocked_reason_class="",
+        )
+        packet.update({
+            "ax_query_result": result_m1,
+            "input_capable_query_method": "AX/System Events process-name UI scripting (Mechanism 1)",
+        })
+        return packet
+    input_capable_m2, result_m2 = _cg_input_capable(observed_pid)
+    input_capable = input_capable_m2
+    query_result = f"mechanism_1_by_name: {result_m1}; mechanism_2_cg: {result_m2}"
+    query_method = "CGWindowList inspection (Mechanism 2)" if input_capable else "all mechanisms blocked"
     packet = build_native_window_usability_packet(
         window_observed=True,
         input_capable_ui_observed=input_capable,
@@ -185,7 +266,7 @@ def _window_usability_from_observation(window_observation: dict[str, Any]) -> di
     )
     packet.update({
         "ax_query_result": query_result,
-        "input_capable_query_method": "AX/System Events text input element inspection",
+        "input_capable_query_method": query_method,
     })
     return packet
 

@@ -1,0 +1,33 @@
+{
+  "contour_id": "WBP_NATIVE_WINDOW_ALTERNATE_OBSERVATION_PASS",
+  "date": "2026-05-25",
+  "status": "blocked",
+  "verdict": "NATIVE_CUSTOM_WINDOW_NOT_PROVEN",
+  "selected_strategy_id": "repo_canonical_custom_proxy_auth_isolated_home",
+  "mechanism_1": {
+    "name": "AppleScript process-name UI scripting",
+    "method": "tell process \"Codex\" by name",
+    "result": "blocked",
+    "error": "-1728: Не удается получить process \"Codex\"",
+    "reason": "process not registered with System Events under expected name"
+  },
+  "mechanism_2": {
+    "name": "CGWindowList inspection",
+    "method": "Quartz.CGWindowListCopyWindowInfo filtered by pid",
+    "result": "unavailable",
+    "error": "pyobjc-framework-Quartz not installed"
+  },
+  "window_identity": {
+    "window_observed": true,
+    "window_bound_to_custom_launch": true,
+    "input_capable_ui_surface_observed": false,
+    "current_codex_touched": false,
+    "cleanup_ok": true
+  },
+  "non_claims": [
+    "provider_routing_success",
+    "prompt_response_success",
+    "Original_Codex_reversibility",
+    "final_E2E"
+  ]
+}

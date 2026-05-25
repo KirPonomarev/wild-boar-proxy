@@ -1,0 +1,23 @@
+{
+  "ax_query_result": "mechanism_1_by_name: cg_query_unavailable_pyobjc_framework_quartz_not_installed",
+  "blocked_reason_class": "input_capable_window_not_proven_for_pid",
+  "captured_at_utc": "2026-05-25T19:47:45.404214Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "input_capable_query_method": "all mechanisms blocked",
+  "input_capable_ui_observed": false,
+  "live_runtime_surface": "bounded_dispatch_only",
+  "machine_error_code": "OK",
+  "native_launch_complete": false,
+  "native_window_usable": false,
+  "native_window_usable_claimed": false,
+  "packet_kind": "native_window_usability",
+  "product_status_upgraded": false,
+  "prompt_attempted": false,
+  "route_inference_attempted": false,
+  "route_trace_bound": false,
+  "schema_version": 1,
+  "status": "ok",
+  "ui_mutation_performed": false,
+  "usability_blocked_with_reason": true,
+  "window_observed": true
+}

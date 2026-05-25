@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-05-25T19:48:00.904709Z",
+  "cleanup_error": "",
+  "cleanup_or_rollback_status": "ok",
+  "termination": {
+    "captured_at_utc": "2026-05-25T19:48:00.881462Z",
+    "custom_processes_gone": true,
+    "final_inventory": {
+      "captured_at_utc": "2026-05-25T19:48:00.881385Z",
+      "custom_process_count": 0,
+      "custom_process_lines": [],
+      "custom_user_data_dir": "/tmp/wbp-native-window-c7uak_qf/profile/electron-user-data",
+      "default_process_count": 0,
+      "default_process_lines": [],
+      "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+      "line_count": 0,
+      "root_app_pids": [],
+      "sample": []
+    },
+    "initial_custom_pids": [
+      4037
+    ]
+  },
+  "tmp_root": "/tmp/wbp-native-window-c7uak_qf",
+  "tmp_root_removed": true
+}

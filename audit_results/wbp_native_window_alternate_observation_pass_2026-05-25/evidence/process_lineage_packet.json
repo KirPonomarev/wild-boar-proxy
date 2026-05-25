@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-25T19:47:44.975457Z",
+  "dispatch_observed": true,
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_runtime_surface": "bounded_dispatch_only",
+  "machine_error_code": "OK",
+  "native_launch_complete": false,
+  "observation_blocked_reason_class": "",
+  "packet_kind": "native_process_observation",
+  "process_id": 4037,
+  "process_lineage": [
+    "4037 /Applications/Codex.app/Contents/MacOS/Codex --user-data-dir /tmp/wbp-native-window-c7uak_qf/profile/electron-user-data"
+  ],
+  "process_observed": true,
+  "product_status_upgraded": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "schema_version": 1,
+  "status": "ok",
+  "ui_mutation_performed": false
+}
