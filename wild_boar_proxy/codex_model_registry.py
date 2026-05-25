@@ -132,11 +132,41 @@ def _status_for_models(model_ids: list[str], claim_gate_status: str, models_ok: 
     return "ok", "OK"
 
 
+def _external_route_model_entries(api_snapshot: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(api_snapshot, dict):
+        return []
+    routes = api_snapshot.get("routes")
+    if not isinstance(routes, list):
+        return []
+    entries: list[dict[str, Any]] = []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        route_id = str(route.get("route_id") or "").strip()
+        if not route_id or route.get("enabled") is not True:
+            continue
+        if not str(route.get("secret_ref") or "").strip():
+            continue
+        entry = _model_entry(route_id)
+        label = str(route.get("upstream_model") or route.get("display_name") or route_id).strip()
+        entry.update(
+            {
+                "label": label or route_id,
+                "source": "server_owned_external_route",
+                "provider_class": "external_route",
+                "model_source_hint": "server_owned_external_route",
+            }
+        )
+        entries.append(entry)
+    return entries
+
+
 def build_custom_model_registry_packet(
     operator_status: dict[str, Any] | None,
     *,
     endpoint: str = DEFAULT_ENDPOINT,
     recommended_default_model: str = DEFAULT_MODEL,
+    api_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     models = _models_payload(operator_status)
     raw_model_ids = models.get("model_ids", [])
@@ -149,6 +179,15 @@ def build_custom_model_registry_packet(
         bool(models.get("ok")) or bool(model_ids),
     )
     reported_configured_model = _reported_configured_model(operator_status)
+    available_models = [_model_entry(model_id) for model_id in model_ids]
+    seen_model_ids = {str(entry["model_id"]) for entry in available_models}
+    for route_entry in _external_route_model_entries(api_snapshot):
+        route_model_id = str(route_entry["model_id"])
+        if route_model_id in seen_model_ids:
+            continue
+        available_models.append(route_entry)
+        seen_model_ids.add(route_model_id)
+
     return {
         "schema_version": 1,
         "status": status,
@@ -171,8 +210,8 @@ def build_custom_model_registry_packet(
         "canonical_internal_model_ids_visible": [
             model_id for model_id in CANONICAL_INTERNAL_MODEL_IDS if model_id in model_ids
         ],
-        "model_count": len(model_ids),
-        "available_models": [_model_entry(model_id) for model_id in model_ids],
+        "model_count": len(available_models),
+        "available_models": available_models,
         "claim_gate_status": claim_gate_status,
         "allowed_browser_fields": ["model_id"],
         "forbidden_browser_fields": sorted(CUSTOM_MODEL_DRY_RUN_FORBIDDEN_FIELDS),

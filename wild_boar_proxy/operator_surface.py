@@ -22,6 +22,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from wild_boar_proxy.external_models import transforms
+from wild_boar_proxy.external_models.http_client import request_json
+from wild_boar_proxy.external_models.paths import ExternalModelsPaths
+
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
 DEFAULT_MODEL = "gpt-5.3-codex"
@@ -63,6 +67,271 @@ def clean_env() -> dict[str, str]:
     env["NO_PROXY"] = "127.0.0.1,localhost"
     env["no_proxy"] = "127.0.0.1,localhost"
     return env
+
+
+def _external_route_model_ids_from_packet(packet: dict[str, Any] | None) -> list[str]:
+    if not isinstance(packet, dict):
+        return []
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return []
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        return []
+    model_ids: list[str] = []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        route_id = str(route.get("route_id") or "").strip()
+        auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+        secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+        if route_id and route.get("enabled") is True and secret_ref:
+            model_ids.append(route_id)
+    return model_ids
+
+
+def _external_route_from_packet(
+    packet: dict[str, Any] | None, model_id: str
+) -> dict[str, Any] | None:
+    if not isinstance(packet, dict):
+        return None
+    data = packet.get("data")
+    if not isinstance(data, dict):
+        return None
+    routes = data.get("routes")
+    if not isinstance(routes, list):
+        return None
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        if str(route.get("route_id") or "").strip() != model_id:
+            continue
+        auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+        secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+        if route.get("enabled") is True and secret_ref:
+            return route
+    return None
+
+
+def _parse_simple_env_file(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _resolve_external_route_secret_value(route: dict[str, Any]) -> str:
+    auth = route.get("auth") if isinstance(route.get("auth"), dict) else {}
+    secret_ref = str(auth.get("secret_ref") or route.get("secret_ref") or "").strip()
+    if not secret_ref:
+        raise RuntimeError("route_secret_ref_missing")
+    paths = ExternalModelsPaths.from_env()
+    secrets_map = _parse_simple_env_file(paths.secrets_file)
+    secret_value = str(secrets_map.get(secret_ref) or "").strip()
+    if not secret_value:
+        raise RuntimeError("route_secret_value_missing")
+    return secret_value
+
+
+def _route_completion_url(route: dict[str, Any]) -> str:
+    return str(route.get("base_url") or "").rstrip("/") + str(route.get("endpoint_path") or "")
+
+
+def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+    instructions = str(payload.get("instructions") or "").strip()
+    if instructions:
+        messages.append({"role": "developer", "content": instructions})
+    raw_input = payload.get("input")
+    if not isinstance(raw_input, list):
+        return messages
+    for item in raw_input:
+        if not isinstance(item, dict) or str(item.get("type") or "") != "message":
+            continue
+        role = str(item.get("role") or "user").strip() or "user"
+        content = item.get("content")
+        parts: list[str] = []
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if str(block.get("type") or "") not in {"input_text", "output_text", "text"}:
+                    continue
+                text = str(block.get("text") or "").strip()
+                if text:
+                    parts.append(text)
+        elif isinstance(content, str) and content.strip():
+            parts.append(content.strip())
+        if parts:
+            messages.append({"role": role, "content": "\n".join(parts)})
+    return messages
+
+
+def _responses_result_payload(
+    text: str, route_id: str, usage: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    created_at = int(time.time())
+    normalized_usage = None
+    if isinstance(usage, dict):
+        normalized_usage = {
+            "input_tokens": int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0),
+            "output_tokens": int(usage.get("output_tokens") or usage.get("completion_tokens") or 0),
+            "total_tokens": int(usage.get("total_tokens") or 0),
+        }
+    payload: dict[str, Any] = {
+        "id": f"resp_{hashlib.sha256((route_id + text).encode('utf-8')).hexdigest()[:16]}",
+        "object": "response",
+        "created_at": created_at,
+        "status": "completed",
+        "model": route_id,
+        "requested_model": route_id,
+        "requested_model_available": True,
+        "fallback_used": False,
+        "fallback_chain": [route_id],
+        "output_text": text,
+        "output": [
+            {
+                "id": "msg_wbp_external_route",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": text,
+                        "annotations": [],
+                    }
+                ],
+            }
+        ],
+    }
+    if normalized_usage is not None:
+        payload["usage"] = normalized_usage
+    return payload
+
+
+def _responses_stream_body(payload: dict[str, Any]) -> bytes:
+    response_id = str(payload.get("id") or "resp_wbp_external_route")
+    created_at = int(payload.get("created_at") or int(time.time()))
+    model = str(payload.get("model") or "")
+    output = payload.get("output") if isinstance(payload.get("output"), list) else []
+    item = output[0] if output and isinstance(output[0], dict) else {
+        "id": "msg_wbp_external_route",
+        "type": "message",
+        "status": "completed",
+        "role": "assistant",
+        "content": [],
+    }
+    item_id = str(item.get("id") or "msg_wbp_external_route")
+    text = str(payload.get("output_text") or "")
+    events = [
+        (
+            "response.created",
+            {
+                "type": "response.created",
+                "response": {
+                    "id": response_id,
+                    "object": "response",
+                    "created_at": created_at,
+                    "status": "in_progress",
+                    "model": model,
+                },
+            },
+        ),
+        (
+            "response.in_progress",
+            {
+                "type": "response.in_progress",
+                "response": {
+                    "id": response_id,
+                    "object": "response",
+                    "created_at": created_at,
+                    "status": "in_progress",
+                    "model": model,
+                },
+            },
+        ),
+        (
+            "response.output_item.added",
+            {
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "id": item_id,
+                    "type": "message",
+                    "status": "in_progress",
+                    "role": "assistant",
+                    "content": [],
+                },
+            },
+        ),
+        (
+            "response.content_part.added",
+            {
+                "type": "response.content_part.added",
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": "", "annotations": []},
+            },
+        ),
+        (
+            "response.output_text.delta",
+            {
+                "type": "response.output_text.delta",
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "delta": text,
+            },
+        ),
+        (
+            "response.output_text.done",
+            {
+                "type": "response.output_text.done",
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "text": text,
+            },
+        ),
+        (
+            "response.content_part.done",
+            {
+                "type": "response.content_part.done",
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": text, "annotations": []},
+            },
+        ),
+        (
+            "response.output_item.done",
+            {
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": item,
+            },
+        ),
+        (
+            "response.completed",
+            {
+                "type": "response.completed",
+                "response": payload,
+            },
+        ),
+    ]
+    chunks: list[str] = []
+    for event_name, event_payload in events:
+        chunks.append(f"event: {event_name}\n")
+        chunks.append(f"data: {json.dumps(event_payload, ensure_ascii=True)}\n\n")
+    return "".join(chunks).encode("utf-8")
 
 
 def extract_local_api_key(config_path: Path) -> str:
@@ -112,18 +381,25 @@ def redact_text(text: str, secret_values: list[str] | None = None) -> str:
     return redacted
 
 
-def build_codex_config(*, endpoint: str, model_id: str) -> str:
+def build_codex_config(
+    *,
+    endpoint: str,
+    model_id: str,
+    provider_name: str = "cliproxy",
+    provider_label: str = "CLIProxyAPI via Wild Boar Proxy",
+    wire_api: str = "responses",
+) -> str:
     return (
         f'model = "{model_id}"\n'
-        'model_provider = "cliproxy"\n'
+        f'model_provider = "{provider_name}"\n'
         'approval_policy = "never"\n'
         'sandbox_mode = "read-only"\n'
         "disable_response_storage = true\n\n"
-        "[model_providers.cliproxy]\n"
-        'name = "CLIProxyAPI via Wild Boar Proxy"\n'
+        f"[model_providers.{provider_name}]\n"
+        f'name = "{provider_label}"\n'
         f'base_url = "{endpoint}"\n'
         'env_key = "OPENAI_API_KEY"\n'
-        'wire_api = "responses"\n'
+        f'wire_api = "{wire_api}"\n'
     )
 
 
@@ -307,6 +583,162 @@ class WbpTraceObserver:
         return packet
 
 
+class _ExternalRouteAdapterServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        handler: type[http.server.BaseHTTPRequestHandler],
+        adapter: "ExternalRouteResponsesAdapter",
+    ) -> None:
+        super().__init__(server_address, handler)
+        self.adapter = adapter
+
+
+class _ExternalRouteAdapterHandler(http.server.BaseHTTPRequestHandler):
+    server: _ExternalRouteAdapterServer
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+        return
+
+    def do_GET(self) -> None:
+        self._handle()
+
+    def do_POST(self) -> None:
+        self._handle()
+
+    def _handle(self) -> None:
+        status, headers, body = self.server.adapter.handle(
+            method=self.command,
+            path=self.path,
+            headers={key: value for key, value in self.headers.items()},
+            body=self.rfile.read(int(self.headers.get("Content-Length", "0") or "0")),
+        )
+        self.send_response(status)
+        for key, value in headers.items():
+            if key.lower() != "content-length":
+                self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class ExternalRouteResponsesAdapter:
+    def __init__(
+        self,
+        *,
+        route: dict[str, Any],
+        expected_api_key: str,
+        route_secret: str,
+        timeout_seconds: float = 120.0,
+    ) -> None:
+        self.route = route
+        self.expected_api_key = expected_api_key
+        self.route_secret = route_secret
+        self.timeout_seconds = timeout_seconds
+        self._server: _ExternalRouteAdapterServer | None = None
+        self._thread: threading.Thread | None = None
+
+    @property
+    def listen_endpoint(self) -> str:
+        if self._server is None:
+            return "http://127.0.0.1:0/v1"
+        return f"http://127.0.0.1:{self._server.server_port}/v1"
+
+    def __enter__(self) -> "ExternalRouteResponsesAdapter":
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = int(sock.getsockname()[1])
+        self._server = _ExternalRouteAdapterServer(
+            ("127.0.0.1", port),
+            _ExternalRouteAdapterHandler,
+            self,
+        )
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
+        if self._thread is not None:
+            self._thread.join(timeout=2)
+            self._thread = None
+
+    def handle(
+        self,
+        *,
+        method: str,
+        path: str,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> tuple[int, dict[str, str], bytes]:
+        normalized_path = path.split("?", 1)[0]
+        if str(headers.get("Authorization") or "") != f"Bearer {self.expected_api_key}":
+            payload = {"error": {"message": "unauthorized", "type": "auth_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 401, {"Content-Type": "application/json"}, body_bytes
+        if method == "GET" and normalized_path in {"/v1/models", "/models"}:
+            payload = {"data": [{"id": str(self.route.get("route_id") or "")}]}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 200, {"Content-Type": "application/json"}, body_bytes
+        if method != "POST" or normalized_path not in {"/v1/responses", "/responses"}:
+            payload = {"error": {"message": "unsupported path", "type": "invalid_request_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 404, {"Content-Type": "application/json"}, body_bytes
+        try:
+            request_payload = json.loads(body.decode("utf-8"))
+        except Exception:
+            payload = {"error": {"message": "invalid json body", "type": "invalid_request_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 400, {"Content-Type": "application/json"}, body_bytes
+        messages = _responses_payload_to_messages(request_payload)
+        if not messages:
+            payload = {"error": {"message": "responses input did not contain prompt text", "type": "invalid_request_error"}}
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 400, {"Content-Type": "application/json"}, body_bytes
+        upstream_payload: dict[str, Any] = {
+            "model": str(self.route.get("upstream_model") or ""),
+            "messages": messages,
+            "stream": False,
+            "max_tokens": int(request_payload.get("max_output_tokens") or 256),
+        }
+        if str(self.route.get("transform_profile") or "") == "openai_chat_system_to_developer":
+            transformed_messages: list[dict[str, str]] = []
+            for message in messages:
+                role = "developer" if message.get("role") == "system" else str(message.get("role") or "user")
+                transformed_messages.append({"role": role, "content": str(message.get("content") or "")})
+            upstream_payload["messages"] = transformed_messages
+        response = request_json(
+            url=_route_completion_url(self.route),
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.route_secret}",
+                "Accept": "application/json",
+            },
+            payload=upstream_payload,
+            timeout_seconds=self.timeout_seconds,
+        )
+        if response.status_code >= 400:
+            body_bytes = json.dumps(response.payload, ensure_ascii=True).encode("utf-8")
+            return response.status_code, {"Content-Type": "application/json"}, body_bytes
+        text, _response_meta = transforms.extract_check_response(self.route, response.payload)
+        payload = _responses_result_payload(
+            text,
+            str(self.route.get("route_id") or ""),
+            response.payload.get("usage") if isinstance(response.payload, dict) else None,
+        )
+        wants_stream = bool(request_payload.get("stream")) or "text/event-stream" in str(headers.get("Accept") or "")
+        if wants_stream:
+            body_bytes = _responses_stream_body(payload)
+            return 200, {"Content-Type": "text/event-stream", "Cache-Control": "no-cache"}, body_bytes
+        body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        return 200, {"Content-Type": "application/json"}, body_bytes
+
+
 def stat_hash(path: str) -> dict[str, Any]:
     real_path = Path(path)
     record: dict[str, Any] = {
@@ -442,6 +874,13 @@ class OperatorSurfaceSession:
                 )
         except Exception as exc:  # pragma: no cover - live runtime surface
             result["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        routes_list = self.run_wbp(["external-models", "routes", "list", "--json"])
+        route_model_ids = _external_route_model_ids_from_packet(routes_list.get("json"))
+        if route_model_ids:
+            merged_model_ids = list(dict.fromkeys([*result["model_ids"], *route_model_ids]))
+            result["model_ids"] = merged_model_ids[:100]
+            if self.config.default_model in route_model_ids:
+                result["chosen_model_visible"] = True
         return result
 
     def run_wbp(self, args: list[str]) -> dict[str, Any]:
@@ -537,6 +976,10 @@ class OperatorSurfaceSession:
                 "human_message": "Model must come from server-issued model list.",
                 "refresh_packet": self.status_payload(),
             }
+        routes_list = self.run_wbp(["external-models", "routes", "list", "--json"])
+        route_record = None
+        if isinstance(model_id, str):
+            route_record = _external_route_from_packet(routes_list.get("json"), model_id)
         models = self.probe_models()
         try:
             selected_model = select_server_issued_model(model_id, list(models.get("model_ids", [])))
@@ -548,7 +991,7 @@ class OperatorSurfaceSession:
                 "refresh_packet": self.status_payload(),
             }
         try:
-            secret = self.local_api_key()
+            local_api_key = self.local_api_key()
         except Exception as exc:
             return {
                 "status": "failed",
@@ -558,6 +1001,45 @@ class OperatorSurfaceSession:
                 "refresh_packet": self.status_payload(),
                 "secret_value_recorded": False,
             }
+        configured_provider = "cliproxy"
+        configured_wire_api = "responses"
+        configured_label = "CLIProxyAPI via Wild Boar Proxy"
+        downstream_endpoint = self.config.endpoint
+        runtime_model = selected_model
+        route_provider_endpoint = ""
+        route_secret = ""
+        if route_record is not None:
+            compatibility = str(route_record.get("compatibility") or "").strip()
+            endpoint_path = str(route_record.get("endpoint_path") or "").strip()
+            if compatibility != "openai_chat_completions" or endpoint_path not in {
+                "/chat/completions",
+                "/v1/chat/completions",
+            }:
+                return {
+                    "status": "failed",
+                    "machine_error_code": "EXTERNAL_ROUTE_WIRE_API_UNSUPPORTED",
+                    "human_message": "Selected external route is not compatible with bounded Codex operator wire API.",
+                    "refresh_packet": self.status_payload(),
+                    "secret_value_recorded": False,
+                }
+            try:
+                secret = _resolve_external_route_secret_value(route_record)
+            except Exception as exc:
+                return {
+                    "status": "failed",
+                    "machine_error_code": "EXTERNAL_ROUTE_SECRET_UNAVAILABLE",
+                    "human_message": "Selected external route is missing its managed secret value.",
+                    "error_class": type(exc).__name__,
+                    "refresh_packet": self.status_payload(),
+                    "secret_value_recorded": False,
+                }
+            runtime_model = selected_model
+            route_provider_endpoint = str(route_record.get("base_url") or "").rstrip("/")
+            route_secret = secret
+            configured_provider = "external_route"
+            configured_wire_api = "responses"
+            configured_label = "Server-owned external route via bounded responses adapter"
+        secret = local_api_key
         if not self.config.codex_bin.exists():
             return {
                 "status": "failed",
@@ -576,46 +1058,71 @@ class OperatorSurfaceSession:
         home.mkdir(parents=True)
         codex_home.mkdir()
         work.mkdir()
-        trace_observer = WbpTraceObserver(downstream_endpoint=self.config.endpoint) if trace_wbp else None
-        effective_endpoint = self.config.endpoint
-        if trace_observer:
-            trace_observer.__enter__()
-            effective_endpoint = trace_observer.listen_endpoint
-        config_text = build_codex_config(endpoint=effective_endpoint, model_id=selected_model)
-        (codex_home / "config.toml").write_text(config_text, encoding="utf-8")
+        route_adapter: ExternalRouteResponsesAdapter | None = None
+        trace_observer = None
+        effective_endpoint = downstream_endpoint
+        config_text = ""
         last_message = run_root / "last_message.txt"
         env = clean_env()
-        env.update(
-            {
-                "HOME": str(home),
-                "CODEX_HOME": str(codex_home),
-                "OPENAI_API_KEY": self.local_api_key(),
-            }
-        )
-        command = [
-            str(self.config.codex_bin),
-            "exec",
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--ignore-rules",
-            "--sandbox",
-            "read-only",
-            "-C",
-            str(work),
-            "--json",
-            "-o",
-            str(last_message),
-                "-",
-            ]
+        command: list[str] = []
         started = time.time()
         current_codex_home = (Path.home() / ".codex").resolve()
-        env_codex_home = Path(env["CODEX_HOME"]).resolve()
-        env_home = Path(env["HOME"]).resolve()
+        env_codex_home = codex_home.resolve()
+        env_home = home.resolve()
         temp_root_resolved = tmp_root.resolve()
-        config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
+        config_sha256 = ""
         timed_out = False
         trace_packet = _empty_trace_packet()
+        exit_code = 127
+        stderr = ""
         try:
+            if route_record is not None:
+                route_adapter = ExternalRouteResponsesAdapter(
+                    route=route_record,
+                    expected_api_key=local_api_key,
+                    route_secret=route_secret,
+                )
+                route_adapter.__enter__()
+                downstream_endpoint = route_adapter.listen_endpoint
+            if trace_wbp:
+                trace_observer = WbpTraceObserver(downstream_endpoint=downstream_endpoint)
+                trace_observer.__enter__()
+                effective_endpoint = trace_observer.listen_endpoint
+            else:
+                effective_endpoint = downstream_endpoint
+            config_text = build_codex_config(
+                endpoint=effective_endpoint,
+                model_id=runtime_model,
+                provider_name=configured_provider,
+                provider_label=configured_label,
+                wire_api=configured_wire_api,
+            )
+            (codex_home / "config.toml").write_text(config_text, encoding="utf-8")
+            env.update(
+                {
+                    "HOME": str(home),
+                    "CODEX_HOME": str(codex_home),
+                    "OPENAI_API_KEY": secret,
+                }
+            )
+            env_codex_home = Path(env["CODEX_HOME"]).resolve()
+            env_home = Path(env["HOME"]).resolve()
+            config_sha256 = hashlib.sha256(config_text.encode("utf-8")).hexdigest()
+            command = [
+                str(self.config.codex_bin),
+                "exec",
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--ignore-rules",
+                "--sandbox",
+                "read-only",
+                "-C",
+                str(work),
+                "--json",
+                "-o",
+                str(last_message),
+                "-",
+            ]
             process = subprocess.run(
                 command,
                 cwd=str(work),
@@ -638,6 +1145,8 @@ class OperatorSurfaceSession:
             if trace_observer:
                 trace_packet = trace_observer.packet()
                 trace_observer.__exit__(None, None, None)
+            if route_adapter:
+                route_adapter.__exit__(None, None, None)
         final_message = (
             redact_text(last_message.read_text(encoding="utf-8", errors="replace"), [secret]).strip()
             if last_message.exists()
@@ -674,22 +1183,25 @@ class OperatorSurfaceSession:
             "machine_error_code": prompt_machine_error_code,
             "human_message": "Codex Operator prompt completed." if ok else "Codex Operator prompt failed.",
             "selected_model": selected_model,
+            "runtime_model": runtime_model,
             "configured_base_url": effective_endpoint,
-            "downstream_wbp_endpoint": self.config.endpoint,
-            "configured_wire_api": "responses",
-            "configured_provider": "cliproxy",
+            "downstream_wbp_endpoint": downstream_endpoint,
+            "route_provider_endpoint": route_provider_endpoint,
+            "route_adapter_used": route_record is not None,
+            "configured_wire_api": configured_wire_api,
+            "configured_provider": configured_provider,
             "wbp_endpoint_configured": effective_endpoint.startswith("http://127.0.0.1:"),
             "config_sha256": config_sha256,
             "config_endpoint_matches": f'base_url = "{effective_endpoint}"' in config_text,
-            "config_provider_matches": 'model_provider = "cliproxy"' in config_text,
-            "config_wire_api_matches": 'wire_api = "responses"' in config_text,
+            "config_provider_matches": f'model_provider = "{configured_provider}"' in config_text,
+            "config_wire_api_matches": f'wire_api = "{configured_wire_api}"' in config_text,
             "trace_observer_enabled": trace_wbp,
             "trace_observer_packet": trace_packet,
             "independent_wbp_trace_observed": (
                 trace_packet.get("request_observed") is True
                 and trace_packet.get("response_observed") is True
                 and trace_packet.get("forwarded_to_wbp") is True
-                and trace_packet.get("forwarded_endpoint") == self.config.endpoint
+                and trace_packet.get("forwarded_endpoint") == downstream_endpoint
                 and isinstance(trace_packet.get("upstream_status"), int)
                 and 200 <= int(trace_packet.get("upstream_status")) < 400
                 and trace_packet.get("secret_value_recorded") is False

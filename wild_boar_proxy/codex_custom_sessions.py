@@ -80,8 +80,11 @@ def forbidden_prompt_run_fields(payload: Any) -> list[str]:
     return sorted(set(_forbidden_fields(payload, PROMPT_RUN_ALLOWED_FIELDS)))
 
 
-def _model_ids(operator_status: dict[str, Any] | None) -> list[str]:
-    registry = build_custom_model_registry_packet(operator_status)
+def _model_ids(
+    operator_status: dict[str, Any] | None,
+    api_snapshot: dict[str, Any] | None = None,
+) -> list[str]:
+    registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
     return [str(entry["model_id"]) for entry in registry.get("available_models", [])]
 
 
@@ -176,12 +179,13 @@ class CodexCustomSessionManager:
         operator_status: dict[str, Any] | None,
         *,
         selection: dict[str, Any] | None = None,
+        api_snapshot: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         forbidden = forbidden_session_create_fields(payload)
         if forbidden:
             return self._rejected("FORBIDDEN_BROWSER_FIELD", forbidden)
         model_id = payload.get("model_id")
-        model_ids = _model_ids(operator_status)
+        model_ids = _model_ids(operator_status, api_snapshot)
         if not isinstance(model_id, str) or model_id not in model_ids:
             return {
                 **self._base_packet("rejected", "MODEL_NOT_SERVER_ISSUED"),
@@ -423,9 +427,12 @@ class CodexCustomSessionManager:
             and result.get("command_output_file_is_temp") is True
             and result.get("current_codex_home_used") is False
         )
+        route_backed_source = session.get("selected_source_class") == "route_backed"
+        allowed_providers = {"cliproxy", "external_route"} if route_backed_source else {"cliproxy"}
+        allowed_wire_apis = {"responses", "chat_completions"} if route_backed_source else {"responses"}
         path_config_proven = (
-            result.get("configured_provider") == "cliproxy"
-            and result.get("configured_wire_api") == "responses"
+            result.get("configured_provider") in allowed_providers
+            and result.get("configured_wire_api") in allowed_wire_apis
             and result.get("wbp_endpoint_configured") is True
             and result.get("config_endpoint_matches") is True
             and result.get("config_provider_matches") is True
@@ -443,8 +450,12 @@ class CodexCustomSessionManager:
         wbp_path_proven = wbp_path_configured and independent_wbp_trace_observed
         source_provenance_status = _source_provenance_status(session)
         source_provenance_proven = _source_provenance_satisfied(session)
-        cli_proxy_api_path_configured = wbp_path_configured and result.get("configured_provider") == "cliproxy"
-        cli_proxy_api_path_proven = wbp_path_proven and result.get("configured_provider") == "cliproxy"
+        cli_proxy_api_path_configured = (
+            wbp_path_configured and result.get("configured_provider") == "cliproxy"
+        )
+        cli_proxy_api_path_proven = (
+            wbp_path_proven and result.get("configured_provider") == "cliproxy"
+        )
         trace_missing_after_response = status_ok and not wbp_path_proven
         route_provenance_missing_after_response = status_ok and wbp_path_proven and not source_provenance_proven
         current_codex_touched_after_response = status_ok and result.get("current_codex_home_used") is True

@@ -6292,6 +6292,26 @@ class WebDesignCodexCustomModelRegistryEndpointTests(unittest.TestCase):
         self.assertEqual(created_sessions[0].run_payloads, [])
         self.assertGreaterEqual(created_sessions[0].status_payload_calls, 1)
 
+    def test_codex_custom_model_registry_includes_server_owned_external_route_models(self) -> None:
+        with mock.patch.object(live_server, "OperatorSurfaceSession", return_value=FakeOperatorSurfaceSession()):
+            server = ThreadingHTTPServer(("127.0.0.1", free_port()), build_handler(runner=MappingRunner(live_payloads())))
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                registry = json.loads(fetch(f"{base}/api/codex/custom/models"))
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        route_entry = next(
+            entry for entry in registry["available_models"] if entry["model_id"] == "wbp-deepseek-v3"
+        )
+        self.assertEqual(route_entry["provider_class"], "external_route")
+        self.assertEqual(route_entry["source"], "server_owned_external_route")
+        self.assertEqual(route_entry["model_source_hint"], "server_owned_external_route")
+
 
 class WebDesignCodexCustomAccountSelectionEndpointTests(unittest.TestCase):
     def test_codex_custom_account_selection_endpoints_are_readonly_and_no_inference(self) -> None:

@@ -75,6 +75,23 @@ def operator_status() -> dict[str, object]:
     }
 
 
+def api_snapshot(route_id: str = "wbp-web-primary-openrouter") -> dict[str, object]:
+    return {
+        "status": "ok",
+        "source": "api_connections_readonly",
+        "primary_truth_ok": True,
+        "routes": [
+            {
+                "route_id": route_id,
+                "provider": "openrouter",
+                "upstream_model": "openai/gpt-5",
+                "enabled": True,
+                "secret_ref": "OPENROUTER_API_KEY",
+            }
+        ],
+    }
+
+
 class CodexCustomSessionManagerTests(unittest.TestCase):
     def test_create_session_binds_server_model_and_selection_without_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -137,6 +154,38 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
             self.assertIn("backend_id", bad_fields["forbidden_fields"])
             self.assertIn("route_id", bad_fields["forbidden_fields"])
             self.assertIn("path", bad_fields["forbidden_fields"])
+
+    def test_create_session_accepts_server_owned_route_model_when_api_snapshot_visible(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = CodexCustomSessionManager(Path(temp_dir))
+            packet = manager.create_packet(
+                {"model_id": "wbp-web-primary-openrouter"},
+                commands(),
+                operator_status(),
+                selection={
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "selection_proven": True,
+                    "selection_dry_run_proven": True,
+                    "live_selection_proven": False,
+                    "selected_source_class": "route_backed",
+                    "selected_backend_ref": "",
+                    "selected_backend_server_issued": False,
+                    "selected_route_ref": "route-digest",
+                    "selected_route_server_issued": True,
+                    "route_provenance_required": True,
+                    "route_provenance_proven": True,
+                    "source_provenance_status": "route_proven",
+                },
+                api_snapshot=api_snapshot(),
+            )
+
+            self.assertEqual(packet["status"], "ok")
+            self.assertTrue(packet["session_created"])
+            self.assertTrue(packet["session"]["model_server_issued"])
+            self.assertEqual(packet["session"]["selected_source_class"], "route_backed")
+            self.assertTrue(packet["session"]["selected_route_server_issued"])
+            self.assertTrue(packet["session"]["route_provenance_proven"])
 
     def test_create_session_rejects_when_account_selection_is_not_proven(self) -> None:
         weak_commands = commands()
@@ -517,7 +566,7 @@ class CodexCustomSessionManagerTests(unittest.TestCase):
                 "machine_error_code": "OK",
                 "final_message": "ROUTE_OK",
                 "secret_value_recorded": False,
-                "configured_provider": "cliproxy",
+                "configured_provider": "external_route",
                 "configured_wire_api": "responses",
                 "wbp_endpoint_configured": True,
                 "config_endpoint_matches": True,

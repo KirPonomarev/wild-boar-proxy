@@ -2240,7 +2240,7 @@ def _launch_custom_codex_packet(
         }
     model_id = payload.get("model_id")
     if not isinstance(model_id, str) or not model_id:
-        registry = build_custom_model_registry_packet(operator_status)
+        registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
         model_id = str(
             registry.get("recommended_default_model")
             or registry.get("recommended_model")
@@ -2257,12 +2257,13 @@ def _launch_custom_codex_packet(
         commands,
         operator_status,
         selection=selection,
+        api_snapshot=api_snapshot,
     )
     session = created.get("session") if isinstance(created.get("session"), dict) else {}
     session_root_ready = bool(session.get("session_root_digest"))
     codex_home_ready = bool(session.get("codex_home_digest"))
     workbench_ready = created.get("status") == "ok" and session_root_ready and codex_home_ready
-    model_registry = build_custom_model_registry_packet(operator_status)
+    model_registry = build_custom_model_registry_packet(operator_status, api_snapshot=api_snapshot)
     return {
         **created,
         **base,
@@ -3227,7 +3228,12 @@ def build_handler(
                 return
             if parsed.path == "/api/codex/custom/models":
                 self._send_json(
-                    build_custom_model_registry_packet(operator_surface_session.status_payload())
+                    build_custom_model_registry_packet(
+                        operator_surface_session.status_payload(),
+                        api_snapshot=build_api_connections_readonly_snapshot(
+                            api_connections_readonly_runner
+                        ),
+                    )
                 )
                 return
             if parsed.path == "/api/codex/custom/api-compat":
@@ -3546,6 +3552,7 @@ def build_handler(
                             operator_status=operator_status,
                             api_snapshot=api_snapshot,
                         ),
+                        api_snapshot=api_snapshot,
                     )
                 )
                 return

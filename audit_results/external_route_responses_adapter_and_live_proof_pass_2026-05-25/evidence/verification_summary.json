@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "py_compile": "ok",
+  "git_diff_check": "ok",
+  "targeted_test_command": "PYTHONPATH=/Volumes/Work/wild-boar-proxy /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest -q tests.test_operator_surface.OperatorSurfaceTests.test_external_route_responses_adapter_translates_responses_to_chat_completions tests.test_operator_surface.OperatorSurfaceTests.test_external_route_responses_adapter_streams_response_completed_for_streaming_clients tests.test_operator_surface.OperatorSurfaceTests.test_run_prompt_route_backed_external_model_uses_route_upstream_model_and_secret",
+  "broader_test_command": "PYTHONPATH=/Volumes/Work/wild-boar-proxy /Users/kirillponomarev/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -m unittest -q tests.test_operator_surface tests.test_codex_custom_sessions tests.test_web_design_live_server",
+  "broader_test_result": "Ran 149 tests in 33.239s OK"
+}

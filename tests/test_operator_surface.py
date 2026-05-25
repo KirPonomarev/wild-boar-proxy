@@ -8,12 +8,14 @@ import re
 import subprocess
 import threading
 import unittest
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
 from wild_boar_proxy.operator_surface import (
+    ExternalRouteResponsesAdapter,
     OperatorSurfaceConfig,
     OperatorSurfaceSession,
     WbpTraceObserver,
@@ -192,6 +194,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             "model_ids": ["gpt-5.3-codex"],
             "server_issued": True,
         }
+        session.run_wbp = lambda args: {"json": {"data": {"routes": []}}}  # type: ignore[method-assign]
         session.status_payload = lambda: {  # type: ignore[method-assign]
             "status": {"status": "ok", "machine_error_code": "OK"},
             "models": {"model_ids": ["gpt-5.3-codex"], "server_issued": True},
@@ -238,6 +241,220 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertTrue(result["temp_root_removed"])
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
 
+    def test_run_prompt_route_backed_external_model_uses_route_upstream_model_and_secret(self) -> None:
+        session = OperatorSurfaceSession(
+            OperatorSurfaceConfig(
+                codex_bin=Path("/bin/echo"),
+                runtime_config=Path("/tmp/nonexistent-runtime-config.yaml"),
+                timeout_seconds=5,
+            )
+        )
+        session.probe_models = lambda: {  # type: ignore[method-assign]
+            "ok": True,
+            "model_ids": ["wbp-web-primary-openrouter"],
+            "server_issued": True,
+        }
+        session.status_payload = lambda: {  # type: ignore[method-assign]
+            "status": {"status": "ok", "machine_error_code": "OK"},
+            "models": {"model_ids": ["wbp-web-primary-openrouter"], "server_issued": True},
+        }
+        session.run_wbp = lambda args: {  # type: ignore[method-assign]
+            "json": {
+                "data": {
+                    "routes": [
+                        {
+                            "route_id": "wbp-web-primary-openrouter",
+                            "enabled": True,
+                            "provider": "openrouter",
+                            "base_url": "https://openrouter.ai/api/v1",
+                            "endpoint_path": "/chat/completions",
+                            "upstream_model": "openai/gpt-5",
+                            "compatibility": "openai_chat_completions",
+                            "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+                        }
+                    ]
+                }
+            }
+        }
+
+        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.assertEqual(command[-1], "-")
+            env = kwargs.get("env")
+            self.assertIsInstance(env, dict)
+            self.assertEqual(env.get("OPENAI_API_KEY"), "sk-local-runtime")  # type: ignore[union-attr]
+            last_message = Path(command[command.index("-o") + 1])
+            config = (Path(str(env["CODEX_HOME"])) / "config.toml").read_text(encoding="utf-8")  # type: ignore[index]
+            self.assertIn('model = "wbp-web-primary-openrouter"', config)
+            self.assertIn('model_provider = "external_route"', config)
+            self.assertIn('base_url = "http://127.0.0.1:', config)
+            self.assertIn('/v1"', config)
+            self.assertIn('wire_api = "responses"', config)
+            last_message.write_text("WBP_CUSTOM_EXTERNAL_API_OK\n", encoding="utf-8")
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"type": "done"}), stderr="")
+
+        with (
+            mock.patch(
+                "wild_boar_proxy.operator_surface._resolve_external_route_secret_value",
+                return_value="sk-route-secret",
+            ),
+            mock.patch.object(session, "local_api_key", return_value="sk-local-runtime"),
+            mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run),
+        ):
+            result = session.run_prompt(
+                {
+                    "prompt": "Reply with exactly WBP_CUSTOM_EXTERNAL_API_OK.",
+                    "model_id": "wbp-web-primary-openrouter",
+                }
+            )
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["machine_error_code"], "OK")
+        self.assertEqual(result["runtime_model"], "wbp-web-primary-openrouter")
+        self.assertEqual(result["configured_provider"], "external_route")
+        self.assertEqual(result["configured_wire_api"], "responses")
+        self.assertTrue(result["route_adapter_used"])
+        self.assertTrue(str(result["downstream_wbp_endpoint"]).startswith("http://127.0.0.1:"))
+        self.assertTrue(str(result["downstream_wbp_endpoint"]).endswith("/v1"))
+        self.assertEqual(result["route_provider_endpoint"], "https://openrouter.ai/api/v1")
+        self.assertNotIn("sk-route-secret", json.dumps(result))
+        self.assertNotIn("sk-local-runtime", json.dumps(result))
+
+    def test_external_route_responses_adapter_translates_responses_to_chat_completions(self) -> None:
+        route = {
+            "route_id": "wbp-web-primary-openrouter",
+            "provider": "openrouter",
+            "base_url": "https://openrouter.ai/api/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "openai/gpt-5",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+        }
+        captured: dict[str, object] = {}
+
+        def fake_request_json(**kwargs: object):
+            captured.update(kwargs)
+
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "WBP_CUSTOM_EXTERNAL_API_OK",
+                            }
+                        }
+                    ],
+                    "usage": {"total_tokens": 12},
+                }
+
+            return FakeResponse()
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json),
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "Reply exactly OK"}],
+                            }
+                        ],
+                        "max_output_tokens": 32,
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": "Bearer sk-local-runtime",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["model"], "wbp-web-primary-openrouter")
+        self.assertEqual(payload["output_text"], "WBP_CUSTOM_EXTERNAL_API_OK")
+        self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["headers"], {"Authorization": "Bearer sk-route-secret", "Accept": "application/json"})
+        self.assertEqual(
+            captured["payload"],
+            {
+                "model": "openai/gpt-5",
+                "messages": [{"role": "user", "content": "Reply exactly OK"}],
+                "stream": False,
+                "max_tokens": 32,
+            },
+        )
+
+    def test_external_route_responses_adapter_streams_response_completed_for_streaming_clients(self) -> None:
+        route = {
+            "route_id": "wbp-web-primary-openrouter",
+            "provider": "openrouter",
+            "base_url": "https://openrouter.ai/api/v1",
+            "endpoint_path": "/chat/completions",
+            "upstream_model": "openai/gpt-5",
+            "compatibility": "openai_chat_completions",
+            "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+        }
+
+        def fake_request_json(**kwargs: object):
+            class FakeResponse:
+                status_code = 200
+                payload = {
+                    "choices": [{"message": {"content": "WBP_CUSTOM_EXTERNAL_API_OK"}}],
+                    "usage": {"total_tokens": 12},
+                }
+
+            return FakeResponse()
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=route,
+                expected_api_key="sk-local-runtime",
+                route_secret="sk-route-secret",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=fake_request_json),
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(
+                    {
+                        "stream": True,
+                        "input": [
+                            {
+                                "type": "message",
+                                "role": "user",
+                                "content": [{"type": "input_text", "text": "Reply exactly OK"}],
+                            }
+                        ],
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Authorization": "Bearer sk-local-runtime",
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream",
+                },
+                method="POST",
+            )
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5) as response:
+                body = response.read().decode("utf-8")
+                content_type = response.headers.get("Content-Type", "")
+
+        self.assertEqual(content_type, "text/event-stream")
+        self.assertIn("event: response.output_text.delta", body)
+        self.assertIn("event: response.completed", body)
+        self.assertIn("WBP_CUSTOM_EXTERNAL_API_OK", body)
+
     def test_run_prompt_rejects_browser_supplied_route_id(self) -> None:
         session = OperatorSurfaceSession()
         session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
@@ -253,6 +470,45 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertEqual(result["status"], "rejected")
         self.assertEqual(result["machine_error_code"], "FORBIDDEN_BROWSER_FIELD")
         self.assertEqual(result["forbidden_fields"], ["route_id"])
+
+    def test_probe_models_merges_enabled_server_owned_external_route_ids(self) -> None:
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps({"data": [{"id": "gpt-5.3-codex"}]}).encode("utf-8")
+
+        class FakeOpener:
+            def open(self, request, timeout=20):  # noqa: ANN001
+                return FakeResponse()
+
+        session = OperatorSurfaceSession()
+        session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
+        session.run_wbp = lambda args: {  # type: ignore[method-assign]
+            "json": {
+                "data": {
+                    "routes": [
+                        {
+                            "route_id": "wbp-web-primary-openrouter",
+                            "enabled": True,
+                            "auth": {"secret_ref": "OPENROUTER_API_KEY"},
+                        }
+                    ]
+                }
+            }
+        }
+        with mock.patch("wild_boar_proxy.operator_surface.urllib.request.build_opener", return_value=FakeOpener()):
+            result = session.probe_models()
+
+        self.assertTrue(result["ok"])
+        self.assertIn("gpt-5.3-codex", result["model_ids"])
+        self.assertIn("wbp-web-primary-openrouter", result["model_ids"])
 
     def test_run_prompt_trace_mode_marks_path_proven_only_after_observer_request(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):
@@ -284,6 +540,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             "model_ids": ["gpt-5.3-codex"],
             "server_issued": True,
         }
+        session.run_wbp = lambda args: {"json": {"data": {"routes": []}}}  # type: ignore[method-assign]
         session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
         session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
 
@@ -368,6 +625,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             "model_ids": ["gpt-5.3-codex"],
             "server_issued": True,
         }
+        session.run_wbp = lambda args: {"json": {"data": {"routes": []}}}  # type: ignore[method-assign]
         session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
         session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
 
