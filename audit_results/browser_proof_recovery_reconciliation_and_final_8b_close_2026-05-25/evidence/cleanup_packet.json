@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
+  "source": "current_owner_side_direct_recovery_reproof",
+  "preflight_verified": true,
+  "session_cancel_performed": true,
+  "owned_cleanup_performed": true,
+  "owned_cleanup_verified": true,
+  "same_selected_session_ref": true,
+  "current_codex_touched": false,
+  "evidence_basis": {
+    "admitted_session_actions_ready": true,
+    "stop_cleanup_preflight_ready": true,
+    "accounts_readonly_ok": true,
+    "api_readonly_ok": true,
+    "custom_status_ok": false
+  }
+}

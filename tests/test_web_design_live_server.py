@@ -7011,6 +7011,82 @@ class WebDesignCodexCustomSessionEndpointTests(unittest.TestCase):
         self.assertEqual(session_after_live["session"]["cancel_state"], "cancelled_dry_run_session")
         self.assertEqual(get_live_status, HTTPStatus.NOT_FOUND)
 
+    def test_codex_custom_recovery_stop_cleanup_live_allows_claim_gate_blocked_custom_status(self) -> None:
+        payloads = live_payloads()
+        payloads[("accounts", "list", "--json")] = accounts_packet(
+            accounts=[account("acct-active", "active", "healthy", auth_ref="/tmp/wbp-auth.json")]
+        )
+        with mock.patch.object(live_server, "OperatorSurfaceSession", FakeOperatorSurfaceSession):
+            server = ThreadingHTTPServer(
+                ("127.0.0.1", free_port()),
+                build_handler(runner=MappingRunner(payloads)),
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                contract = json.loads(fetch(f"{base}/api/codex/custom/recovery/contract"))
+                created = json.loads(
+                    post_json(
+                        f"{base}/api/codex/custom/sessions",
+                        {"model_id": "gpt-5.3-codex"},
+                    )
+                )
+                admitted = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/admitted-session-actions")
+                )
+                preflight = json.loads(
+                    fetch(f"{base}/api/codex/custom/recovery/stop-cleanup/preflight")
+                )
+                live = json.loads(
+                    post_json(f"{base}/api/codex/custom/recovery/stop-cleanup", {})
+                )
+                session_id = created["session"]["session_id"]
+                session_after_live = json.loads(
+                    fetch(f"{base}/api/codex/custom/sessions/{session_id}")
+                )
+            finally:
+                server.shutdown()
+                thread.join(timeout=2)
+                server.server_close()
+
+        self.assertEqual(contract["status"], "blocked")
+        self.assertEqual(
+            contract["contract_block_reason_code"],
+            "RECOVERY_CONTRACT_READONLY_SOURCE_FAILED",
+        )
+        self.assertTrue(contract["readonly_sources"]["original_status_ok"])
+        self.assertFalse(contract["readonly_sources"]["custom_status_ok"])
+        self.assertTrue(contract["readonly_sources"]["accounts_readonly_ok"])
+        self.assertTrue(contract["readonly_sources"]["api_readonly_ok"])
+
+        self.assertEqual(admitted["status"], "ok")
+        self.assertEqual(admitted["machine_error_code"], "ADMITTED_SESSION_ACTIONS_READY")
+        self.assertTrue(admitted["session_admitted_actions_ready"])
+        self.assertTrue(admitted["selected_session_present"])
+        self.assertTrue(admitted["selected_session_packet_valid"])
+        self.assertTrue(admitted["selected_session_cancel_ready"])
+        self.assertTrue(admitted["owned_session_cleanup_ready"])
+        self.assertFalse(admitted["readonly_sources"]["custom_status_ok"])
+
+        self.assertEqual(preflight["status"], "ok")
+        self.assertEqual(
+            preflight["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_PREFLIGHT_READY",
+        )
+        self.assertTrue(preflight["stop_cleanup_preflight_ready"])
+
+        self.assertEqual(live["status"], "ok")
+        self.assertEqual(
+            live["machine_error_code"],
+            "CUSTOM_CODEX_RECOVERY_STOP_CLEANUP_LIVE_READY",
+        )
+        self.assertTrue(live["session_cancel_performed"])
+        self.assertTrue(live["owned_cleanup_performed"])
+        self.assertTrue(live["owned_cleanup_verified"])
+        self.assertEqual(session_after_live["session"]["cleanup_state"], "cleaned")
+        self.assertEqual(session_after_live["session"]["cancel_state"], "cancelled_dry_run_session")
+
     def test_codex_custom_recovery_process_kill_preflight_endpoint_is_readonly(self) -> None:
         payloads = live_payloads()
         payloads[("accounts", "list", "--json")] = accounts_packet(

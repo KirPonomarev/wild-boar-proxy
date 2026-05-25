@@ -415,6 +415,23 @@ def _non_admitted_mutation(action: dict[str, Any]) -> bool:
     return action.get("mutation_allowed") is True or action.get("browser_payload_allowed") is True
 
 
+def _owned_session_recovery_readonly_ok(
+    contract_packet: dict[str, Any] | None,
+    readonly_sources: dict[str, Any] | None,
+) -> bool:
+    contract = contract_packet if isinstance(contract_packet, dict) else {}
+    readonly = readonly_sources if isinstance(readonly_sources, dict) else {}
+    return (
+        readonly.get("original_status_ok") is True
+        and readonly.get("accounts_readonly_ok") is True
+        and readonly.get("api_readonly_ok") is True
+        and contract.get("rollback_claimed") is False
+        and contract.get("process_kill_claimed") is False
+        and contract.get("dangerous_actions_disabled") is True
+        and contract.get("browser_payload_allowed") is False
+    )
+
+
 def _server_session_selection(
     sessions_packet: dict[str, Any] | None,
 ) -> tuple[dict[str, Any] | None, bool, str]:
@@ -462,23 +479,13 @@ def build_custom_recovery_admitted_session_actions_packet(
     kill_action = _action_by_id(actions, "stuck_process_kill_readiness")
     arbitrary_cleanup_action = _action_by_id(actions, "cleanup_arbitrary_path")
 
-    contract_readonly_ok = (
-        contract.get("status") == "ok"
-        and readonly.get("original_status_ok") is True
-        and readonly.get("custom_status_ok") is True
-        and readonly.get("accounts_readonly_ok") is True
-        and readonly.get("api_readonly_ok") is True
-    )
+    contract_readonly_ok = _owned_session_recovery_readonly_ok(contract, readonly)
     admitted_actions_contract_ready = (
         _admitted_session_action(stop_action)
         and _admitted_session_action(cleanup_action)
         and not _non_admitted_mutation(rollback_action)
         and not _non_admitted_mutation(kill_action)
         and not _non_admitted_mutation(arbitrary_cleanup_action)
-        and contract.get("rollback_claimed") is False
-        and contract.get("process_kill_claimed") is False
-        and contract.get("dangerous_actions_disabled") is True
-        and contract.get("browser_payload_allowed") is False
     )
 
     selected_session, selected_session_ambiguous, selected_session_source = (

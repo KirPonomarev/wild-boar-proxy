@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "source": "current_owner_runtime_diagnostics_export",
+  "bundle_exported": true,
+  "redaction_expected": true,
+  "bundle_path_redacted": "<diagnostics_bundle>"
+}

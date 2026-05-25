@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "reused_as_settled_truth": true,
+  "source_artifact_ref": "/Volumes/Work/wild-boar-proxy/audit_results/codex_custom_launch_and_route_e2e_completion_pass_2026-05-25/evidence/transcript_packet.json",
+  "transcript_visible": true,
+  "raw_prompt_not_stored": true,
+  "raw_response_not_stored": true
+}
