@@ -826,3 +826,54 @@ def classify_fresh_context_entry(
         "phase7_retry_admissible": True,
         "verdict": "FRESH_CONTEXT_ENTRY_ADMISSIBLE",
     }
+
+
+def classify_fresh_context_acquisition(
+    *,
+    operator_action_performed: bool,
+    fresh_context_entry_packet: dict[str, Any],
+) -> dict[str, Any]:
+    if not operator_action_performed:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED",
+            "operator_action_required": True,
+            "operator_action_performed": False,
+            "fresh_context_verified": bool(
+                fresh_context_entry_packet.get("fresh_context_verified")
+            ),
+            "phase7_retry_admissible": False,
+            "verdict": "operator_mediated_fresh_context_not_provided",
+        }
+    if fresh_context_entry_packet.get("status") == "ok":
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "reason_class": "",
+            "operator_action_required": True,
+            "operator_action_performed": True,
+            "fresh_context_verified": bool(
+                fresh_context_entry_packet.get("fresh_context_verified")
+            ),
+            "phase7_retry_admissible": bool(
+                fresh_context_entry_packet.get("phase7_retry_admissible")
+            ),
+            "verdict": "FRESH_CONTEXT_ENTRY_ADMISSIBLE",
+        }
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "reason_class": fresh_context_entry_packet.get(
+            "reason_class", "FRESH_CONTEXT_NOT_ESTABLISHED"
+        ),
+        "operator_action_required": True,
+        "operator_action_performed": True,
+        "fresh_context_verified": bool(
+            fresh_context_entry_packet.get("fresh_context_verified")
+        ),
+        "phase7_retry_admissible": False,
+        "verdict": fresh_context_entry_packet.get(
+            "verdict", "fresh_context_verification_failed"
+        ),
+    }

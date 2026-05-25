@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_fresh_context_acquisition,
     classify_fresh_context_entry,
     classify_quiescent_handoff_admission,
     classify_quiescent_current_codex_precondition,
@@ -267,6 +268,35 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             host_process_chain=[{"command": "/usr/bin/python3"}],
             quiescent_precondition_packet={
                 "quiescent_current_codex_precondition_satisfied": True
+            },
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["verdict"], "FRESH_CONTEXT_ENTRY_ADMISSIBLE")
+        self.assertTrue(packet["phase7_retry_admissible"])
+
+    def test_fresh_context_acquisition_blocks_without_operator_admission(self) -> None:
+        packet = classify_fresh_context_acquisition(
+            operator_action_performed=False,
+            fresh_context_entry_packet={
+                "status": "blocked",
+                "reason_class": "FRESH_CONTEXT_NOT_ESTABLISHED",
+                "fresh_context_verified": False,
+                "phase7_retry_admissible": False,
+                "verdict": "fresh_context_still_hosted_by_protected_codex",
+            },
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED")
+        self.assertEqual(packet["verdict"], "operator_mediated_fresh_context_not_provided")
+        self.assertFalse(packet["phase7_retry_admissible"])
+
+    def test_fresh_context_acquisition_passes_when_entry_is_admissible(self) -> None:
+        packet = classify_fresh_context_acquisition(
+            operator_action_performed=True,
+            fresh_context_entry_packet={
+                "status": "ok",
+                "fresh_context_verified": True,
+                "phase7_retry_admissible": True,
             },
         )
         self.assertEqual(packet["status"], "ok")

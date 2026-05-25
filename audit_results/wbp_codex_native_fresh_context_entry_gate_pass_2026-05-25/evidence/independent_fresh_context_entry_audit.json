@@ -1,8 +1,19 @@
 {
-  "auditor": "subagent:019e5f95-e296-7ae1-bce9-02aa6aaeaea8",
-  "captured_at_utc": "2026-05-25T14:43:30Z",
-  "final_verdict": "fresh_context_entry_block_supported",
+  "auditor": "subagent:019e5f9b-464c-7d92-ad93-f291e4e5759c",
+  "captured_at_utc": "2026-05-25T14:49:10Z",
+  "final_verdict": "fresh_context_acquisition_block_supported",
   "findings": [
+    {
+      "facts": {
+        "operator_action_performed": false,
+        "operator_action_required": true,
+        "phase7_retry_admissible": false,
+        "reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED",
+        "status": "blocked"
+      },
+      "id": "operator_mediated_acquisition_missing",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json"
+    },
     {
       "facts": {
         "fresh_context_verified": false,
@@ -10,42 +21,32 @@
         "host_process_chain_contains_codex_main_app": true,
         "hosted_by_protected_codex_session": true
       },
-      "id": "host_chain_still_points_to_protected_codex",
+      "id": "host_chain_still_codex_hosted",
       "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/fresh_context_host_chain_packet.json"
-    },
-    {
-      "facts": {
-        "filesystem_retry_attempted": false,
-        "launch_attempted": false,
-        "phase7_retry_admissible": false,
-        "reason_class": "FRESH_CONTEXT_NOT_ESTABLISHED",
-        "status": "blocked"
-      },
-      "id": "entry_summary_blocks_phase7_retry",
-      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/fresh_context_entry_summary.json"
     },
     {
       "facts": {
         "quiescent_current_codex_precondition_satisfied": false,
         "reason_class": "CURRENT_CODEX_NOT_QUIESCENT"
       },
-      "id": "quiescent_precondition_secondary_blocker",
+      "id": "quiescent_precondition_still_false",
       "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json"
     },
     {
       "facts": {
-        "reason_class": "WORKTREE_DIRTY_DURING_CAPTURE",
-        "status": "blocked"
+        "filesystem_retry_attempted": false,
+        "launch_attempted": false,
+        "phase7_retry_admissible": false
       },
-      "id": "sync_packet_not_admissible_as_pass",
-      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/sync_gate_packet.json"
+      "id": "no_launch_or_retry_overclaim",
+      "packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_fresh_context_entry_gate_pass_2026-05-25/evidence/fresh_context_entry_summary.json"
     }
   ],
   "overclaim_check": {
     "filesystem_isolation_claim_present": false,
-    "native_launch_claim_present": false,
-    "phase7_retry_admissible_overclaimed": false
+    "fresh_context_verified_overclaimed": false,
+    "native_launch_claim_present": false
   },
   "status": "ok",
-  "supported_reason_class": "FRESH_CONTEXT_NOT_ESTABLISHED"
+  "supported_reason_class": "FRESH_CONTEXT_ACQUISITION_NOT_ADMITTED"
 }

@@ -56,6 +56,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument(
+        "--operator-action-performed",
+        action="store_true",
+        help="Record that owner-mediated fresh-context acquisition was already performed before this probe.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
@@ -63,6 +68,7 @@ def main() -> int:
         sys.path.insert(0, str(repo_root))
 
     from wild_boar_proxy.native_filesystem_probe import (
+        classify_fresh_context_acquisition,
         classify_fresh_context_entry,
         classify_quiescent_current_codex_precondition,
         collect_codex_process_inventory,
@@ -80,6 +86,10 @@ def main() -> int:
     entry = classify_fresh_context_entry(
         host_process_chain=host_chain,
         quiescent_precondition_packet=precondition,
+    )
+    acquisition = classify_fresh_context_acquisition(
+        operator_action_performed=args.operator_action_performed,
+        fresh_context_entry_packet=entry,
     )
 
     sync_packet = {
@@ -121,13 +131,15 @@ def main() -> int:
     }
     summary = {
         "captured_at_utc": _utc_now(),
-        "status": entry["status"],
-        "reason_class": entry["reason_class"],
-        "final_verdict": entry["verdict"],
-        "fresh_context_verified": entry["fresh_context_verified"],
+        "status": acquisition["status"],
+        "reason_class": acquisition["reason_class"],
+        "final_verdict": acquisition["verdict"],
+        "operator_action_required": acquisition["operator_action_required"],
+        "operator_action_performed": acquisition["operator_action_performed"],
+        "fresh_context_verified": acquisition["fresh_context_verified"],
         "hosted_by_protected_codex_session": entry["hosted_by_protected_codex_session"],
         "quiescent_precondition_verified": entry["quiescent_precondition_verified"],
-        "phase7_retry_admissible": entry["phase7_retry_admissible"],
+        "phase7_retry_admissible": acquisition["phase7_retry_admissible"],
         "launch_attempted": False,
         "filesystem_retry_attempted": False,
         "host_process_chain_length": len(host_chain),
@@ -135,6 +147,10 @@ def main() -> int:
 
     json_write(evidence_dir / "sync_gate_packet.json", sync_packet)
     json_write(evidence_dir / "version_pinning_packet.json", version_packet)
+    json_write(
+        evidence_dir / "fresh_context_acquisition_packet.json",
+        acquisition,
+    )
     json_write(evidence_dir / "fresh_context_host_chain_packet.json", host_packet)
     json_write(evidence_dir / "quiescent_current_codex_precondition_packet.json", precondition)
     json_write(evidence_dir / "fresh_context_entry_summary.json", summary)
