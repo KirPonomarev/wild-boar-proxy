@@ -8,12 +8,14 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_protected_codex_host_negative,
     classify_fresh_context_acquisition,
     classify_fresh_context_entry,
     classify_quiescent_handoff_admission,
     classify_quiescent_current_codex_precondition,
     classify_current_codex_delta,
     classify_user_data_dir_respected,
+    collect_ambient_env_context,
     diff_scans,
     scan_tree,
     summarize_idle_baseline_windows,
@@ -236,6 +238,37 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertTrue(packet["same_thread_admissible"])
         self.assertFalse(packet["fresh_context_required"])
 
+    def test_protected_codex_host_negative_blocks_when_codex_ancestry_detected(self) -> None:
+        packet = classify_protected_codex_host_negative(
+            [
+                {"pid": 100, "ppid": 90, "command": "/usr/bin/python3"},
+                {
+                    "pid": 90,
+                    "ppid": 80,
+                    "command": "/Applications/Codex.app/Contents/Resources/codex app-server",
+                },
+            ]
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "PROTECTED_CODEX_SESSION_DETECTED")
+        self.assertTrue(packet["hosted_by_protected_codex_session"])
+        self.assertFalse(packet["protected_codex_ancestry_disproven"])
+
+    def test_protected_codex_host_negative_passes_when_codex_ancestry_absent(self) -> None:
+        packet = classify_protected_codex_host_negative(
+            [{"pid": 100, "ppid": 90, "command": "/usr/bin/python3"}]
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["reason_class"], "")
+        self.assertFalse(packet["hosted_by_protected_codex_session"])
+        self.assertTrue(packet["protected_codex_ancestry_disproven"])
+
+    def test_protected_codex_host_negative_blocks_when_chain_missing(self) -> None:
+        packet = classify_protected_codex_host_negative([])
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "HOST_CHAIN_UNPROVEN")
+        self.assertFalse(packet["protected_codex_ancestry_disproven"])
+
     def test_fresh_context_entry_blocks_when_hosted_by_protected_codex(self) -> None:
         packet = classify_fresh_context_entry(
             host_process_chain=[
@@ -290,6 +323,26 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["verdict"], "operator_mediated_fresh_context_not_provided")
         self.assertFalse(packet["phase7_retry_admissible"])
 
+    def test_fresh_context_acquisition_preserves_entry_reason_when_operator_action_present(
+        self,
+    ) -> None:
+        packet = classify_fresh_context_acquisition(
+            operator_action_performed=True,
+            fresh_context_entry_packet={
+                "status": "blocked",
+                "reason_class": "QUIESCENT_PRECONDITION_STILL_FAILED",
+                "fresh_context_verified": True,
+                "phase7_retry_admissible": False,
+                "verdict": "fresh_context_present_but_quiescent_precondition_failed",
+            },
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "QUIESCENT_PRECONDITION_STILL_FAILED")
+        self.assertEqual(
+            packet["verdict"], "fresh_context_present_but_quiescent_precondition_failed"
+        )
+        self.assertFalse(packet["phase7_retry_admissible"])
+
     def test_fresh_context_acquisition_passes_when_entry_is_admissible(self) -> None:
         packet = classify_fresh_context_acquisition(
             operator_action_performed=True,
@@ -302,6 +355,27 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["verdict"], "FRESH_CONTEXT_ENTRY_ADMISSIBLE")
         self.assertTrue(packet["phase7_retry_admissible"])
+
+    def test_ambient_env_context_flags_unexplained_authority(self) -> None:
+        packet = collect_ambient_env_context(
+            {
+                "HOME": "/tmp/home",
+                "CODEX_HOME": "/tmp/codex",
+                "OPENAI_API_KEY": "secret",
+                "HTTP_PROXY": "http://proxy",
+            }
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "AMBIENT_ENV_AUTHORITY_UNEXPLAINED")
+        self.assertTrue(packet["ambient_openai_api_key_present"])
+        self.assertTrue(packet["ambient_proxy_keys_present"]["HTTP_PROXY"])
+
+    def test_ambient_env_context_passes_without_authority(self) -> None:
+        packet = collect_ambient_env_context({"HOME": "/tmp/home", "CODEX_HOME": "/tmp/codex"})
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["reason_class"], "")
+        self.assertFalse(packet["ambient_openai_api_key_present"])
+        self.assertFalse(packet["unexplained_authority_present"])
 
 
 if __name__ == "__main__":

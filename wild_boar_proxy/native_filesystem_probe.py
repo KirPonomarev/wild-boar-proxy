@@ -21,7 +21,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from .runtime import (
     RuntimePaths,
@@ -52,6 +52,103 @@ def utc_now() -> str:
 def json_write(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _host_process_chain_contains_protected_codex(
+    host_process_chain: list[dict[str, Any]],
+) -> tuple[bool, bool]:
+    codex_app_detected = any(
+        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
+        for entry in host_process_chain
+    )
+    codex_app_server_detected = any(
+        "codex app-server" in entry.get("command", "") for entry in host_process_chain
+    )
+    return codex_app_detected, codex_app_server_detected
+
+
+def classify_protected_codex_host_negative(
+    host_process_chain: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not host_process_chain:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "HOST_CHAIN_UNPROVEN",
+            "hosted_by_protected_codex_session": None,
+            "protected_codex_ancestry_disproven": False,
+            "codex_app_parent_detected": False,
+            "codex_app_server_parent_detected": False,
+            "host_process_chain_length": 0,
+            "verdict": "protected_codex_host_chain_missing",
+        }
+    codex_app_detected, codex_app_server_detected = _host_process_chain_contains_protected_codex(
+        host_process_chain
+    )
+    hosted_by_codex = codex_app_detected or codex_app_server_detected
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "ok" if not hosted_by_codex else "blocked",
+        "reason_class": "" if not hosted_by_codex else "PROTECTED_CODEX_SESSION_DETECTED",
+        "hosted_by_protected_codex_session": hosted_by_codex,
+        "protected_codex_ancestry_disproven": not hosted_by_codex,
+        "codex_app_parent_detected": codex_app_detected,
+        "codex_app_server_parent_detected": codex_app_server_detected,
+        "host_process_chain_length": len(host_process_chain),
+        "executor_pid": host_process_chain[0].get("pid"),
+        "executor_command": host_process_chain[0].get("command", ""),
+        "verdict": (
+            "protected_codex_host_negative_proven"
+            if not hosted_by_codex
+            else "protected_codex_host_detected"
+        ),
+    }
+
+
+def collect_ambient_env_context(environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    env = dict(os.environ if environ is None else environ)
+    proxy_keys = (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    )
+    ambient_proxy_keys_present = {key: bool(env.get(key)) for key in proxy_keys}
+    authority_keys = [
+        key
+        for key in (
+            "OPENAI_API_KEY",
+            "OPENAI_BASE_URL",
+            "OPENAI_ORG_ID",
+            "WBP_AUTH_COMMAND_STAMP",
+        )
+        if env.get(key)
+    ]
+    wbp_token_command_path = env.get("WBP_AUTH_COMMAND_PATH", "")
+    unexplained_authority_present = bool(
+        env.get("OPENAI_API_KEY")
+        or any(ambient_proxy_keys_present.values())
+        or env.get("OPENAI_BASE_URL")
+        or env.get("OPENAI_ORG_ID")
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "ambient_env_context",
+        "status": "ok" if not unexplained_authority_present else "blocked",
+        "reason_class": "" if not unexplained_authority_present else "AMBIENT_ENV_AUTHORITY_UNEXPLAINED",
+        "ambient_codex_home": env.get("CODEX_HOME", ""),
+        "ambient_home": env.get("HOME", ""),
+        "ambient_openai_api_key_present": bool(env.get("OPENAI_API_KEY")),
+        "ambient_proxy_keys_present": ambient_proxy_keys_present,
+        "ambient_authority_keys_present": authority_keys,
+        "wbp_token_command_path": wbp_token_command_path,
+        "browser_authority_used": False,
+        "consumer_launch_performed": False,
+        "secret_value_recorded": False,
+        "unexplained_authority_present": unexplained_authority_present,
+    }
 
 
 def clean_env() -> dict[str, str]:
@@ -720,11 +817,10 @@ def classify_quiescent_handoff_admission(
     quiescent_precondition_packet: dict[str, Any],
     host_process_chain: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    hosted_by_codex = any(
-        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
-        or "codex app-server" in entry.get("command", "")
-        for entry in host_process_chain
+    codex_app_detected, codex_app_server_detected = _host_process_chain_contains_protected_codex(
+        host_process_chain
     )
+    hosted_by_codex = codex_app_detected or codex_app_server_detected
     quiescent_verified = bool(
         quiescent_precondition_packet.get("quiescent_current_codex_precondition_satisfied")
     )
@@ -786,11 +882,10 @@ def classify_fresh_context_entry(
     host_process_chain: list[dict[str, Any]],
     quiescent_precondition_packet: dict[str, Any],
 ) -> dict[str, Any]:
-    hosted_by_codex = any(
-        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
-        or "codex app-server" in entry.get("command", "")
-        for entry in host_process_chain
+    codex_app_detected, codex_app_server_detected = _host_process_chain_contains_protected_codex(
+        host_process_chain
     )
+    hosted_by_codex = codex_app_detected or codex_app_server_detected
     quiescent_verified = bool(
         quiescent_precondition_packet.get("quiescent_current_codex_precondition_satisfied")
     )
