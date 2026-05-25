@@ -20,7 +20,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
@@ -379,6 +379,303 @@ def redact_text(text: str, secret_values: list[str] | None = None) -> str:
     for pattern in SECRET_PATTERNS:
         redacted = pattern.sub("<redacted-secret>", redacted)
     return redacted
+
+
+def _pid_digest(pid: int) -> str:
+    return hashlib.sha256(str(pid).encode("utf-8")).hexdigest()[:16]
+
+
+def _endpoint_host(endpoint: str) -> str:
+    text = endpoint.strip()
+    if text.startswith("[") and "]:" in text:
+        return text[1:].split("]:", 1)[0].lower()
+    if ":" not in text:
+        return text.lower()
+    return text.rsplit(":", 1)[0].lower()
+
+
+def _is_local_host(host: str) -> bool:
+    normalized = host.strip().lower().strip("[]")
+    return normalized in {"127.0.0.1", "::1", "localhost"}
+
+
+def _allowed_local_endpoints(*urls: str) -> set[str]:
+    allowed: set[str] = set()
+    for url in urls:
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or "").strip().lower()
+        port = parsed.port
+        if host and port and _is_local_host(host):
+            allowed.add(f"{host}:{port}")
+            if host == "127.0.0.1":
+                allowed.add(f"localhost:{port}")
+            if host == "localhost":
+                allowed.add(f"127.0.0.1:{port}")
+    return allowed
+
+
+def _process_tree_snapshot(root_pid: int) -> dict[str, Any]:
+    try:
+        process = subprocess.run(
+            ["ps", "-Ao", "pid=,ppid=,command="],
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return {"public_entries": [], "raw_pids": []}
+    rows: dict[int, dict[str, Any]] = {}
+    children: dict[int, list[int]] = {}
+    for raw_line in process.stdout.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 2 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue
+        pid = int(parts[0])
+        ppid = int(parts[1])
+        command_text = parts[2].strip() if len(parts) >= 3 else ""
+        command_basename = ""
+        if command_text:
+            command_basename = Path(command_text.split()[0]).name
+        rows[pid] = {
+            "pid": pid,
+            "ppid": ppid,
+            "command_present": bool(command_text),
+            "command_basename": command_basename,
+        }
+        children.setdefault(ppid, []).append(pid)
+    if root_pid not in rows:
+        return {"public_entries": [], "raw_pids": []}
+    descendants: list[dict[str, Any]] = []
+    raw_pids: list[int] = []
+    queue = [root_pid]
+    seen: set[int] = set()
+    while queue:
+        pid = queue.pop(0)
+        if pid in seen:
+            continue
+        seen.add(pid)
+        row = rows.get(pid)
+        if row is None:
+            continue
+        raw_pids.append(pid)
+        descendants.append(
+            {
+                "pid_digest": _pid_digest(pid),
+                "is_root": pid == root_pid,
+                "parent_pid_digest": _pid_digest(row["ppid"]),
+                "command_present": row["command_present"],
+                "command_basename": row["command_basename"],
+            }
+        )
+        queue.extend(children.get(pid, []))
+    return {"public_entries": descendants, "raw_pids": raw_pids}
+
+
+def _network_sample_for_pid(pid: int) -> dict[str, Any]:
+    try:
+        process = subprocess.run(
+            ["lsof", "-n", "-P", "-a", "-i", "-p", str(pid)],
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception:
+        return {"peer_endpoints": [], "peer_endpoint_count": 0, "local_only": True}
+    peer_endpoints: list[dict[str, Any]] = []
+    for raw_line in process.stdout.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("COMMAND"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        name_token = parts[-2] if parts[-1].startswith("(") and len(parts) >= 2 else parts[-1]
+        if "->" not in name_token:
+            continue
+        peer = name_token.split("->", 1)[1].strip()
+        host = _endpoint_host(peer)
+        peer_endpoints.append(
+            {
+                "endpoint": peer,
+                "host_class": "local" if _is_local_host(host) else "non_local",
+            }
+        )
+    local_only = all(item["host_class"] == "local" for item in peer_endpoints)
+    return {
+        "peer_endpoints": peer_endpoints,
+        "peer_endpoint_count": len(peer_endpoints),
+        "local_only": local_only,
+    }
+
+
+ANCILLARY_COMMAND_BASENAMES = {"git", "git-remote-http", "git-remote-https", "sh", "bash", "zsh"}
+
+
+class OwnerSideProcessNetworkObserver:
+    def __init__(self, *, root_pid: int, allowed_local_endpoints: set[str]) -> None:
+        self.root_pid = root_pid
+        self.allowed_local_endpoints = set(allowed_local_endpoints)
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._samples: list[dict[str, Any]] = []
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        self._thread.join(timeout=2)
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            self._samples.append(self._sample_once())
+            time.sleep(0.25)
+
+    def _sample_once(self) -> dict[str, Any]:
+        tree_snapshot = _process_tree_snapshot(self.root_pid)
+        tree = tree_snapshot.get("public_entries", [])
+        raw_pids = tree_snapshot.get("raw_pids", [])
+        public_by_digest = {
+            str(entry.get("pid_digest") or ""): entry for entry in tree if isinstance(entry, dict)
+        }
+        peer_endpoints: list[dict[str, Any]] = []
+        for pid_value in raw_pids:
+            network = _network_sample_for_pid(int(pid_value))
+            pid_digest = _pid_digest(int(pid_value))
+            entry = public_by_digest.get(pid_digest, {})
+            for peer in network.get("peer_endpoints", []):
+                if not isinstance(peer, dict):
+                    continue
+                peer_endpoints.append(
+                    {
+                        **peer,
+                        "pid_digest": pid_digest,
+                        "is_root_process": entry.get("is_root") is True,
+                        "command_basename": str(entry.get("command_basename") or ""),
+                    }
+                )
+        return {
+            "process_tree_seen": bool(tree),
+            "process_count": len(tree),
+            "process_tree": tree,
+            "peer_endpoints": peer_endpoints,
+        }
+
+    def packet(self, *, warning_classes: list[str]) -> dict[str, Any]:
+        process_tree_observed = any(sample.get("process_tree_seen") for sample in self._samples)
+        sample_count = len(self._samples)
+        peer_endpoints = [
+            item
+            for sample in self._samples
+            for item in sample.get("peer_endpoints", [])
+            if isinstance(item, dict) and str(item.get("endpoint") or "")
+        ]
+        deduped_endpoints = list(
+            {
+                (str(item.get("endpoint") or ""), str(item.get("host_class") or "")): item
+                for item in peer_endpoints
+            }.values()
+        )
+        non_local = [item for item in deduped_endpoints if item.get("host_class") == "non_local"]
+        local = [item for item in deduped_endpoints if item.get("host_class") == "local"]
+        allowed_local_observed = any(
+            str(item.get("endpoint") or "") in self.allowed_local_endpoints for item in local
+        )
+        ancillary_non_local = [
+            item
+            for item in non_local
+            if str(item.get("command_basename") or "") in ANCILLARY_COMMAND_BASENAMES
+        ]
+        model_or_ambiguous_non_local = [
+            item for item in non_local if item not in ancillary_non_local
+        ]
+        if not process_tree_observed or sample_count == 0:
+            classification = "insufficient_observation"
+        elif not allowed_local_observed:
+            classification = "insufficient_observation"
+        elif model_or_ambiguous_non_local:
+            classification = "direct_model_egress_observed"
+        elif ancillary_non_local:
+            classification = "ancillary_non_model_egress_observed"
+        elif local:
+            classification = "wbp_forward_only_proven"
+        else:
+            classification = "insufficient_observation"
+        return {
+            "status": "ok",
+            "machine_error_code": "OK",
+            "process_tree_observed": process_tree_observed,
+            "sample_count": sample_count,
+            "observed_process_count_max": max(
+                (int(sample.get("process_count") or 0) for sample in self._samples),
+                default=0,
+            ),
+            "allowed_local_endpoints": sorted(self.allowed_local_endpoints),
+            "allowed_local_endpoint_observed": allowed_local_observed,
+            "peer_endpoints": deduped_endpoints,
+            "non_local_peer_endpoints_present": bool(non_local),
+            "classification": classification,
+            "direct_non_wbp_model_egress_absent_proven": classification in {
+                "wbp_forward_only_proven",
+                "ancillary_non_model_egress_observed",
+            },
+            "raw_pid_exposed": False,
+            "pid_not_exposed_to_browser": True,
+            "secret_value_recorded": False,
+        }
+
+
+def _run_command_with_observation(
+    command: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str],
+    prompt: str,
+    timeout_seconds: int,
+    allowed_local_endpoints: set[str],
+    warning_classes_from_stderr: Callable[[str], list[str]] | None = None,
+) -> dict[str, Any]:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    observer = OwnerSideProcessNetworkObserver(
+        root_pid=process.pid,
+        allowed_local_endpoints=allowed_local_endpoints,
+    )
+    observer.start()
+    timed_out = False
+    try:
+        _, stderr = process.communicate(
+            input=prompt,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        process.kill()
+        _, stderr = process.communicate()
+        stderr = stderr or exc.stderr or ""
+    finally:
+        observer.stop()
+    warning_classes = (
+        warning_classes_from_stderr(stderr) if warning_classes_from_stderr is not None else []
+    )
+    return {
+        "exit_code": process.returncode if process.returncode is not None else 127,
+        "stderr": stderr,
+        "timed_out": timed_out,
+        "process_network_observation_packet": observer.packet(warning_classes=warning_classes),
+    }
 
 
 def build_codex_config(
@@ -1073,6 +1370,21 @@ class OperatorSurfaceSession:
         config_sha256 = ""
         timed_out = False
         trace_packet = _empty_trace_packet()
+        process_network_observation = {
+            "status": "ok",
+            "machine_error_code": "INSUFFICIENT_OBSERVATION",
+            "classification": "insufficient_observation",
+            "direct_non_wbp_model_egress_absent_proven": False,
+            "process_tree_observed": False,
+            "sample_count": 0,
+            "observed_process_count_max": 0,
+            "allowed_local_endpoints": [],
+            "peer_endpoints": [],
+            "non_local_peer_endpoints_present": False,
+            "raw_pid_exposed": False,
+            "pid_not_exposed_to_browser": True,
+            "secret_value_recorded": False,
+        }
         exit_code = 127
         stderr = ""
         try:
@@ -1123,24 +1435,32 @@ class OperatorSurfaceSession:
                 str(last_message),
                 "-",
             ]
-            process = subprocess.run(
+            observation_result = _run_command_with_observation(
                 command,
                 cwd=str(work),
                 env=env,
-                input=prompt,
-                text=True,
-                capture_output=True,
-                timeout=self.config.timeout_seconds,
+                prompt=prompt,
+                timeout_seconds=self.config.timeout_seconds,
+                allowed_local_endpoints=_allowed_local_endpoints(
+                    effective_endpoint,
+                    downstream_endpoint,
+                ),
+                warning_classes_from_stderr=lambda text: (
+                    ["remote_plugin_sync_401"] if "Failed to sync remote plugins" in text else []
+                ),
             )
-            exit_code = process.returncode
-            stderr = process.stderr
+            raw_exit_code = observation_result.get("exit_code")
+            exit_code = int(raw_exit_code) if isinstance(raw_exit_code, int) else 127
+            stderr = str(observation_result.get("stderr") or "")
+            timed_out = observation_result.get("timed_out") is True
+            process_network_observation = (
+                observation_result.get("process_network_observation_packet")
+                if isinstance(observation_result.get("process_network_observation_packet"), dict)
+                else process_network_observation
+            )
         except OSError as exc:
             exit_code = 127
             stderr = f"{type(exc).__name__}: {exc}"
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            exit_code = 124
-            stderr = exc.stderr or ""
         finally:
             if trace_observer:
                 trace_packet = trace_observer.packet()
@@ -1197,6 +1517,7 @@ class OperatorSurfaceSession:
             "config_wire_api_matches": f'wire_api = "{configured_wire_api}"' in config_text,
             "trace_observer_enabled": trace_wbp,
             "trace_observer_packet": trace_packet,
+            "process_network_observation_packet": process_network_observation,
             "independent_wbp_trace_observed": (
                 trace_packet.get("request_observed") is True
                 and trace_packet.get("response_observed") is True
@@ -1222,6 +1543,9 @@ class OperatorSurfaceSession:
             "timed_out": timed_out,
             "duration_seconds": round(time.time() - started, 3),
             "warning_classes": warning_classes,
+            "direct_non_wbp_model_egress_absent_proven": (
+                process_network_observation.get("direct_non_wbp_model_egress_absent_proven") is True
+            ),
             "stdin_prompt_used": True,
             "command_surface": {
                 "binary": "<codex>",

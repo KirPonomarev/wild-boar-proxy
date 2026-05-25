@@ -140,6 +140,22 @@ class FakeOperatorSurfaceSession:
                 "machine_error_code": "OK",
                 "observer_closed": False,
             },
+            "process_network_observation_packet": {
+                "status": "ok",
+                "machine_error_code": "OK",
+                "process_tree_observed": True,
+                "sample_count": 2,
+                "observed_process_count_max": 1,
+                "allowed_local_endpoints": ["127.0.0.1:8318"],
+                "allowed_local_endpoint_observed": True,
+                "peer_endpoints": [{"endpoint": "127.0.0.1:8318", "host_class": "local", "command_basename": "codex"}],
+                "non_local_peer_endpoints_present": False,
+                "classification": "wbp_forward_only_proven",
+                "direct_non_wbp_model_egress_absent_proven": True,
+                "raw_pid_exposed": False,
+                "pid_not_exposed_to_browser": True,
+                "secret_value_recorded": False,
+            },
             "warning_classes": ["remote_plugin_sync_401"],
         }
 
@@ -208,6 +224,8 @@ class CliRunnerTests(unittest.TestCase):
         self.assertTrue(packet["selection_packet"]["selected_route_server_issued"])
         self.assertTrue(packet["selection_packet"]["route_provenance_proven"])
         self.assertEqual(packet["prompt_packet"]["response_preview_bounded"], "CLI_RUNNER_OK")
+        self.assertEqual(packet["direct_egress_negative_status"], "wbp_forward_only_proven")
+        self.assertTrue(packet["direct_non_wbp_model_egress_absent_proven"])
         self.assertEqual(packet["transcript_packet"]["transcript_kind"], "service_ledger_only")
         self.assertTrue(packet["transcript_packet"]["raw_prompt_not_stored"])
         self.assertTrue(packet["cleanup_packet"]["cleanup_performed"])

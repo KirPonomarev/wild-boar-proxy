@@ -133,6 +133,34 @@ def _safe_trace_observer_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
+def _safe_process_network_observation_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "status",
+        "machine_error_code",
+        "process_tree_observed",
+        "sample_count",
+        "observed_process_count_max",
+        "allowed_local_endpoints",
+        "allowed_local_endpoint_observed",
+        "peer_endpoints",
+        "non_local_peer_endpoints_present",
+        "classification",
+        "direct_non_wbp_model_egress_absent_proven",
+        "raw_pid_exposed",
+        "pid_not_exposed_to_browser",
+        "secret_value_recorded",
+    }
+    safe: dict[str, Any] = {}
+    for key, value in packet.items():
+        if key not in allowed:
+            continue
+        if isinstance(value, (str, int, bool)) or value is None:
+            safe[key] = value
+        elif isinstance(value, list):
+            safe[key] = value
+    return safe
+
+
 def _source_provenance_status(session: dict[str, Any]) -> str:
     if session.get("route_provenance_required") is True:
         if (
@@ -443,6 +471,14 @@ class CodexCustomSessionManager:
         independent_wbp_trace_observed = result.get("independent_wbp_trace_observed") is True
         raw_trace_observer_packet = result.get("trace_observer_packet") if isinstance(result.get("trace_observer_packet"), dict) else {}
         trace_observer_packet = _safe_trace_observer_packet(raw_trace_observer_packet)
+        raw_process_network_observation = (
+            result.get("process_network_observation_packet")
+            if isinstance(result.get("process_network_observation_packet"), dict)
+            else {}
+        )
+        process_network_observation_packet = _safe_process_network_observation_packet(
+            raw_process_network_observation
+        )
         trace_path = str(trace_observer_packet.get("path") or "")
         upstream_status = trace_observer_packet.get("upstream_status")
         forwarded_to_wbp = trace_observer_packet.get("forwarded_to_wbp") is True
@@ -553,6 +589,7 @@ class CodexCustomSessionManager:
             "upstream_status": upstream_status if isinstance(upstream_status, int) else None,
             "forwarded_to_wbp": forwarded_to_wbp,
             "trace_observer_packet": trace_observer_packet,
+            "process_network_observation_packet": process_network_observation_packet,
             "isolated_engine_home_proven": isolated_engine_home_proven,
             "current_codex_touched": result.get("current_codex_home_used") is True,
             "configured_wire_api": result.get("configured_wire_api") if status_ok else "",

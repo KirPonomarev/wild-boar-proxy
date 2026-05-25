@@ -16,9 +16,11 @@ from unittest import mock
 
 from wild_boar_proxy.operator_surface import (
     ExternalRouteResponsesAdapter,
+    OwnerSideProcessNetworkObserver,
     OperatorSurfaceConfig,
     OperatorSurfaceSession,
     WbpTraceObserver,
+    _run_command_with_observation,
     build_codex_config,
     forbidden_browser_fields,
     run_process_isolation_proof,
@@ -201,17 +203,40 @@ class OperatorSurfaceTests(unittest.TestCase):
         }
         session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
 
-        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def fake_observed_run(command: list[str], **kwargs: object) -> dict[str, object]:
             self.assertEqual(command[-1], "-")
-            self.assertEqual(kwargs.get("input"), "Reply with exactly MAIN_WEB_OK.")
+            self.assertEqual(kwargs.get("prompt"), "Reply with exactly MAIN_WEB_OK.")
             env = kwargs.get("env")
             self.assertIsInstance(env, dict)
             self.assertEqual(env.get("OPENAI_API_KEY"), "sk-test-secret-value")  # type: ignore[union-attr]
             last_message = Path(command[command.index("-o") + 1])
             last_message.write_text("MAIN_WEB_OK\n", encoding="utf-8")
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"type": "done"}), stderr="")
+            return {
+                "exit_code": 0,
+                "stderr": "",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 2,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": ["127.0.0.1:8318"],
+                    "allowed_local_endpoint_observed": True,
+                    "peer_endpoints": [{"endpoint": "127.0.0.1:8318", "host_class": "local"}],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
 
-        with mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run):
+        with mock.patch(
+            "wild_boar_proxy.operator_surface._run_command_with_observation",
+            side_effect=fake_observed_run,
+        ):
             result = session.run_prompt(
                 {
                     "prompt": "Reply with exactly MAIN_WEB_OK.",
@@ -239,6 +264,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(result["current_codex_home_used"])
         self.assertTrue(result["stdin_prompt_used"])
         self.assertTrue(result["temp_root_removed"])
+        self.assertTrue(result["direct_non_wbp_model_egress_absent_proven"])
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
 
     def test_run_prompt_route_backed_external_model_uses_route_upstream_model_and_secret(self) -> None:
@@ -277,7 +303,7 @@ class OperatorSurfaceTests(unittest.TestCase):
             }
         }
 
-        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def fake_observed_run(command: list[str], **kwargs: object) -> dict[str, object]:
             self.assertEqual(command[-1], "-")
             env = kwargs.get("env")
             self.assertIsInstance(env, dict)
@@ -290,7 +316,27 @@ class OperatorSurfaceTests(unittest.TestCase):
             self.assertIn('/v1"', config)
             self.assertIn('wire_api = "responses"', config)
             last_message.write_text("WBP_CUSTOM_EXTERNAL_API_OK\n", encoding="utf-8")
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"type": "done"}), stderr="")
+            return {
+                "exit_code": 0,
+                "stderr": "",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 2,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": ["127.0.0.1:8318"],
+                    "allowed_local_endpoint_observed": True,
+                    "peer_endpoints": [{"endpoint": "127.0.0.1:8318", "host_class": "local"}],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
 
         with (
             mock.patch(
@@ -298,7 +344,10 @@ class OperatorSurfaceTests(unittest.TestCase):
                 return_value="sk-route-secret",
             ),
             mock.patch.object(session, "local_api_key", return_value="sk-local-runtime"),
-            mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run),
+            mock.patch(
+                "wild_boar_proxy.operator_surface._run_command_with_observation",
+                side_effect=fake_observed_run,
+            ),
         ):
             result = session.run_prompt(
                 {
@@ -544,7 +593,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
         session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
 
-        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def fake_observed_run(command: list[str], **kwargs: object) -> dict[str, object]:
             env = kwargs.get("env")
             self.assertIsInstance(env, dict)
             config_path = Path(str(env["CODEX_HOME"])) / "config.toml"  # type: ignore[index]
@@ -564,10 +613,33 @@ class OperatorSurfaceTests(unittest.TestCase):
                 self.assertEqual(response.status, 200)
             last_message = Path(command[command.index("-o") + 1])
             last_message.write_text("WBP_TRACE_OK\n", encoding="utf-8")
-            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"type": "done"}), stderr="")
+            return {
+                "exit_code": 0,
+                "stderr": "",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 3,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": [],
+                    "allowed_local_endpoint_observed": False,
+                    "peer_endpoints": [{"endpoint": "127.0.0.1:9999", "host_class": "local"}],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
 
         try:
-            with mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run):
+            with mock.patch(
+                "wild_boar_proxy.operator_surface._run_command_with_observation",
+                side_effect=fake_observed_run,
+            ):
                 result = session.run_prompt(
                     {
                         "prompt": "Reply with exactly WBP_TRACE_OK.",
@@ -629,7 +701,7 @@ class OperatorSurfaceTests(unittest.TestCase):
         session.status_payload = lambda: {"status": {"status": "ok"}}  # type: ignore[method-assign]
         session.local_api_key = lambda: "sk-test-secret-value"  # type: ignore[method-assign]
 
-        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        def fake_observed_run(command: list[str], **kwargs: object) -> dict[str, object]:
             env = kwargs.get("env")
             self.assertIsInstance(env, dict)
             config_path = Path(str(env["CODEX_HOME"])) / "config.toml"  # type: ignore[index]
@@ -648,10 +720,33 @@ class OperatorSurfaceTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5)
             self.assertEqual(raised.exception.code, 401)
-            return subprocess.CompletedProcess(command, 1, stdout="", stderr="upstream failed")
+            return {
+                "exit_code": 1,
+                "stderr": "upstream failed",
+                "timed_out": False,
+                "process_network_observation_packet": {
+                    "status": "ok",
+                    "machine_error_code": "OK",
+                    "process_tree_observed": True,
+                    "sample_count": 1,
+                    "observed_process_count_max": 1,
+                    "allowed_local_endpoints": [],
+                    "allowed_local_endpoint_observed": False,
+                    "peer_endpoints": [{"endpoint": "127.0.0.1:9999", "host_class": "local"}],
+                    "non_local_peer_endpoints_present": False,
+                    "classification": "wbp_forward_only_proven",
+                    "direct_non_wbp_model_egress_absent_proven": True,
+                    "raw_pid_exposed": False,
+                    "pid_not_exposed_to_browser": True,
+                    "secret_value_recorded": False,
+                },
+            }
 
         try:
-            with mock.patch("wild_boar_proxy.operator_surface.subprocess.run", side_effect=fake_run):
+            with mock.patch(
+                "wild_boar_proxy.operator_surface._run_command_with_observation",
+                side_effect=fake_observed_run,
+            ):
                 result = session.run_prompt(
                     {
                         "prompt": "Reply with exactly WBP_TRACE_OK.",
@@ -675,6 +770,58 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertFalse(result["independent_wbp_trace_observed"])
         self.assertNotIn("Reply with exactly WBP_TRACE_OK.", json.dumps(result))
         self.assertNotIn("sk-test-secret-value", json.dumps(result))
+
+    def test_process_network_observer_classifies_missing_samples_as_insufficient(self) -> None:
+        observer = OwnerSideProcessNetworkObserver(
+            root_pid=123,
+            allowed_local_endpoints={"127.0.0.1:8318"},
+        )
+
+        packet = observer.packet(warning_classes=[])
+
+        self.assertEqual(packet["classification"], "insufficient_observation")
+        self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
+
+    def test_process_network_observer_classifies_local_only_as_wbp_forward_only(self) -> None:
+        observer = OwnerSideProcessNetworkObserver(
+            root_pid=123,
+            allowed_local_endpoints={"127.0.0.1:8318"},
+        )
+        observer._samples = [  # type: ignore[attr-defined]
+            {
+                "process_tree_seen": True,
+                "process_count": 1,
+                "process_tree": [{"pid_digest": "abc", "is_root": True, "command_basename": "codex"}],
+                "peer_endpoints": [{"endpoint": "127.0.0.1:8318", "host_class": "local", "command_basename": "codex"}],
+            }
+        ]
+
+        packet = observer.packet(warning_classes=[])
+
+        self.assertEqual(packet["classification"], "wbp_forward_only_proven")
+        self.assertTrue(packet["direct_non_wbp_model_egress_absent_proven"])
+
+    def test_process_network_observer_classifies_remote_plugin_sync_as_ancillary(self) -> None:
+        observer = OwnerSideProcessNetworkObserver(
+            root_pid=123,
+            allowed_local_endpoints={"127.0.0.1:8318"},
+        )
+        observer._samples = [  # type: ignore[attr-defined]
+            {
+                "process_tree_seen": True,
+                "process_count": 1,
+                "process_tree": [{"pid_digest": "abc", "is_root": False, "command_basename": "git"}],
+                "peer_endpoints": [
+                    {"endpoint": "127.0.0.1:8318", "host_class": "local", "command_basename": "codex"},
+                    {"endpoint": "34.120.0.1:443", "host_class": "non_local", "command_basename": "git"},
+                ],
+            }
+        ]
+
+        packet = observer.packet(warning_classes=["remote_plugin_sync_401"])
+
+        self.assertEqual(packet["classification"], "ancillary_non_model_egress_observed")
+        self.assertTrue(packet["direct_non_wbp_model_egress_absent_proven"])
 
     def test_process_isolation_proof_reports_protected_surfaces_unchanged(self) -> None:
         snapshot = {
