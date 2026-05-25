@@ -14,7 +14,7 @@ Prove a practical non-native Codex CLI runner can use WBP safely without being m
 
 - goal: prove a bounded reusable `CODEX_CLI_RUNNER_VIA_WBP` lane with isolated `CODEX_HOME`, WBP provider routing, transcript artifact, cleanup artifact, and explicit non-native classification
 - branch: `codex/external-agent-lab-isolated`
-- head: `423153c13287a43fc6f8717711637232366021a9`
+- head: `c2ef487c772fc750c9ca71f7d14fbaae74d8eaad`
 - touched files: `wild_boar_proxy/cli.py`, `wild_boar_proxy/cli_runner.py`, `tests/test_cli_runner.py`, `COMMAND_API.md`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/sync_gate_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/version_pinning_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/ambient_env_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_live_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_launch_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_prompt_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_transcript_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_cleanup_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/current_codex_observation_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_direct_egress_negative_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_false_green_audit.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/cli_runner_summary.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/independent_cli_runner_audit.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/evidence/subagent_factcheck_packet.json`, `audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/closeout.md`
 - tests run: `python3 -m unittest tests.test_cli_runner tests.test_cli_token_command tests.test_repo_hygiene tests.test_closeout_resilience`; JSON parse validation on all contour evidence packets; `git diff --check`; `python3 tools/check_closeout_resilience.py audit_results/wbp_codex_cli_runner_via_wbp_proof_pass_2026-05-25/closeout.md`
 - blocked risks: direct-egress negative proof remained unproven with safe tooling; this contour does not prove native `Codex.app`, Original via WBP, FILE_AUTH, native strategy selection, or final E2E readiness
@@ -36,8 +36,8 @@ Prove a practical non-native Codex CLI runner can use WBP safely without being m
 ## Git
 
 - branch: `codex/external-agent-lab-isolated`
-- commit: not yet created at time of writing this closeout
-- pushed: no at time of writing this closeout
+- commit: `c2ef487c772fc750c9ca71f7d14fbaae74d8eaad`
+- pushed: yes
 
 ## Scope Check
 
