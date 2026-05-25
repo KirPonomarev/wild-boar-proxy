@@ -12,6 +12,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     classify_user_data_dir_respected,
     diff_scans,
     scan_tree,
+    summarize_idle_baseline_windows,
 )
 
 
@@ -78,6 +79,84 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         )
         self.assertTrue(packet["current_codex_touched"])
         self.assertEqual(packet["missing_root_app_pids"], [100])
+
+    def test_idle_baseline_summary_marks_unstable_when_repeated_drift_present(self) -> None:
+        windows = [
+            {
+                "current_codex_delta": {"current_codex_touched": False},
+                "protected_surface_recursive_diff": {
+                    "surfaces": {
+                        "codex_dir": {
+                            "diff": {
+                                "changed": [{"relative_path": "logs_2.sqlite"}],
+                                "created": [],
+                                "deleted": [],
+                            }
+                        }
+                    }
+                },
+            },
+            {
+                "current_codex_delta": {"current_codex_touched": False},
+                "protected_surface_recursive_diff": {
+                    "surfaces": {
+                        "codex_dir": {
+                            "diff": {
+                                "changed": [{"relative_path": "logs_2.sqlite"}],
+                                "created": [],
+                                "deleted": [],
+                            }
+                        }
+                    }
+                },
+            },
+        ]
+        summary = summarize_idle_baseline_windows(windows)
+        self.assertEqual(summary["status"], "ok")
+        self.assertEqual(summary["final_verdict"], "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE")
+        self.assertTrue(summary["quiescent_current_codex_precondition_required"])
+        self.assertEqual(summary["drift_repeatability"], "repeated")
+
+    def test_idle_baseline_summary_requires_quiescent_precondition_when_active_drift_present(
+        self,
+    ) -> None:
+        windows = [
+            {
+                "current_codex_delta": {"current_codex_touched": False},
+                "protected_surface_recursive_diff": {
+                    "surfaces": {
+                        "default_app_support_codex": {
+                            "diff": {
+                                "changed": [{"relative_path": "sentry/scope_v3.json"}],
+                                "created": [],
+                                "deleted": [],
+                            }
+                        }
+                    }
+                },
+            },
+            {
+                "current_codex_delta": {"current_codex_touched": False},
+                "protected_surface_recursive_diff": {"surfaces": {}},
+            },
+        ]
+        summary = summarize_idle_baseline_windows(windows)
+        self.assertEqual(summary["final_verdict"], "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE")
+        self.assertTrue(summary["quiescent_current_codex_precondition_required"])
+        self.assertEqual(summary["drift_repeatability"], "sporadic")
+
+    def test_idle_baseline_contour_does_not_overclaim_filesystem_pass(self) -> None:
+        summary = summarize_idle_baseline_windows(
+            [
+                {
+                    "current_codex_delta": {"current_codex_touched": False},
+                    "protected_surface_recursive_diff": {"surfaces": {}},
+                }
+            ]
+        )
+        self.assertEqual(summary["status"], "blocked")
+        self.assertEqual(summary["final_verdict"], "INSUFFICIENT_OBSERVATION")
+        self.assertEqual(summary["drift_repeatability"], "insufficient")
 
 
 if __name__ == "__main__":

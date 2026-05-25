@@ -34,6 +34,7 @@ from .token_command import emit_local_token
 DEFAULT_SHA256_SIZE_LIMIT = 5_000_000
 DEFAULT_STARTUP_WAIT_SECONDS = 20.0
 DEFAULT_SHUTDOWN_WAIT_SECONDS = 15.0
+DEFAULT_IDLE_WINDOW_SECONDS = 3.0
 DEFAULT_DEFAULT_USER_DATA_DIR = str(
     Path.home() / "Library" / "Application Support" / "Codex"
 )
@@ -551,3 +552,131 @@ def run_native_filesystem_probe(
     }
     json_write(evidence_dir / "live_native_filesystem_probe_packet.json", packet)
     return packet
+
+
+def run_idle_baseline_window(
+    *,
+    sleep_seconds: float = DEFAULT_IDLE_WINDOW_SECONDS,
+) -> dict[str, Any]:
+    before_process = collect_codex_process_inventory(
+        custom_user_data_dir="/tmp/nonexistent-custom-user-data"
+    )
+    before_surfaces = scan_protected_surfaces()
+    time.sleep(sleep_seconds)
+    after_surfaces = scan_protected_surfaces()
+    after_process = collect_codex_process_inventory(
+        custom_user_data_dir="/tmp/nonexistent-custom-user-data"
+    )
+    protected_diff = diff_protected_surfaces(before_surfaces, after_surfaces)
+    current_delta = classify_current_codex_delta(before_process, after_process)
+    return {
+        "captured_at_utc": utc_now(),
+        "sleep_seconds": sleep_seconds,
+        "custom_launch_observed": False,
+        "current_codex_running_state_before": before_process,
+        "current_codex_running_state_after": after_process,
+        "current_codex_delta": current_delta,
+        "protected_surface_recursive_before": before_surfaces,
+        "protected_surface_recursive_after": after_surfaces,
+        "protected_surface_recursive_diff": protected_diff,
+        "status": "ok",
+    }
+
+
+def summarize_idle_baseline_windows(windows: list[dict[str, Any]]) -> dict[str, Any]:
+    if len(windows) < 2:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "INSUFFICIENT_OBSERVATION",
+            "final_verdict": "INSUFFICIENT_OBSERVATION",
+            "quiescent_current_codex_precondition_required": False,
+            "drift_repeatability": "insufficient",
+            "window_count": len(windows),
+        }
+
+    any_root_touched = False
+    changed_surfaces_by_window: list[dict[str, list[str]]] = []
+    windows_with_any_drift = 0
+    windows_all_unchanged = 0
+    repeated_surface_drift = False
+    repeated_path_drift = False
+    previous_surface_set: set[str] | None = None
+    previous_path_set: set[tuple[str, str]] | None = None
+
+    for window in windows:
+        current_delta = window.get("current_codex_delta", {})
+        if current_delta.get("current_codex_touched"):
+            any_root_touched = True
+        protected_diff = window.get("protected_surface_recursive_diff", {})
+        surfaces = protected_diff.get("surfaces", {})
+        changed_map: dict[str, list[str]] = {}
+        current_surface_set: set[str] = set()
+        current_path_set: set[tuple[str, str]] = set()
+        for surface_name, payload in surfaces.items():
+            diff = payload.get("diff", {})
+            changed_paths = [entry["relative_path"] for entry in diff.get("changed", [])]
+            created_paths = [entry for entry in diff.get("created", []) if isinstance(entry, str)]
+            deleted_paths = [entry for entry in diff.get("deleted", []) if isinstance(entry, str)]
+            all_changed_paths = sorted(changed_paths + created_paths + deleted_paths)
+            if all_changed_paths:
+                changed_map[surface_name] = all_changed_paths
+                current_surface_set.add(surface_name)
+                current_path_set.update((surface_name, path) for path in all_changed_paths)
+        changed_surfaces_by_window.append(changed_map)
+        if changed_map:
+            windows_with_any_drift += 1
+        else:
+            windows_all_unchanged += 1
+        if previous_surface_set is not None and current_surface_set & previous_surface_set:
+            repeated_surface_drift = True
+        if previous_path_set is not None and current_path_set & previous_path_set:
+            repeated_path_drift = True
+        previous_surface_set = current_surface_set
+        previous_path_set = current_path_set
+
+    if any_root_touched:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "INSUFFICIENT_OBSERVATION",
+            "final_verdict": "INSUFFICIENT_OBSERVATION",
+            "quiescent_current_codex_precondition_required": False,
+            "drift_repeatability": "insufficient",
+            "window_count": len(windows),
+            "window_changed_surfaces": changed_surfaces_by_window,
+            "current_codex_root_baseline_preserved": False,
+        }
+
+    if windows_with_any_drift == 0:
+        final_verdict = "ACTIVE_CURRENT_CODEX_BASELINE_STABLE"
+        drift_repeatability = "sporadic"
+        quiescent_required = False
+    elif windows_with_any_drift >= 2 and (repeated_surface_drift or repeated_path_drift):
+        final_verdict = "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE"
+        drift_repeatability = "repeated"
+        quiescent_required = True
+    elif windows_with_any_drift >= 2:
+        final_verdict = "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE"
+        drift_repeatability = "sporadic"
+        quiescent_required = True
+    else:
+        final_verdict = "ACTIVE_CURRENT_CODEX_BASELINE_UNSTABLE"
+        drift_repeatability = "sporadic"
+        quiescent_required = True
+
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "ok",
+        "reason_class": "",
+        "final_verdict": final_verdict,
+        "quiescent_current_codex_precondition_required": quiescent_required,
+        "drift_repeatability": drift_repeatability,
+        "window_count": len(windows),
+        "windows_with_any_drift": windows_with_any_drift,
+        "windows_all_unchanged": windows_all_unchanged,
+        "repeated_surface_drift": repeated_surface_drift,
+        "repeated_path_drift": repeated_path_drift,
+        "window_changed_surfaces": changed_surfaces_by_window,
+        "current_codex_root_baseline_preserved": True,
+    }
