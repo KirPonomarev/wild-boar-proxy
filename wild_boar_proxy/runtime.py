@@ -494,10 +494,12 @@ def dispatch_external_client(
             severity="recoverable",
             operator_action="retry",
         ) from exc
+    time.sleep(0.5)
     return {
         "dispatch_method": "detached_executable_spawn",
         "dispatch_observed": True,
         "dispatch_exit_code": None,
+        "process_observed_running": process.poll() is None,
         "stderr": "",
     }
 
@@ -8127,6 +8129,8 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
         "dispatch_attempted": False,
         "dispatch_observed": False,
         "dispatch_exit_code": None,
+        "process_observed_running": False,
+        "real_codex_app_launched": False,
         "launch_claim_scope": "os_dispatch_only",
         "final_outcome": "runtime_precondition_failed",
     }
@@ -8196,6 +8200,8 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
                 "dispatch_attempted": not unsupported_shape,
                 "dispatch_observed": False,
                 "dispatch_exit_code": None,
+                "process_observed_running": False,
+                "real_codex_app_launched": False,
                 "final_outcome": final_outcome,
             }
         )
@@ -8252,10 +8258,25 @@ def run_launch_client(paths: RuntimePaths, client_path_raw: str) -> dict[str, An
             "dispatch_attempted": True,
             "dispatch_observed": bool(dispatch_result["dispatch_observed"]),
             "dispatch_exit_code": dispatch_result["dispatch_exit_code"],
+            "process_observed_running": bool(
+                dispatch_result.get("process_observed_running", False)
+            ),
+            "real_codex_app_launched": bool(
+                dispatch_result.get("process_observed_running", False)
+            ),
+            "launch_claim_scope": (
+                "bounded_executable_launch_with_process_observation"
+                if dispatch_result.get("process_observed_running", False)
+                else "os_dispatch_only"
+            ),
             "final_outcome": (
-                "dispatch_requested"
-                if dispatch_result["dispatch_observed"]
-                else "dispatch_failed"
+                "app_process_observed"
+                if dispatch_result.get("process_observed_running", False)
+                else (
+                    "dispatch_requested"
+                    if dispatch_result["dispatch_observed"]
+                    else "dispatch_failed"
+                )
             ),
         }
     )

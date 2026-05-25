@@ -1,0 +1,50 @@
+{
+  "captured_at_utc": "2026-05-25T01:40:10.569354Z",
+  "claim_gate_status": "blocked",
+  "machine_error_code": "OK",
+  "modes": [
+    {
+      "custom_codex_home_allowed": false,
+      "custom_home": false,
+      "dispatch_available": true,
+      "id": "original_codex",
+      "label": "Original Codex",
+      "launch_claim_scope": "owner_authorized_baseline_launch",
+      "live_launch_available": true,
+      "proxy_allowed": false,
+      "proxy_enabled": false,
+      "role": "protected_baseline"
+    },
+    {
+      "availability_reason": "",
+      "current_codex_home_allowed": false,
+      "custom_codex_home_required": true,
+      "custom_home": true,
+      "custom_session_available": true,
+      "id": "codex_custom",
+      "label": "Codex Custom",
+      "launch_claim_scope": "isolated_session_workbench_launch",
+      "launch_dry_run_available": true,
+      "live_launch_available": true,
+      "live_prompt_requires_authorization": true,
+      "proxy_allowed": true,
+      "proxy_enabled": true,
+      "role": "proxy_enabled_workbench"
+    },
+    {
+      "current_codex_home_allowed": false,
+      "current_home_allowed": false,
+      "custom_home": true,
+      "id": "safe_app_copy",
+      "label": "Safe App Copy",
+      "launch_claim_scope": "separate_app_copy_dry_run_only",
+      "launch_dry_run_available": true,
+      "live_launch_available": false,
+      "proxy_allowed": false,
+      "proxy_enabled": false,
+      "role": "separate_copy_launch_surface"
+    }
+  ],
+  "schema_version": 1,
+  "status": "ok"
+}

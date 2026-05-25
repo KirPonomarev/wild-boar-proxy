@@ -4522,7 +4522,48 @@ class WebDesignLiveServerTests(unittest.TestCase):
             dispatched["result"]["changed_files"],
             ["launch_dispatch_metadata"],
         )
+        self.assertEqual(
+            dispatched["result"]["data"]["launch_phase"],
+            "launch_requested",
+        )
+        self.assertFalse(dispatched["result"]["data"]["real_codex_app_launched"])
         self.assertNotIn("/tmp/private-client-path", json.dumps(dispatched))
+
+    def test_launch_client_dispatch_reports_real_app_process_observation(self) -> None:
+        runner = MappingRunner(
+            {
+                ("launch", "client", "--client-path", TEST_LAUNCH_CLIENT_PATH, "--json"): command_packet(
+                    human_message="Client launch observed.",
+                    client_launch_result={
+                        "dispatch_method": "detached_executable_spawn",
+                        "dispatch_observed": True,
+                        "dispatch_attempted": True,
+                        "process_observed_running": True,
+                        "real_codex_app_launched": True,
+                        "final_outcome": "app_process_observed",
+                    },
+                )
+            }
+        )
+
+        dispatched = run_ui_action(
+            runner,
+            {"ui_action": "launch_client_dispatch"},
+            launch_client_path=TEST_LAUNCH_CLIENT_PATH,
+            launch_copy_contract=launch_copy_contract(),
+            action_phase=FULL_ACTION_PHASE,
+        )
+
+        self.assertEqual(
+            dispatched["result"]["data"]["launch_phase"],
+            "app_process_confirmed",
+        )
+        self.assertTrue(dispatched["result"]["data"]["process_confirmed"])
+        self.assertTrue(dispatched["result"]["data"]["real_codex_app_launched"])
+        self.assertEqual(
+            dispatched["result"]["data"]["launch_claim_scope"],
+            "bounded_executable_launch_with_process_observation",
+        )
 
     def test_ui_action_endpoint_blocks_command_id_payload_and_forbidden_actions(self) -> None:
         runner = MappingRunner(live_payloads())

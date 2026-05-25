@@ -2516,6 +2516,7 @@ def run_ui_action(
     *,
     launch_client_path: str | None = None,
     launch_copy_contract: LaunchCopyContract | None = None,
+    launch_action_runner: CommandRunner | None = None,
     action_phase: str = FULL_ACTION_PHASE,
     legacy_import_token_store: LegacyImportTokenStore | None = None,
 ) -> dict[str, Any]:
@@ -2729,8 +2730,13 @@ def run_ui_action(
         structured_args = {"client_path": launch_client_path}
         allow_disabled = True
 
+    selected_runner = (
+        launch_action_runner
+        if ui_action == "launch_client_dispatch" and launch_action_runner is not None
+        else runner
+    )
     result = execute_command(
-        runner,
+        selected_runner,
         str(action_spec["adapter_command_id"]),
         structured_args=structured_args,
         allow_disabled=allow_disabled,
@@ -2868,13 +2874,23 @@ def build_handler(
     codex_custom_live_prompt_authorized = owner_authorization_phrase_present(
         owner_authorization_phrase
     )
+    launch_copy_runner = None
+    if (
+        runner is None
+        and launch_copy_contract is not None
+        and _launch_copy_preflight(launch_copy_contract)["status"] == "admitted"
+    ):
+        launch_copy_runner = JsonCommandRunner(
+            cwd=str(Path(launch_copy_contract.profile_dir or "").expanduser()),
+            env=_sandbox_action_runner_env(launch_copy_contract),
+        )
     if (
         runner is None
         and action_phase == SANDBOX_ACTION_PHASE
         and _sandbox_action_preflight(launch_copy_contract)["status"] == "admitted"
         and launch_copy_contract is not None
     ):
-        sandbox_runner = JsonCommandRunner(
+        sandbox_runner = launch_copy_runner or JsonCommandRunner(
             cwd=str(Path(launch_copy_contract.profile_dir or "").expanduser()),
             env=_sandbox_action_runner_env(launch_copy_contract),
         )
@@ -3604,6 +3620,7 @@ def build_handler(
                     self._read_json_body(),
                     launch_client_path=launch_client_path,
                     launch_copy_contract=launch_copy_contract,
+                    launch_action_runner=launch_copy_runner,
                     action_phase=action_phase,
                     legacy_import_token_store=legacy_import_token_store,
                 )
@@ -3901,6 +3918,8 @@ def _sandbox_action_runner_env(contract: LaunchCopyContract) -> dict[str, str]:
     if repo_root not in pythonpath_parts:
         pythonpath_parts.insert(0, repo_root)
     env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    env["HOME"] = str(profile_dir)
+    env["CODEX_HOME"] = str(profile_dir)
     env["WBP_PROFILE_DIR"] = str(profile_dir)
     env["WBP_MANAGED_DIR"] = str(data_dir)
     env["WBP_STABLE_CONFIG"] = str(data_dir / "stable-runtime-config.yaml")
@@ -4441,13 +4460,19 @@ def _action_result(
         client_launch_result = packet.get("client_launch_result") if isinstance(packet, dict) else None
         launch_state = "launch_failed"
         process_confirmed = False
+        real_codex_app_launched = False
         dispatch_method = ""
         if isinstance(client_launch_result, dict):
             dispatch_method = str(client_launch_result.get("dispatch_method", ""))
             dispatch_observed = client_launch_result.get("dispatch_observed") is True
-            if dispatch_method == "detached_executable_spawn" and dispatch_observed:
-                launch_state = "process_confirmed"
+            real_codex_app_launched = (
+                client_launch_result.get("real_codex_app_launched") is True
+            )
+            if real_codex_app_launched:
+                launch_state = "app_process_confirmed"
                 process_confirmed = True
+            elif dispatch_method == "detached_executable_spawn" and dispatch_observed:
+                launch_state = "launch_requested"
             elif dispatch_observed:
                 launch_state = "launch_requested"
             elif client_launch_result.get("dispatch_attempted") is True:
@@ -4456,8 +4481,13 @@ def _action_result(
             "launch_preflight": _public_launch_preflight_summary(launch_preflight or {}),
             "launch_phase": launch_state,
             "process_confirmed": process_confirmed,
+            "real_codex_app_launched": real_codex_app_launched,
             "dispatch_method": dispatch_method or "unreported",
-            "launch_claim_scope": "os_dispatch_only",
+            "launch_claim_scope": (
+                "bounded_executable_launch_with_process_observation"
+                if real_codex_app_launched
+                else "os_dispatch_only"
+            ),
             "current_session_untouched": (
                 bool(launch_preflight) and launch_preflight.get("current_session_untouched") is True
             ),

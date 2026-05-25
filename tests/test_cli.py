@@ -18180,7 +18180,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(launch_result["runtime_precondition_status"], "ready")
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
-        self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+        self.assertIsInstance(launch_result["process_observed_running"], bool)
+        self.assertEqual(
+            launch_result["real_codex_app_launched"],
+            launch_result["process_observed_running"],
+        )
+        if launch_result["process_observed_running"]:
+            self.assertEqual(
+                launch_result["launch_claim_scope"],
+                "bounded_executable_launch_with_process_observation",
+            )
+            self.assertEqual(launch_result["final_outcome"], "app_process_observed")
+        else:
+            self.assertEqual(launch_result["launch_claim_scope"], "os_dispatch_only")
+            self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
         self.assertEqual(payload["status_observed"]["exit_code"], 0)
         for _ in range(50):
             if trace_file.exists():
@@ -18258,7 +18271,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(trace_file.exists())
         self.assertEqual(before, self.state_snapshot())
 
-    def test_launch_client_treats_detached_executable_as_bounded_dispatch_only(
+    def test_launch_client_marks_real_app_launch_when_process_stays_alive(
         self,
     ) -> None:
         port = free_port()
@@ -18316,8 +18329,11 @@ class CliTests(unittest.TestCase):
         launch_result = payload["client_launch_result"]
         self.assertTrue(launch_result["dispatch_attempted"])
         self.assertTrue(launch_result["dispatch_observed"])
+        self.assertTrue(launch_result["process_observed_running"])
+        self.assertTrue(launch_result["real_codex_app_launched"])
         self.assertIsNone(launch_result["dispatch_exit_code"])
-        self.assertEqual(launch_result["final_outcome"], "dispatch_requested")
+        self.assertEqual(launch_result["launch_claim_scope"], "bounded_executable_launch_with_process_observation")
+        self.assertEqual(launch_result["final_outcome"], "app_process_observed")
 
     def test_launch_client_reports_exec_format_failure_as_json_packet(self) -> None:
         port = free_port()
