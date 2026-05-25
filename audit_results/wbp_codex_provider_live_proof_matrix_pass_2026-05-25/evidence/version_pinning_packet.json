@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-25T12:32:15.548877Z",
+  "packet_kind": "version_pinning",
+  "status": "ok",
+  "schema_version": 1,
+  "machine_error_code": "OK",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version": "codex-cli 0.128.0",
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.41501",
+  "codex_app_bundle_version": "3044",
+  "codex_app_bundle_identifier": "com.openai.codex",
+  "config_schema_source": "https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json",
+  "config_schema_retrieval_date_utc": "2026-05-25T12:32:15.548937Z",
+  "config_schema_sha256": "ee66ce87a31cfb9c1ae6642459cb36d9c583d86128a8d2d5c2549ba0579b5e6b",
+  "wbp_git_commit": "f0a8eea30d82521c133aa7129b06f33e91fd8ef7",
+  "wbp_status_endpoint": "http://127.0.0.1:8318/v1",
+  "wbp_status_liveness": "healthy",
+  "wbp_status_machine_error_code": "OK",
+  "secret_value_recorded": false
+}

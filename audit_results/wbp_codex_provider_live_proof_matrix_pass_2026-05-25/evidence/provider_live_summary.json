@@ -1,0 +1,21 @@
+{
+  "captured_at_utc": "2026-05-25T12:32:46.368856Z",
+  "packet_kind": "provider_live_summary",
+  "status": "ok",
+  "schema_version": 1,
+  "machine_error_code": "OK",
+  "final_status": "WBP_CODEX_PROVIDER_LIVE_COMPATIBILITY_CLASSIFIED",
+  "variant_a_result": "pass",
+  "variant_b_result": "pass",
+  "current_codex_untouched_on_targeted_files": true,
+  "positive_arrival_proof_available": true,
+  "general_non_arrival_proof_available": false,
+  "notes": [
+    "Variant A env_key provider request reached WBP and returned exact expected message.",
+    "Variant B auth.command was invoked and the provider request reached WBP and returned exact expected message.",
+    "Both variants used temp HOME and temp CODEX_HOME and left targeted current Codex surfaces unchanged.",
+    "Direct model-path-to-WBP proof is strong; global remote silence is not proven because stderr showed chatgpt.com remote plugin sync warnings.",
+    "Existing trace observer is sufficient for controlled positive arrival proof but not a durable general non-arrival proof surface."
+  ],
+  "secret_value_recorded": false
+}
