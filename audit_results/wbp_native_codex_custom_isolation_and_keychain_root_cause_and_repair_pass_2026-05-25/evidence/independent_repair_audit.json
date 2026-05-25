@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "packet_kind": "independent_repair_audit",
+  "captured_at_utc": "2026-05-25T10:29:15.265520Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_ISOLATION_AND_KEYCHAIN_ROOT_CAUSE_AND_REPAIR_PASS_R2",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "checks": {
+    "prior_false_green_preserved": true,
+    "repo_owned_launcher_now_recognized": true,
+    "invalid_backup_not_counted_as_active_truth": true,
+    "isolated_lane_only_counted": true,
+    "real_home_lane_not_counted": true,
+    "protected_surfaces_unchanged_in_isolated_lane": true,
+    "process_observed_in_isolated_lane": true,
+    "no_routing_or_session_claims_smuggled_in": true,
+    "no_repeated_machine_visible_keychain_prompt_signal": true
+  }
+}

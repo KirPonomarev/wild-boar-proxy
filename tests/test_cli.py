@@ -17769,8 +17769,30 @@ class CliTests(unittest.TestCase):
                 "repo_managed_marker_recognized"
             ]
         )
+        launcher_text = self.default_launcher_script.read_text(encoding="utf-8")
+        self.assertIn('if [ "$mode" = "desktop" ]; then', launcher_text)
+        self.assertIn('export CODEX_HOME="$PROFILE_DIR"', launcher_text)
+        self.assertIn(
+            'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
+            launcher_text,
+        )
         self.assertEqual(status_payload["current_proxy_url"], "http://127.0.0.1:10808")
         self.assertEqual(status_payload["changed_files"], [])
+
+    def test_repo_owned_default_launcher_payload_includes_isolated_desktop_lane(
+        self,
+    ) -> None:
+        payload = runtime_mod.build_repo_owned_default_launcher_script_payload()
+        self.assertIn('PROFILE_DIR="$HOME/.codex-custom-cli"', payload)
+        self.assertIn('AUTH_FILE="$PROFILE_DIR/auth.json"', payload)
+        self.assertIn('APP_USER_DATA_DIR="$PROFILE_DIR/electron-user-data"', payload)
+        self.assertIn('if [ "$mode" = "desktop" ]; then', payload)
+        self.assertIn('export CODEX_HOME="$PROFILE_DIR"', payload)
+        self.assertIn('export OPENAI_API_KEY="$(${WBP_PYTHON_BIN:-/usr/bin/python3}', payload)
+        self.assertIn(
+            'exec "$CODEX_APP_BIN" --user-data-dir "$APP_USER_DATA_DIR" "$@"',
+            payload,
+        )
 
     def test_launch_smoke_does_not_overwrite_unmarked_default_launcher_file(self) -> None:
         original_text = "#!/bin/sh\nmode=\"$1\"\n[ \"$mode\" = smoke ] || exit 7\nexit 9\n"

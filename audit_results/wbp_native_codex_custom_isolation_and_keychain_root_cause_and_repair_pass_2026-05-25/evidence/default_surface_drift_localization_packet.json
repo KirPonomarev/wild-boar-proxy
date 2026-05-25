@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_kind": "default_surface_drift_localization",
+  "captured_at_utc": "2026-05-25T10:29:15.265520Z",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_ISOLATION_AND_KEYCHAIN_ROOT_CAUSE_AND_REPAIR_PASS_R2",
+  "prior_failed_contour_ref": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_codex_custom_authorized_process_window_usability_proof_pass_2026-05-25/closeout.md",
+  "prior_touched_surface_labels": [
+    "default_app_support_codex"
+  ],
+  "prior_touch_reason_class": "default_codex_surface_mtime_changed_during_custom_launch",
+  "prior_dispatch_failed_checks": [
+    "native_window_usability_required",
+    "current_codex_must_remain_untouched"
+  ],
+  "real_home_wrapper_launch_observed_touched_surface_labels": [
+    "codex_config"
+  ],
+  "real_home_wrapper_launch_counted_as_admitted": false,
+  "real_home_wrapper_launch_forbidden_reason": "custom_native_requires_isolated_home_for_no_current_codex_hijack_rule",
+  "isolated_home_recheck_touched_surface_labels": [],
+  "isolated_home_recheck_default_codex_surfaces_unchanged": true,
+  "localized_root_cause_verdict": "invalid_marker_custom_launcher_replaced_with_repo_owned_launcher_and_custom_native_launch_must_run_under_isolated_HOME"
+}
