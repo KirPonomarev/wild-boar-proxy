@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "packet_kind": "independent_live_audit",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_AUTHORIZED_PROCESS_WINDOW_USABILITY_PROOF_PASS_R6",
+  "status": "blocked",
+  "machine_error_code": "NATIVE_CUSTOM_LIVE_PROOF_NOT_ACCEPTED",
+  "exact_owner_authorization_present": true,
+  "dispatch_bounded_to_custom_only": true,
+  "process_proof_honest": true,
+  "window_proof_honest": true,
+  "window_proven": false,
+  "native_window_usable_proven": false,
+  "current_codex_untouched_proven": false,
+  "cleanup_completed": true,
+  "prompt_attempted": false,
+  "route_inference_attempted": false,
+  "false_green_detected": false,
+  "blocking_reasons": [
+    "no_accessible_window_for_launched_pid",
+    "default_codex_surface_changed_during_custom_launch_attempt"
+  ],
+  "verdict": "blocked_after_live_attempt"
+}

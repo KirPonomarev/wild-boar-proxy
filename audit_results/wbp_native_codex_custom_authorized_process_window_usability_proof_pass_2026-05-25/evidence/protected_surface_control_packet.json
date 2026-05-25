@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "packet_kind": "protected_surface_control_packet",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_AUTHORIZED_PROCESS_WINDOW_USABILITY_PROOF_PASS_R6",
+  "status": "ok",
+  "machine_error_code": "OK",
+  "control_window_seconds": 25,
+  "launch_attempted": false,
+  "protected_surfaces_unchanged": true,
+  "comparisons": {
+    "codex_config": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "codex_auth": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": true
+    },
+    "default_app_support_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_cache_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    },
+    "default_httpstorage_codex": {
+      "exists_unchanged": true,
+      "mtime_ns_unchanged": true,
+      "size_unchanged": true,
+      "sha256_unchanged": null
+    }
+  }
+}
