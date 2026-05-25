@@ -18,6 +18,12 @@ from wild_boar_proxy.native_launch_dispatch import (
     build_native_window_observation_packet,
     build_native_window_usability_packet,
 )
+from wild_boar_proxy.native_window_probe import (
+    OWNER_STANDING_AUTHORIZATION_PHRASE,
+    native_window_probe_command,
+    native_window_probe_server_plan,
+    owner_authorization_phrase_present,
+)
 
 
 def native_command() -> dict[str, object]:
@@ -66,6 +72,28 @@ def admitted_custom_packet(**overrides: object) -> dict[str, object]:
 
 
 class NativeLaunchDispatchTests(unittest.TestCase):
+    def test_native_window_probe_runner_command_matches_custom_native_mode(self) -> None:
+        command = native_window_probe_command()
+        self.assertEqual(command["schema_version"], 1)
+        self.assertEqual(command["command_id"], "cmd-native-window-proof")
+        self.assertEqual(command["launch_mode"], "CODEX_CUSTOM_NATIVE_APP")
+
+    def test_native_window_probe_server_plan_keeps_repo_canonical_isolated_home_lane(self) -> None:
+        plan = native_window_probe_server_plan()
+        self.assertTrue(plan["isolated_home_plan"])
+        self.assertTrue(plan["isolated_codex_home_plan"])
+        self.assertTrue(plan["isolated_profile_data_dir_plan"])
+        self.assertTrue(plan["isolated_app_support_dir_plan"])
+        self.assertTrue(plan["isolated_cache_dir_plan"])
+        self.assertTrue(plan["isolated_runtime_dir_plan"])
+        self.assertTrue(plan["keychain_reset_prompt_blocker_plan"])
+        self.assertTrue(plan["server_planned_route_endpoint"])
+
+    def test_owner_authorization_phrase_present_requires_exact_phrase(self) -> None:
+        self.assertTrue(owner_authorization_phrase_present(OWNER_STANDING_AUTHORIZATION_PHRASE))
+        self.assertTrue(owner_authorization_phrase_present(f" {OWNER_STANDING_AUTHORIZATION_PHRASE} "))
+        self.assertFalse(owner_authorization_phrase_present("go"))
+
     def test_authorization_blocks_without_owner_authorization(self) -> None:
         packet = build_native_dispatch_authorization_packet(
             owner_authorized=False,

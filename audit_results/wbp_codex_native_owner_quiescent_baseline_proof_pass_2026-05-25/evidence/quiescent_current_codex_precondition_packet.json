@@ -1,0 +1,25 @@
+{
+  "captured_at_utc": "2026-05-25T16:57:35.764178Z",
+  "custom_process_count": 0,
+  "custom_process_present": false,
+  "default_codex_process_present": false,
+  "default_process_count": 0,
+  "inventory": {
+    "captured_at_utc": "2026-05-25T16:57:35.763949Z",
+    "custom_process_count": 0,
+    "custom_process_lines": [],
+    "custom_user_data_dir": "/tmp/nonexistent-custom-user-data",
+    "default_process_count": 0,
+    "default_process_lines": [],
+    "default_user_data_dir": "/Users/kirillponomarev/Library/Application Support/Codex",
+    "line_count": 0,
+    "root_app_pids": [],
+    "sample": []
+  },
+  "precondition_failures": [],
+  "quiescent_current_codex_precondition_satisfied": true,
+  "reason_class": "",
+  "root_app_pid_present": false,
+  "root_app_pids": [],
+  "status": "ok"
+}
