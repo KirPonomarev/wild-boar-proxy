@@ -1,0 +1,39 @@
+{
+  "admission": {
+    "captured_at_utc": "2026-05-25T14:37:03.756437Z",
+    "fresh_context_required": true,
+    "hosted_by_protected_codex_session": true,
+    "operator_action_performed": false,
+    "operator_action_required": true,
+    "quiescent_precondition_verified": false,
+    "reason_class": "",
+    "same_thread_admissible": false,
+    "status": "ok",
+    "verdict": "QUIESCENT_HANDOFF_REQUIRES_FRESH_CONTEXT"
+  },
+  "captured_at_utc": "2026-05-25T14:37:03.901209Z",
+  "host_process_chain": [
+    {
+      "command": "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python /Volumes/Work/wild-boar-proxy/tools/native_quiescent_handoff_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_codex_native_quiescent_handoff_gate_pass_2026-05-25/evidence",
+      "pid": 99768,
+      "ppid": 41308
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+      "pid": 41308,
+      "ppid": 41266
+    },
+    {
+      "command": "/Applications/Codex.app/Contents/MacOS/Codex",
+      "pid": 41266,
+      "ppid": 1
+    },
+    {
+      "command": "/sbin/launchd",
+      "pid": 1,
+      "ppid": 0
+    }
+  ],
+  "operator_action_performed": false,
+  "operator_action_required": true
+}

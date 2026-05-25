@@ -712,3 +712,70 @@ def classify_quiescent_current_codex_precondition(
         "precondition_failures": failures,
         "inventory": inventory,
     }
+
+
+def classify_quiescent_handoff_admission(
+    *,
+    operator_action_performed: bool,
+    quiescent_precondition_packet: dict[str, Any],
+    host_process_chain: list[dict[str, Any]],
+) -> dict[str, Any]:
+    hosted_by_codex = any(
+        "/Applications/Codex.app/Contents/MacOS/Codex" in entry.get("command", "")
+        or "codex app-server" in entry.get("command", "")
+        for entry in host_process_chain
+    )
+    quiescent_verified = bool(
+        quiescent_precondition_packet.get("quiescent_current_codex_precondition_satisfied")
+    )
+    if hosted_by_codex:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "reason_class": "",
+            "operator_action_required": True,
+            "operator_action_performed": operator_action_performed,
+            "quiescent_precondition_verified": quiescent_verified,
+            "same_thread_admissible": False,
+            "fresh_context_required": True,
+            "hosted_by_protected_codex_session": True,
+            "verdict": "QUIESCENT_HANDOFF_REQUIRES_FRESH_CONTEXT",
+        }
+    if not operator_action_performed:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "blocked",
+            "reason_class": "QUIESCENT_HANDOFF_NOT_ADMITTED",
+            "operator_action_required": True,
+            "operator_action_performed": False,
+            "quiescent_precondition_verified": quiescent_verified,
+            "same_thread_admissible": False,
+            "fresh_context_required": hosted_by_codex,
+            "hosted_by_protected_codex_session": hosted_by_codex,
+            "verdict": "operator_action_missing",
+        }
+    if quiescent_verified and not hosted_by_codex:
+        return {
+            "captured_at_utc": utc_now(),
+            "status": "ok",
+            "reason_class": "",
+            "operator_action_required": True,
+            "operator_action_performed": True,
+            "quiescent_precondition_verified": True,
+            "same_thread_admissible": True,
+            "fresh_context_required": False,
+            "hosted_by_protected_codex_session": False,
+            "verdict": "QUIESCENT_HANDOFF_ADMISSIBLE",
+        }
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "blocked",
+        "reason_class": "QUIESCENT_HANDOFF_NOT_ADMITTED",
+        "operator_action_required": True,
+        "operator_action_performed": operator_action_performed,
+        "quiescent_precondition_verified": quiescent_verified,
+        "same_thread_admissible": False,
+        "fresh_context_required": False,
+        "hosted_by_protected_codex_session": False,
+        "verdict": "quiescent_unverified",
+    }

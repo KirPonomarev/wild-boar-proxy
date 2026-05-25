@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    classify_quiescent_handoff_admission,
     classify_quiescent_current_codex_precondition,
     classify_current_codex_delta,
     classify_user_data_dir_respected,
@@ -190,6 +191,48 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(packet["status"], "ok")
         self.assertEqual(packet["reason_class"], "")
         self.assertTrue(packet["quiescent_current_codex_precondition_satisfied"])
+
+    def test_quiescent_handoff_blocks_without_operator_admission(self) -> None:
+        packet = classify_quiescent_handoff_admission(
+            operator_action_performed=False,
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+            host_process_chain=[{"command": "/usr/bin/python3"}],
+        )
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["reason_class"], "QUIESCENT_HANDOFF_NOT_ADMITTED")
+        self.assertFalse(packet["same_thread_admissible"])
+        self.assertFalse(packet["fresh_context_required"])
+
+    def test_quiescent_handoff_classifies_fresh_context_requirement(self) -> None:
+        packet = classify_quiescent_handoff_admission(
+            operator_action_performed=False,
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": False
+            },
+            host_process_chain=[
+                {"command": "/Applications/Codex.app/Contents/Resources/codex app-server"},
+                {"command": "/Applications/Codex.app/Contents/MacOS/Codex"},
+            ],
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["verdict"], "QUIESCENT_HANDOFF_REQUIRES_FRESH_CONTEXT")
+        self.assertFalse(packet["same_thread_admissible"])
+        self.assertTrue(packet["fresh_context_required"])
+
+    def test_quiescent_handoff_does_not_attempt_live_launch(self) -> None:
+        packet = classify_quiescent_handoff_admission(
+            operator_action_performed=True,
+            quiescent_precondition_packet={
+                "quiescent_current_codex_precondition_satisfied": True
+            },
+            host_process_chain=[{"command": "/usr/bin/python3"}],
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["verdict"], "QUIESCENT_HANDOFF_ADMISSIBLE")
+        self.assertTrue(packet["same_thread_admissible"])
+        self.assertFalse(packet["fresh_context_required"])
 
 
 if __name__ == "__main__":
