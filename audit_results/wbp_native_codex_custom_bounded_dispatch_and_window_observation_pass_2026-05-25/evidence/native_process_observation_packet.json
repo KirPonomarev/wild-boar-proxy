@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "machine_error_code": "NATIVE_PROCESS_NOT_OBSERVED",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_BOUNDED_DISPATCH_AND_WINDOW_OBSERVATION_PASS_R2",
+  "packet_kind": "native_process_observation",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "dispatch_observed": false,
+  "process_observed": false,
+  "observation_blocked_reason_class": "owner_authorization_missing_no_live_dispatch",
+  "native_launch_complete": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false
+}

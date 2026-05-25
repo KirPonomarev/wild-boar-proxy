@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_BOUNDED_DISPATCH_AND_WINDOW_OBSERVATION_PASS_R2",
+  "packet_kind": "native_window_observation",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "window_observed": false,
+  "window_observation_blocked_with_reason": true,
+  "blocked_reason_class": "owner_authorization_missing_no_live_dispatch",
+  "native_window_usable": false,
+  "native_window_usable_claimed": false,
+  "native_launch_complete": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false
+}

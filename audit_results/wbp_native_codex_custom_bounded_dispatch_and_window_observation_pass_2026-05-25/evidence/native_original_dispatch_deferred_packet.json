@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "machine_error_code": "NATIVE_ORIGINAL_DISPATCH_DEFERRED",
+  "contour_id": "WBP_NATIVE_CODEX_CUSTOM_BOUNDED_DISPATCH_AND_WINDOW_OBSERVATION_PASS_R2",
+  "packet_kind": "native_original_dispatch_deferred",
+  "launch_mode": "ORIGINAL_CODEX_VIA_WBP",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "original_contract_preserved": true,
+  "original_live_dispatch_attempted": false,
+  "reason_class": "out_of_scope_custom_first",
+  "native_launch_complete": false,
+  "route_trace_bound": false,
+  "reversibility_proof_claimed": false
+}
