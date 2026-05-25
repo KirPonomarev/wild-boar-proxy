@@ -1,0 +1,23 @@
+{
+  "blocked_reason_class": "",
+  "captured_at_utc": "2026-05-25T19:34:28.481563Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_runtime_surface": "bounded_dispatch_only",
+  "machine_error_code": "OK",
+  "native_launch_complete": false,
+  "native_window_usable": false,
+  "native_window_usable_claimed": false,
+  "observed_pid": 90896,
+  "packet_kind": "native_window_observation",
+  "product_status_upgraded": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "schema_version": 1,
+  "status": "ok",
+  "ui_mutation_performed": false,
+  "window_observation_blocked_with_reason": false,
+  "window_observed": true,
+  "window_query": "Codex, true, false, false, 0",
+  "window_query_error_class": "",
+  "window_query_rc": 0
+}

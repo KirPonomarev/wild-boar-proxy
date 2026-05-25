@@ -1,0 +1,18 @@
+{
+  "admission_consumed": true,
+  "blocked_reason_class": "",
+  "captured_at_utc": "2026-05-25T19:34:23.514261Z",
+  "dispatch_scope": "custom_first_bounded_dispatch",
+  "live_dispatch_allowed": true,
+  "live_runtime_surface": "bounded_dispatch_only",
+  "machine_error_code": "OK",
+  "native_launch_complete": false,
+  "owner_authorized": true,
+  "packet_kind": "native_dispatch_authorization",
+  "product_status_upgraded": false,
+  "prompt_attempted": false,
+  "route_trace_bound": false,
+  "schema_version": 1,
+  "status": "ok",
+  "ui_mutation_performed": false
+}

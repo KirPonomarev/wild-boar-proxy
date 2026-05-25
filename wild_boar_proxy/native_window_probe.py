@@ -136,15 +136,88 @@ def _window_observation_via_ax(process_inventory: dict[str, Any]) -> dict[str, A
     return packet
 
 
+def _ax_input_capable(observed_pid: int) -> tuple[bool, str]:
+    script = (
+        'tell application "System Events"\n'
+        f'  set p to first process whose unix id is {observed_pid}\n'
+        '  set w to front window of p\n'
+        '  set hasField to false\n'
+        '  try\n'
+        '    set hasField to exists (first UI element of w whose role is "AXTextField" or role is "AXTextArea")\n'
+        '  end try\n'
+        '  return {name of w, hasField}\n'
+        'end tell\n'
+    )
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    stdout = result.stdout.strip()
+    if result.returncode != 0 or not stdout:
+        return False, str(result.stderr.strip() or "ax_query_failed")
+    parts = stdout.split(", ", 1)
+    input_capable = len(parts) == 2 and parts[1].strip().lower() == "true"
+    return input_capable, stdout
+
+
 def _window_usability_from_observation(window_observation: dict[str, Any]) -> dict[str, Any]:
     window_observed = window_observation.get("window_observed") is True
-    return build_native_window_usability_packet(
-        window_observed=window_observed,
-        input_capable_ui_observed=False,
-        blocked_reason_class=(
-            "input_capable_window_not_proven_for_pid" if not window_observed else "prompt_surface_not_attempted_in_runner_surface_contour"
-        ),
+    if not window_observed:
+        return build_native_window_usability_packet(
+            window_observed=False,
+            input_capable_ui_observed=False,
+            blocked_reason_class="input_capable_window_not_proven_for_pid",
+        )
+    observed_pid = window_observation.get("observed_pid")
+    if not isinstance(observed_pid, int):
+        return build_native_window_usability_packet(
+            window_observed=True,
+            input_capable_ui_observed=False,
+            blocked_reason_class="observed_pid_missing_for_input_capable_query",
+        )
+    input_capable, query_result = _ax_input_capable(observed_pid)
+    packet = build_native_window_usability_packet(
+        window_observed=True,
+        input_capable_ui_observed=input_capable,
+        blocked_reason_class="" if input_capable else "input_capable_window_not_proven_for_pid",
     )
+    packet.update({
+        "ax_query_result": query_result,
+        "input_capable_query_method": "AX/System Events text input element inspection",
+    })
+    return packet
+
+
+def _build_identity_binding(
+    window_packet: dict[str, Any],
+    layout: NativeProbeLayout,
+    launch_result: dict[str, Any],
+) -> dict[str, Any]:
+    window_observed = window_packet.get("window_observed") is True
+    window_name = window_packet.get("window_query", "")
+    bound = window_observed and isinstance(window_name, str) and len(window_name) > 0
+    distinguishable = bound and "/Applications/Codex.app/Contents/MacOS/Codex" in str(
+        launch_result.get("startup_inventory", {}).get("sample", [])
+    )
+    identity_chain = [
+        "repo_canonical_custom_proxy_auth_isolated_home",
+        str(layout.launcher_path),
+        "/Applications/Codex.app/Contents/MacOS/Codex",
+        f"process_group_or_pid:{launch_result['launcher_pid']}",
+        f"window_binding:{'proven' if bound else 'unproven'}",
+    ]
+    if bound and window_name:
+        identity_chain.append(f"window_ax_visible:{window_name}")
+    return {
+        "captured_at_utc": utc_now(),
+        "status": "ok" if bound else "blocked",
+        "machine_error_code": "OK" if bound else "NATIVE_WINDOW_IDENTITY_NOT_PROVEN",
+        "window_bound_to_custom_launch": bound,
+        "window_distinguishable_from_original_codex": distinguishable,
+        "identity_chain": identity_chain,
+    }
 
 
 def run_native_window_probe(
@@ -285,7 +358,9 @@ def run_native_window_probe(
     custom_dispatch["process_id"] = launch_result["launcher_pid"]
     custom_dispatch["profile_dir"] = materialized["profile_dir"]
     custom_dispatch["codex_home"] = materialized["profile_dir"]
-    custom_dispatch["window_id_or_title"] = "unproven" if not window_packet.get("window_observed") else str(window_packet.get("window_query") or "observed")
+    window_observed = window_packet.get("window_observed") is True
+    input_capable = usability_packet.get("input_capable_ui_observed") is True
+    custom_dispatch["window_id_or_title"] = str(window_packet.get("window_query") or "observed") if window_observed else "unproven"
     custom_dispatch["cleanup_command"] = f"remove_tree_with_retry({tmp_root})"
     custom_dispatch["wbp_action_id"] = "wbp-native-window-proof"
     custom_dispatch["trace_id"] = "unproven"
@@ -295,14 +370,23 @@ def run_native_window_probe(
         custom_dispatch_packet=custom_dispatch,
         original_deferred_packet=original_deferred,
     )
+    window_proof_pass = window_observed and input_capable
     summary = {
         "captured_at_utc": utc_now(),
-        "status": "ok",
-        "machine_error_code": "OK",
+        "status": "ok" if window_proof_pass else "blocked",
+        "machine_error_code": "OK" if window_proof_pass else "NATIVE_CUSTOM_WINDOW_NOT_PROVEN",
         "runner_surface_ready": True,
         "selected_strategy_id": "repo_canonical_custom_proxy_auth_isolated_home",
         "owner_authorization_phrase_present": True,
         "expected_runner_command": "python3 tools/native_window_proof_probe.py --repo-root <repo> --evidence-dir <dir> --endpoint <url> --model <model> --owner-authorization-phrase <phrase>",
+        "window_observed": window_observed,
+        "input_capable_ui_surface_observed": input_capable,
+        "window_proof_pass": window_proof_pass,
+        "blocked_reason_class": "" if window_proof_pass else (
+            "input_capable_window_not_proven_for_pid" if window_observed and not input_capable
+            else "pid_visible_but_accessible_window_absent" if not window_observed
+            else "native_custom_window_not_proven"
+        ),
         "materialized_profile": materialized,
         "custom_native_launch_packet": custom_dispatch,
     }
@@ -310,20 +394,7 @@ def run_native_window_probe(
         "native_custom_launch_packet.json": custom_dispatch,
         "process_lineage_packet.json": process_packet,
         "window_observation_packet.json": window_packet,
-        "window_identity_binding_packet.json": {
-            "captured_at_utc": utc_now(),
-            "status": "ok" if window_packet.get("window_observed") else "blocked",
-            "machine_error_code": "OK" if window_packet.get("window_observed") else "NATIVE_WINDOW_IDENTITY_NOT_PROVEN",
-            "window_bound_to_custom_launch": False,
-            "window_distinguishable_from_original_codex": False,
-            "identity_chain": [
-                "repo_canonical_custom_proxy_auth_isolated_home",
-                str(layout.launcher_path),
-                "/Applications/Codex.app/Contents/MacOS/Codex",
-                f"process_group_or_pid:{launch_result['launcher_pid']}",
-                "window_binding:unproven",
-            ],
-        },
+        "window_identity_binding_packet.json": _build_identity_binding(window_packet, layout, launch_result),
         "native_window_ui_surface_packet.json": usability_packet,
         "current_codex_running_state_before.json": before_process,
         "current_codex_running_state_after.json": after_process,
