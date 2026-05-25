@@ -1,0 +1,20 @@
+{
+  "auth_command_runtime_claimed": false,
+  "auth_command_sequence_shape_rejected": true,
+  "auth_command_string_shape_accepted": true,
+  "captured_at_utc": "2026-05-25T12:21:10.005116Z",
+  "classification_scope": "syntax_and_safe_load_only",
+  "cli_auth_credentials_store_invalid_type_rejected": true,
+  "cli_auth_credentials_store_string_accepted": true,
+  "machine_error_code": "OK",
+  "minimal_provider_config_shape_accepted": true,
+  "model_provider_string_required": true,
+  "packet_kind": "provider_contract_syntax_matrix",
+  "provider_live_compatibility_claimed": false,
+  "requires_openai_auth_boolean_required": true,
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok",
+  "unsupported_extra_provider_key_rejected": false,
+  "unsupported_extra_provider_key_tolerated": true
+}

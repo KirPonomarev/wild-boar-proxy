@@ -1,0 +1,21 @@
+{
+  "auth_command_runtime_claimed": false,
+  "captured_at_utc": "2026-05-25T12:21:10.005120Z",
+  "current_codex_untouched": true,
+  "final_status": "WBP_CODEX_PROVIDER_CONTRACT_SYNTAX_CLASSIFIED",
+  "local_codex_version": "codex-cli 0.128.0",
+  "machine_error_code": "OK",
+  "notes": [
+    "local Codex accepts model_providers.wbp config shape under safe load commands",
+    "auth.command expects string shape in this local version",
+    "requires_openai_auth expects boolean",
+    "cli_auth_credentials_store accepts string file mode",
+    "unsupported extra provider key was tolerated by safe load command and remains unclassified for stricter semantics"
+  ],
+  "packet_kind": "provider_contract_syntax_summary",
+  "provider_live_compatibility_claimed": false,
+  "safe_parse_seam_exists": true,
+  "schema_version": 1,
+  "secret_value_recorded": false,
+  "status": "ok"
+}
