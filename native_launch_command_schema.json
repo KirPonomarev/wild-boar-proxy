@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "schema_id": "WBP_NATIVE_LAUNCH_COMMAND_SCHEMA",
+  "scope": "client_request_contract_only",
+  "allowed_launch_modes": [
+    "CODEX_CUSTOM_NATIVE_APP",
+    "ORIGINAL_CODEX_VIA_WBP"
+  ],
+  "required_fields": [
+    "schema_version",
+    "command_id",
+    "launch_mode"
+  ],
+  "client_allowed_fields": [
+    "schema_version",
+    "command_id",
+    "launch_mode",
+    "request_id",
+    "operator_intent"
+  ],
+  "client_forbidden_authority_fields": [
+    "api_key",
+    "apikey",
+    "auth",
+    "auth_path",
+    "authorization",
+    "backend",
+    "backend_id",
+    "base_url",
+    "codex_home",
+    "command",
+    "data_dir",
+    "endpoint",
+    "env",
+    "executable",
+    "home",
+    "http_proxy",
+    "https_proxy",
+    "model",
+    "model_id",
+    "openai_base_url",
+    "path",
+    "pid",
+    "port",
+    "process_id",
+    "profile",
+    "profile_dir",
+    "profile_root",
+    "proxy",
+    "route",
+    "route_endpoint",
+    "route_id",
+    "secret",
+    "token",
+    "trace_id"
+  ],
+  "authority_rule": "browser_or_client_may_choose_mode_only; server_owns_paths_env_routes_backend_endpoint_and_process_identity"
+}
