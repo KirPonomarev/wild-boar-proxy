@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "status": "ok",
+  "machine_error_code": "OK",
+  "contour_id": "WBP_NATIVE_CODEX_LAUNCH_PREFLIGHT_AND_ADMISSION_PASS_R2",
+  "packet_kind": "native_launch_identity_fields",
+  "admission_scope": "admission_only_no_runtime_launch",
+  "identity_chain_required_fields": [
+    "wbp_action_id",
+    "launch_mode",
+    "process_id",
+    "process_lineage",
+    "window_id_or_title",
+    "profile_dir",
+    "codex_home",
+    "route_endpoint",
+    "trace_id",
+    "cleanup_command"
+  ],
+  "identity_chain_fields_reserved": true,
+  "identity_chain_proven": false,
+  "live_process_observed": false,
+  "native_window_observed": false,
+  "route_trace_bound": false,
+  "native_launch_complete": false
+}
