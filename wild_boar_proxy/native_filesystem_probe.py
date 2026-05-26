@@ -910,23 +910,25 @@ def build_original_live_temporary_config_candidate_packet(
     provider_auth_strategy_reference_packet: dict[str, Any],
     endpoint: str = "http://127.0.0.1:8318/v1",
     model: str = "gpt-5.4-mini",
+    candidate_text: str | None = None,
 ) -> dict[str, Any]:
     auth_command_path = str(
         provider_auth_strategy_reference_packet.get("auth_command_path") or ""
     )
-    candidate_text = (
-        f'model = "{model}"\n'
-        'model_provider = "wbp"\n'
-        'approval_policy = "never"\n'
-        'sandbox_mode = "read-only"\n\n'
-        "[model_providers.wbp]\n"
-        'name = "Wild Boar Proxy"\n'
-        f'base_url = "{endpoint}"\n'
-        'wire_api = "responses"\n'
-        "requires_openai_auth = false\n\n"
-        "[model_providers.wbp.auth]\n"
-        f'command = "{auth_command_path}"\n'
-    )
+    if candidate_text is None:
+        candidate_text = (
+            f'model = "{model}"\n'
+            'model_provider = "wbp"\n'
+            'approval_policy = "never"\n'
+            'sandbox_mode = "read-only"\n\n'
+            "[model_providers.wbp]\n"
+            'name = "Wild Boar Proxy"\n'
+            f'base_url = "{endpoint}"\n'
+            'wire_api = "responses"\n'
+            "requires_openai_auth = false\n\n"
+            "[model_providers.wbp.auth]\n"
+            f'command = "{auth_command_path}"\n'
+        )
     failed_checks: list[str] = []
     if owner_authorization_packet.get("status") != "ok":
         failed_checks.append("owner_authorization_required_for_candidate")

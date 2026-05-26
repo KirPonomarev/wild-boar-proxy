@@ -1,0 +1,17 @@
+{
+  "auth_command_edited": false,
+  "auth_command_path": "/Volumes/Work/wild-boar-proxy/wbp_codex_auth_command.py",
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T14:48:19.063899Z",
+  "current_auth_json_runtime_dependency": false,
+  "failed_checks": [],
+  "file_auth_fallback_used": false,
+  "packet_kind": "provider_auth_strategy_reference",
+  "raw_upstream_secret_used": false,
+  "reason_class": "",
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_refresh_2026-05-26/provider_auth_strategy_packet.json",
+  "referenced_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "selected_strategy": "auth.command",
+  "status": "ok",
+  "temporary_route_apply_allowed": true
+}

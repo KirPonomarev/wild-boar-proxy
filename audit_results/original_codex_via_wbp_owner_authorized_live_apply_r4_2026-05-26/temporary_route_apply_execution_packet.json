@@ -1,0 +1,15 @@
+{
+  "apply_attempted": true,
+  "apply_succeeded": true,
+  "candidate_sha256": "439eecc22d7550946eb29b61a03c2a004f958ff82d93fa4a671e3a2af2602546",
+  "captured_at_utc": "2026-05-26T14:55:31.899549Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "original_profile_write_performed": true,
+  "packet_kind": "original_live_temporary_route_apply_execution",
+  "reason_class": "",
+  "status": "ok",
+  "written_surface_count": 1,
+  "written_surfaces": [
+    "/Users/kirillponomarev/.codex/config.toml"
+  ]
+}

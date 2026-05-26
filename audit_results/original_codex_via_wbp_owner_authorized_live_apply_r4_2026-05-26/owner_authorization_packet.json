@@ -1,0 +1,21 @@
+{
+  "allowed_write_operation": "temporary_wbp_route_config_replace",
+  "authorization_exact": true,
+  "broad_authorization_accepted": false,
+  "captured_at_utc": "2026-05-26T14:55:31.675719Z",
+  "exact_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "expected_target_path": "/Users/kirillponomarev/.codex/config.toml",
+  "failed_checks": [],
+  "implicit_previous_authorization_accepted": false,
+  "launch_permission": true,
+  "native_original_launch_allowed": true,
+  "original_profile_write_allowed": true,
+  "owner_authorized": true,
+  "owner_prompt_permission": true,
+  "packet_kind": "original_live_owner_authorization",
+  "reason_class": "",
+  "restore_permission": true,
+  "retry_mutation_authorized": false,
+  "rollback_mode": "restore_prior_bytes",
+  "status": "ok"
+}

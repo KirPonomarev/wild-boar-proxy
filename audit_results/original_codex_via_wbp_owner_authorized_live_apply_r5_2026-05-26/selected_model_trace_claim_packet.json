@@ -1,0 +1,13 @@
+{
+  "allowed_claim": "selected_model_responded_in_this_original_route_trace",
+  "captured_at_utc": "2026-05-26T14:58:07.887273Z",
+  "catalog_availability_claimed": false,
+  "gpt_5_5_availability_claimed": false,
+  "model_availability_claimed": false,
+  "model_family_availability_claimed": false,
+  "packet_kind": "selected_model_trace_claim",
+  "reason_class": "",
+  "route_trace_confirmed": true,
+  "selected_model": "gpt-5.4",
+  "status": "ok"
+}
