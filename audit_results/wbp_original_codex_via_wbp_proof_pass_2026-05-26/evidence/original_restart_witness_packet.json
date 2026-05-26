@@ -1,0 +1,10 @@
+{
+  "pid": 21001,
+  "process_observed": true,
+  "window_visible": true,
+  "window_count": 1,
+  "launch_method": "open -a Codex (ordinary, no CODEX_HOME)",
+  "config_used": "restored original ~/.codex/config.toml",
+  "auth_json_untouched": true,
+  "verdict": "ordinary_codex_restarts_normally"
+}
