@@ -11,7 +11,14 @@ from pathlib import Path
 from wild_boar_proxy.native_filesystem_probe import (
     build_provider_config,
     build_allowed_claims_matrix,
+    build_external_detached_command_admission_packet,
+    build_external_detached_handoff_allowed_claims_matrix,
+    build_external_detached_handoff_command_packet,
+    build_external_detached_handoff_false_green_audit,
+    build_external_detached_import_contract_packet,
+    build_external_detached_operator_boundary_packet,
     build_native_safety_false_green_audit,
+    build_no_launch_from_current_thread_packet,
     build_owner_action_boundary_packet,
     build_protected_surface_read_classification_packet,
     build_quiescent_retry_blocker_packet,
@@ -278,6 +285,102 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertFalse(blocker["route_claimed"])
         self.assertFalse(blocker["ux_claimed"])
         self.assertFalse(blocker["egress_claimed"])
+
+    def test_external_detached_handoff_command_is_bounded(self) -> None:
+        repo_root = Path("/repo").resolve()
+        evidence_dir = repo_root / "audit_results" / "wbp_external_EXTERNAL_2026"
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+        )
+        admission = build_external_detached_command_admission_packet(
+            command,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(admission["status"], "ok")
+        self.assertEqual(command["cwd"], str(repo_root))
+        self.assertIn("native_custom_quiescent_safety_retry_probe.py", command["argv"][1])
+        self.assertFalse(command["command_executed"])
+        self.assertFalse(command["external_result_imported"])
+        self.assertFalse(admission["protected_surfaces_write_allowed"])
+
+    def test_external_detached_handoff_rejects_wildcard_or_non_audit_evidence_dir(
+        self,
+    ) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=Path("/tmp/unsafe-*"),
+        )
+        admission = build_external_detached_command_admission_packet(
+            command,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(admission["status"], "blocked")
+        self.assertIn("shell_wildcards_forbidden", admission["failed_checks"])
+        self.assertIn("evidence_dir_must_be_under_audit_results", admission["failed_checks"])
+
+    def test_external_detached_handoff_operator_boundary_required(self) -> None:
+        packet = build_external_detached_operator_boundary_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["owner_edits_command_allowed"])
+        self.assertFalse(packet["owner_runtime_authority_edits_allowed"])
+        self.assertFalse(packet["owner_prompt_allowed"])
+
+    def test_external_detached_handoff_import_contract_required(self) -> None:
+        packet = build_external_detached_import_contract_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertIn("host_context_packet.json", packet["required_packets"])
+        self.assertTrue(packet["future_import_must_verify_json"])
+        self.assertFalse(packet["external_result_imported_in_this_contour"])
+        self.assertFalse(packet["route_claim_allowed"])
+
+    def test_external_detached_handoff_forbids_current_thread_launch(self) -> None:
+        packet = build_no_launch_from_current_thread_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["native_launch_attempted"])
+        self.assertFalse(packet["filesystem_retry_attempted"])
+        self.assertFalse(packet["external_command_executed"])
+        self.assertFalse(packet["external_result_imported"])
+
+    def test_external_detached_handoff_no_route_ux_egress_claim(self) -> None:
+        matrix = build_external_detached_handoff_allowed_claims_matrix()
+
+        self.assertFalse(matrix["route_claim_allowed"])
+        self.assertFalse(matrix["ux_claim_allowed"])
+        self.assertFalse(matrix["egress_claim_allowed"])
+        self.assertFalse(matrix["native_safety_pass_claim_allowed"])
+        self.assertIn("native_route_proven", matrix["forbidden_claims"])
+
+    def test_external_detached_handoff_does_not_import_result_in_handoff_only_mode(
+        self,
+    ) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "wbp_external_EXTERNAL_2026",
+        )
+        admission = build_external_detached_command_admission_packet(
+            command,
+            repo_root=repo_root,
+        )
+        import_contract = build_external_detached_import_contract_packet()
+        no_launch = build_no_launch_from_current_thread_packet()
+        matrix = build_external_detached_handoff_allowed_claims_matrix()
+        audit = build_external_detached_handoff_false_green_audit(
+            command_admission_packet=admission,
+            import_contract_packet=import_contract,
+            no_launch_packet=no_launch,
+            allowed_claims_matrix=matrix,
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["forbidden_claims_present"])
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(

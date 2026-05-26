@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -576,6 +577,251 @@ def build_quiescent_retry_blocker_packet(
         "egress_claimed": False,
         "auth_strategy_reproved": False,
         "model_availability_reproved": False,
+    }
+
+
+def build_external_detached_handoff_command_packet(
+    *,
+    repo_root: Path,
+    evidence_dir: Path,
+    python_bin: str = "python3",
+) -> dict[str, Any]:
+    repo_root = repo_root.resolve()
+    evidence_dir = evidence_dir.resolve()
+    tool_path = repo_root / "tools" / "native_custom_quiescent_safety_retry_probe.py"
+    argv = [
+        python_bin,
+        str(tool_path),
+        "--repo-root",
+        str(repo_root),
+        "--evidence-dir",
+        str(evidence_dir),
+    ]
+    shell_command = (
+        f"cd {shlex.quote(str(repo_root))} && "
+        + " ".join(shlex.quote(part) for part in argv)
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_command",
+        "status": "ok",
+        "cwd": str(repo_root),
+        "argv": argv,
+        "shell_command": shell_command,
+        "target_tool": str(tool_path),
+        "evidence_dir": str(evidence_dir),
+        "command_executed": False,
+        "external_result_imported": False,
+        "native_launch_attempted_from_current_thread": False,
+    }
+
+
+def build_external_detached_command_admission_packet(
+    command_packet: dict[str, Any],
+    *,
+    repo_root: Path,
+) -> dict[str, Any]:
+    repo_root = repo_root.resolve()
+    argv = [str(part) for part in command_packet.get("argv", [])]
+    cwd = Path(str(command_packet.get("cwd", ""))).expanduser()
+    evidence_dir = Path(str(command_packet.get("evidence_dir", ""))).expanduser()
+    target_tool = str(command_packet.get("target_tool", ""))
+    wildcard_chars = {"*", "?", "["}
+    failed_checks: list[str] = []
+    if cwd.resolve() != repo_root:
+        failed_checks.append("cwd_must_equal_repo_root")
+    if len(argv) < 6:
+        failed_checks.append("argv_shape_required")
+    if any(any(char in part for char in wildcard_chars) for part in argv):
+        failed_checks.append("shell_wildcards_forbidden")
+    if any("$" in part or "`" in part for part in argv):
+        failed_checks.append("shell_expansion_forbidden")
+    if target_tool != str(repo_root / "tools" / "native_custom_quiescent_safety_retry_probe.py"):
+        failed_checks.append("target_tool_must_be_quiescent_retry_probe")
+    try:
+        evidence_dir.relative_to(repo_root / "audit_results")
+    except ValueError:
+        failed_checks.append("evidence_dir_must_be_under_audit_results")
+    if "EXTERNAL" not in evidence_dir.name:
+        failed_checks.append("external_evidence_dir_marker_required")
+    if command_packet.get("command_executed"):
+        failed_checks.append("handoff_only_command_must_not_be_executed")
+    if command_packet.get("external_result_imported"):
+        failed_checks.append("handoff_only_result_must_not_be_imported")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_command_admission",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "UNSAFE_COMMAND_SURFACE",
+        "failed_checks": failed_checks,
+        "cwd_fixed": cwd.resolve() == repo_root,
+        "repo_root_fixed": str(repo_root) in argv,
+        "evidence_dir_fixed": str(evidence_dir) in argv,
+        "no_shell_wildcard": "shell_wildcards_forbidden" not in failed_checks,
+        "no_shell_variable_expansion": "shell_expansion_forbidden" not in failed_checks,
+        "expected_writes": [
+            str(evidence_dir),
+            "/tmp/wbp-native-fs-* only if the external retry later admits launch",
+        ],
+        "protected_surfaces_write_allowed": False,
+        "route_model_account_provider_mutation_allowed": False,
+        "expected_exit_codes": {
+            "0": "external retry reached a pass-classified result",
+            "1": "external retry produced honest blocker evidence",
+            "other": "tool/runtime failure requiring diagnosis",
+        },
+        "command_executed": False,
+        "external_result_imported": False,
+    }
+
+
+def build_external_detached_operator_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_operator_boundary",
+        "status": "ok",
+        "owner_allowed_actions": [
+            "close ordinary Codex before running command",
+            "open Terminal outside Codex",
+            "run exactly the generated command",
+            "preserve generated evidence directory",
+            "report command exit code and evidence path later",
+        ],
+        "owner_forbidden_actions": [
+            "edit command",
+            "edit config/model/provider/route/account",
+            "manually cleanup hidden files",
+            "type prompt into Custom window",
+            "mark pass without packet output",
+        ],
+        "owner_edits_command_allowed": False,
+        "owner_runtime_authority_edits_allowed": False,
+        "owner_prompt_allowed": False,
+    }
+
+
+def build_external_detached_import_contract_packet(
+    *,
+    required_packets: list[str] | None = None,
+) -> dict[str, Any]:
+    packets = required_packets or [
+        "sync_gate_packet.json",
+        "historical_dirt_quarantine_packet.json",
+        "version_pinning_packet.json",
+        "host_context_packet.json",
+        "owner_action_boundary_packet.json",
+        "current_codex_running_state_initial.json",
+        "quiescent_current_codex_precondition_packet.json",
+        "pre_custom_idle_stability_packet.json",
+        "launch_admission_packet.json",
+        "native_safety_blocker_packet.json or native safety pass packets",
+        "allowed_claims_matrix.json",
+        "native_safety_false_green_audit.json",
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_import_contract",
+        "status": "ok",
+        "required_packets": packets,
+        "future_import_must_verify_json": True,
+        "future_import_must_verify_no_secrets": True,
+        "future_import_must_verify_host_detached_if_launch_proceeded": True,
+        "future_import_must_verify_quiescent_if_launch_proceeded": True,
+        "future_import_must_verify_idle_stability_if_launch_proceeded": True,
+        "future_import_must_verify_launch_admission_matches_attempt": True,
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+        "model_availability_reproof_allowed": False,
+        "external_result_imported_in_this_contour": False,
+    }
+
+
+def build_no_launch_from_current_thread_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "no_launch_from_current_thread",
+        "status": "ok",
+        "native_launch_attempted": False,
+        "filesystem_retry_attempted": False,
+        "external_command_executed": False,
+        "external_result_imported": False,
+        "claim_scope": "handoff_only",
+    }
+
+
+def build_external_detached_handoff_allowed_claims_matrix() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_handoff_allowed_claims_matrix",
+        "status": "ok",
+        "allowed_claims": [
+            "EXTERNAL_DETACHED_NATIVE_SAFETY_RETRY_HANDOFF_READY",
+            "external_command_bounded",
+            "operator_boundary_defined",
+            "import_contract_defined",
+            "no_launch_from_current_thread_proven",
+        ],
+        "forbidden_claims": [
+            "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+            "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+            "native_safety_passed",
+            "native_route_proven",
+            "owner_ux_proven",
+            "direct_egress_absent",
+            "Original_Codex_via_WBP_proven",
+            "model_availability_reproven",
+            "auth_strategy_reproven",
+            "external_result_passed_before_import",
+            "external_result_classified_in_handoff_only_mode",
+        ],
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "native_safety_pass_claim_allowed": False,
+    }
+
+
+def build_external_detached_handoff_false_green_audit(
+    *,
+    command_admission_packet: dict[str, Any],
+    import_contract_packet: dict[str, Any],
+    no_launch_packet: dict[str, Any],
+    allowed_claims_matrix: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "command_admission_ok",
+            "passed": command_admission_packet.get("status") == "ok",
+        },
+        {
+            "name": "no_native_launch_from_current_thread",
+            "passed": no_launch_packet.get("native_launch_attempted") is False
+            and no_launch_packet.get("filesystem_retry_attempted") is False,
+        },
+        {
+            "name": "no_external_result_import",
+            "passed": import_contract_packet.get("external_result_imported_in_this_contour")
+            is False,
+        },
+        {
+            "name": "no_route_ux_egress_claim",
+            "passed": not allowed_claims_matrix.get("route_claim_allowed", True)
+            and not allowed_claims_matrix.get("ux_claim_allowed", True)
+            and not allowed_claims_matrix.get("egress_claim_allowed", True),
+        },
+        {
+            "name": "native_safety_pass_not_claimed",
+            "passed": not allowed_claims_matrix.get("native_safety_pass_claim_allowed", True),
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_detached_handoff_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": False,
     }
 
 
