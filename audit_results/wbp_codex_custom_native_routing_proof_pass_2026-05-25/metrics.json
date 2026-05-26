@@ -1,0 +1,21 @@
+{
+  "contour_id": "WBP_CODEX_CUSTOM_NATIVE_ROUTING_PROOF_PASS",
+  "date": "2026-05-26",
+  "status": "closed_success",
+  "verdict": "NATIVE_CUSTOM_ROUTING_PROVEN",
+  "routing_evidence": {
+    "custom_launch_attempted": true,
+    "ordinary_codex_closed_during_proof": true,
+    "prompt_sent": true,
+    "request_reached_wbp": true,
+    "route_url": "http://127.0.0.1:8318/v1/responses",
+    "direct_api_openai_egress_detected": false,
+    "auth_side_note": "WBP auth format needs fix for full prompt-response, but routing to WBP is proven"
+  },
+  "non_claims": [
+    "prompt_response_success",
+    "multi_turn_session_routing",
+    "Original_Codex_reversibility",
+    "final_E2E"
+  ]
+}
