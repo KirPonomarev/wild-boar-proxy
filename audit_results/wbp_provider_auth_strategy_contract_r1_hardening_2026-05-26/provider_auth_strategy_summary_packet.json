@@ -1,0 +1,15 @@
+{
+  "auth_command_selected": true,
+  "bounded_bearer_selected": false,
+  "captured_at_utc": "2026-05-26T20:40:02.627935Z",
+  "direct_egress_absence_proven": false,
+  "file_auth_selected": false,
+  "final_e2e_proven": false,
+  "final_status": "WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED",
+  "model_availability_proven": false,
+  "native_launch_attempted": false,
+  "packet_kind": "provider_auth_strategy_summary",
+  "selected_strategy": "auth.command",
+  "silent_fallback_detected": false,
+  "status": "ok"
+}

@@ -12,8 +12,10 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_auth_strategy_decision_matrix,
     build_auth_strategy_false_green_audit,
     build_auth_token_boundary_packet,
+    build_authority_boundary_packet,
     build_current_codex_auth_independence_packet,
     build_file_auth_fallback_deferred_packet,
+    build_file_auth_fallback_exclusion_packet,
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
     build_provider_auth_strategy_packet,
@@ -217,7 +219,12 @@ class ProviderAuthStrategyTests(unittest.TestCase):
         self.assertFalse(matrix["current_codex_auth_json_used"])
         self.assertFalse(matrix["browser_authority_used"])
         self.assertFalse(matrix["remote_authority_used"])
+        self.assertFalse(matrix["browser_authority_detected"])
+        self.assertFalse(matrix["remote_client_authority_detected"])
+        self.assertFalse(matrix["current_codex_auth_runtime_dependency_detected"])
         self.assertFalse(matrix["silent_fallback_detected"])
+        self.assertIn("bounded_local_bearer", matrix["rejected_strategies"])
+        self.assertTrue(matrix["all_unselected_strategies_have_rejection_reasons"])
         self.assertEqual(
             [
                 row["strategy_id"]
@@ -248,9 +255,13 @@ class ProviderAuthStrategyTests(unittest.TestCase):
     def test_file_auth_fallback_deferred_to_separate_contour(self) -> None:
         packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
         deferred = build_file_auth_fallback_deferred_packet(packet)
+        exclusion = build_file_auth_fallback_exclusion_packet(packet)
         non_substitution = build_file_auth_non_substitution_packet(packet)
 
         self.assertEqual(deferred["status"], "ok")
+        self.assertEqual(exclusion["status"], "ok")
+        self.assertTrue(exclusion["file_auth_excluded_from_proxy_auth_contour"])
+        self.assertFalse(exclusion["file_auth_silent_substitution_allowed"])
         self.assertFalse(deferred["allowed_in_this_contour"])
         self.assertTrue(deferred["requires_separate_contour"])
         self.assertFalse(deferred["can_satisfy_proxy_auth_contract"])
@@ -260,6 +271,55 @@ class ProviderAuthStrategyTests(unittest.TestCase):
         self.assertFalse(non_substitution["file_auth_equals_proxy_auth"])
         self.assertFalse(non_substitution["file_auth_may_satisfy_proxy_auth"])
         self.assertFalse(non_substitution["file_auth_selected_as_provider_auth"])
+
+    def test_bounded_bearer_requires_scope_and_redaction_packet(self) -> None:
+        packet = build_provider_auth_strategy_packet(
+            auth_command_path=AUTH_COMMAND,
+            native_config_text=bearer_config(),
+            explicit_bearer_contract=True,
+        )
+        matrix = build_auth_strategy_decision_matrix(packet)
+
+        self.assertTrue(matrix["bounded_bearer_available"])
+        self.assertFalse(matrix["bounded_bearer_selected"])
+        self.assertEqual(matrix["bounded_bearer_scope"], "owner_local_listener")
+        self.assertEqual(matrix["bounded_bearer_locality"], "local_wbp_listener_only")
+        self.assertTrue(matrix["bounded_bearer_redaction"])
+
+    def test_authority_boundary_blocks_token_path_model_provider(self) -> None:
+        clean = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        blocked = build_provider_auth_strategy_packet(
+            auth_command_path=AUTH_COMMAND,
+            browser_payload={
+                "token": "sk-browser-forged",
+                "path": "/tmp/auth",
+                "model": "forged",
+                "provider": "forged",
+            },
+            remote_payload={
+                "token": "remote-token",
+                "model": "remote-model",
+                "provider": "remote-provider",
+            },
+        )
+        clean_boundary = build_authority_boundary_packet(clean)
+        blocked_boundary = build_authority_boundary_packet(blocked)
+
+        self.assertEqual(clean_boundary["status"], "ok")
+        self.assertEqual(blocked_boundary["status"], "blocked")
+        self.assertFalse(
+            clean_boundary["browser_can_supply_token_path_model_provider_authority"]
+        )
+        self.assertFalse(
+            clean_boundary["remote_can_supply_token_path_model_provider_authority"]
+        )
+        self.assertEqual(
+            clean_boundary["authority_filter_method"], "recursive_key_name_match"
+        )
+        self.assertFalse(clean_boundary["semantic_alias_coverage_proven"])
+        self.assertIn("semantic aliases", clean_boundary["authority_filter_limit"])
+        self.assertIn("token", blocked_boundary["browser_detected_forbidden_fields"])
+        self.assertIn("provider", blocked_boundary["remote_detected_forbidden_fields"])
 
     def test_current_codex_auth_json_not_runtime_dependency(self) -> None:
         packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)

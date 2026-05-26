@@ -23,8 +23,10 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_auth_strategy_decision_matrix,
     build_auth_strategy_false_green_audit,
     build_auth_token_boundary_packet,
+    build_authority_boundary_packet,
     build_current_codex_auth_independence_packet,
     build_file_auth_fallback_deferred_packet,
+    build_file_auth_fallback_exclusion_packet,
     build_file_auth_non_substitution_packet,
     build_no_ambient_authority_packet,
     build_provider_auth_strategy_packet,
@@ -187,12 +189,14 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     required = {
         "provider_auth_strategy_packet.json",
         "auth_strategy_precedence_packet.json",
-        "auth_strategy_decision_matrix.json",
+        "auth_strategy_decision_matrix_packet.json",
         "auth_command_contract_packet.json",
         "auth_command_output_format_packet.json",
         "bounded_bearer_fallback_packet.json",
+        "file_auth_fallback_exclusion_packet.json",
         "file_auth_fallback_deferred_packet.json",
         "file_auth_non_substitution_packet.json",
+        "authority_boundary_packet.json",
         "current_codex_auth_independence_packet.json",
         "no_ambient_authority_packet.json",
         "auth_token_boundary_packet.json",
@@ -211,11 +215,11 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "referenced_packets": sorted(required),
         "missing_required_packets": missing,
         "blocked_packets": sorted(blocked),
-        "auth_command_selected": packets["auth_strategy_decision_matrix.json"].get(
+        "auth_command_selected": packets["auth_strategy_decision_matrix_packet.json"].get(
             "auth_command_selected"
         )
         is True,
-        "bounded_bearer_not_silent": packets["auth_strategy_decision_matrix.json"].get(
+        "bounded_bearer_not_silent": packets["auth_strategy_decision_matrix_packet.json"].get(
             "silent_fallback_detected"
         )
         is False,
@@ -262,9 +266,11 @@ def main() -> int:
     decision_matrix = build_auth_strategy_decision_matrix(provider_packet)
     output_format = build_auth_command_output_format_packet(provider_packet)
     file_auth = build_file_auth_fallback_deferred_packet(provider_packet)
+    file_auth_exclusion = build_file_auth_fallback_exclusion_packet(provider_packet)
     file_auth_non_substitution = build_file_auth_non_substitution_packet(provider_packet)
     current_auth = build_current_codex_auth_independence_packet(provider_packet)
     no_ambient_authority = build_no_ambient_authority_packet(provider_packet)
+    authority_boundary = build_authority_boundary_packet(provider_packet)
     source_guard = build_secret_source_confusion_guard_packet(provider_packet)
     auth_token_boundary = build_auth_token_boundary_packet(provider_packet)
     false_green = build_auth_strategy_false_green_audit(
@@ -293,6 +299,7 @@ def main() -> int:
                 "fallbacks": provider_packet["fallbacks"],
                 "validation_failures": validation_failures,
             },
+            "auth_strategy_decision_matrix_packet.json": decision_matrix,
             "auth_strategy_decision_matrix.json": decision_matrix,
             "auth_command_contract_packet.json": {
                 "captured_at_utc": _utc_now(),
@@ -303,6 +310,7 @@ def main() -> int:
                 "native_live_invocation_attempted": False,
             },
             "auth_command_output_format_packet.json": output_format,
+            "authority_boundary_packet.json": authority_boundary,
             "native_config_auth_surface_packet.json": provider_packet[
                 "native_config_auth_surface"
             ],
@@ -318,6 +326,7 @@ def main() -> int:
                 "raw_token_in_packet": False,
                 "native_launch_attempted": False,
             },
+            "file_auth_fallback_exclusion_packet.json": file_auth_exclusion,
             "file_auth_fallback_deferred_packet.json": file_auth,
             "file_auth_non_substitution_packet.json": file_auth_non_substitution,
             "current_codex_auth_independence_packet.json": current_auth,

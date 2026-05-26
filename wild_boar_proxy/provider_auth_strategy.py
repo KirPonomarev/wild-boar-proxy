@@ -461,6 +461,16 @@ def build_auth_strategy_decision_matrix(
         is not True,
         "remote_authority_used": remote_authority.get("remote_authority_blocked")
         is not True,
+        "browser_authority_detected": browser_authority.get("browser_authority_blocked")
+        is not True,
+        "remote_client_authority_detected": remote_authority.get(
+            "remote_authority_blocked"
+        )
+        is not True,
+        "current_codex_auth_runtime_dependency_detected": runtime_dependency.get(
+            "current_codex_auth_json_dependency"
+        )
+        is True,
         "silent_fallback_detected": silent_fallback_detected,
         "selected_strategy": selected_strategy,
         "selection_reason": provider_auth_strategy_packet.get(
@@ -474,6 +484,14 @@ def build_auth_strategy_decision_matrix(
             "browser_supplied_auth": "browser_authority_forbidden",
             "remote_client_supplied_auth": "remote_client_authority_forbidden",
         },
+        "rejected_strategies": [
+            row["strategy_id"] for row in strategy_rows if row.get("selected") is not True
+        ],
+        "all_unselected_strategies_have_rejection_reasons": all(
+            bool(row.get("rejection_reason"))
+            for row in strategy_rows
+            if row.get("selected") is not True
+        ),
         "strategy_rows": strategy_rows,
         "failed_checks": sorted(set(str(item) for item in failed_checks)),
     }
@@ -555,6 +573,23 @@ def build_file_auth_non_substitution_packet(
     }
 
 
+def build_file_auth_fallback_exclusion_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    deferred = build_file_auth_fallback_deferred_packet(provider_auth_strategy_packet)
+    return {
+        **deferred,
+        "packet_kind": "file_auth_fallback_exclusion",
+        "status": deferred.get("status", "blocked"),
+        "file_auth_excluded_from_proxy_auth_contour": True,
+        "file_auth_silent_substitution_allowed": False,
+        "file_auth_requires_separate_contour": deferred.get(
+            "requires_separate_contour"
+        )
+        is True,
+    }
+
+
 def build_current_codex_auth_independence_packet(
     provider_auth_strategy_packet: dict[str, Any],
 ) -> dict[str, Any]:
@@ -581,6 +616,57 @@ def build_current_codex_auth_independence_packet(
         "current_codex_auth_json_copied": False,
         "current_codex_auth_json_symlinked": False,
         "native_filesystem_safety_claimed": False,
+        "keychain_safety_claimed": False,
+        "original_profile_safety_claimed": False,
+    }
+
+
+def build_authority_boundary_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    browser_authority = (
+        provider_auth_strategy_packet.get("browser_authority")
+        if isinstance(provider_auth_strategy_packet.get("browser_authority"), dict)
+        else {}
+    )
+    remote_authority = (
+        provider_auth_strategy_packet.get("remote_authority")
+        if isinstance(provider_auth_strategy_packet.get("remote_authority"), dict)
+        else {}
+    )
+    forbidden_browser_fields = list(browser_authority.get("forbidden_fields") or [])
+    forbidden_remote_fields = list(remote_authority.get("forbidden_fields") or [])
+    blocked = (
+        browser_authority.get("browser_authority_blocked") is True
+        and remote_authority.get("remote_authority_blocked") is True
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "authority_boundary",
+        "status": "ok" if blocked else "blocked",
+        "authority_filter_method": "recursive_key_name_match",
+        "semantic_alias_coverage_proven": False,
+        "authority_filter_limit": (
+            "classification covers explicit forbidden field names and nested keys; "
+            "semantic aliases require separate policy-engine proof"
+        ),
+        "browser_allowed_request_shape": [
+            "server-approved profile",
+            "server-approved alias",
+            "server-approved task tag",
+        ],
+        "browser_forbidden_authority_fields": sorted(AUTH_FORBIDDEN_BROWSER_FIELDS),
+        "browser_detected_forbidden_fields": forbidden_browser_fields,
+        "remote_detected_forbidden_fields": forbidden_remote_fields,
+        "browser_can_supply_token_path_model_provider_authority": False,
+        "remote_can_supply_token_path_model_provider_authority": False,
+        "server_owns_provider_endpoint_selection": True,
+        "server_owns_token_command_path": True,
+        "server_owns_bearer_fallback_admission": True,
+        "server_owns_account_selection": True,
+        "server_owns_model_route_selection": True,
+        "server_owns_secret_redaction": True,
+        "server_owns_trace_classification": True,
     }
 
 
