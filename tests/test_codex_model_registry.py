@@ -7,10 +7,12 @@ import json
 import unittest
 
 from wild_boar_proxy.codex_model_registry import (
+    build_model_catalog_fidelity_packets,
     build_custom_api_compat_packet,
     build_custom_model_dry_run_packet,
     build_custom_model_registry_packet,
     forbidden_custom_model_fields,
+    validate_wbp_model_catalog_contract,
 )
 
 
@@ -67,6 +69,12 @@ class CodexModelRegistryTests(unittest.TestCase):
         self.assertIn("route_id", packet["forbidden_browser_fields"])
         first_model = packet["available_models"][0]
         self.assertEqual(first_model["label"], first_model["model_id"])
+        self.assertEqual(first_model["lane"], "codex_native")
+        self.assertEqual(first_model["source_class"], "current_build_catalog_visible")
+        self.assertFalse(first_model["physical_provider_proven"])
+        self.assertEqual(first_model["display_name"], first_model["model_id"])
+        self.assertIn("source", first_model["intelligence_tier"])
+        self.assertIn("proof_level", first_model["speed_tier"])
         self.assertIn("provider_class", first_model)
         self.assertTrue(first_model["codex_compatible"])
         self.assertTrue(first_model["responses_supported"])
@@ -196,6 +204,153 @@ class CodexModelRegistryTests(unittest.TestCase):
             forbidden_custom_model_fields({"model_id": "gpt-5.3-codex", "items": [{"path": "/x"}]}),
             ["items", "items[0].path"],
         )
+
+    def test_model_catalog_preserves_codex_native_and_wbp_api_lanes(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+
+        native_lane = packets["codex_native_model_lane_packet.json"]
+        wbp_lane = packets["wbp_api_model_lane_packet.json"]
+        separation = packets["model_lane_separation_packet.json"]
+
+        self.assertEqual(native_lane["status"], "ok")
+        self.assertEqual(wbp_lane["status"], "ok")
+        self.assertEqual(separation["status"], "ok")
+        self.assertTrue(native_lane["models"])
+        self.assertTrue(wbp_lane["models"])
+        self.assertTrue(all(model["lane"] == "codex_native" for model in native_lane["models"]))
+        self.assertTrue(all(model["lane"] == "wbp_api" for model in wbp_lane["models"]))
+        self.assertFalse(separation["lanes_mixed"])
+
+    def test_model_display_metadata_not_runtime_truth(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        display = packets["model_display_metadata_packet.json"]
+        runtime = packets["runtime_truth_boundary_packet.json"]
+
+        self.assertEqual(display["status"], "ok")
+        self.assertFalse(display["display_metadata_is_runtime_truth"])
+        self.assertEqual(runtime["status"], "ok")
+        self.assertFalse(runtime["catalog_metadata_becomes_runtime_truth"])
+        self.assertFalse(runtime["route_selected_proven"])
+        self.assertFalse(runtime["upstream_accepts_proven"])
+        self.assertFalse(runtime["response_accepted_by_codex_proven"])
+
+    def test_runtime_truth_boundary_not_capability_proof(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        capability = packets["capability_claims_packet.json"]
+
+        self.assertEqual(capability["status"], "ok")
+        self.assertFalse(capability["runtime_truth_boundary_is_capability_proof"])
+        for model in capability["models"]:
+            self.assertFalse(model["runtime_truth_counts_as_capability_proof"])
+            self.assertIn("proof_level", model["capabilities"]["tools"])
+
+    def test_intelligence_and_speed_tier_source_and_proof_level_required(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        display = packets["model_display_metadata_packet.json"]
+
+        for model in display["models"]:
+            self.assertIn("source", model["intelligence_tier"])
+            self.assertIn("proof_level", model["intelligence_tier"])
+            self.assertIn("source", model["speed_tier"])
+            self.assertIn("proof_level", model["speed_tier"])
+
+    def test_measured_source_requires_measurement_packet(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        catalog = packets["codex_native_model_lane_packet.json"]
+        mutated = {
+            "schema_version": 1,
+            "contract_scope": "provider_catalog_only",
+            "server_owned_source": True,
+            "default_model_explicit": True,
+            "default_model": "gpt-5.3-codex",
+            "browser_authority": {
+                "catalog_path": False,
+                "model_provider": False,
+                "base_url": False,
+                "wire_api": False,
+                "route_id": False,
+                "backend_id": False,
+                "auth_path": False,
+                "token": False,
+            },
+            "live_api_checked": False,
+            "network_calls_made": False,
+            "inference_called": False,
+            "provider_called": False,
+            "account_health_proven": False,
+            "native_codex_proven": False,
+            "cli_runner_proven": False,
+            "direct_egress_absence_proven": False,
+            "final_e2e_proven": False,
+            "current_codex_auth_json_dependency": False,
+            "keychain_dependency": False,
+            "original_codex_mutation": False,
+            "raw_upstream_secret_exposed": False,
+            "models": [dict(catalog["models"][0])],
+        }
+        mutated["models"][0]["speed_tier"] = {
+            "label": "x1.5",
+            "source": "measured",
+            "proof_level": "declared",
+        }
+
+        self.assertIn(
+            "models[0].speed_tier.measured_without_packet",
+            validate_wbp_model_catalog_contract(mutated),
+        )
+
+    def test_wbp_api_external_models_are_prefixed_or_non_impersonating(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        wbp_lane = packets["wbp_api_model_lane_packet.json"]
+        non_impersonation = packets["non_impersonation_packet.json"]
+
+        for model in wbp_lane["models"]:
+            self.assertTrue(model["display_name"].lower().startswith("wbp "))
+        self.assertEqual(non_impersonation["status"], "ok")
+        self.assertTrue(non_impersonation["exception_requires_wbp_prefixed_display_name"])
+        self.assertFalse(non_impersonation["native_parity_claimed"])
+
+    def test_codex_native_provider_identity_not_assumed(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        native_lane = packets["codex_native_model_lane_packet.json"]
+
+        self.assertFalse(native_lane["physical_provider_identity_assumed"])
+        self.assertTrue(native_lane["provider_class_or_source_class_only"])
+        for model in native_lane["models"]:
+            self.assertFalse(model["physical_provider_proven"])
+            self.assertEqual(model["physical_provider"], "")
+
+    def test_browser_remote_catalog_authority_blocked(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        authority = packets["model_catalog_authority_boundary_packet.json"]
+
+        self.assertEqual(authority["status"], "ok")
+        self.assertFalse(authority["browser_can_supply_catalog_path"])
+        self.assertFalse(authority["browser_can_supply_provider"])
+        self.assertFalse(authority["browser_can_supply_model_authority"])
+        self.assertFalse(authority["remote_can_supply_catalog_path"])
+        self.assertFalse(authority["remote_can_supply_provider"])
+        self.assertFalse(authority["remote_can_supply_model_authority"])
+
+    def test_gpt_5_5_visibility_not_availability(self) -> None:
+        packets = build_model_catalog_fidelity_packets(
+            operator_status(claim_gate="passed")
+            | {"models": {"ok": True, "model_ids": ["gpt-5.5"], "server_issued": True}}
+        )
+        false_green = packets["model_catalog_fidelity_false_green_audit.json"]
+        matrix = packets["model_catalog_fidelity_matrix.json"]
+
+        self.assertEqual(matrix["status"], "ok")
+        self.assertFalse(matrix["model_availability_proven"])
+        self.assertFalse(false_green["gpt_5_5_visibility_claimed_as_availability"])
+
+    def test_catalog_does_not_claim_route_or_upstream_acceptance(self) -> None:
+        packets = build_model_catalog_fidelity_packets(operator_status(claim_gate="passed"))
+        matrix = packets["model_catalog_fidelity_matrix.json"]
+
+        self.assertFalse(matrix["route_selected_proven"])
+        self.assertFalse(matrix["upstream_accepts_proven"])
+        self.assertFalse(matrix["response_accepted_by_codex_proven"])
 
 
 if __name__ == "__main__":

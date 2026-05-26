@@ -1,0 +1,56 @@
+{
+  "captured_at_utc": "2026-05-26T20:58:45Z",
+  "packet_kind": "verification_results",
+  "status": "ok",
+  "commands": [
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/codex_model_registry.py tests/test_codex_model_registry.py tools/model_catalog_fidelity_probe.py",
+      "status": "passed"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_codex_model_registry tests.test_wbp_model_catalog_contract",
+      "status": "passed",
+      "observed": "Ran 25 tests; OK"
+    },
+    {
+      "command": "python3 tools/model_catalog_fidelity_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_catalog_fidelity_model_registry_r1_2026-05-26",
+      "status": "passed",
+      "observed": "final_status=WBP_MODEL_CATALOG_FIDELITY_CLASSIFIED; model_availability_proven=false"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_codex_model_registry tests.test_wbp_model_catalog_contract tests.test_model_availability tests.test_repo_hygiene tests.test_closeout_resilience",
+      "status": "passed",
+      "observed": "Ran 58 tests; OK"
+    },
+    {
+      "command": "json parse audit_results/wbp_catalog_fidelity_model_registry_r1_2026-05-26/*.json",
+      "status": "passed",
+      "observed": "json_ok 20"
+    },
+    {
+      "command": "rg --pcre2 secret-pattern scan audit_results/wbp_catalog_fidelity_model_registry_r1_2026-05-26",
+      "status": "passed",
+      "observed": "no matches"
+    },
+    {
+      "command": "python3 tools/check_closeout_resilience.py",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "claims_not_made": {
+    "model_availability_proven": false,
+    "route_selected_proven": false,
+    "upstream_accepts_proven": false,
+    "response_accepted_by_codex_proven": false,
+    "native_app_proven": false,
+    "external_provider_live_proven": false,
+    "direct_egress_absence_proven": false,
+    "ux_acceptance_proven": false,
+    "original_codex_reversibility_proven": false,
+    "final_e2e_proven": false
+  }
+}

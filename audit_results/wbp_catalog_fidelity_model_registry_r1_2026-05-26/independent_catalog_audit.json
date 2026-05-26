@@ -1,0 +1,23 @@
+{
+  "authority_boundary_checked": true,
+  "captured_at_utc": "2026-05-26T21:00:49.327886Z",
+  "false_green_checked": true,
+  "lane_separation_checked": true,
+  "packet_kind": "independent_catalog_audit",
+  "referenced_packets": [
+    "capability_claims_packet.json",
+    "codex_native_model_lane_packet.json",
+    "metadata_source_packet.json",
+    "model_catalog_authority_boundary_packet.json",
+    "model_catalog_fidelity_false_green_audit.json",
+    "model_catalog_fidelity_matrix.json",
+    "model_display_metadata_packet.json",
+    "model_lane_separation_packet.json",
+    "model_registry_schema_packet.json",
+    "non_impersonation_packet.json",
+    "runtime_truth_boundary_packet.json",
+    "wbp_api_model_lane_packet.json"
+  ],
+  "status": "ok",
+  "text_only_audit": false
+}

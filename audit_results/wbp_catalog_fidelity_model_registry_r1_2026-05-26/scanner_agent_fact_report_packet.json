@@ -1,0 +1,45 @@
+{
+  "captured_at_utc": "2026-05-26T20:58:45Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agent_id": "019e6610-8088-7fa2-af30-06de212124cf",
+  "agent_role": "read_only_scanner_and_independent_auditor",
+  "agent_model": "gpt-5.4-mini",
+  "scope": [
+    "wild_boar_proxy/codex_model_registry.py",
+    "tests/test_codex_model_registry.py",
+    "tools/model_catalog_fidelity_probe.py",
+    "audit_results/wbp_catalog_fidelity_model_registry_r1_2026-05-26"
+  ],
+  "claims_checked": {
+    "codex_native_lane_separated_from_wbp_api_lane": true,
+    "display_metadata_not_runtime_truth_boundary": true,
+    "runtime_truth_boundary_not_capability_proof": true,
+    "intelligence_speed_source_and_proof_level_present": true,
+    "measured_source_not_used_without_measurement_packet": true,
+    "wbp_api_prefix_or_non_impersonation_packet_present": true,
+    "browser_remote_catalog_authority_blocked": true,
+    "gpt_5_5_visibility_not_availability": true,
+    "route_upstream_response_native_external_live_egress_ux_final_claims_absent": true
+  },
+  "referenced_packets": [
+    "codex_native_model_lane_packet.json",
+    "wbp_api_model_lane_packet.json",
+    "model_display_metadata_packet.json",
+    "runtime_truth_boundary_packet.json",
+    "capability_claims_packet.json",
+    "metadata_source_packet.json",
+    "non_impersonation_packet.json",
+    "model_catalog_authority_boundary_packet.json",
+    "model_catalog_fidelity_matrix.json",
+    "model_catalog_fidelity_false_green_audit.json",
+    "model_catalog_fidelity_summary_packet.json"
+  ],
+  "blocking_findings": [],
+  "residual_limits": [
+    "source=measured is only negatively tested here because measurement_packet_present=false",
+    "new WBP/API display names must be revalidated for prefix/non-impersonation drift",
+    "catalog fidelity remains non-live and must not be read as model availability proof"
+  ],
+  "auditor_verdict": "no_blocking_findings"
+}
