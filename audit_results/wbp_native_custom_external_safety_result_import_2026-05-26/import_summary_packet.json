@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T10:36:25.710940Z",
+  "current_thread_external_command_executed": false,
+  "current_thread_native_launch_attempted": false,
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_dir_exists": false,
+  "external_result_imported": false,
+  "final_status": "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+  "native_safety_pass_claimed": false,
+  "status": "blocked"
+}

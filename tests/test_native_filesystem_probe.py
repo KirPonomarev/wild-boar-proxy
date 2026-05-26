@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -17,12 +20,22 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_external_detached_handoff_false_green_audit,
     build_external_detached_import_contract_packet,
     build_external_detached_operator_boundary_packet,
+    build_external_result_command_integrity_packet,
+    build_external_result_execution_ownership_packet,
+    build_external_result_import_packet,
+    build_external_result_secret_scan_packet,
+    build_import_allowed_claims_matrix,
+    build_keychain_boundary_packet,
+    build_layer_separation_packet,
     build_native_safety_false_green_audit,
+    build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
     build_owner_action_boundary_packet,
+    build_protected_surface_import_summary,
     build_protected_surface_read_classification_packet,
     build_quiescent_retry_blocker_packet,
     build_quiescent_retry_launch_admission_packet,
+    classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
     classify_host_context,
@@ -38,6 +51,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     diff_scans,
     scan_tree,
     summarize_idle_baseline_windows,
+    validate_external_evidence_packets,
 )
 
 
@@ -381,6 +395,292 @@ class NativeFilesystemProbeTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["forbidden_claims_present"])
+
+    def test_external_result_import_requires_handoff_packet(self) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "retry_EXTERNAL_2026",
+        )
+        integrity = build_external_result_command_integrity_packet(
+            handoff_command_packet=command,
+            external_evidence_dir=repo_root / "audit_results" / "retry_EXTERNAL_2026",
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(integrity["status"], "ok")
+        self.assertTrue(integrity["external_evidence_path_matches_handoff"])
+        self.assertFalse(integrity["current_thread_executed_command"])
+
+    def test_external_result_import_rejects_command_mismatch(self) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "retry_EXTERNAL_2026",
+        )
+        integrity = build_external_result_command_integrity_packet(
+            handoff_command_packet=command,
+            external_evidence_dir=repo_root / "audit_results" / "other_EXTERNAL_2026",
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(integrity["status"], "blocked")
+        self.assertIn("external_evidence_path_mismatch", integrity["failed_checks"])
+
+    def test_external_result_import_rejects_missing_required_packets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            validation = validate_external_evidence_packets(
+                external_evidence_dir=root / "missing_EXTERNAL",
+                required_packets=["sync_gate_packet.json", "launch_admission_packet.json"],
+            )
+
+        self.assertEqual(validation["status"], "blocked")
+        self.assertEqual(validation["reason_class"], "EXTERNAL_EVIDENCE_DIR_MISSING")
+        self.assertFalse(validation["json_validated"])
+
+    def test_external_result_import_rejects_unvalidated_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            evidence = root / "evidence_EXTERNAL"
+            evidence.mkdir()
+            (evidence / "sync_gate_packet.json").write_text("{", encoding="utf-8")
+            validation = validate_external_evidence_packets(
+                external_evidence_dir=evidence,
+                required_packets=["sync_gate_packet.json"],
+            )
+
+        self.assertEqual(validation["status"], "blocked")
+        self.assertEqual(validation["reason_class"], "INVALID_EXTERNAL_PACKET_JSON")
+        self.assertIn("sync_gate_packet.json", validation["invalid_json_packets"])
+
+    def test_external_result_import_requires_secret_scan(self) -> None:
+        packet = build_external_result_secret_scan_packet(
+            external_evidence_dir=Path("/repo/audit_results/evidence_EXTERNAL"),
+            matches=["secret-like-token"],
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["raw_secrets_found"])
+
+    def test_external_result_import_does_not_claim_route_ux_egress(self) -> None:
+        matrix = build_import_allowed_claims_matrix()
+        layer = build_layer_separation_packet()
+
+        self.assertFalse(matrix["route_claim_allowed"])
+        self.assertFalse(matrix["ux_claim_allowed"])
+        self.assertFalse(matrix["egress_claim_allowed"])
+        self.assertFalse(layer["route_claim_allowed"])
+        self.assertIn("NATIVE_ROUTING_PROVEN", matrix["forbidden_claims"])
+
+    def test_external_result_import_does_not_treat_keychain_as_auth_proof(self) -> None:
+        packet = build_keychain_boundary_packet(
+            keychain_packet={
+                "machine_prompt_observed": True,
+                "owner_pressed_cancel": True,
+            }
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["keychain_observation_treated_as_auth_proof"])
+
+    def test_external_result_import_classifies_blocked_not_pass(self) -> None:
+        classification = classify_native_safety_retry_import(
+            command_integrity_packet={"status": "ok"},
+            validation_packet={"status": "blocked", "parsed_packets": {}},
+            secret_scan_packet={"status": "ok"},
+            protected_surface_summary_packet={"status": "blocked"},
+            keychain_boundary_packet={"status": "ok"},
+        )
+
+        self.assertEqual(classification["status"], "blocked")
+        self.assertEqual(
+            classification["final_status"],
+            "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+        )
+        self.assertFalse(classification["route_claimed"])
+
+    def test_external_result_import_pass_requires_protected_surface_diff(self) -> None:
+        validation = {
+            "status": "ok",
+            "parsed_packets": {
+                "launch_admission_packet.json": {"native_launch_admitted": True},
+                "native_safety_false_green_audit.json": {"status": "ok"},
+            },
+        }
+        protected = build_protected_surface_import_summary(
+            validation_packet=validation,
+        )
+        classification = classify_native_safety_retry_import(
+            command_integrity_packet={"status": "ok"},
+            validation_packet=validation,
+            secret_scan_packet={"status": "ok"},
+            protected_surface_summary_packet=protected,
+            keychain_boundary_packet={"status": "ok"},
+        )
+
+        self.assertEqual(protected["status"], "blocked")
+        self.assertIn(
+            "protected_surface_import_summary_required",
+            classification["failed_checks"],
+        )
+
+    def test_external_result_import_pass_requires_cleanup_packet(self) -> None:
+        classification = classify_native_safety_retry_import(
+            command_integrity_packet={"status": "ok"},
+            validation_packet={
+                "status": "ok",
+                "parsed_packets": {
+                    "launch_admission_packet.json": {"native_launch_admitted": True},
+                    "cleanup_reversibility_packet.json": {"tmp_root_removed": False},
+                    "native_safety_false_green_audit.json": {"status": "ok"},
+                },
+            },
+            secret_scan_packet={"status": "ok"},
+            protected_surface_summary_packet={"status": "ok"},
+            keychain_boundary_packet={"status": "ok"},
+        )
+
+        self.assertEqual(classification["status"], "blocked")
+        self.assertIn("cleanup_reversibility_required", classification["failed_checks"])
+
+    def test_native_safety_import_false_green_blocks_overclaim_layers(self) -> None:
+        audit = build_native_safety_import_false_green_audit(
+            execution_ownership_packet=build_external_result_execution_ownership_packet(),
+            command_integrity_packet={"status": "ok"},
+            validation_packet={"status": "blocked"},
+            secret_scan_packet={"status": "ok"},
+            classification_packet={
+                "status": "blocked",
+                "final_status": "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+            },
+            allowed_claims_matrix=build_import_allowed_claims_matrix(),
+            layer_separation_packet=build_layer_separation_packet(),
+            keychain_boundary_packet=build_keychain_boundary_packet(),
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["forbidden_claims_present"])
+
+    def test_external_result_import_packet_reflects_blocked_validation(self) -> None:
+        packet = build_external_result_import_packet(
+            validation_packet={
+                "status": "blocked",
+                "external_evidence_dir": "/repo/audit_results/missing_EXTERNAL",
+            },
+            classification_packet={
+                "status": "blocked",
+                "final_status": "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["external_result_imported"])
+
+    def test_external_result_import_packet_blocks_when_classification_blocks(self) -> None:
+        packet = build_external_result_import_packet(
+            validation_packet={
+                "status": "ok",
+                "external_evidence_dir": "/repo/audit_results/present_EXTERNAL",
+            },
+            classification_packet={
+                "status": "blocked",
+                "final_status": "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+            },
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(packet["external_evidence_json_loaded"])
+        self.assertFalse(packet["external_result_imported"])
+
+    def test_external_result_import_probe_entrypoint_emits_blocked_packets(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_external_result_import_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            handoff_dir = temp_repo / "handoff"
+            handoff_dir.mkdir()
+            external_evidence = (
+                temp_repo / "audit_results" / "retry_EXTERNAL_missing"
+            )
+            evidence_dir = temp_repo / "audit_results" / "import_result"
+            command = build_external_detached_handoff_command_packet(
+                repo_root=temp_repo,
+                evidence_dir=external_evidence,
+            )
+            (handoff_dir / "external_detached_command_packet.json").write_text(
+                json.dumps(command),
+                encoding="utf-8",
+            )
+            (handoff_dir / "evidence_import_contract_packet.json").write_text(
+                json.dumps(
+                    build_external_detached_import_contract_packet(
+                        required_packets=[
+                            "sync_gate_packet.json",
+                            "launch_admission_packet.json",
+                        ]
+                    )
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--handoff-dir",
+                    str(handoff_dir),
+                    "--external-evidence-dir",
+                    str(external_evidence),
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            summary = json.loads((evidence_dir / "import_summary_packet.json").read_text())
+            validation = json.loads(
+                (evidence_dir / "external_evidence_validation_packet.json").read_text()
+            )
+            false_green = json.loads(
+                (evidence_dir / "native_safety_import_false_green_audit.json").read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+            )
+            self.assertFalse(summary["current_thread_external_command_executed"])
+            self.assertFalse(summary["current_thread_native_launch_attempted"])
+            self.assertFalse(summary["external_result_imported"])
+            self.assertEqual(validation["reason_class"], "EXTERNAL_EVIDENCE_DIR_MISSING")
+            self.assertEqual(false_green["status"], "ok")
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(

@@ -1,0 +1,14 @@
+{
+  "actual_external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "captured_at_utc": "2026-05-26T10:36:25.705362Z",
+  "current_thread_executed_command": false,
+  "cwd": "/Volumes/Work/wild-boar-proxy",
+  "expected_external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_path_matches_handoff": true,
+  "failed_checks": [],
+  "no_shell_variable_expansion": true,
+  "no_shell_wildcard": true,
+  "packet_kind": "external_result_command_integrity",
+  "status": "ok",
+  "target_tool": "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py"
+}

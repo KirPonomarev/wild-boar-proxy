@@ -825,6 +825,402 @@ def build_external_detached_handoff_false_green_audit(
     }
 
 
+def build_external_result_execution_ownership_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_execution_ownership",
+        "status": "ok",
+        "current_thread_external_command_executed": False,
+        "current_thread_native_launch_attempted": False,
+        "current_thread_owner_prompt_submitted": False,
+        "owner_execution_required": True,
+        "owner_command_edit_allowed": False,
+        "claim_scope": "import_and_classification_only",
+    }
+
+
+def build_external_result_command_integrity_packet(
+    *,
+    handoff_command_packet: dict[str, Any],
+    external_evidence_dir: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    expected_evidence_dir = Path(str(handoff_command_packet.get("evidence_dir", ""))).resolve()
+    actual_evidence_dir = external_evidence_dir.resolve()
+    command_admission = build_external_detached_command_admission_packet(
+        handoff_command_packet,
+        repo_root=repo_root,
+    )
+    failed_checks = list(command_admission.get("failed_checks", []))
+    if expected_evidence_dir != actual_evidence_dir:
+        failed_checks.append("external_evidence_path_mismatch")
+    if handoff_command_packet.get("command_executed"):
+        failed_checks.append("handoff_packet_must_not_mark_command_executed")
+    if handoff_command_packet.get("external_result_imported"):
+        failed_checks.append("handoff_packet_must_not_mark_result_imported")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_command_integrity",
+        "status": "ok" if not failed_checks else "blocked",
+        "failed_checks": failed_checks,
+        "expected_external_evidence_dir": str(expected_evidence_dir),
+        "actual_external_evidence_dir": str(actual_evidence_dir),
+        "external_evidence_path_matches_handoff": expected_evidence_dir == actual_evidence_dir,
+        "target_tool": handoff_command_packet.get("target_tool", ""),
+        "cwd": handoff_command_packet.get("cwd", ""),
+        "no_shell_wildcard": command_admission.get("no_shell_wildcard") is True,
+        "no_shell_variable_expansion": command_admission.get("no_shell_variable_expansion") is True,
+        "current_thread_executed_command": False,
+    }
+
+
+def validate_external_evidence_packets(
+    *,
+    external_evidence_dir: Path,
+    required_packets: list[str],
+) -> dict[str, Any]:
+    external_evidence_dir = external_evidence_dir.resolve()
+    required: list[str] = []
+    alternatives: list[str] = []
+    for packet in required_packets:
+        if " or " in packet:
+            alternatives.append(packet)
+        else:
+            required.append(packet)
+
+    packet_statuses: dict[str, str] = {}
+    parsed_packets: dict[str, Any] = {}
+    missing_packets: list[str] = []
+    invalid_json_packets: list[str] = []
+    if not external_evidence_dir.exists():
+        missing_packets = required[:]
+        for packet in required:
+            packet_statuses[packet] = "missing"
+    else:
+        for packet in required:
+            path = external_evidence_dir / packet
+            if not path.exists():
+                packet_statuses[packet] = "missing"
+                missing_packets.append(packet)
+                continue
+            try:
+                parsed_packets[packet] = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                packet_statuses[packet] = "invalid_json"
+                invalid_json_packets.append(packet)
+                continue
+            packet_statuses[packet] = "present"
+
+    alternative_statuses: dict[str, str] = {}
+    for alternative in alternatives:
+        choices = [choice.strip() for choice in alternative.split(" or ")]
+        present = [choice for choice in choices if (external_evidence_dir / choice).exists()]
+        alternative_statuses[alternative] = "present" if present else "missing"
+        if present:
+            for choice in present:
+                try:
+                    parsed_packets[choice] = json.loads(
+                        (external_evidence_dir / choice).read_text(encoding="utf-8")
+                    )
+                except json.JSONDecodeError:
+                    invalid_json_packets.append(choice)
+                    alternative_statuses[alternative] = "invalid_json"
+        else:
+            missing_packets.append(alternative)
+
+    status = "ok"
+    reason_class = ""
+    if not external_evidence_dir.exists():
+        status = "blocked"
+        reason_class = "EXTERNAL_EVIDENCE_DIR_MISSING"
+    elif missing_packets:
+        status = "blocked"
+        reason_class = "REQUIRED_EXTERNAL_PACKETS_MISSING"
+    elif invalid_json_packets:
+        status = "blocked"
+        reason_class = "INVALID_EXTERNAL_PACKET_JSON"
+
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_evidence_validation",
+        "status": status,
+        "reason_class": reason_class,
+        "external_evidence_dir": str(external_evidence_dir),
+        "external_evidence_dir_exists": external_evidence_dir.exists(),
+        "required_packets": required_packets,
+        "packet_statuses": packet_statuses,
+        "alternative_statuses": alternative_statuses,
+        "missing_packets": missing_packets,
+        "invalid_json_packets": invalid_json_packets,
+        "json_validated": status == "ok",
+        "parsed_packet_count": len(parsed_packets),
+        "parsed_packets": parsed_packets,
+        "partial_write_state_detected": False,
+    }
+
+
+def build_external_result_secret_scan_packet(
+    *,
+    external_evidence_dir: Path,
+    matches: list[str],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_secret_scan",
+        "status": "ok" if not matches else "blocked",
+        "external_evidence_dir": str(external_evidence_dir.resolve()),
+        "secret_scan_performed": True,
+        "raw_secret_matches": matches,
+        "raw_secrets_found": bool(matches),
+    }
+
+
+def build_import_allowed_claims_matrix() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_import_allowed_claims_matrix",
+        "status": "ok",
+        "allowed_claims": [
+            "external evidence imported",
+            "external evidence validated",
+            "native filesystem safety classified",
+            "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORTED_PASS_WITH_LIMITS",
+            "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+        ],
+        "forbidden_claims": [
+            "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_PROVEN",
+            "CODEX_CUSTOM_NATIVE_APP_USABLE",
+            "NATIVE_ROUTING_PROVEN",
+            "OWNER_UX_PROVEN",
+            "DIRECT_EGRESS_ABSENT",
+            "ORIGINAL_CODEX_VIA_WBP_PROVEN",
+            "MODEL_AVAILABILITY_PROVEN",
+            "AUTH_STRATEGY_PROVEN",
+            "FINAL_E2E_COMPLETE",
+        ],
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+        "model_availability_reproof_allowed": False,
+    }
+
+
+def build_layer_separation_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_import_layer_separation",
+        "status": "ok",
+        "current_contour_scope": "native_filesystem_safety_import_only",
+        "deferred_or_incidental_observations": [
+            "route traces",
+            "WBP 200 responses",
+            "visible native window",
+            "owner screenshots",
+            "owner prompt-response observations",
+            "network egress observations",
+            "model availability observations",
+            "auth/account observations",
+        ],
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+        "model_availability_reproof_allowed": False,
+    }
+
+
+def build_keychain_boundary_packet(
+    *,
+    keychain_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    keychain_packet = keychain_packet or {}
+    reset_required = keychain_packet.get("keychain_reset_performed") is True
+    default_required = keychain_packet.get("keychain_default_required") is True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_import_keychain_boundary",
+        "status": "blocked" if reset_required or default_required else "ok",
+        "reason_class": "KEYCHAIN_MUTATION_REQUIRED"
+        if reset_required or default_required
+        else "",
+        "keychain_observation_present": bool(keychain_packet),
+        "keychain_observation_classifies_native_safety_only": True,
+        "keychain_observation_treated_as_auth_proof": False,
+        "keychain_reset_required": reset_required,
+        "keychain_default_required": default_required,
+    }
+
+
+def build_protected_surface_import_summary(
+    *,
+    validation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    parsed_packets = validation_packet.get("parsed_packets", {})
+    diff_packet = parsed_packets.get("protected_surface_recursive_diff.json", {})
+    surfaces = diff_packet.get("surfaces", {})
+    classifications: dict[str, str] = {}
+    if not diff_packet:
+        classifications = {
+            "~/.codex": "not_measured_blocker",
+            "~/Library/Application Support/Codex": "not_measured_blocker",
+            "~/Library/Caches/com.openai.codex": "not_measured_blocker",
+            "~/Library/HTTPStorages/com.openai.codex": "not_measured_blocker",
+        }
+    else:
+        for name, surface in surfaces.items():
+            diff = surface.get("diff", {})
+            changed = bool(diff.get("created") or diff.get("deleted") or diff.get("changed"))
+            classifications[name] = "changed_unexpected_blocker" if changed else "unchanged"
+    all_safe = bool(classifications) and all(
+        value in {"unchanged", "changed_safe_owned"} for value in classifications.values()
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "protected_surface_import_summary",
+        "status": "ok" if all_safe else "blocked",
+        "surface_classifications": classifications,
+        "all_protected_surfaces_safe": all_safe,
+    }
+
+
+def classify_native_safety_retry_import(
+    *,
+    command_integrity_packet: dict[str, Any],
+    validation_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    protected_surface_summary_packet: dict[str, Any],
+    keychain_boundary_packet: dict[str, Any],
+) -> dict[str, Any]:
+    parsed_packets = validation_packet.get("parsed_packets", {})
+    launch_admission = parsed_packets.get("launch_admission_packet.json", {})
+    cleanup = parsed_packets.get("cleanup_reversibility_packet.json", {})
+    false_green = parsed_packets.get("native_safety_false_green_audit.json", {})
+    failed_checks: list[str] = []
+    if command_integrity_packet.get("status") != "ok":
+        failed_checks.append("external_command_integrity_required")
+    if validation_packet.get("status") != "ok":
+        failed_checks.append("external_evidence_validation_required")
+    if secret_scan_packet.get("status") != "ok":
+        failed_checks.append("secret_scan_clean_required")
+    if launch_admission.get("native_launch_admitted") is not True:
+        failed_checks.append("native_launch_admission_required")
+    if protected_surface_summary_packet.get("status") != "ok":
+        failed_checks.append("protected_surface_import_summary_required")
+    if cleanup and cleanup.get("tmp_root_removed") is not True:
+        failed_checks.append("cleanup_reversibility_required")
+    if keychain_boundary_packet.get("status") != "ok":
+        failed_checks.append("keychain_boundary_required")
+    if false_green and false_green.get("status") != "ok":
+        failed_checks.append("native_safety_false_green_audit_required")
+
+    final_status = (
+        "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORTED_PASS_WITH_LIMITS"
+        if not failed_checks
+        else "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED"
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_retry_import_classification",
+        "status": "ok" if not failed_checks else "blocked",
+        "final_status": final_status,
+        "failed_checks": failed_checks,
+        "native_safety_pass_claimed": not failed_checks,
+        "route_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+    }
+
+
+def build_external_result_import_packet(
+    *,
+    validation_packet: dict[str, Any],
+    classification_packet: dict[str, Any],
+) -> dict[str, Any]:
+    evidence_json_loaded = validation_packet.get("status") == "ok"
+    classification_ok = classification_packet.get("status") == "ok"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_result_import",
+        "status": "ok" if evidence_json_loaded and classification_ok else "blocked",
+        "external_evidence_dir": validation_packet.get("external_evidence_dir", ""),
+        "external_evidence_json_loaded": evidence_json_loaded,
+        "external_result_imported": evidence_json_loaded and classification_ok,
+        "external_result_classified": True,
+        "classification_status": classification_packet.get("status"),
+        "final_status": classification_packet.get("final_status"),
+    }
+
+
+def build_native_safety_import_false_green_audit(
+    *,
+    execution_ownership_packet: dict[str, Any],
+    command_integrity_packet: dict[str, Any],
+    validation_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    classification_packet: dict[str, Any],
+    allowed_claims_matrix: dict[str, Any],
+    layer_separation_packet: dict[str, Any],
+    keychain_boundary_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "current_thread_did_not_execute_external_command",
+            "passed": execution_ownership_packet.get("current_thread_external_command_executed")
+            is False,
+        },
+        {
+            "name": "current_thread_did_not_launch_native_app",
+            "passed": execution_ownership_packet.get("current_thread_native_launch_attempted")
+            is False,
+        },
+        {
+            "name": "external_command_integrity_verified_or_blocked",
+            "passed": command_integrity_packet.get("status") in {"ok", "blocked"},
+        },
+        {
+            "name": "external_evidence_json_validated_or_missing_blocked",
+            "passed": validation_packet.get("status") in {"ok", "blocked"},
+        },
+        {
+            "name": "secret_scan_clean_or_blocked",
+            "passed": secret_scan_packet.get("status") in {"ok", "blocked"},
+        },
+        {
+            "name": "route_ux_egress_auth_model_claims_forbidden",
+            "passed": not allowed_claims_matrix.get("route_claim_allowed", True)
+            and not allowed_claims_matrix.get("ux_claim_allowed", True)
+            and not allowed_claims_matrix.get("egress_claim_allowed", True)
+            and not allowed_claims_matrix.get("auth_strategy_reproof_allowed", True)
+            and not allowed_claims_matrix.get("model_availability_reproof_allowed", True),
+        },
+        {
+            "name": "layer_separation_respected",
+            "passed": layer_separation_packet.get("status") == "ok",
+        },
+        {
+            "name": "keychain_not_auth_proof",
+            "passed": keychain_boundary_packet.get("keychain_observation_treated_as_auth_proof")
+            is False,
+        },
+        {
+            "name": "blocked_result_not_counted_as_pass",
+            "passed": classification_packet.get("status") == "ok"
+            or classification_packet.get("final_status")
+            == "NATIVE_CUSTOM_FILESYSTEM_SAFETY_IMPORT_BLOCKED",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_safety_import_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": False,
+    }
+
+
 def classify_environment_blocked_result(
     *,
     item: str,

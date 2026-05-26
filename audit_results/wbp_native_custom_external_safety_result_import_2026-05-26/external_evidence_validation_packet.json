@@ -1,0 +1,57 @@
+{
+  "alternative_statuses": {
+    "native_safety_blocker_packet.json or native safety pass packets": "missing"
+  },
+  "captured_at_utc": "2026-05-26T10:36:25.705409Z",
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_dir_exists": false,
+  "invalid_json_packets": [],
+  "json_validated": false,
+  "missing_packets": [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "version_pinning_packet.json",
+    "host_context_packet.json",
+    "owner_action_boundary_packet.json",
+    "current_codex_running_state_initial.json",
+    "quiescent_current_codex_precondition_packet.json",
+    "pre_custom_idle_stability_packet.json",
+    "launch_admission_packet.json",
+    "allowed_claims_matrix.json",
+    "native_safety_false_green_audit.json",
+    "native_safety_blocker_packet.json or native safety pass packets"
+  ],
+  "packet_kind": "external_evidence_validation",
+  "packet_statuses": {
+    "allowed_claims_matrix.json": "missing",
+    "current_codex_running_state_initial.json": "missing",
+    "historical_dirt_quarantine_packet.json": "missing",
+    "host_context_packet.json": "missing",
+    "launch_admission_packet.json": "missing",
+    "native_safety_false_green_audit.json": "missing",
+    "owner_action_boundary_packet.json": "missing",
+    "pre_custom_idle_stability_packet.json": "missing",
+    "quiescent_current_codex_precondition_packet.json": "missing",
+    "sync_gate_packet.json": "missing",
+    "version_pinning_packet.json": "missing"
+  },
+  "parsed_packet_count": 0,
+  "parsed_packets": {},
+  "partial_write_state_detected": false,
+  "reason_class": "EXTERNAL_EVIDENCE_DIR_MISSING",
+  "required_packets": [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "version_pinning_packet.json",
+    "host_context_packet.json",
+    "owner_action_boundary_packet.json",
+    "current_codex_running_state_initial.json",
+    "quiescent_current_codex_precondition_packet.json",
+    "pre_custom_idle_stability_packet.json",
+    "launch_admission_packet.json",
+    "native_safety_blocker_packet.json or native safety pass packets",
+    "allowed_claims_matrix.json",
+    "native_safety_false_green_audit.json"
+  ],
+  "status": "blocked"
+}
