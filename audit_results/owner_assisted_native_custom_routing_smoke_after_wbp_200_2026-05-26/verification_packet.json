@@ -1,0 +1,42 @@
+{
+  "captured_at_utc": "2026-05-26T07:20:18.947310Z",
+  "claim_limiters": {
+    "current_codex_drift_guard": "blocked_or_noisy",
+    "direct_egress_absence_proven": false,
+    "full_native_ux_claimed": false,
+    "full_phase7_claimed": false,
+    "machine_ui_input_claimed": false
+  },
+  "diff_check": {
+    "command": "git diff --check -- audit_results/owner_assisted_native_custom_routing_smoke_after_wbp_200_2026-05-26",
+    "status": "ok"
+  },
+  "json_parse": {
+    "json_file_count": 23,
+    "status": "ok"
+  },
+  "machine_error_code": "OK",
+  "redaction_scan": {
+    "findings": [],
+    "status": "ok"
+  },
+  "routing_assertions": {
+    "custom_process_observed": true,
+    "forwarded_to_wbp": true,
+    "native_prompt_response_status": "ok",
+    "preflight_ok": true,
+    "trace_path": "/v1/responses",
+    "trace_request_observed": true,
+    "trace_response_observed": true,
+    "trace_upstream_status": 200
+  },
+  "status": "ok",
+  "unit_tests": {
+    "command": "python3 -m unittest -q tests.test_operator_surface tests.test_native_launch_contract tests.test_native_launch_dispatch tests.test_codex_custom_sessions",
+    "status": "ok",
+    "test_count": 88,
+    "warnings": [
+      "ResourceWarning from expected HTTPError cleanup in tests.test_operator_surface"
+    ]
+  }
+}

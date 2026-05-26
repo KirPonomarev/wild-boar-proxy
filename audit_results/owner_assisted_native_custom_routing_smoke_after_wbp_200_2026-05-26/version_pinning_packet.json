@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T07:13:54.808507Z",
+  "cliproxyapi_binary_path": "/Users/kirillponomarev/.local/bin/cli-proxy-api",
+  "cliproxyapi_config_path": "/Users/kirillponomarev/.cli-proxy-api/config.yaml",
+  "codex_app_info_plist_exists": true,
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_app_version": "26.519.41501",
+  "codex_cli_path": "/opt/homebrew/bin/codex",
+  "codex_cli_version_exit_code": 0,
+  "codex_cli_version_stdout": "codex-cli 0.128.0",
+  "config_schema_retrieval_date": "2026-05-26",
+  "config_schema_source": "local installed codex binary/config parser plus repo prior evidence; official schema not re-fetched in this narrow contour",
+  "wbp_git_commit": "59499c237c0708620e0603163c9b55876858c2a2"
+}

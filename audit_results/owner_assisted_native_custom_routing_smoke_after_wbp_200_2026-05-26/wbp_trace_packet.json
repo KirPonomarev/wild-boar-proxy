@@ -1,0 +1,20 @@
+{
+  "auth_header_recorded": false,
+  "downstream_endpoint": "http://127.0.0.1:8318/v1",
+  "forwarded_endpoint": "http://127.0.0.1:8318/v1",
+  "forwarded_to_wbp": true,
+  "listen_endpoint": "http://127.0.0.1:55813/v1",
+  "machine_error_code": "OK",
+  "method": "POST",
+  "observer_closed": false,
+  "path": "/v1/responses",
+  "prompt_body_recorded": false,
+  "raw_account_id_recorded": false,
+  "raw_backend_id_recorded": false,
+  "request_body_sha256": "a7ab3c28a4e6dd18da62ec7e625765ea9915ffa51d3918c70f74551111c63e24",
+  "request_observed": true,
+  "response_body_sha256": "5ff988594becacfde7a119073cc8fbc7bc829433d8e488cd24c2f85bf1f1db53",
+  "response_observed": true,
+  "secret_value_recorded": false,
+  "upstream_status": 200
+}
