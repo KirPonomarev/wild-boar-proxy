@@ -1,0 +1,4 @@
+{
+  "classification": "reasoning_input_ignored_not_passthrough",
+  "expected_upstream_contains_reasoning_summary": false
+}

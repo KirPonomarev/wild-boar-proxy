@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T07:53:04.804139Z",
+  "fixture": "non_stream_text_request.json",
+  "live_consumer_claimed": false,
+  "machine_error_code": "OK",
+  "shape_fields": [
+    "object=response",
+    "status=completed",
+    "output[0].type=message",
+    "content[0].type=output_text"
+  ],
+  "status": "ok",
+  "test": "test_wbp_responses_non_stream_shape_is_codex_compatible"
+}

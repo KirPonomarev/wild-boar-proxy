@@ -1,0 +1,9 @@
+{"event":"response.created"}
+{"event":"response.in_progress"}
+{"event":"response.output_item.added"}
+{"event":"response.content_part.added"}
+{"event":"response.output_text.delta"}
+{"event":"response.output_text.done"}
+{"event":"response.content_part.done"}
+{"event":"response.output_item.done"}
+{"event":"response.completed"}

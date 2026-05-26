@@ -1,0 +1,25 @@
+{
+  "input": [
+    {
+      "encrypted_content": "fixture-redacted-reasoning",
+      "summary": [
+        {
+          "text": "internal reasoning summary should not go upstream",
+          "type": "summary_text"
+        }
+      ],
+      "type": "reasoning"
+    },
+    {
+      "content": [
+        {
+          "text": "Reply without exposing reasoning",
+          "type": "input_text"
+        }
+      ],
+      "role": "user",
+      "type": "message"
+    }
+  ],
+  "model": "wbp-fixture-route"
+}

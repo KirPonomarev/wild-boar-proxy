@@ -143,17 +143,60 @@ def _route_completion_url(route: dict[str, Any]) -> str:
     return str(route.get("base_url") or "").rstrip("/") + str(route.get("endpoint_path") or "")
 
 
-def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, str]]:
-    messages: list[dict[str, str]] = []
+def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
         messages.append({"role": "developer", "content": instructions})
     raw_input = payload.get("input")
+    if isinstance(raw_input, str) and raw_input.strip():
+        return [*messages, {"role": "user", "content": raw_input.strip()}]
     if not isinstance(raw_input, list):
         return messages
+    pending_tool_calls: list[dict[str, Any]] = []
+
+    def flush_pending_tool_calls() -> None:
+        if pending_tool_calls:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": list(pending_tool_calls),
+                }
+            )
+            pending_tool_calls.clear()
+
     for item in raw_input:
         if not isinstance(item, dict) or str(item.get("type") or "") != "message":
+            item_type = str(item.get("type") or "")
+            if item_type in {"input_text", "text"}:
+                text = str(item.get("text") or item.get("content") or "").strip()
+                if text:
+                    flush_pending_tool_calls()
+                    messages.append({"role": "user", "content": text})
+            elif item_type == "function_call":
+                call_id = str(item.get("call_id") or item.get("id") or "call_0")
+                pending_tool_calls.append(
+                    {
+                        "id": call_id,
+                        "type": "function",
+                        "function": {
+                            "name": str(item.get("name") or ""),
+                            "arguments": str(item.get("arguments") or ""),
+                        },
+                    }
+                )
+            elif item_type == "function_call_output":
+                flush_pending_tool_calls()
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": str(item.get("call_id") or "call_0"),
+                        "content": str(item.get("output") or ""),
+                    }
+                )
             continue
+        flush_pending_tool_calls()
         role = str(item.get("role") or "user").strip() or "user"
         content = item.get("content")
         parts: list[str] = []
@@ -170,6 +213,7 @@ def _responses_payload_to_messages(payload: dict[str, Any]) -> list[dict[str, st
             parts.append(content.strip())
         if parts:
             messages.append({"role": role, "content": "\n".join(parts)})
+    flush_pending_tool_calls()
     return messages
 
 
@@ -992,6 +1036,35 @@ class ExternalRouteResponsesAdapter:
             payload = {"error": {"message": "invalid json body", "type": "invalid_request_error"}}
             body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
             return 400, {"Content-Type": "application/json"}, body_bytes
+        tools = request_payload.get("tools")
+        if isinstance(tools, list):
+            unsupported_tools = [
+                str(tool.get("type") or "")
+                for tool in tools
+                if isinstance(tool, dict) and str(tool.get("type") or "") not in {"", "function"}
+            ]
+            if unsupported_tools:
+                payload = {
+                    "error": {
+                        "message": "unsupported Responses tool type for this WBP route",
+                        "type": "invalid_request_error",
+                        "code": "unsupported_tool_type",
+                    }
+                }
+                body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+                return 400, {"Content-Type": "application/json"}, body_bytes
+        requested_model = str(request_payload.get("model") or "").strip()
+        route_id = str(self.route.get("route_id") or "").strip()
+        if requested_model and requested_model != route_id:
+            payload = {
+                "error": {
+                    "message": "unknown model for this WBP route",
+                    "type": "invalid_request_error",
+                    "code": "model_not_found",
+                }
+            }
+            body_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+            return 404, {"Content-Type": "application/json"}, body_bytes
         messages = _responses_payload_to_messages(request_payload)
         if not messages:
             payload = {"error": {"message": "responses input did not contain prompt text", "type": "invalid_request_error"}}
@@ -1004,10 +1077,12 @@ class ExternalRouteResponsesAdapter:
             "max_tokens": int(request_payload.get("max_output_tokens") or 256),
         }
         if str(self.route.get("transform_profile") or "") == "openai_chat_system_to_developer":
-            transformed_messages: list[dict[str, str]] = []
+            transformed_messages: list[dict[str, Any]] = []
             for message in messages:
                 role = "developer" if message.get("role") == "system" else str(message.get("role") or "user")
-                transformed_messages.append({"role": role, "content": str(message.get("content") or "")})
+                transformed = dict(message)
+                transformed["role"] = role
+                transformed_messages.append(transformed)
             upstream_payload["messages"] = transformed_messages
         response = request_json(
             url=_route_completion_url(self.route),

@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "auth failed",
+    "type": "authentication_error"
+  },
+  "status_code": 401
+}
