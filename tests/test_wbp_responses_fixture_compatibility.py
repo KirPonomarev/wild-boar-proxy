@@ -12,7 +12,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from wild_boar_proxy.external_models import errors
 from wild_boar_proxy.operator_surface import ExternalRouteResponsesAdapter, WbpTraceObserver
+from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "wbp_responses_compatibility"
@@ -154,6 +156,116 @@ class WbpResponsesFixtureCompatibilityTests(unittest.TestCase):
                 self.assertEqual(status, status_code)
                 self.assertIn("error", response_payload)
                 self.assertNotEqual(status, 200)
+
+    def test_failure_semantics_429_classified(self) -> None:
+        status, body, _captured, _fixture = self.run_adapter_request(
+            "non_stream_text_request.json",
+            response_payload={
+                "error": {
+                    "message": "rate limit fixture",
+                    "type": "rate_limit_error",
+                    "code": "rate_limit_exceeded",
+                }
+            },
+            response_status=429,
+        )
+        payload = json.loads(body)
+
+        self.assertEqual(status, 429)
+        self.assertEqual(payload["error"]["type"], "rate_limit_error")
+        self.assertEqual(payload["error"]["code"], "rate_limit_exceeded")
+
+    def test_failure_semantics_timeout_classified(self) -> None:
+        def timeout_request_json(**_kwargs: object) -> FakeResponse:
+            raise RuntimeErrorInfo(
+                "Provider request timed out.",
+                machine_error_code=errors.PROVIDER_NETWORK_FAILED,
+                operator_action="retry",
+            )
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=fixture_route(),
+                expected_api_key="local-runtime-fixture",
+                route_secret="route-secret-fixture",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=timeout_request_json),
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
+                headers={
+                    "Authorization": "Bearer local-runtime-fixture",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5)
+
+        self.assertEqual(caught.exception.code, 504)
+        payload = json.loads(caught.exception.read().decode("utf-8"))
+        self.assertEqual(payload["error"]["code"], errors.PROVIDER_NETWORK_FAILED)
+        self.assertTrue(payload["error"]["retryable"])
+
+    def test_failure_semantics_disconnect_classified(self) -> None:
+        def disconnect_request_json(**_kwargs: object) -> FakeResponse:
+            raise RuntimeErrorInfo(
+                "Provider network request failed: upstream disconnect",
+                machine_error_code=errors.PROVIDER_NETWORK_FAILED,
+                operator_action="retry",
+            )
+
+        with (
+            ExternalRouteResponsesAdapter(
+                route=fixture_route(),
+                expected_api_key="local-runtime-fixture",
+                route_secret="route-secret-fixture",
+            ) as adapter,
+            mock.patch("wild_boar_proxy.operator_surface.request_json", side_effect=disconnect_request_json),
+        ):
+            request = urllib.request.Request(
+                f"{adapter.listen_endpoint}/responses",
+                data=json.dumps(load_json("non_stream_text_request.json")).encode("utf-8"),
+                headers={
+                    "Authorization": "Bearer local-runtime-fixture",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5)
+
+        self.assertEqual(caught.exception.code, 502)
+        payload = json.loads(caught.exception.read().decode("utf-8"))
+        self.assertEqual(payload["error"]["type"], "provider_runtime_error")
+        self.assertTrue(payload["error"]["retryable"])
+
+    def test_failure_semantics_partial_stream_classified(self) -> None:
+        status, body, _captured, _fixture = self.run_adapter_request(
+            "stream_text_request.json",
+            response_payload={"choices": [{"message": {"content": "WBP_STREAM_OK"}}]},
+            accept="text/event-stream",
+        )
+        observed_events = [
+            line.removeprefix("event: ").strip()
+            for line in body.splitlines()
+            if line.startswith("event: ")
+        ]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(observed_events[-1], "response.completed")
+        self.assertNotIn("partial_stream_passed", body)
+
+    def test_environment_blocked_result_not_counted_as_pass(self) -> None:
+        blocked_packet = {
+            "status": "blocked_by_host_environment",
+            "counts_as_pass": False,
+            "root_cause": "fixture host intentionally unavailable",
+        }
+
+        self.assertFalse(blocked_packet["counts_as_pass"])
+        self.assertEqual(blocked_packet["status"], "blocked_by_host_environment")
 
     def test_wbp_responses_unknown_model_error_blocks_route_overclaim(self) -> None:
         status, body, captured, _fixture = self.run_adapter_request("unknown_model_request.json")

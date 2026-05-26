@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-26T20:50:43.297588Z",
+  "classification": "rate_limit_not_success",
+  "counts_as_provider_pass": false,
+  "http_status": 429,
+  "packet_kind": "failure_semantics_429",
+  "retry_behavior": "not_retried_by_adapter",
+  "status": "ok"
+}

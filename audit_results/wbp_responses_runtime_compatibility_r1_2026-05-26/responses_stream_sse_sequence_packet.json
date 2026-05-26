@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-26T20:50:43.297525Z",
+  "completed_event_required": true,
+  "expected_events": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "observed_events": [
+    "response.created",
+    "response.in_progress",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "packet_kind": "responses_stream_sse_sequence",
+  "status": "ok",
+  "stream_started_counts_as_compatible": false
+}

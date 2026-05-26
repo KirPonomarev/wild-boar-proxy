@@ -26,6 +26,7 @@ from typing import Any, Callable
 from wild_boar_proxy.external_models import transforms
 from wild_boar_proxy.external_models.http_client import request_json
 from wild_boar_proxy.external_models.paths import ExternalModelsPaths
+from wild_boar_proxy.runtime import RuntimeErrorInfo
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
@@ -377,6 +378,24 @@ def _responses_stream_body(payload: dict[str, Any]) -> bytes:
         chunks.append(f"event: {event_name}\n")
         chunks.append(f"data: {json.dumps(event_payload, ensure_ascii=True)}\n\n")
     return "".join(chunks).encode("utf-8")
+
+
+def _responses_runtime_error_status(exc: RuntimeErrorInfo) -> int:
+    text = f"{exc.machine_error_code} {exc.message}".lower()
+    if "timeout" in text or "timed out" in text:
+        return 504
+    return 502
+
+
+def _responses_runtime_error_payload(exc: RuntimeErrorInfo) -> dict[str, Any]:
+    return {
+        "error": {
+            "message": exc.message,
+            "type": "provider_runtime_error",
+            "code": exc.machine_error_code,
+            "retryable": exc.operator_action == "retry",
+        }
+    }
 
 
 def extract_local_api_key(config_path: Path) -> str:
@@ -1086,20 +1105,40 @@ class ExternalRouteResponsesAdapter:
                 transformed["role"] = role
                 transformed_messages.append(transformed)
             upstream_payload["messages"] = transformed_messages
-        response = request_json(
-            url=_route_completion_url(self.route),
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {self.route_secret}",
-                "Accept": "application/json",
-            },
-            payload=upstream_payload,
-            timeout_seconds=self.timeout_seconds,
-        )
+        try:
+            response = request_json(
+                url=_route_completion_url(self.route),
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {self.route_secret}",
+                    "Accept": "application/json",
+                },
+                payload=upstream_payload,
+                timeout_seconds=self.timeout_seconds,
+            )
+        except RuntimeErrorInfo as exc:
+            body_bytes = json.dumps(
+                _responses_runtime_error_payload(exc), ensure_ascii=True
+            ).encode("utf-8")
+            return (
+                _responses_runtime_error_status(exc),
+                {"Content-Type": "application/json"},
+                body_bytes,
+            )
         if response.status_code >= 400:
             body_bytes = json.dumps(response.payload, ensure_ascii=True).encode("utf-8")
             return response.status_code, {"Content-Type": "application/json"}, body_bytes
-        text, _response_meta = transforms.extract_check_response(self.route, response.payload)
+        try:
+            text, _response_meta = transforms.extract_check_response(self.route, response.payload)
+        except RuntimeErrorInfo as exc:
+            body_bytes = json.dumps(
+                _responses_runtime_error_payload(exc), ensure_ascii=True
+            ).encode("utf-8")
+            return (
+                _responses_runtime_error_status(exc),
+                {"Content-Type": "application/json"},
+                body_bytes,
+            )
         payload = _responses_result_payload(
             text,
             str(self.route.get("route_id") or ""),

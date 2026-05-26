@@ -1,0 +1,9 @@
+{
+  "captured_at_utc": "2026-05-26T20:50:43.297621Z",
+  "counts_as_pass": false,
+  "packet_kind": "failure_semantics_client_cancel",
+  "remains_unproven": "adapter behavior after downstream client cancellation",
+  "root_cause": "deterministic local harness does not expose reliable client-cancel observation without introducing flaky socket timing",
+  "status": "blocked_by_host_environment",
+  "what_was_exercised": "no client-cancel runtime path"
+}
