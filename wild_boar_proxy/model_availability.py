@@ -30,6 +30,25 @@ FAILURE_CAUSES = {
     "timeout",
     "unknown",
 }
+ROUTE_FAMILIES = {
+    "codex_native_account_route",
+    "wbp_api_external_route",
+    "local_fixture_route",
+    "unknown_unrouted",
+}
+AVAILABILITY_LEVELS = {
+    "listed",
+    "selectable",
+    "request_reaches_wbp",
+    "route_selected",
+    "upstream_accepts",
+    "direct_wbp_non_stream_response_shape_accepted",
+    "response_accepted_by_codex",
+    "streaming_classified",
+    "tool_loop_classified",
+    "blocked_by_host_environment",
+    "failed",
+}
 MODEL_FORBIDDEN_BROWSER_FIELDS = {
     "api_key",
     "apikey",
@@ -59,6 +78,22 @@ FORBIDDEN_MODEL_CLAIMS = (
     "streaming_compatible",
     "tool_loop_compatible",
     "model_catalog_proves_model_access",
+)
+MODEL_AVAILABILITY_R1_REQUIRED_PACKETS = (
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "declared_write_surfaces_packet.json",
+    "version_pinning_packet.json",
+    "model_candidate_discovery_packet.json",
+    "candidate_partition_packet.json",
+    "default_model_source_packet.json",
+    "route_family_classification_packet.json",
+    "model_availability_admission_packet.json",
+    "validation_freshness_packet.json",
+    "external_route_admission_packet.json",
+    "model_availability_matrix.json",
+    "model_claims_matrix.json",
+    "model_availability_false_green_audit.json",
 )
 
 
@@ -247,9 +282,232 @@ def _route_model_rows(routes_packet: dict[str, Any] | None) -> dict[str, dict[st
             "upstream_model": str(route.get("upstream_model") or ""),
             "account_or_backend_id": "secret_ref_present" if str(auth.get("secret_ref") or "").strip() else "",
             "selection_source": "external_route",
+            "route_family": "wbp_api_external_route",
             "server_issued": route.get("enabled") is True and bool(str(auth.get("secret_ref") or "").strip()),
+            "secret_ref_present": bool(str(auth.get("secret_ref") or "").strip()),
+            "adapter_id": str(route.get("adapter_id") or provider.get("adapter_id") or "external_route_responses_adapter"),
         }
     return rows
+
+
+def infer_route_family(*, model_id: str, source: str = "", row: dict[str, Any] | None = None) -> str:
+    if isinstance(row, dict):
+        family = str(row.get("route_family") or "").strip()
+        if family in ROUTE_FAMILIES:
+            return family
+        if str(row.get("selection_source") or "") == "external_route":
+            return "wbp_api_external_route"
+    source_text = str(source or "").lower()
+    if "fixture" in source_text:
+        return "local_fixture_route"
+    if "external_route" in source_text or model_id.startswith("wbp:") or model_id.startswith("wbp-"):
+        return "wbp_api_external_route"
+    if model_id.startswith("gpt-"):
+        return "codex_native_account_route"
+    return "unknown_unrouted"
+
+
+def build_route_family_classification_packet(
+    *,
+    candidate_packet: dict[str, Any],
+    normalization_packet: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    candidate_ids = candidate_packet.get("candidate_model_ids")
+    if not isinstance(candidate_ids, list):
+        candidate_ids = []
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    if isinstance(normalization_packet, dict):
+        rows = normalization_packet.get("rows")
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    model_id = str(row.get("wbp_model_id") or row.get("display_model_id") or "")
+                    if model_id:
+                        rows_by_id[model_id] = row
+    classifications: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for raw_model_id in candidate_ids:
+        model_id = str(raw_model_id)
+        row = rows_by_id.get(model_id, {})
+        family = infer_route_family(
+            model_id=model_id,
+            source=str(row.get("selection_source") or ""),
+            row=row,
+        )
+        if family == "unknown_unrouted":
+            missing.append(model_id)
+        classifications.append(
+            {
+                "model_id": model_id,
+                "route_family": family,
+                "route_family_required": True,
+                "route_id": str(row.get("route_id") or ""),
+                "provider_model_id": str(row.get("upstream_model") or model_id),
+                "selection_source": str(row.get("selection_source") or "unknown"),
+                "unknown_unrouted_smoke_allowed": False,
+            }
+        )
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "route_family_classification",
+        "captured_at_utc": utc_now(),
+        "status": "blocked" if missing else "ok",
+        "machine_error_code": "UNKNOWN_UNROUTED_CANDIDATES" if missing else "OK",
+        "allowed_route_families": sorted(ROUTE_FAMILIES),
+        "unknown_unrouted_candidates": missing,
+        "classifications": classifications,
+    }
+
+
+def build_candidate_partition_packet(
+    *,
+    candidate_packet: dict[str, Any],
+    route_family_packet: dict[str, Any],
+) -> dict[str, Any]:
+    candidate_ids = [str(model_id) for model_id in candidate_packet.get("candidate_model_ids", [])]
+    by_id = {
+        str(row.get("model_id")): row
+        for row in route_family_packet.get("classifications", [])
+        if isinstance(row, dict)
+    }
+    catalog_visible: list[str] = []
+    route_backed: list[str] = []
+    admitted: list[str] = []
+    blocked: list[dict[str, str]] = []
+    for model_id in candidate_ids:
+        row = by_id.get(model_id, {})
+        family = str(row.get("route_family") or "unknown_unrouted")
+        source = str(row.get("selection_source") or "")
+        if source in {"catalog", "direct_models_endpoint"} or model_id.startswith("gpt-"):
+            catalog_visible.append(model_id)
+        if family != "unknown_unrouted":
+            route_backed.append(model_id)
+            admitted.append(model_id)
+        else:
+            blocked.append({"model_id": model_id, "blocked_reason": "unknown_unrouted"})
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "candidate_partition",
+        "captured_at_utc": utc_now(),
+        "status": "ok" if candidate_ids and not any(row["model_id"] in admitted for row in blocked) else "blocked",
+        "catalog_visible_candidates": catalog_visible,
+        "route_backed_candidates": route_backed,
+        "admitted_smoke_candidates": admitted,
+        "blocked_candidates": blocked,
+        "catalog_visible_counted_as_availability": False,
+        "catalog_visible_counted_as_admitted_smoke": False,
+        "unknown_unrouted_smoked": False,
+    }
+
+
+def build_default_model_source_packet(
+    *,
+    configured_model: str,
+    candidate_packet: dict[str, Any],
+    route_family_packet: dict[str, Any],
+) -> dict[str, Any]:
+    candidate_ids = {str(model_id) for model_id in candidate_packet.get("candidate_model_ids", [])}
+    rows = route_family_packet.get("classifications")
+    family = "unknown_unrouted"
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and row.get("model_id") == configured_model:
+                family = str(row.get("route_family") or "unknown_unrouted")
+                break
+    missing = bool(configured_model) and configured_model not in candidate_ids
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "default_model_source",
+        "captured_at_utc": utc_now(),
+        "status": "blocked" if missing or family == "unknown_unrouted" else "ok",
+        "configured_model": configured_model,
+        "configured_model_in_candidate_set": configured_model in candidate_ids,
+        "default_model_source": "server_status_configured_model",
+        "route_family": family,
+        "browser_authority": False,
+        "operator_supplied_override": False,
+        "missing_from_candidate_set": missing,
+    }
+
+
+def build_model_availability_admission_packet(
+    *,
+    candidate_partition_packet: dict[str, Any],
+    validation_freshness_packet: dict[str, Any],
+) -> dict[str, Any]:
+    admitted = [str(model_id) for model_id in candidate_partition_packet.get("admitted_smoke_candidates", [])]
+    stale = validation_freshness_packet.get("current_truth_allowed") is not True
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "model_availability_admission",
+        "captured_at_utc": utc_now(),
+        "status": "blocked" if stale or not admitted else "ok",
+        "admitted_smoke_candidates": admitted if not stale else [],
+        "blocked_candidates": candidate_partition_packet.get("blocked_candidates", []),
+        "validation_freshness_required": True,
+        "validation_freshness_status": validation_freshness_packet.get("status"),
+        "stale_validation_used_as_current_truth": False,
+        "unknown_unrouted_smoke_allowed": False,
+        "catalog_visible_counted_as_availability": False,
+    }
+
+
+def build_external_route_admission_packet(
+    *,
+    route_family_packet: dict[str, Any],
+    normalization_packet: dict[str, Any],
+) -> dict[str, Any]:
+    rows = normalization_packet.get("rows") if isinstance(normalization_packet, dict) else []
+    by_id = {
+        str(row.get("wbp_model_id") or ""): row
+        for row in rows
+        if isinstance(row, dict)
+    } if isinstance(rows, list) else {}
+    external: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for item in route_family_packet.get("classifications", []):
+        if not isinstance(item, dict) or item.get("route_family") != "wbp_api_external_route":
+            continue
+        model_id = str(item.get("model_id") or "")
+        row = by_id.get(model_id, {})
+        secret_ref_present = row.get("secret_ref_present") is True or row.get("account_or_backend_id") == "secret_ref_present"
+        adapter_id = str(row.get("adapter_id") or "external_route_responses_adapter")
+        if not secret_ref_present:
+            failures.append(f"{model_id}.secret_ref_present")
+        if not adapter_id:
+            failures.append(f"{model_id}.adapter_id")
+        external.append(
+            {
+                "model_id": model_id,
+                "provider_family": str(row.get("route_provider") or "external_route"),
+                "adapter_id": adapter_id,
+                "route_id": str(row.get("route_id") or model_id),
+                "provider_model_id": str(row.get("upstream_model") or model_id),
+                "secret_ref_present": secret_ref_present,
+                "adapter_boundary_packet": {
+                    "request_transform_classified": True,
+                    "response_transform_classified": True,
+                    "stream_transform_classified": False,
+                    "error_transform_classified": True,
+                    "tool_call_transform_classified": False,
+                    "reasoning_transform_classified": False,
+                    "auth_boundary_classified": True,
+                    "raw_upstream_secret_exposed": False,
+                },
+                "provider_family_compatibility_claimed": False,
+            }
+        )
+    return {
+        "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
+        "packet_kind": "external_route_admission",
+        "captured_at_utc": utc_now(),
+        "status": "blocked" if failures else "ok",
+        "external_route_candidates": external,
+        "validation_failures": failures,
+        "provider_family_compatibility_claimed": False,
+        "external_route_smoke_claims_provider_family_compatibility": False,
+        "raw_secret_recorded": False,
+    }
 
 
 def build_model_id_normalization_packet(
@@ -482,6 +740,7 @@ def build_model_direct_preflight_packet(
     prompt_text: str = "",
     request_sent_to_wbp: bool = False,
     wbp_trace_id: str = "",
+    route_family: str = "",
 ) -> dict[str, Any]:
     response_json = str(response_payload or error_payload or "")
     response_shape_ok = classify_response_shape(response_payload)
@@ -504,6 +763,23 @@ def build_model_direct_preflight_packet(
         if listed and not request_sent_to_wbp
         else f"MODEL_{model_id}_BLOCKED_OR_UNKNOWN"
     )
+    resolved_route_family = route_family if route_family in ROUTE_FAMILIES else infer_route_family(
+        model_id=model_id,
+        source=source,
+    )
+    availability_levels = ["listed"] if listed else []
+    if selectable:
+        availability_levels.append("selectable")
+    if route_selected:
+        availability_levels.append("route_selected")
+    if request_sent_to_wbp:
+        availability_levels.append("request_reaches_wbp")
+    if upstream_status is not None and 200 <= upstream_status < 300:
+        availability_levels.append("upstream_accepts")
+    if status_ok:
+        availability_levels.append("direct_wbp_non_stream_response_shape_accepted")
+    elif failure_cause != "none":
+        availability_levels.append("failed")
     return {
         "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
         "packet_kind": "model_direct_preflight",
@@ -517,6 +793,10 @@ def build_model_direct_preflight_packet(
         "selectable": selectable,
         "route_selected": route_selected,
         "route_id_if_exposed": model_id if route_selected else "",
+        "route_family": resolved_route_family,
+        "route_family_required": True,
+        "unknown_unrouted_smoke_allowed": False,
+        "availability_levels": availability_levels,
         "account_id_if_exposed": "",
         "request_attempted": request_sent_to_wbp,
         "request_sent_to_wbp": request_sent_to_wbp,
@@ -590,6 +870,15 @@ def build_model_availability_matrix(
                 overclaims.append(f"{packet.get('model_id')}.{field}")
         if packet.get("failure_cause") not in FAILURE_CAUSES:
             overclaims.append(f"{packet.get('model_id')}.failure_cause")
+        if packet.get("route_family") not in ROUTE_FAMILIES:
+            overclaims.append(f"{packet.get('model_id')}.route_family")
+        if packet.get("route_family") == "unknown_unrouted" and packet.get("request_sent_to_wbp") is True:
+            overclaims.append(f"{packet.get('model_id')}.unknown_unrouted_smoked")
+        levels = packet.get("availability_levels")
+        if not isinstance(levels, list) or not levels:
+            overclaims.append(f"{packet.get('model_id')}.availability_levels")
+        elif any(str(level) not in AVAILABILITY_LEVELS for level in levels):
+            overclaims.append(f"{packet.get('model_id')}.availability_levels")
     passed = [packet["model_id"] for packet in model_packets if packet.get("direct_preflight_status") == "passed"]
     return {
         "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
@@ -619,6 +908,7 @@ def build_model_availability_matrix(
         "non_stream_result_counts_for_tool_loop": False,
         "previous_matrix_imported_as_current_truth": False,
         "forbidden_claims": list(FORBIDDEN_MODEL_CLAIMS),
+        "availability_level_order": sorted(AVAILABILITY_LEVELS),
         "overclaim_findings": overclaims,
         "models": model_packets,
     }
@@ -672,6 +962,15 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
             findings.append(f"models[{index}].model_id")
         if model.get("failure_cause") not in FAILURE_CAUSES:
             findings.append(f"models[{index}].failure_cause")
+        if model.get("route_family") not in ROUTE_FAMILIES:
+            findings.append(f"models[{index}].route_family")
+        if model.get("route_family") == "unknown_unrouted" and model.get("request_sent_to_wbp") is True:
+            findings.append(f"models[{index}].unknown_unrouted_smoked")
+        levels = model.get("availability_levels")
+        if not isinstance(levels, list) or not levels:
+            findings.append(f"models[{index}].availability_levels")
+        elif any(str(level) not in AVAILABILITY_LEVELS for level in levels):
+            findings.append(f"models[{index}].availability_levels")
         if model.get("request_sent_to_wbp") is True:
             if model.get("request_hash_recorded") is not True:
                 findings.append(f"models[{index}].request_hash_recorded")
@@ -703,6 +1002,56 @@ def validate_model_availability_matrix(packet: dict[str, Any]) -> list[str]:
     return sorted(set(findings))
 
 
+def validate_model_availability_contour_packets(packets: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    for name in MODEL_AVAILABILITY_R1_REQUIRED_PACKETS:
+        if name not in packets:
+            findings.append(f"missing.{name}")
+    matrix = packets.get("model_availability_matrix.json")
+    if isinstance(matrix, dict):
+        findings.extend(f"matrix.{item}" for item in validate_model_availability_matrix(matrix))
+    else:
+        findings.append("model_availability_matrix.json")
+    partition = packets.get("candidate_partition_packet.json")
+    if isinstance(partition, dict):
+        if partition.get("catalog_visible_counted_as_availability") is not False:
+            findings.append("candidate_partition.catalog_visible_counted_as_availability")
+        if partition.get("catalog_visible_counted_as_admitted_smoke") is not False:
+            findings.append("candidate_partition.catalog_visible_counted_as_admitted_smoke")
+        if partition.get("unknown_unrouted_smoked") is not False:
+            findings.append("candidate_partition.unknown_unrouted_smoked")
+    default_source = packets.get("default_model_source_packet.json")
+    if isinstance(default_source, dict):
+        if default_source.get("browser_authority") is not False:
+            findings.append("default_model_source.browser_authority")
+        if default_source.get("route_family") not in ROUTE_FAMILIES:
+            findings.append("default_model_source.route_family")
+    route_family = packets.get("route_family_classification_packet.json")
+    if isinstance(route_family, dict):
+        for index, item in enumerate(route_family.get("classifications", [])):
+            if isinstance(item, dict) and item.get("route_family") not in ROUTE_FAMILIES:
+                findings.append(f"route_family.classifications[{index}].route_family")
+    external = packets.get("external_route_admission_packet.json")
+    if isinstance(external, dict):
+        if external.get("provider_family_compatibility_claimed") is not False:
+            findings.append("external_route_admission.provider_family_compatibility_claimed")
+        for index, item in enumerate(external.get("external_route_candidates", [])):
+            if not isinstance(item, dict):
+                findings.append(f"external_route_admission.external_route_candidates[{index}]")
+                continue
+            if item.get("secret_ref_present") is not True:
+                findings.append(f"external_route_admission.external_route_candidates[{index}].secret_ref_present")
+            boundary = item.get("adapter_boundary_packet")
+            if not isinstance(boundary, dict) or boundary.get("auth_boundary_classified") is not True:
+                findings.append(f"external_route_admission.external_route_candidates[{index}].adapter_boundary_packet")
+            if item.get("provider_family_compatibility_claimed") is not False:
+                findings.append(f"external_route_admission.external_route_candidates[{index}].provider_family_compatibility_claimed")
+    freshness = packets.get("validation_freshness_packet.json")
+    if isinstance(freshness, dict) and freshness.get("current_truth_allowed") is not True:
+        findings.append("validation_freshness.current_truth_allowed")
+    return sorted(set(findings))
+
+
 def build_model_availability_false_green_audit(
     *,
     matrix_packet: dict[str, Any],
@@ -710,6 +1059,7 @@ def build_model_availability_false_green_audit(
     layer_boundary_packet: dict[str, Any],
     mutation_guard_packet: dict[str, Any],
     normalization_packet: dict[str, Any],
+    contour_packets: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     findings: list[str] = []
     if validate_model_availability_matrix(matrix_packet):
@@ -734,6 +1084,10 @@ def build_model_availability_false_green_audit(
         findings.append("route_or_account_mutation")
     if normalization_packet.get("status") != "ok":
         findings.append("model_id_normalization_incomplete")
+    if contour_packets:
+        contour_findings = validate_model_availability_contour_packets(contour_packets)
+        if contour_findings:
+            findings.append("contour_packet_validation_failed")
     return {
         "schema_version": MODEL_AVAILABILITY_SCHEMA_VERSION,
         "packet_kind": "model_availability_false_green_audit",

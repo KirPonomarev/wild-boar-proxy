@@ -1,0 +1,19 @@
+{
+  "auth_reproved_in_this_contour": false,
+  "captured_at_utc": "2026-05-26T21:11:35.735957Z",
+  "catalog_reproved_in_this_contour": false,
+  "expected_status": "ok",
+  "model_availability_proven_by_reference": false,
+  "packet_kind": "model_route_policy_reference",
+  "reference_only": true,
+  "referenced_allowed_status": "",
+  "referenced_nested_allowed_status": "WBP_MODEL_SELECTION_ACCOUNT_ROUTE_TRUTH_CLASSIFIED",
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_account_route_model_selection_truth_2026-05-26/model_to_route_selection_packet.json",
+  "referenced_packet_exists": true,
+  "referenced_packet_sha256": "e66fdca54690e31dcead7ef6a6aee7baa5ddcabe11948e5d5a4b7b5b9ae965e2",
+  "referenced_selected_strategy": "",
+  "referenced_status": "",
+  "route_policy_reproved_in_this_contour": false,
+  "status": "ok",
+  "validation_failures": []
+}

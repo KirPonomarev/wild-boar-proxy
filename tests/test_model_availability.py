@@ -8,16 +8,22 @@ import unittest
 
 from wild_boar_proxy.model_availability import (
     build_candidate_model_list,
+    build_candidate_partition_packet,
+    build_default_model_source_packet,
+    build_external_route_admission_packet,
     build_layer_boundary_packet,
+    build_model_availability_admission_packet,
     build_model_availability_matrix,
     build_model_direct_preflight_packet,
     build_model_availability_false_green_audit,
     build_model_id_normalization_packet,
     build_no_route_account_mutation_packet,
+    build_route_family_classification_packet,
     build_runtime_readiness_packet,
     build_validation_freshness_packet,
     classify_failure_cause,
     forbidden_model_browser_fields,
+    validate_model_availability_contour_packets,
     validate_model_availability_matrix,
 )
 
@@ -505,6 +511,306 @@ class ModelAvailabilityTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "ok")
         self.assertFalse(audit["direct_wbp_200_counted_as_codex_acceptance"])
+
+    def test_model_availability_candidate_partition_required(self) -> None:
+        candidates = build_candidate_model_list(
+            configured_model="gpt-5.4-mini",
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        normalization = build_model_id_normalization_packet(
+            candidate_packet=candidates,
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        route_family = build_route_family_classification_packet(
+            candidate_packet=candidates,
+            normalization_packet=normalization,
+        )
+        partition = build_candidate_partition_packet(
+            candidate_packet=candidates,
+            route_family_packet=route_family,
+        )
+
+        self.assertEqual(partition["status"], "ok")
+        self.assertIn("gpt-5.4-mini", partition["catalog_visible_candidates"])
+        self.assertIn("wbp-web-primary-openrouter", partition["route_backed_candidates"])
+        self.assertFalse(partition["catalog_visible_counted_as_availability"])
+
+    def test_default_model_source_packet_required(self) -> None:
+        candidates = build_candidate_model_list(
+            configured_model="gpt-5.4-mini",
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        normalization = build_model_id_normalization_packet(
+            candidate_packet=candidates,
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        route_family = build_route_family_classification_packet(
+            candidate_packet=candidates,
+            normalization_packet=normalization,
+        )
+        packet = build_default_model_source_packet(
+            configured_model="gpt-5.4-mini",
+            candidate_packet=candidates,
+            route_family_packet=route_family,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(packet["route_family"], "codex_native_account_route")
+        self.assertFalse(packet["browser_authority"])
+
+    def test_route_family_required_for_each_candidate(self) -> None:
+        candidates = build_candidate_model_list(
+            configured_model="gpt-5.4-mini",
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        normalization = build_model_id_normalization_packet(
+            candidate_packet=candidates,
+            catalog_packet=catalog_packet(),
+            routes_packet=routes_packet(),
+        )
+        packet = build_route_family_classification_packet(
+            candidate_packet=candidates,
+            normalization_packet=normalization,
+        )
+        by_model = {row["model_id"]: row for row in packet["classifications"]}
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertEqual(by_model["gpt-5.4-mini"]["route_family"], "codex_native_account_route")
+        self.assertEqual(by_model["wbp-web-primary-openrouter"]["route_family"], "wbp_api_external_route")
+
+    def test_unknown_unrouted_candidate_not_smoked(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="mystery-model",
+            source="unknown",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            request_sent_to_wbp=True,
+        )
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        self.assertIn("models[0].unknown_unrouted_smoked", validate_model_availability_matrix(matrix))
+
+    def test_catalog_visible_not_admitted_smoke(self) -> None:
+        partition = {
+            "candidate_partition_packet.json": {
+                "catalog_visible_counted_as_availability": False,
+                "catalog_visible_counted_as_admitted_smoke": True,
+                "unknown_unrouted_smoked": False,
+            },
+            "model_availability_matrix.json": build_model_availability_matrix(
+                [
+                    build_model_direct_preflight_packet(
+                        model_id="gpt-5.4-mini",
+                        source="catalog",
+                        listed=True,
+                        selectable=True,
+                        route_selected=True,
+                        runtime_ready=True,
+                    )
+                ],
+                candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+                runtime_packet={"runtime_ready": True},
+            ),
+        }
+
+        self.assertIn(
+            "candidate_partition.catalog_visible_counted_as_admitted_smoke",
+            validate_model_availability_contour_packets(partition),
+        )
+
+    def test_route_backed_not_upstream_accepts_without_smoke(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            request_sent_to_wbp=False,
+        )
+
+        self.assertIn("route_selected", model["availability_levels"])
+        self.assertNotIn("upstream_accepts", model["availability_levels"])
+        self.assertEqual(model["claim_level"], "listed_only")
+
+    def test_external_route_admission_requires_secret_ref_and_adapter_boundary(self) -> None:
+        candidates = {"candidate_model_ids": ["wbp-web-primary-openrouter"]}
+        normalization = build_model_id_normalization_packet(
+            candidate_packet=candidates,
+            routes_packet=routes_packet(),
+        )
+        route_family = build_route_family_classification_packet(
+            candidate_packet=candidates,
+            normalization_packet=normalization,
+        )
+        packet = build_external_route_admission_packet(
+            route_family_packet=route_family,
+            normalization_packet=normalization,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        candidate = packet["external_route_candidates"][0]
+        self.assertTrue(candidate["secret_ref_present"])
+        self.assertTrue(candidate["adapter_boundary_packet"]["auth_boundary_classified"])
+        self.assertFalse(candidate["provider_family_compatibility_claimed"])
+
+    def test_external_route_smoke_does_not_claim_provider_family_compatibility(self) -> None:
+        packet = {
+            "external_route_admission_packet.json": {
+                "provider_family_compatibility_claimed": True,
+                "external_route_candidates": [],
+            },
+            "model_availability_matrix.json": build_model_availability_matrix(
+                [
+                    build_model_direct_preflight_packet(
+                        model_id="gpt-5.4-mini",
+                        source="catalog",
+                        listed=True,
+                        selectable=True,
+                        route_selected=True,
+                        runtime_ready=True,
+                    )
+                ],
+                candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+                runtime_packet={"runtime_ready": True},
+            ),
+        }
+
+        self.assertIn(
+            "external_route_admission.provider_family_compatibility_claimed",
+            validate_model_availability_contour_packets(packet),
+        )
+
+    def test_direct_wbp_non_stream_response_shape_not_codex_acceptance(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+        )
+
+        self.assertIn("direct_wbp_non_stream_response_shape_accepted", model["availability_levels"])
+        self.assertFalse(model["response_accepted_by_codex"])
+        self.assertEqual(model["codex_acceptance_status"], "not_tested")
+
+    def test_non_stream_result_not_streaming_or_tool_loop(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="Reply OK",
+            request_sent_to_wbp=True,
+        )
+
+        self.assertFalse(model["non_stream_result_counts_for_streaming"])
+        self.assertFalse(model["non_stream_result_counts_for_tool_loop"])
+        self.assertEqual(model["streaming_classified"], "live_not_tested")
+        self.assertEqual(model["tool_loop_classified"], "live_not_tested")
+
+    def test_gpt_5_5_visibility_not_availability(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.5",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            request_sent_to_wbp=False,
+        )
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        self.assertEqual(matrix["gpt_5_5_claim"], "own_packet_listed_but_not_proven")
+
+    def test_blocked_model_remains_in_matrix(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=429,
+            error_payload={"error": {"type": "rate_limit_error"}},
+            request_sent_to_wbp=True,
+            prompt_text="Reply OK",
+        )
+        matrix = build_model_availability_matrix(
+            [model],
+            candidate_packet={"candidate_count": 1, "sampling_limit": 5},
+            runtime_packet={"runtime_ready": True},
+        )
+
+        self.assertIn("gpt-5.4", matrix["models_tested"])
+        self.assertEqual(matrix["models"][0]["failure_cause"], "quota_or_rate_limit")
+        self.assertEqual(matrix["models"][0]["claim_level"], "blocked_with_reason")
+
+    def test_raw_prompt_auth_secret_not_recorded(self) -> None:
+        model = build_model_direct_preflight_packet(
+            model_id="gpt-5.4-mini",
+            source="catalog",
+            listed=True,
+            selectable=True,
+            route_selected=True,
+            runtime_ready=True,
+            http_status=200,
+            upstream_status=200,
+            response_payload={"status": "completed", "output_text": "OK"},
+            prompt_text="very secret prompt",
+            request_sent_to_wbp=True,
+        )
+        serialized = json.dumps(model)
+
+        self.assertNotIn("very secret prompt", serialized)
+        self.assertFalse(model["auth_header_recorded"])
+        self.assertFalse(model["raw_upstream_secret_recorded"])
+
+    def test_model_availability_admission_requires_fresh_validation(self) -> None:
+        partition = {
+            "admitted_smoke_candidates": ["gpt-5.4-mini"],
+            "blocked_candidates": [],
+        }
+        stale = build_validation_freshness_packet(
+            observed_at_utc="2026-05-25T00:00:00Z",
+            captured_at_utc="2026-05-26T12:00:00Z",
+            validation_actor="fixture",
+            validation_scope="gpt-5.4-mini",
+            max_age_seconds=60,
+        )
+        packet = build_model_availability_admission_packet(
+            candidate_partition_packet=partition,
+            validation_freshness_packet=stale,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["admitted_smoke_candidates"], [])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,17 @@
+{
+  "admitted_smoke_candidates": [
+    "gpt-5.5",
+    "gpt-5.4-mini",
+    "gpt-5.4"
+  ],
+  "blocked_candidates": [],
+  "captured_at_utc": "2026-05-26T21:11:22.294219Z",
+  "catalog_visible_counted_as_availability": false,
+  "packet_kind": "model_availability_admission",
+  "schema_version": 1,
+  "stale_validation_used_as_current_truth": false,
+  "status": "ok",
+  "unknown_unrouted_smoke_allowed": false,
+  "validation_freshness_required": true,
+  "validation_freshness_status": "ok"
+}

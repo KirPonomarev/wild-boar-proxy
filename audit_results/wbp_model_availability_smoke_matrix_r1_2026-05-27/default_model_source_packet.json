@@ -1,0 +1,13 @@
+{
+  "browser_authority": false,
+  "captured_at_utc": "2026-05-26T21:11:20.855293Z",
+  "configured_model": "gpt-5.5",
+  "configured_model_in_candidate_set": true,
+  "default_model_source": "server_status_configured_model",
+  "missing_from_candidate_set": false,
+  "operator_supplied_override": false,
+  "packet_kind": "default_model_source",
+  "route_family": "codex_native_account_route",
+  "schema_version": 1,
+  "status": "ok"
+}

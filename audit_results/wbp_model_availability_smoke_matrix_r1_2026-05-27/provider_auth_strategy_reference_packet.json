@@ -1,0 +1,19 @@
+{
+  "auth_reproved_in_this_contour": false,
+  "captured_at_utc": "2026-05-26T21:11:35.735665Z",
+  "catalog_reproved_in_this_contour": false,
+  "expected_status": "ok",
+  "model_availability_proven_by_reference": false,
+  "packet_kind": "provider_auth_strategy_reference",
+  "reference_only": true,
+  "referenced_allowed_status": "",
+  "referenced_nested_allowed_status": "",
+  "referenced_packet": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26/provider_auth_strategy_packet.json",
+  "referenced_packet_exists": true,
+  "referenced_packet_sha256": "ebb15458b8202ad7183399c03888b108c43c5501b63789d274eee15909dcaefd",
+  "referenced_selected_strategy": "auth.command",
+  "referenced_status": "ok",
+  "route_policy_reproved_in_this_contour": false,
+  "status": "ok",
+  "validation_failures": []
+}

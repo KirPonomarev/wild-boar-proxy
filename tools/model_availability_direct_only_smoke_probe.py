@@ -21,14 +21,20 @@ if str(ROOT) not in sys.path:
 
 from wild_boar_proxy.model_availability import (
     build_candidate_model_list,
+    build_candidate_partition_packet,
+    build_default_model_source_packet,
+    build_external_route_admission_packet,
     build_layer_boundary_packet,
+    build_model_availability_admission_packet,
     build_model_availability_false_green_audit,
     build_model_availability_matrix,
     build_model_direct_preflight_packet,
     build_model_id_normalization_packet,
     build_no_route_account_mutation_packet,
+    build_route_family_classification_packet,
     build_validation_freshness_packet,
     sha256_text,
+    validate_model_availability_contour_packets,
     validate_model_availability_matrix,
 )
 from wild_boar_proxy.native_filesystem_probe import json_write
@@ -36,8 +42,8 @@ from wild_boar_proxy.runtime import proxyless_urlopen
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:8318/v1"
-DIRECT_SMOKE_PROMPT_PREFIX = "WBP_MODEL_AVAILABILITY_R1_DIRECT_ONLY_NONCE_2026_05_26"
-AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26"
+DIRECT_SMOKE_PROMPT_PREFIX = "WBP_MODEL_AVAILABILITY_R1_DIRECT_ONLY_NONCE_2026_05_27"
+AUTH_STRATEGY_DIR = "audit_results/wbp_provider_auth_strategy_contract_r1_hardening_2026-05-26"
 MODEL_CATALOG_DIR = "audit_results/wbp_model_catalog_contract_2026-05-26"
 MODEL_ROUTE_TRUTH_DIR = "audit_results/wbp_account_route_model_selection_truth_2026-05-26"
 
@@ -409,12 +415,18 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "historical_dirt_quarantine_packet.json",
         "declared_write_surfaces_packet.json",
         "version_pinning_packet.json",
+        "model_candidate_discovery_packet.json",
         "runtime_status_before_packet.json",
         "runtime_healthcheck_packet.json",
         "runtime_status_after_packet.json",
         "direct_smoke_auth_command_observation_packet.json",
         "direct_models_endpoint_observation_packet.json",
         "candidate_model_list_packet.json",
+        "candidate_partition_packet.json",
+        "default_model_source_packet.json",
+        "route_family_classification_packet.json",
+        "model_availability_admission_packet.json",
+        "external_route_admission_packet.json",
         "model_id_normalization_packet.json",
         "route_account_mutation_guard_packet.json",
         "validation_freshness_packet.json",
@@ -427,13 +439,15 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     missing = sorted(required - set(packets))
     blocked = sorted(name for name, packet in packets.items() if packet.get("status") == "blocked")
     matrix = packets.get("model_availability_matrix.json", {})
+    contour_failures = validate_model_availability_contour_packets(packets)
     return {
         "captured_at_utc": _utc_now(),
         "packet_kind": "independent_model_availability_direct_only_audit",
-        "status": "blocked" if missing or blocked else "ok",
+        "status": "blocked" if missing or blocked or contour_failures else "ok",
         "required_packets": sorted(required),
         "missing_required_packets": missing,
         "blocked_packets": blocked,
+        "contour_validation_failures": contour_failures,
         "direct_only_contour": matrix.get("direct_only_contour") is True,
         "native_launch_attempted": matrix.get("native_launch_attempted") is True,
         "codex_cli_tested": matrix.get("codex_cli_tested") is True,
@@ -484,19 +498,28 @@ def main() -> int:
         catalog_packet=catalog_packet,
         routes_packet=None,
     )
-    model_packets = [
-        _direct_model_packet(endpoint, token, model_id, model_id in model_ids)
-        for model_id in candidate_packet.get("candidate_model_ids", [])
-    ] if token else []
     runtime_packet = {
         "runtime_ready": healthcheck.get("status") == "ok"
         and isinstance(healthcheck.get("launch_readiness"), dict)
         and healthcheck["launch_readiness"].get("gate_passed") is True,
     }
-    matrix = build_model_availability_matrix(
-        model_packets,
+    normalization = build_model_id_normalization_packet(
         candidate_packet=candidate_packet,
-        runtime_packet=runtime_packet,
+        catalog_packet=catalog_packet,
+        routes_packet=None,
+    )
+    route_family = build_route_family_classification_packet(
+        candidate_packet=candidate_packet,
+        normalization_packet=normalization,
+    )
+    candidate_partition = build_candidate_partition_packet(
+        candidate_packet=candidate_packet,
+        route_family_packet=route_family,
+    )
+    default_model_source = build_default_model_source_packet(
+        configured_model=configured_model,
+        candidate_packet=candidate_packet,
+        route_family_packet=route_family,
     )
     status_after = _run_json(repo_root, [sys.executable, "-m", "wild_boar_proxy", "status", "--json"])
     if status_after.get("status") == "blocked" and healthcheck.get("status") == "ok":
@@ -515,10 +538,32 @@ def main() -> int:
         validation_actor="fresh_direct_wbp_model_availability_smoke",
         validation_scope=",".join(str(model_id) for model_id in candidate_packet.get("candidate_model_ids", [])),
     )
-    normalization = build_model_id_normalization_packet(
+    admission = build_model_availability_admission_packet(
+        candidate_partition_packet=candidate_partition,
+        validation_freshness_packet=freshness,
+    )
+    external_admission = build_external_route_admission_packet(
+        route_family_packet=route_family,
+        normalization_packet=normalization,
+    )
+    route_family_by_model = {
+        str(row.get("model_id")): str(row.get("route_family") or "")
+        for row in route_family.get("classifications", [])
+        if isinstance(row, dict)
+    }
+    admitted_models = set(admission.get("admitted_smoke_candidates", []))
+    model_packets = [
+        {
+            **_direct_model_packet(endpoint, token, model_id, model_id in model_ids),
+            "route_family": route_family_by_model.get(model_id, ""),
+        }
+        for model_id in candidate_packet.get("candidate_model_ids", [])
+        if token and model_id in admitted_models
+    ]
+    matrix = build_model_availability_matrix(
+        model_packets,
         candidate_packet=candidate_packet,
-        catalog_packet=catalog_packet,
-        routes_packet=None,
+        runtime_packet=runtime_packet,
     )
     mutation_guard = build_no_route_account_mutation_packet(
         route_snapshot_before=route_account_before,
@@ -600,7 +645,23 @@ def main() -> int:
             expected_status="ok",
         ),
         "direct_models_endpoint_observation_packet.json": models_packet,
+        "model_candidate_discovery_packet.json": {
+            "captured_at_utc": _utc_now(),
+            "packet_kind": "model_candidate_discovery",
+            "status": "ok" if model_ids else "blocked",
+            "source": "direct_wbp_models_endpoint",
+            "configured_model": configured_model,
+            "catalog_visible_model_ids": model_ids,
+            "catalog_visible_counted_as_availability": False,
+            "all_model_sweep_attempted": False,
+            "raw_secret_recorded": False,
+        },
         "candidate_model_list_packet.json": candidate_packet,
+        "candidate_partition_packet.json": candidate_partition,
+        "default_model_source_packet.json": default_model_source,
+        "route_family_classification_packet.json": route_family,
+        "model_availability_admission_packet.json": admission,
+        "external_route_admission_packet.json": external_admission,
         "model_id_normalization_packet.json": normalization,
         "route_account_mutation_guard_packet.json": mutation_guard,
         "validation_freshness_packet.json": freshness,
@@ -621,16 +682,28 @@ def main() -> int:
         },
         "model_availability_false_green_audit.json": false_green,
     }
+    packets["model_availability_false_green_audit.json"] = build_model_availability_false_green_audit(
+        matrix_packet=matrix,
+        freshness_packet=freshness,
+        layer_boundary_packet=layer_boundary,
+        mutation_guard_packet=mutation_guard,
+        normalization_packet=normalization,
+        contour_packets=packets,
+    )
     packets["secret_redaction_audit.json"] = _secret_redaction_audit(packets)
-    packets["independent_model_availability_direct_only_audit.json"] = _independent_audit(packets)
+    packets["independent_model_availability_audit.json"] = _independent_audit(packets)
     summary = {
         "captured_at_utc": _utc_now(),
         "packet_kind": "model_availability_direct_only_summary",
-        "status": "ok" if all(packet.get("status") != "blocked" for packet in packets.values()) else "blocked",
+        "status": "ok"
+        if all(packet.get("status") != "blocked" for packet in packets.values())
+        and not validate_model_availability_contour_packets(packets)
+        else "blocked",
         "final_status": "WBP_CODEX_MODEL_AVAILABILITY_CLASSIFIED",
         "proof_transport": "direct_wbp_http_non_stream",
         "models_tested": matrix.get("models_tested", []),
         "direct_wbp_non_stream_passed_models": matrix.get("direct_wbp_non_stream_passed_models", []),
+        "contour_validation_failures": validate_model_availability_contour_packets(packets),
         "gpt_5_5_claim": matrix.get("gpt_5_5_claim"),
         "native_launch_attempted": False,
         "codex_cli_launch_attempted": False,
@@ -642,8 +715,32 @@ def main() -> int:
     packets["model_availability_direct_only_summary_packet.json"] = summary
     for name, packet in packets.items():
         json_write(evidence_dir / name, packet)
+    for row in route_family.get("classifications", []):
+        if not isinstance(row, dict):
+            continue
+        model_id = str(row.get("model_id") or "unknown")
+        safe_name = model_id.replace("/", "_").replace(":", "_")
+        json_write(evidence_dir / "model_route_selection_packets" / f"{safe_name}.json", row)
     for packet in model_packets:
         json_write(evidence_dir / "model_direct_preflight_packets" / f"{packet['model_id']}.json", packet)
+    blocked_candidates = candidate_partition.get("blocked_candidates", [])
+    if blocked_candidates:
+        for item in blocked_candidates:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("model_id") or "unknown")
+            safe_name = model_id.replace("/", "_").replace(":", "_")
+            json_write(evidence_dir / "model_blocked_packets" / f"{safe_name}.json", item)
+    else:
+        json_write(
+            evidence_dir / "model_blocked_packets" / "no_blocked_candidates.json",
+            {
+                "captured_at_utc": _utc_now(),
+                "packet_kind": "model_blocked_candidates",
+                "status": "ok",
+                "blocked_candidates": [],
+            },
+        )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["status"] == "ok" else 1
 

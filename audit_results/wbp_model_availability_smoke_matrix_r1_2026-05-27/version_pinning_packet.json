@@ -1,0 +1,11 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-26T21:11:35.719749Z",
+  "codex_app_version": "not_used_in_this_contour",
+  "codex_cli_version": "not_used_in_this_contour",
+  "endpoint": "http://127.0.0.1:8318/v1",
+  "model_availability_schema_version": 1,
+  "packet_kind": "version_pinning",
+  "status": "ok",
+  "wbp_git_commit": "d813747d0ab6f6592974e9a28f0ca687f8bac2b3"
+}

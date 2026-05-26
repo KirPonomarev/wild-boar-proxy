@@ -1,0 +1,69 @@
+{
+  "captured_at_utc": "2026-05-26T21:11:40Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "ok",
+  "agents": [
+    {
+      "agent_id": "019e661b-3927-7a32-bf72-6e614fb61aa0",
+      "role": "read_only_scanner",
+      "model": "gpt-5.4-mini",
+      "edited_files": [],
+      "factual_findings": [
+        {
+          "finding": "direct WBP model availability smoke already existed but was direct-only and helper-driven",
+          "evidence": "tools/model_availability_direct_only_smoke_probe.py; wild_boar_proxy/model_availability.py; tests/test_model_availability.py"
+        },
+        {
+          "finding": "route family was not a dedicated model_availability symbol before this contour",
+          "evidence": "pre-change code used lane/source_class/selection_source surfaces rather than explicit route_family classification"
+        },
+        {
+          "finding": "probe-runner-level coverage was weaker than helper-level coverage",
+          "evidence": "tests/test_model_availability.py covered helpers; direct probe generated evidence but did not have a dedicated end-to-end unit test"
+        }
+      ],
+      "false_green_risks_reported": [
+        "catalog visibility can be mistaken for model usability",
+        "direct WBP non-stream response can be mistaken for Codex/native acceptance",
+        "external route response can be mistaken for provider-family compatibility"
+      ]
+    },
+    {
+      "agent_id": "019e661a-2430-7e93-bc25-348fe9627582",
+      "role": "independent_read_only_inspector",
+      "model": "existing_completed_agent",
+      "edited_files": [],
+      "factual_findings": [
+        {
+          "finding": "candidate partitioning and normalization existed, but route-family partitioning was implicit",
+          "evidence": "wild_boar_proxy/model_availability.py and wild_boar_proxy/codex_model_registry.py"
+        },
+        {
+          "finding": "direct-only matrix intentionally leaves streaming, tool-loop, egress, account-pool health, and native acceptance false",
+          "evidence": "model availability helper and direct-only evidence matrix fields"
+        },
+        {
+          "finding": "reference packets must stay reference-only and not become current model-availability proof",
+          "evidence": "provider auth, catalog, and route-selection evidence surfaces"
+        }
+      ],
+      "false_green_risks_reported": [
+        "all-model sweep claims are invalid for capped candidates",
+        "static route/account selection cannot become live-selection truth",
+        "packet redaction proves bounded stored-packet redaction only"
+      ]
+    }
+  ],
+  "orchestrator_assessment": {
+    "agent_claims_accepted": true,
+    "agent_claims_rechecked_against_current_code": true,
+    "reported_gap_closed_in_this_contour": [
+      "explicit route_family packet builder",
+      "candidate_partition packet builder",
+      "default_model_source packet builder",
+      "external_route_admission packet builder",
+      "contour-level validation for R1 required packets"
+    ],
+    "text_only_audit_counted_as_pass": false
+  }
+}
