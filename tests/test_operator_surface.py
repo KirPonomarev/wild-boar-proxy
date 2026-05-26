@@ -123,6 +123,44 @@ class OperatorSurfaceTests(unittest.TestCase):
         self.assertNotIn("Proxy-Authorization", captured_headers)
         self.assertNotIn("Cookie", captured_headers)
 
+    def test_trace_observer_allows_models_query_string(self) -> None:
+        class UpstreamHandler(BaseHTTPRequestHandler):
+            def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+                return
+
+            def do_GET(self) -> None:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                body = json.dumps({"data": []}).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), UpstreamHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            downstream = f"http://127.0.0.1:{server.server_port}/v1"
+            with WbpTraceObserver(downstream_endpoint=downstream) as observer:
+                request = urllib.request.Request(
+                    f"{observer.listen_endpoint}/models?client_version=0.133.0",
+                    method="GET",
+                )
+                with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                    request,
+                    timeout=5,
+                ) as response:
+                    self.assertEqual(response.status, 200)
+                packet = observer.packet()
+        finally:
+            server.shutdown()
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertTrue(packet["request_observed"])
+        self.assertTrue(packet["response_observed"])
+        self.assertEqual(packet["upstream_status"], 200)
+
     def test_trace_observer_classifies_upstream_4xx_without_green_code(self) -> None:
         class UpstreamHandler(BaseHTTPRequestHandler):
             status_code = 401

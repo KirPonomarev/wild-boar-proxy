@@ -5,11 +5,23 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from wild_boar_proxy import cli
 from wild_boar_proxy.cli_runner import run_codex_cli_runner_smoke
+from wild_boar_proxy.cli_runner_via_wbp import (
+    PRIMARY_MODEL_ID,
+    build_cli_runner_claims_packet,
+    build_cli_runner_layer_boundary_packet,
+    build_codex_auth_command_config,
+    build_false_green_audit_packet,
+    build_no_ambient_authority_packet,
+    build_trace_acceptance_packet,
+    remove_tree,
+)
 
 
 def _command(packet: dict[str, object]) -> dict[str, object]:
@@ -188,6 +200,161 @@ class LaunchRejectedOperatorSurfaceSession(FakeOperatorSurfaceSession):
 
 
 class CliRunnerTests(unittest.TestCase):
+    def test_cli_runner_via_wbp_layer_boundary_does_not_claim_native_or_wire(self) -> None:
+        packet = build_cli_runner_layer_boundary_packet()
+
+        self.assertFalse(packet["native_app_claimed"])
+        self.assertFalse(packet["original_codex_lane_claimed"])
+        self.assertFalse(packet["model_availability_reproof_claimed"])
+        self.assertFalse(packet["streaming_claimed"])
+        self.assertFalse(packet["tool_loop_claimed"])
+        self.assertFalse(packet["final_e2e_claimed"])
+        self.assertIn("native_codex_app_usability", packet["does_not_prove"])
+        self.assertIn("direct_egress_absence", packet["does_not_prove"])
+
+    def test_cli_runner_via_wbp_config_requires_auth_command(self) -> None:
+        config = build_codex_auth_command_config(
+            base_url="http://127.0.0.1:12345/v1",
+            auth_command_path="/repo/wbp_codex_auth_command.py",
+            model_id=PRIMARY_MODEL_ID,
+        )
+
+        self.assertIn('model = "gpt-5.4-mini"', config)
+        self.assertIn('base_url = "http://127.0.0.1:12345/v1"', config)
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertNotIn("OPENAI_API_KEY", config)
+        self.assertNotIn("auth.json", config)
+
+    def test_cli_runner_via_wbp_no_ambient_authority_packet_requires_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home = root / "home"
+            codex_home = root / "codex-home"
+            auth_command = root / "wbp_codex_auth_command.py"
+            home.mkdir()
+            codex_home.mkdir()
+            auth_command.write_text("#!/usr/bin/env python3\n")
+            env = {
+                "HOME": str(home),
+                "CODEX_HOME": str(codex_home),
+                "WBP_STABLE_CONFIG": "/server-owned/config.yaml",
+            }
+
+            packet = build_no_ambient_authority_packet(
+                env=env,
+                home=home,
+                codex_home=codex_home,
+                auth_command_path=auth_command,
+            )
+
+        self.assertEqual(packet["status"], "passed")
+        self.assertTrue(packet["home_is_isolated"])
+        self.assertTrue(packet["codex_home_is_isolated"])
+        self.assertFalse(packet["openai_api_key_present"])
+        self.assertEqual(packet["proxy_env_present"], [])
+        self.assertFalse(packet["browser_supplied_authority"])
+        self.assertFalse(packet["remote_client_supplied_authority"])
+
+    def test_cli_runner_via_wbp_no_ambient_authority_fails_on_openai_key(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            home = root / "home"
+            codex_home = root / "codex-home"
+            auth_command = root / "wbp_codex_auth_command.py"
+            home.mkdir()
+            codex_home.mkdir()
+            auth_command.write_text("#!/usr/bin/env python3\n")
+            env = {
+                "HOME": str(home),
+                "CODEX_HOME": str(codex_home),
+                "OPENAI_API_KEY": "sk-test",
+                "WBP_STABLE_CONFIG": "/server-owned/config.yaml",
+            }
+
+            packet = build_no_ambient_authority_packet(
+                env=env,
+                home=home,
+                codex_home=codex_home,
+                auth_command_path=auth_command,
+            )
+
+        self.assertEqual(packet["status"], "failed")
+        self.assertTrue(packet["openai_api_key_present"])
+
+    def test_cli_runner_via_wbp_trace_acceptance_requires_hashes(self) -> None:
+        packet = build_trace_acceptance_packet(
+            {
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 200,
+                "request_body_sha256": "a" * 64,
+                "response_body_sha256": "b" * 64,
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+                "raw_account_id_recorded": False,
+                "raw_backend_id_recorded": False,
+            }
+        )
+
+        self.assertEqual(packet["status"], "passed")
+        self.assertEqual(packet["request_body_sha256"], "a" * 64)
+        self.assertEqual(packet["response_body_sha256"], "b" * 64)
+        self.assertFalse(packet["full_wire_claimed"])
+
+    def test_cli_runner_via_wbp_claims_do_not_expand_model_or_egress(self) -> None:
+        trace_packet = {"status": "passed"}
+        packet = build_cli_runner_claims_packet(
+            probe_status="passed",
+            model_id=PRIMARY_MODEL_ID,
+            response_match_observed=True,
+            auth_command_invoked=True,
+            trace_acceptance_packet=trace_packet,
+        )
+
+        self.assertEqual(packet["status"], "passed")
+        self.assertEqual(
+            packet["model_claim_level"],
+            "gpt-5.4-mini_cli_runner_non_stream_wbp_200_proven",
+        )
+        self.assertFalse(packet["model_availability_expansion_claimed"])
+        self.assertFalse(packet["direct_egress_absence_claimed"])
+        self.assertFalse(packet["native_app_claimed"])
+
+    def test_cli_runner_via_wbp_false_green_audit_blocks_missing_cleanup(self) -> None:
+        audit = build_false_green_audit_packet(
+            layer_boundary_packet=build_cli_runner_layer_boundary_packet(),
+            env_packet={"status": "passed"},
+            trace_packet={"status": "passed"},
+            claims_packet={
+                "native_app_claimed": False,
+                "original_codex_lane_claimed": False,
+                "streaming_claimed": False,
+                "tool_loop_claimed": False,
+                "direct_egress_absence_claimed": False,
+            },
+            original_integrity_passed=True,
+            cleanup_passed=False,
+        )
+
+        self.assertEqual(audit["status"], "failed")
+        self.assertIn("cleanup_passed", audit["failed_checks"])
+
+    def test_cli_runner_via_wbp_cleanup_removes_owned_root_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "owned-root"
+            root.mkdir()
+            (root / "file.txt").write_text("owned\n")
+            packet = remove_tree(root)
+
+            self.assertEqual(packet["status"], "passed")
+            self.assertTrue(packet["cleanup_performed"])
+            self.assertTrue(packet["owned_session_root_only"])
+            self.assertFalse(packet["exists_after"])
+
     def test_cli_runner_smoke_returns_non_native_runner_packet(self) -> None:
         snapshot = {
             "path_label": "~/.codex/config.toml",

@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -862,8 +863,9 @@ class WbpTraceObserver:
             self._thread = None
 
     def forward(self, *, method: str, path: str, headers: dict[str, str], body: bytes) -> tuple[int, bytes, dict[str, str]]:
-        allowed = method == "GET" and path in {"/v1/models", "/models"}
-        allowed = allowed or method == "POST" and path in {"/v1/responses", "/responses", "/v1/chat/completions", "/chat/completions"}
+        parsed_path = urllib.parse.urlsplit(path).path
+        allowed = method == "GET" and parsed_path in {"/v1/models", "/models"}
+        allowed = allowed or method == "POST" and parsed_path in {"/v1/responses", "/responses", "/v1/chat/completions", "/chat/completions"}
         forwarded_url = f"{self.downstream_endpoint}{path[3:] if path.startswith('/v1/') else path}"
         request_digest = _body_digest(body) if body else ""
         self._packet.update(
