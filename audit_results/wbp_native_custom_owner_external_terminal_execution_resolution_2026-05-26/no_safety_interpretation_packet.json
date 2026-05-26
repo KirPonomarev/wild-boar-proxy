@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T11:33:07.928047Z",
+  "cleanup_interpreted": false,
+  "exit_code_used_as_proof": false,
+  "keychain_interpreted_as_auth": false,
+  "launch_admission_interpreted": false,
+  "packet_kind": "no_safety_interpretation",
+  "protected_surface_interpreted": false,
+  "safety_interpreted": false,
+  "status": "ok"
+}

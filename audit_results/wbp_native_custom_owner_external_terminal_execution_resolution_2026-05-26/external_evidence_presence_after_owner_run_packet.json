@@ -1,0 +1,29 @@
+{
+  "captured_at_utc": "2026-05-26T11:33:07.928006Z",
+  "classification": "evidence_dir_missing",
+  "external_evidence_dir": "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "external_evidence_dir_exists": false,
+  "file_list": [],
+  "filesystem_safety_classified": false,
+  "invalid_json_packets": [],
+  "json_parse_check_completed": false,
+  "minimal_expected_packets": [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "version_pinning_packet.json",
+    "host_context_packet.json",
+    "owner_action_boundary_packet.json",
+    "current_codex_running_state_initial.json",
+    "quiescent_current_codex_precondition_packet.json",
+    "pre_custom_idle_stability_packet.json",
+    "launch_admission_packet.json",
+    "allowed_claims_matrix.json",
+    "native_safety_false_green_audit.json"
+  ],
+  "missing_packets": [],
+  "packet_kind": "external_evidence_presence",
+  "packet_statuses": {},
+  "reason_class": "EXTERNAL_EVIDENCE_DIR_MISSING",
+  "safety_result_imported": false,
+  "status": "blocked"
+}

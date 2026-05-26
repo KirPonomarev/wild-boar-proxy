@@ -37,7 +37,16 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_safety_false_green_audit,
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
+    build_current_thread_boundary_packet,
+    build_external_execution_minimal_json_packet,
+    build_no_safety_interpretation_packet,
+    build_owner_command_reverification_packet,
+    build_owner_execution_attestation_packet,
+    build_owner_execution_false_green_audit,
+    build_owner_execution_layer_separation_packet,
+    build_owner_execution_observation_packet,
     build_owner_action_boundary_packet,
+    build_owner_external_execution_result_packet,
     build_owner_execution_boundary_packet,
     build_protected_surface_import_summary,
     build_protected_surface_read_classification_packet,
@@ -917,6 +926,439 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             self.assertFalse(scope["filesystem_safety_classified"])
             self.assertEqual(presence["classification"], "evidence_dir_missing")
             self.assertEqual(false_green["status"], "ok")
+
+    def test_owner_execution_command_reverification_requires_handoff_packet(self) -> None:
+        repo_root = Path("/repo").resolve()
+        evidence_dir = repo_root / "audit_results" / "retry_EXTERNAL_2026"
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+        )
+        packet = build_owner_command_reverification_packet(
+            handoff_command_packet=command,
+            expected_shell_command=command["shell_command"],
+            external_evidence_dir=evidence_dir,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["shell_command_matches_expected"])
+        self.assertFalse(packet["command_executed_in_current_thread"])
+
+    def test_owner_execution_command_reverification_rejects_mismatch(self) -> None:
+        repo_root = Path("/repo").resolve()
+        evidence_dir = repo_root / "audit_results" / "retry_EXTERNAL_2026"
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+        )
+        packet = build_owner_command_reverification_packet(
+            handoff_command_packet=command,
+            expected_shell_command="echo edited",
+            external_evidence_dir=evidence_dir,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIn("shell_command_mismatch", packet["failed_checks"])
+
+    def test_owner_execution_observation_does_not_use_exit_code_as_proof(self) -> None:
+        packet = build_owner_execution_observation_packet(
+            owner_reported_execution=True,
+            owner_reported_exit_code=0,
+            owner_reported_output_summary="done",
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["owner_report_is_not_packet_truth"])
+        self.assertFalse(packet["exit_code_used_as_proof"])
+
+    def test_owner_execution_presence_classifies_missing_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            packet = build_external_evidence_presence_packet(
+                external_evidence_dir=Path(tmpdir) / "missing_EXTERNAL",
+            )
+
+        self.assertEqual(packet["classification"], "evidence_dir_missing")
+
+    def test_owner_execution_presence_rejects_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            evidence = Path(tmpdir) / "evidence_EXTERNAL"
+            evidence.mkdir()
+            for name in [
+                "sync_gate_packet.json",
+                "historical_dirt_quarantine_packet.json",
+                "version_pinning_packet.json",
+                "host_context_packet.json",
+                "owner_action_boundary_packet.json",
+                "current_codex_running_state_initial.json",
+                "quiescent_current_codex_precondition_packet.json",
+                "pre_custom_idle_stability_packet.json",
+                "launch_admission_packet.json",
+                "allowed_claims_matrix.json",
+                "native_safety_false_green_audit.json",
+                "native_safety_blocker_packet.json",
+            ]:
+                (evidence / name).write_text("{}", encoding="utf-8")
+            (evidence / "launch_admission_packet.json").write_text("{", encoding="utf-8")
+
+            packet = build_external_evidence_presence_packet(external_evidence_dir=evidence)
+
+        self.assertEqual(packet["classification"], "evidence_present_but_invalid_json")
+        self.assertIn("launch_admission_packet.json", packet["invalid_json_packets"])
+
+    def test_owner_execution_minimal_json_rejects_missing_required_packets(self) -> None:
+        packet = build_external_execution_minimal_json_packet(
+            evidence_presence_packet={
+                "status": "blocked",
+                "classification": "evidence_present_but_required_packets_missing",
+                "external_evidence_dir_exists": True,
+                "missing_packets": ["launch_admission_packet.json"],
+                "invalid_json_packets": [],
+                "json_parse_check_completed": True,
+            }
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertFalse(packet["required_packets_present"])
+        self.assertIn("launch_admission_packet.json", packet["missing_packets"])
+
+    def test_owner_execution_no_safety_interpretation_required(self) -> None:
+        packet = build_no_safety_interpretation_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["safety_interpreted"])
+        self.assertFalse(packet["protected_surface_interpreted"])
+        self.assertFalse(packet["launch_admission_interpreted"])
+        self.assertFalse(packet["exit_code_used_as_proof"])
+
+    def test_owner_execution_result_does_not_classify_safety(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": False},
+            evidence_presence_packet={
+                "classification": "evidence_dir_missing",
+                "external_evidence_dir_exists": False,
+            },
+            minimal_json_packet={"status": "blocked"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+
+        self.assertEqual(
+            result["final_status"],
+            "OWNER_EXTERNAL_EXECUTION_NO_EVIDENCE_PRODUCED",
+        )
+        self.assertFalse(result["owner_external_execution_evidence_produced"])
+        self.assertFalse(result["safety_interpreted"])
+        self.assertFalse(result["native_safety_pass_claimed"])
+
+    def test_owner_execution_evidence_produced_requires_owner_attestation(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": False},
+            evidence_presence_packet={
+                "status": "ok",
+                "classification": "evidence_dir_present",
+                "external_evidence_dir_exists": True,
+            },
+            minimal_json_packet={"status": "ok"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+
+        self.assertEqual(
+            result["final_status"],
+            "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH",
+        )
+        self.assertFalse(result["owner_external_execution_evidence_produced"])
+        self.assertTrue(result["owner_attestation_required_for_evidence_produced"])
+
+    def test_owner_execution_result_records_valid_evidence_produced(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": True},
+            evidence_presence_packet={
+                "status": "ok",
+                "classification": "evidence_dir_present",
+                "external_evidence_dir_exists": True,
+            },
+            minimal_json_packet={"status": "ok"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+
+        self.assertEqual(
+            result["final_status"],
+            "OWNER_EXTERNAL_EXECUTION_EVIDENCE_PRODUCED",
+        )
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["owner_external_execution_evidence_produced"])
+        self.assertFalse(result["native_safety_pass_claimed"])
+
+    def test_owner_execution_result_blocks_secret_scan_failure(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": True},
+            evidence_presence_packet={
+                "status": "ok",
+                "classification": "evidence_dir_present",
+                "external_evidence_dir_exists": True,
+            },
+            minimal_json_packet={"status": "ok"},
+            secret_scan_packet={"status": "blocked"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+
+        self.assertEqual(
+            result["final_status"],
+            "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH",
+        )
+        self.assertFalse(result["owner_external_execution_evidence_produced"])
+
+    def test_owner_execution_false_green_blocks_produced_without_owner_report(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": True},
+            evidence_presence_packet={
+                "status": "ok",
+                "classification": "evidence_dir_present",
+                "external_evidence_dir_exists": True,
+            },
+            minimal_json_packet={"status": "ok"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+        audit = build_owner_execution_false_green_audit(
+            current_thread_boundary_packet=build_current_thread_boundary_packet(),
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet=build_owner_execution_attestation_packet(
+                owner_reported_execution=False
+            ),
+            owner_observation_packet=build_owner_execution_observation_packet(
+                owner_reported_execution=False
+            ),
+            evidence_presence_packet={"classification": "evidence_dir_present"},
+            minimal_json_packet={"json_parse_check_completed": True},
+            secret_scan_packet={"secret_scan_performed": True},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+            result_packet=result,
+            layer_separation_packet=build_owner_execution_layer_separation_packet(),
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+
+    def test_owner_execution_false_green_blocks_safety_claim(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": True},
+            evidence_presence_packet={
+                "classification": "evidence_dir_missing",
+                "external_evidence_dir_exists": False,
+            },
+            minimal_json_packet={"status": "blocked"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+        audit = build_owner_execution_false_green_audit(
+            current_thread_boundary_packet=build_current_thread_boundary_packet(),
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet=build_owner_execution_attestation_packet(
+                owner_reported_execution=True
+            ),
+            owner_observation_packet=build_owner_execution_observation_packet(
+                owner_reported_execution=True,
+                owner_reported_exit_code=0,
+            ),
+            evidence_presence_packet={"classification": "evidence_dir_missing"},
+            minimal_json_packet={"json_parse_check_completed": False},
+            secret_scan_packet={"secret_scan_performed": True},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+            result_packet=result,
+            layer_separation_packet=build_owner_execution_layer_separation_packet(),
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["forbidden_claims_present"])
+
+    def test_owner_execution_false_green_blocks_route_ux_egress_claim(self) -> None:
+        result = build_owner_external_execution_result_packet(
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet={"owner_reported_execution": True},
+            evidence_presence_packet={
+                "classification": "evidence_dir_missing",
+                "external_evidence_dir_exists": False,
+            },
+            minimal_json_packet={"status": "blocked"},
+            secret_scan_packet={"status": "ok"},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+        )
+        result["ux_claimed"] = True
+        audit = build_owner_execution_false_green_audit(
+            current_thread_boundary_packet=build_current_thread_boundary_packet(),
+            command_reverification_packet={"status": "ok"},
+            owner_attestation_packet=build_owner_execution_attestation_packet(
+                owner_reported_execution=True
+            ),
+            owner_observation_packet=build_owner_execution_observation_packet(
+                owner_reported_execution=True
+            ),
+            evidence_presence_packet={"classification": "evidence_dir_missing"},
+            minimal_json_packet={"json_parse_check_completed": False},
+            secret_scan_packet={"secret_scan_performed": True},
+            no_safety_interpretation_packet=build_no_safety_interpretation_packet(),
+            result_packet=result,
+            layer_separation_packet=build_owner_execution_layer_separation_packet(),
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+
+    def test_owner_execution_probe_entrypoint_no_evidence_blocks(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_external_terminal_execution_probe.py"
+        with tempfile.TemporaryDirectory(
+            dir=repo_root / "audit_results",
+            prefix="owner_execution_test_",
+        ) as tmpdir:
+            evidence_dir = Path(tmpdir) / "owner_execution_result"
+            handoff_packet = Path(tmpdir) / "external_detached_command_packet.json"
+            command = {
+                "argv": [
+                    "python3",
+                    "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py",
+                    "--repo-root",
+                    "/Volumes/Work/wild-boar-proxy",
+                    "--evidence-dir",
+                    "/Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+                ],
+                "command_executed": False,
+                "cwd": "/Volumes/Work/wild-boar-proxy",
+                "evidence_dir": (
+                    "/Volumes/Work/wild-boar-proxy/audit_results/"
+                    "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
+                ),
+                "external_result_imported": False,
+                "native_launch_attempted_from_current_thread": False,
+                "packet_kind": "external_detached_command",
+                "shell_command": (
+                "cd /Volumes/Work/wild-boar-proxy && python3 "
+                "/Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py "
+                "--repo-root /Volumes/Work/wild-boar-proxy "
+                "--evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/"
+                "wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z"
+                ),
+                "status": "ok",
+                "target_tool": (
+                    "/Volumes/Work/wild-boar-proxy/tools/"
+                    "native_custom_quiescent_safety_retry_probe.py"
+                ),
+            }
+            handoff_packet.write_text(json.dumps(command), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(repo_root),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--handoff-command-packet",
+                    str(handoff_packet),
+                    "--owner-reported-execution",
+                    "--owner-reported-exit-code",
+                    "0",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads(
+                (evidence_dir / "owner_execution_summary_packet.json").read_text()
+            )
+            no_safety = json.loads(
+                (evidence_dir / "no_safety_interpretation_packet.json").read_text()
+            )
+            false_green = json.loads(
+                (evidence_dir / "owner_execution_false_green_audit.json").read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "OWNER_EXTERNAL_EXECUTION_NO_EVIDENCE_PRODUCED",
+            )
+            self.assertTrue(summary["owner_reported_execution"])
+            self.assertFalse(summary["safety_interpreted"])
+            self.assertFalse(summary["protected_surface_interpreted"])
+            self.assertFalse(summary["exit_code_used_as_proof"])
+            self.assertFalse(no_safety["launch_admission_interpreted"])
+            self.assertEqual(false_green["status"], "ok")
+
+    def test_owner_execution_probe_rejects_missing_handoff_without_traceback(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_external_terminal_execution_probe.py"
+        with tempfile.TemporaryDirectory(
+            dir=repo_root / "audit_results",
+            prefix="owner_execution_test_",
+        ) as tmpdir:
+            evidence_dir = Path(tmpdir) / "owner_execution_result"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(repo_root),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--handoff-command-packet",
+                    str(Path(tmpdir) / "missing.json"),
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            packet = json.loads(result.stderr)
+            self.assertEqual(packet["reason_class"], "HANDOFF_COMMAND_PACKET_MISSING")
+            self.assertFalse(packet["traceback_emitted"])
+            written = json.loads((evidence_dir / "input_error_packet.json").read_text())
+            self.assertEqual(written["reason_class"], "HANDOFF_COMMAND_PACKET_MISSING")
+
+    def test_owner_execution_probe_rejects_evidence_dir_outside_repo_without_traceback(
+        self,
+    ) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_external_terminal_execution_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(repo_root),
+                    "--evidence-dir",
+                    str(Path(tmpdir) / "outside_repo"),
+                    "--handoff-command-packet",
+                    str(
+                        repo_root
+                        / "audit_results/wbp_native_custom_external_detached_execution_handoff_2026-05-26/external_detached_command_packet.json"
+                    ),
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            packet = json.loads(result.stderr)
+            self.assertEqual(packet["reason_class"], "EVIDENCE_DIR_OUTSIDE_REPO")
+            self.assertFalse(packet["traceback_emitted"])
+            self.assertNotIn("Traceback", result.stderr)
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(

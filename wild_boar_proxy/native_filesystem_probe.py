@@ -1557,6 +1557,334 @@ def build_external_execution_false_green_audit(
     }
 
 
+def build_current_thread_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_external_current_thread_boundary",
+        "status": "ok",
+        "current_thread_may_verify_handoff": True,
+        "current_thread_may_check_evidence_presence": True,
+        "current_thread_executed_external_command": False,
+        "current_thread_launched_native_app": False,
+        "current_thread_typed_into_custom_window": False,
+        "current_thread_imported_safety_pass": False,
+        "current_thread_classified_filesystem_safety": False,
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+        "model_availability_reproof_allowed": False,
+    }
+
+
+def build_owner_command_reverification_packet(
+    *,
+    handoff_command_packet: dict[str, Any],
+    expected_shell_command: str,
+    external_evidence_dir: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    verification = build_external_execution_command_verification_packet(
+        handoff_command_packet=handoff_command_packet,
+        external_evidence_dir=external_evidence_dir,
+        repo_root=repo_root,
+    )
+    failed_checks = list(verification.get("failed_checks", []))
+    if handoff_command_packet.get("shell_command") != expected_shell_command:
+        failed_checks.append("shell_command_mismatch")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_command_reverification",
+        "status": "ok" if not failed_checks else "blocked",
+        "failed_checks": failed_checks,
+        "shell_command": handoff_command_packet.get("shell_command", ""),
+        "expected_shell_command": expected_shell_command,
+        "shell_command_matches_expected": handoff_command_packet.get("shell_command")
+        == expected_shell_command,
+        "cwd": verification.get("cwd", ""),
+        "target_tool": verification.get("target_tool", ""),
+        "external_evidence_path_matches_handoff": verification.get(
+            "external_evidence_path_matches_handoff", False
+        ),
+        "command_executed_in_current_thread": False,
+        "external_result_imported": False,
+        "native_launch_attempted_from_current_thread": False,
+        "no_shell_wildcard": verification.get("no_shell_wildcard") is True,
+        "no_shell_variable_expansion": verification.get("no_shell_variable_expansion")
+        is True,
+    }
+
+
+def build_owner_execution_attestation_packet(
+    *,
+    owner_reported_execution: bool = False,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_execution_attestation",
+        "status": "ok" if owner_reported_execution else "blocked",
+        "owner_reported_execution": owner_reported_execution,
+        "owner_report_is_not_packet_truth": True,
+        "owner_command_edit_allowed": False,
+        "owner_config_model_provider_account_change_allowed": False,
+        "owner_prompt_allowed": False,
+        "owner_screenshot_counts_as_proof": False,
+    }
+
+
+def build_owner_execution_observation_packet(
+    *,
+    owner_reported_execution: bool = False,
+    owner_reported_exit_code: int | None = None,
+    owner_reported_output_summary: str = "",
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_execution_observation",
+        "status": "ok" if owner_reported_execution else "blocked",
+        "owner_reported_execution": owner_reported_execution,
+        "owner_reported_exit_code": owner_reported_exit_code,
+        "owner_reported_output_summary": owner_reported_output_summary,
+        "owner_report_is_not_packet_truth": True,
+        "exit_code_used_as_proof": False,
+        "current_thread_executed_command": False,
+        "native_launch_from_current_thread": False,
+    }
+
+
+def build_no_safety_interpretation_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "no_safety_interpretation",
+        "status": "ok",
+        "safety_interpreted": False,
+        "protected_surface_interpreted": False,
+        "launch_admission_interpreted": False,
+        "cleanup_interpreted": False,
+        "keychain_interpreted_as_auth": False,
+        "exit_code_used_as_proof": False,
+    }
+
+
+def build_external_execution_minimal_json_packet(
+    *,
+    evidence_presence_packet: dict[str, Any],
+) -> dict[str, Any]:
+    evidence_exists = evidence_presence_packet.get("external_evidence_dir_exists") is True
+    invalid_json = list(evidence_presence_packet.get("invalid_json_packets", []))
+    missing_packets = list(evidence_presence_packet.get("missing_packets", []))
+    evidence_presence_ok = evidence_presence_packet.get("status") == "ok"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_external_execution_minimal_json",
+        "status": "ok"
+        if evidence_exists and evidence_presence_ok and not invalid_json and not missing_packets
+        else "blocked",
+        "external_evidence_dir": evidence_presence_packet.get("external_evidence_dir", ""),
+        "json_parse_check_completed": evidence_presence_packet.get(
+            "json_parse_check_completed", False
+        ),
+        "required_packets_present": evidence_presence_ok,
+        "missing_packets": missing_packets,
+        "invalid_json_packets": invalid_json,
+        "safety_interpreted": False,
+        "protected_surface_interpreted": False,
+        "launch_admission_interpreted": False,
+    }
+
+
+def build_owner_execution_layer_separation_packet() -> dict[str, Any]:
+    packet = build_execution_layer_separation_packet()
+    packet["packet_kind"] = "owner_execution_layer_separation"
+    packet["owner_report_is_not_packet_truth"] = True
+    packet["exit_code_used_as_proof"] = False
+    return packet
+
+
+def build_owner_external_execution_result_packet(
+    *,
+    command_reverification_packet: dict[str, Any],
+    owner_attestation_packet: dict[str, Any],
+    evidence_presence_packet: dict[str, Any],
+    minimal_json_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    no_safety_interpretation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    owner_reported_execution = owner_attestation_packet.get(
+        "owner_reported_execution", False
+    )
+    if command_reverification_packet.get("status") != "ok":
+        final_status = "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif secret_scan_packet.get("status") != "ok":
+        final_status = "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif evidence_presence_packet.get("classification") == "evidence_dir_missing":
+        final_status = "OWNER_EXTERNAL_EXECUTION_NO_EVIDENCE_PRODUCED"
+    elif owner_reported_execution is not True:
+        final_status = "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif evidence_presence_packet.get("status") != "ok":
+        final_status = "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif minimal_json_packet.get("status") == "ok":
+        final_status = "OWNER_EXTERNAL_EXECUTION_EVIDENCE_PRODUCED"
+    else:
+        final_status = "OWNER_EXTERNAL_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    evidence_produced = final_status == "OWNER_EXTERNAL_EXECUTION_EVIDENCE_PRODUCED"
+    closeout_status_ok = final_status in {
+        "OWNER_EXTERNAL_EXECUTION_EVIDENCE_PRODUCED",
+        "OWNER_EXTERNAL_EXECUTION_NO_EVIDENCE_PRODUCED",
+    }
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_external_execution_result",
+        "status": "ok" if closeout_status_ok else "blocked",
+        "final_status": final_status,
+        "owner_reported_execution": owner_reported_execution,
+        "owner_attestation_required_for_evidence_produced": True,
+        "owner_external_execution_evidence_produced": evidence_produced,
+        "external_evidence_dir": evidence_presence_packet.get("external_evidence_dir", ""),
+        "external_evidence_dir_exists": evidence_presence_packet.get(
+            "external_evidence_dir_exists", False
+        ),
+        "safety_interpreted": no_safety_interpretation_packet.get(
+            "safety_interpreted", True
+        ),
+        "protected_surface_interpreted": no_safety_interpretation_packet.get(
+            "protected_surface_interpreted", True
+        ),
+        "launch_admission_interpreted": no_safety_interpretation_packet.get(
+            "launch_admission_interpreted", True
+        ),
+        "cleanup_interpreted": no_safety_interpretation_packet.get(
+            "cleanup_interpreted", True
+        ),
+        "exit_code_used_as_proof": no_safety_interpretation_packet.get(
+            "exit_code_used_as_proof", True
+        ),
+        "native_safety_pass_claimed": False,
+        "routing_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+    }
+
+
+def build_owner_execution_false_green_audit(
+    *,
+    current_thread_boundary_packet: dict[str, Any],
+    command_reverification_packet: dict[str, Any],
+    owner_attestation_packet: dict[str, Any],
+    owner_observation_packet: dict[str, Any],
+    evidence_presence_packet: dict[str, Any],
+    minimal_json_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    no_safety_interpretation_packet: dict[str, Any],
+    result_packet: dict[str, Any],
+    layer_separation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        result_packet.get("native_safety_pass_claimed") is True
+        or result_packet.get("routing_claimed") is True
+        or result_packet.get("ux_claimed") is True
+        or result_packet.get("egress_claimed") is True
+        or result_packet.get("auth_strategy_reproved") is True
+        or result_packet.get("model_availability_reproved") is True
+        or result_packet.get("safety_interpreted") is True
+        or result_packet.get("protected_surface_interpreted") is True
+        or result_packet.get("launch_admission_interpreted") is True
+        or result_packet.get("cleanup_interpreted") is True
+    )
+    checks = [
+        {
+            "name": "current_thread_did_not_execute_external_command",
+            "passed": current_thread_boundary_packet.get(
+                "current_thread_executed_external_command"
+            )
+            is False
+            and owner_observation_packet.get("current_thread_executed_command") is False,
+        },
+        {
+            "name": "current_thread_did_not_launch_native_app",
+            "passed": current_thread_boundary_packet.get("current_thread_launched_native_app")
+            is False
+            and owner_observation_packet.get("native_launch_from_current_thread") is False,
+        },
+        {
+            "name": "owner_command_boundary_recorded",
+            "passed": owner_attestation_packet.get("owner_command_edit_allowed") is False,
+        },
+        {
+            "name": "command_reverification_passed_or_blocked",
+            "passed": command_reverification_packet.get("status") in {"ok", "blocked"},
+        },
+        {
+            "name": "owner_execution_observation_recorded",
+            "passed": "owner_reported_execution" in owner_observation_packet,
+        },
+        {
+            "name": "evidence_produced_requires_owner_reported_execution",
+            "passed": result_packet.get("owner_external_execution_evidence_produced")
+            is not True
+            or (
+                owner_attestation_packet.get("owner_reported_execution") is True
+                and owner_observation_packet.get("owner_reported_execution") is True
+                and result_packet.get("owner_reported_execution") is True
+            ),
+        },
+        {
+            "name": "evidence_presence_classified",
+            "passed": evidence_presence_packet.get("classification")
+            in {
+                "evidence_dir_present",
+                "evidence_dir_missing",
+                "evidence_present_but_invalid_json",
+                "evidence_present_but_required_packets_missing",
+            },
+        },
+        {
+            "name": "json_parse_result_recorded",
+            "passed": "json_parse_check_completed" in minimal_json_packet,
+        },
+        {
+            "name": "secret_scan_recorded",
+            "passed": secret_scan_packet.get("secret_scan_performed") is True,
+        },
+        {
+            "name": "no_safety_interpretation",
+            "passed": no_safety_interpretation_packet.get("safety_interpreted") is False
+            and no_safety_interpretation_packet.get("protected_surface_interpreted") is False
+            and no_safety_interpretation_packet.get("launch_admission_interpreted") is False
+            and no_safety_interpretation_packet.get("cleanup_interpreted") is False
+            and no_safety_interpretation_packet.get("exit_code_used_as_proof") is False,
+        },
+        {
+            "name": "route_ux_egress_auth_model_not_claimed",
+            "passed": result_packet.get("routing_claimed") is False
+            and result_packet.get("ux_claimed") is False
+            and result_packet.get("egress_claimed") is False
+            and result_packet.get("auth_strategy_reproved") is False
+            and result_packet.get("model_availability_reproved") is False,
+        },
+        {
+            "name": "blocked_or_no_evidence_not_counted_as_pass",
+            "passed": result_packet.get("final_status")
+            != "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+        },
+        {
+            "name": "layer_separation_respected",
+            "passed": layer_separation_packet.get("status") == "ok",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_execution_false_green_audit",
+        "status": "ok"
+        if all(check["passed"] for check in checks) and not forbidden_claims_present
+        else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+    }
+
+
 def classify_environment_blocked_result(
     *,
     item: str,

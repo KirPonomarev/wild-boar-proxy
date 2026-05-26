@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T11:33:07.927968Z",
+  "current_thread_executed_command": false,
+  "exit_code_used_as_proof": false,
+  "native_launch_from_current_thread": false,
+  "owner_report_is_not_packet_truth": true,
+  "owner_reported_execution": false,
+  "owner_reported_exit_code": null,
+  "owner_reported_output_summary": "owner explicitly approved fallback NO_EVIDENCE_PRODUCED closeout",
+  "packet_kind": "owner_execution_observation",
+  "status": "blocked"
+}
