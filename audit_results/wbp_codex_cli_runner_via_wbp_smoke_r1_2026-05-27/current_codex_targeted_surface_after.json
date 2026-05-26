@@ -1,0 +1,18 @@
+{
+  "current_codex_auth": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1779424645682385204,
+    "path_label": "~/.codex/auth.json",
+    "sha256": "a349a8a81e3278d5d6a534642f8570bdeb73235474d934b7d7732dd22af11712",
+    "size": 4697
+  },
+  "current_codex_config": {
+    "exists": true,
+    "is_dir": false,
+    "mtime_ns": 1779827595248828124,
+    "path_label": "~/.codex/config.toml",
+    "sha256": "148b4f3cc3606ed070f60b40935f2323fa212bba9b4bb2999440c3321cbfe8b5",
+    "size": 5549
+  }
+}

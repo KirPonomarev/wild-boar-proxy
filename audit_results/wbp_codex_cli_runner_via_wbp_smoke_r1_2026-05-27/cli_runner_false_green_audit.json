@@ -1,0 +1,21 @@
+{
+  "checks": {
+    "ambient_authority_blocked": true,
+    "cleanup_passed": true,
+    "codex_app_acceptance_not_claimed": true,
+    "direct_egress_not_claimed": true,
+    "model_availability_not_reproved": true,
+    "native_not_claimed": true,
+    "original_config_auth_unchanged": true,
+    "original_not_claimed": true,
+    "response_match_not_substituted_for_wire": true,
+    "route_trace_not_wire_compat": true,
+    "trace_hashes_present": true,
+    "trace_not_exit_code_only": true
+  },
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "contour_validation_failures": [],
+  "failed_checks": [],
+  "false_green_policy": "impossible_by_construction",
+  "status": "passed"
+}

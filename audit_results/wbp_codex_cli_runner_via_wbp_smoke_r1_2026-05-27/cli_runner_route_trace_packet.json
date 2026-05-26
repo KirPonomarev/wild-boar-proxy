@@ -1,0 +1,22 @@
+{
+  "auth_header_recorded": false,
+  "codex_app_acceptance_claimed": false,
+  "contour_id": "WBP_CODEX_CLI_RUNNER_VIA_WBP_SMOKE_R1",
+  "exit_code_counted_as_route_proof": false,
+  "forwarded_to_wbp": true,
+  "full_wire_claimed": false,
+  "path": "/v1/responses",
+  "prompt_body_recorded": false,
+  "raw_account_id_recorded": false,
+  "raw_backend_id_recorded": false,
+  "request_body_sha256": "be86f7c340d88181fcd87a84671d2ac453d5beffc1a5df65d79cb0b47f336509",
+  "request_observed": true,
+  "response_body_sha256": "f488ae502ac1e241d77e59c66358cf82d79ea2029f6ef32989fca98bcef0f445",
+  "response_observed": true,
+  "responses_wire_compatibility_claimed": false,
+  "route_trace_state": "route_trace_observed",
+  "secret_value_recorded": false,
+  "status": "passed",
+  "stdout_text_counted_as_route_proof": false,
+  "upstream_status": 200
+}

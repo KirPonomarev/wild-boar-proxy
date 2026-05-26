@@ -21,6 +21,7 @@ from wild_boar_proxy.cli_runner_via_wbp import (
     build_no_ambient_authority_packet,
     build_trace_acceptance_packet,
     remove_tree,
+    validate_cli_runner_contour_packets,
 )
 
 
@@ -208,7 +209,11 @@ class CliRunnerTests(unittest.TestCase):
         self.assertFalse(packet["model_availability_reproof_claimed"])
         self.assertFalse(packet["streaming_claimed"])
         self.assertFalse(packet["tool_loop_claimed"])
+        self.assertFalse(packet["direct_egress_absence_claimed"])
         self.assertFalse(packet["final_e2e_claimed"])
+        self.assertFalse(packet["cli_runner_route_proof_is_responses_wire_compatibility"])
+        self.assertFalse(packet["cli_runner_route_proof_is_model_availability_expansion"])
+        self.assertFalse(packet["cli_runner_response_is_native_codex_app_response"])
         self.assertIn("native_codex_app_usability", packet["does_not_prove"])
         self.assertIn("direct_egress_absence", packet["does_not_prove"])
 
@@ -249,6 +254,10 @@ class CliRunnerTests(unittest.TestCase):
             )
 
         self.assertEqual(packet["status"], "passed")
+        self.assertTrue(packet["openai_api_key_absent_or_ignored"])
+        self.assertTrue(packet["proxy_env_absent_or_ignored"])
+        self.assertEqual(packet["home_strategy"], "isolated_temp_home")
+        self.assertEqual(packet["codex_home_strategy"], "isolated_temp_codex_home")
         self.assertTrue(packet["home_is_isolated"])
         self.assertTrue(packet["codex_home_is_isolated"])
         self.assertFalse(packet["openai_api_key_present"])
@@ -301,9 +310,33 @@ class CliRunnerTests(unittest.TestCase):
         )
 
         self.assertEqual(packet["status"], "passed")
+        self.assertEqual(packet["route_trace_state"], "route_trace_observed")
         self.assertEqual(packet["request_body_sha256"], "a" * 64)
         self.assertEqual(packet["response_body_sha256"], "b" * 64)
         self.assertFalse(packet["full_wire_claimed"])
+        self.assertFalse(packet["exit_code_counted_as_route_proof"])
+        self.assertFalse(packet["responses_wire_compatibility_claimed"])
+        self.assertFalse(packet["codex_app_acceptance_claimed"])
+
+    def test_cli_runner_route_trace_not_exit_code_only(self) -> None:
+        packet = build_trace_acceptance_packet(
+            {
+                "request_observed": False,
+                "response_observed": False,
+                "forwarded_to_wbp": False,
+                "path": "",
+                "upstream_status": None,
+                "request_body_sha256": "",
+                "response_body_sha256": "",
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+
+        self.assertEqual(packet["status"], "failed")
+        self.assertEqual(packet["route_trace_state"], "route_trace_unavailable_with_reason")
+        self.assertFalse(packet["exit_code_counted_as_route_proof"])
 
     def test_cli_runner_via_wbp_claims_do_not_expand_model_or_egress(self) -> None:
         trace_packet = {"status": "passed"}
@@ -321,6 +354,9 @@ class CliRunnerTests(unittest.TestCase):
             "gpt-5.4-mini_cli_runner_non_stream_wbp_200_proven",
         )
         self.assertFalse(packet["model_availability_expansion_claimed"])
+        self.assertFalse(packet["model_availability_reproved_in_this_contour"])
+        self.assertFalse(packet["new_model_availability_claims_allowed"])
+        self.assertFalse(packet["response_accepted_by_codex_app"])
         self.assertFalse(packet["direct_egress_absence_claimed"])
         self.assertFalse(packet["native_app_claimed"])
 
@@ -391,8 +427,9 @@ class CliRunnerTests(unittest.TestCase):
         self.assertTrue(packet["selection_packet"]["selected_route_server_issued"])
         self.assertTrue(packet["selection_packet"]["route_provenance_proven"])
         self.assertEqual(packet["prompt_packet"]["response_preview_bounded"], "CLI_RUNNER_OK")
-        self.assertEqual(packet["direct_egress_negative_status"], "wbp_forward_only_proven")
-        self.assertTrue(packet["direct_non_wbp_model_egress_absent_proven"])
+        self.assertEqual(packet["direct_egress_negative_status"], "not_claimed_in_cli_runner_contour")
+        self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
+        self.assertFalse(packet["process_network_observation_counts_as_egress_proof"])
         self.assertEqual(packet["transcript_packet"]["transcript_kind"], "service_ledger_only")
         self.assertTrue(packet["transcript_packet"]["raw_prompt_not_stored"])
         self.assertTrue(packet["cleanup_packet"]["cleanup_performed"])
@@ -460,6 +497,94 @@ class CliRunnerTests(unittest.TestCase):
         emitted = json.loads(stdout.getvalue())
         self.assertEqual(emitted["consumer_kind"], "codex_cli_runner")
         self.assertFalse(emitted["native_app_claimed"])
+
+    def test_cli_runner_reference_model_availability_not_reproved(self) -> None:
+        packets = {
+            "model_availability_reference_packet.json": {
+                "reference_only": True,
+                "model_availability_expansion_claimed": False,
+                "model_availability_reproved_in_this_contour": True,
+                "new_model_availability_claims_allowed": False,
+                "native_model_availability_claimed": False,
+            },
+            "cli_runner_layer_boundary_packet.json": build_cli_runner_layer_boundary_packet(),
+            "cli_runner_route_trace_packet.json": build_trace_acceptance_packet(
+                {
+                    "request_observed": True,
+                    "response_observed": True,
+                    "forwarded_to_wbp": True,
+                    "path": "/v1/responses",
+                    "upstream_status": 200,
+                    "request_body_sha256": "a" * 64,
+                    "response_body_sha256": "b" * 64,
+                    "prompt_body_recorded": False,
+                    "auth_header_recorded": False,
+                    "secret_value_recorded": False,
+                }
+            ),
+            "cli_runner_response_hash_packet.json": {
+                "response_exists": True,
+                "response_sha256": "c" * 64,
+                "raw_prompt_recorded": False,
+                "auth_header_recorded": False,
+                "raw_upstream_secret_recorded": False,
+            },
+            "cli_runner_smoke_packet.json": build_cli_runner_claims_packet(
+                probe_status="passed",
+                model_id=PRIMARY_MODEL_ID,
+                response_match_observed=True,
+                auth_command_invoked=True,
+                trace_acceptance_packet={"status": "passed"},
+            ),
+        }
+
+        self.assertIn(
+            "model_availability_reference.model_availability_reproved_in_this_contour",
+            validate_cli_runner_contour_packets(packets),
+        )
+
+    def test_cli_runner_response_hash_required(self) -> None:
+        failures = validate_cli_runner_contour_packets(
+            {
+                "cli_runner_response_hash_packet.json": {
+                    "response_exists": True,
+                    "response_sha256": "",
+                    "raw_prompt_recorded": False,
+                    "auth_header_recorded": False,
+                    "raw_upstream_secret_recorded": False,
+                }
+            }
+        )
+
+        self.assertIn("cli_runner_response_hash.response_sha256", failures)
+
+    def test_cli_runner_no_streaming_or_tool_loop_claim(self) -> None:
+        smoke = build_cli_runner_claims_packet(
+            probe_status="passed",
+            model_id=PRIMARY_MODEL_ID,
+            response_match_observed=True,
+            auth_command_invoked=True,
+            trace_acceptance_packet={"status": "passed"},
+        )
+        smoke["streaming_claimed"] = True
+        failures = validate_cli_runner_contour_packets({"cli_runner_smoke_packet.json": smoke})
+
+        self.assertIn("cli_runner_smoke.streaming_claimed", failures)
+
+    def test_cli_runner_no_egress_or_ux_claim(self) -> None:
+        smoke = build_cli_runner_claims_packet(
+            probe_status="passed",
+            model_id=PRIMARY_MODEL_ID,
+            response_match_observed=True,
+            auth_command_invoked=True,
+            trace_acceptance_packet={"status": "passed"},
+        )
+        smoke["direct_egress_absence_claimed"] = True
+        smoke["native_app_claimed"] = True
+        failures = validate_cli_runner_contour_packets({"cli_runner_smoke_packet.json": smoke})
+
+        self.assertIn("cli_runner_smoke.direct_egress_absence_claimed", failures)
+        self.assertIn("cli_runner_smoke.native_app_claimed", failures)
 
 
 if __name__ == "__main__":

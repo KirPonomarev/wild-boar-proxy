@@ -1,0 +1,55 @@
+{
+  "captured_at_utc": "2026-05-26T21:21:00Z",
+  "packet_kind": "scanner_agent_fact_report",
+  "status": "passed",
+  "agent_id": "019e6624-c62a-7700-ac5d-cc6ce03e89be",
+  "agent_role": "read_only_scanner",
+  "agent_model": "gpt-5.4-mini",
+  "edited_files": [],
+  "historical_audit_results_used_as_current_truth": false,
+  "factual_findings": [
+    {
+      "finding": "CLI runner implementation and tests existed before this contour.",
+      "evidence_refs": [
+        "wild_boar_proxy/cli_runner_via_wbp.py",
+        "wild_boar_proxy/cli_runner.py",
+        "tests/test_cli_runner.py"
+      ]
+    },
+    {
+      "finding": "Existing test coverage was mostly synthetic/mocked and did not provide a fresh current contour evidence bundle.",
+      "evidence_refs": [
+        "tests/test_cli_runner.py",
+        "tools/cli_runner_via_wbp_smoke_probe.py"
+      ]
+    },
+    {
+      "finding": "Route/request evidence and response hashing surfaces existed, but needed current standalone evidence for this contour.",
+      "evidence_refs": [
+        "wild_boar_proxy/operator_surface.py",
+        "wild_boar_proxy/cli_runner_via_wbp.py"
+      ]
+    },
+    {
+      "finding": "No ambient authority, redaction, and route/account mutation guards existed as split packet builders/tests.",
+      "evidence_refs": [
+        "wild_boar_proxy/cli_runner_via_wbp.py",
+        "wild_boar_proxy/provider_auth_strategy.py",
+        "wild_boar_proxy/model_availability.py"
+      ]
+    }
+  ],
+  "reported_gaps_closed_in_this_contour": [
+    "fresh current CLI runner evidence bundle generated",
+    "explicit R3_5 packet names generated",
+    "contour-level packet validator added",
+    "egress absence top-level claim removed from CLI runner lane",
+    "model availability reference-only behavior enforced"
+  ],
+  "orchestrator_assessment": {
+    "agent_claims_rechecked_against_current_code": true,
+    "text_only_audit_counted_as_pass": false,
+    "additional_worker_spawned": false,
+    "reason_no_worker_spawned": "scanner gaps were directly actionable and bounded"
+  }
+}

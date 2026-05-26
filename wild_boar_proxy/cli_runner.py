@@ -315,9 +315,7 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
     direct_egress_classification = str(
         process_network_observation.get("classification") or "insufficient_observation"
     )
-    direct_non_wbp_model_egress_absent_proven = (
-        process_network_observation.get("direct_non_wbp_model_egress_absent_proven") is True
-    )
+    direct_non_wbp_model_egress_absent_proven = False
 
     failed_checks: list[str] = []
     if launch_packet.get("status") != "ok":
@@ -370,6 +368,7 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
             "transcript_packet": transcript_packet,
             "cleanup_packet": cleanup_packet,
             "process_network_observation_packet": process_network_observation,
+            "process_network_observation_counts_as_egress_proof": False,
             "current_codex_observation": {
                 "before": before,
                 "after": after,
@@ -381,7 +380,8 @@ def run_codex_cli_runner_smoke(paths: RuntimePaths, prompt: str) -> dict[str, An
                 if isinstance(raw_runner_result.get("warning_classes"), list)
                 else []
             ),
-            "direct_egress_negative_status": direct_egress_classification,
+            "direct_egress_negative_status": "not_claimed_in_cli_runner_contour",
+            "process_network_observation_classification": direct_egress_classification,
             "direct_non_wbp_model_egress_absent_proven": direct_non_wbp_model_egress_absent_proven,
             "failed_checks": failed_checks,
         },
