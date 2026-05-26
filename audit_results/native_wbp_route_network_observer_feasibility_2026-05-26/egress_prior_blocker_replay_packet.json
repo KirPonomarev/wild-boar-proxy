@@ -1,0 +1,17 @@
+{
+  "captured_at_utc": "2026-05-26T13:54:59.398721Z",
+  "current_egress_absence_claimed": false,
+  "historical_route_trace_counted_as_current_egress_proof": false,
+  "packet_kind": "egress_prior_blocker_replay",
+  "prior_background_codex_noise_detected": true,
+  "prior_direct_egress_absence_proven": false,
+  "prior_direct_model_egress_observed": true,
+  "prior_final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+  "prior_full_network_absence_proven": false,
+  "prior_observer_classification": "direct_model_egress_observed",
+  "prior_process_observation_classification": "direct_model_egress_observed",
+  "prior_reason_class": "BACKGROUND_CODEX_NOISE",
+  "prior_route_context_confirmed": true,
+  "reason_class": "",
+  "status": "ok"
+}

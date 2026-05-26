@@ -3758,3 +3758,313 @@ def build_native_direct_egress_false_green_audit(
         "forbidden_claims_present": forbidden_claims_present,
         "route_trace_counted_as_egress_absence": direct_absent and not observer_absent,
     }
+
+
+def build_egress_prior_blocker_replay_packet(
+    *,
+    prior_claim_packet: dict[str, Any],
+    prior_process_network_observation_packet: dict[str, Any],
+    prior_background_noise_packet: dict[str, Any],
+    prior_wbp_trace_observation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    final_status = str(prior_claim_packet.get("final_status") or "")
+    reason_class = str(prior_claim_packet.get("reason_class") or "")
+    background_noise = (
+        prior_background_noise_packet.get("background_codex_noise_detected") is True
+    )
+    route_context_confirmed = (
+        prior_wbp_trace_observation_packet.get("route_status") == "confirmed"
+        or prior_wbp_trace_observation_packet.get("forwarded_to_wbp") is True
+    )
+    direct_absence_proven = (
+        prior_claim_packet.get("direct_non_wbp_model_egress_absent_proven") is True
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "egress_prior_blocker_replay",
+        "status": "ok" if background_noise and not direct_absence_proven else "blocked",
+        "reason_class": (
+            ""
+            if background_noise and not direct_absence_proven
+            else "PRIOR_EGRESS_BLOCKER_REPLAY_MISMATCH"
+        ),
+        "prior_final_status": final_status,
+        "prior_reason_class": reason_class,
+        "prior_observer_classification": prior_claim_packet.get(
+            "observer_classification", ""
+        ),
+        "prior_process_observation_classification": (
+            prior_process_network_observation_packet.get("classification", "")
+        ),
+        "prior_background_codex_noise_detected": background_noise,
+        "prior_route_context_confirmed": route_context_confirmed,
+        "prior_direct_model_egress_observed": (
+            prior_claim_packet.get("direct_model_egress_observed") is True
+        ),
+        "prior_direct_egress_absence_proven": direct_absence_proven,
+        "prior_full_network_absence_proven": (
+            prior_claim_packet.get("full_network_absence_proven") is True
+        ),
+        "current_egress_absence_claimed": False,
+        "historical_route_trace_counted_as_current_egress_proof": False,
+    }
+
+
+def build_historical_route_context_packet(
+    *,
+    wbp_trace_observation_packet: dict[str, Any],
+    source_trace_path: str,
+) -> dict[str, Any]:
+    route_confirmed = (
+        wbp_trace_observation_packet.get("route_status") == "confirmed"
+        or wbp_trace_observation_packet.get("forwarded_to_wbp") is True
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "historical_route_context",
+        "status": "ok" if route_confirmed else "blocked",
+        "reason_class": "" if route_confirmed else "HISTORICAL_ROUTE_CONTEXT_UNCONFIRMED",
+        "source_trace_path": source_trace_path,
+        "historical_only": True,
+        "historical_route_context_confirmed": route_confirmed,
+        "historical_trace_path": wbp_trace_observation_packet.get("trace_path")
+        or wbp_trace_observation_packet.get("path", ""),
+        "historical_forwarded_to_wbp": (
+            wbp_trace_observation_packet.get("forwarded_to_wbp") is True
+        ),
+        "historical_upstream_status": wbp_trace_observation_packet.get("upstream_status"),
+        "fresh_route_reproved_in_this_contour": False,
+        "historical_route_counted_as_egress_absence": False,
+        "direct_egress_absence_claimed": False,
+    }
+
+
+def build_current_background_codex_noise_packet(
+    *,
+    current_process_inventory_packet: dict[str, Any],
+    hosted_by_codex_context: bool = True,
+) -> dict[str, Any]:
+    root_count = len(current_process_inventory_packet.get("root_app_pids", []) or [])
+    line_count = int(current_process_inventory_packet.get("line_count") or 0)
+    default_count = int(current_process_inventory_packet.get("default_process_count") or 0)
+    custom_count = int(current_process_inventory_packet.get("custom_process_count") or 0)
+    noise_detected = hosted_by_codex_context or root_count > 0 or default_count > 0
+    clean_attribution_feasible = not noise_detected and custom_count == 0
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "current_background_codex_noise",
+        "status": "ok" if not noise_detected else "blocked",
+        "reason_class": "" if not noise_detected else "BACKGROUND_CODEX_NOISE_PRESENT",
+        "hosted_by_codex_context": hosted_by_codex_context,
+        "current_codex_root_process_count": root_count,
+        "current_codex_default_process_count": default_count,
+        "current_codex_process_line_count": line_count,
+        "current_custom_process_count": custom_count,
+        "background_codex_noise_detected": noise_detected,
+        "clean_process_attribution_currently_feasible": clean_attribution_feasible,
+        "current_codex_process_mutated": False,
+        "fresh_native_launch_attempted": False,
+    }
+
+
+def build_quiescent_network_precondition_packet(
+    *,
+    observer_capability_packet: dict[str, Any],
+    current_background_codex_noise_packet: dict[str, Any],
+) -> dict[str, Any]:
+    observer_available = (
+        observer_capability_packet.get("observer_usable_for_bounded_native_classification")
+        is True
+    )
+    background_noise = (
+        current_background_codex_noise_packet.get("background_codex_noise_detected")
+        is True
+    )
+    quiescent_ready = observer_available and not background_noise
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "quiescent_network_precondition",
+        "status": "ok" if quiescent_ready else "blocked",
+        "reason_class": (
+            ""
+            if quiescent_ready
+            else (
+                "BACKGROUND_CODEX_NOISE_PRESENT"
+                if background_noise
+                else "OBSERVER_CAPABILITY_UNAVAILABLE"
+            )
+        ),
+        "observer_available": observer_available,
+        "background_codex_noise_detected": background_noise,
+        "owner_assisted_quiescent_window_required": background_noise,
+        "fresh_native_launch_admissible_in_this_contour": False,
+        "process_peer_attribution_currently_clean": quiescent_ready,
+        "direct_egress_absence_claimed": False,
+    }
+
+
+def build_network_observer_feasibility_decision_packet(
+    *,
+    prior_blocker_replay_packet: dict[str, Any],
+    observer_capability_packet: dict[str, Any],
+    quiescent_network_precondition_packet: dict[str, Any],
+) -> dict[str, Any]:
+    prior_ok = prior_blocker_replay_packet.get("status") == "ok"
+    observer_ok = observer_capability_packet.get("status") == "ok"
+    quiescent_ok = quiescent_network_precondition_packet.get("status") == "ok"
+    if not prior_ok:
+        status = "blocked"
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_BLOCKED_PRIOR_REPLAY"
+        )
+        reason_class = "PRIOR_BLOCKER_REPLAY_FAILED"
+        separate_live_admissible = False
+    elif not observer_ok:
+        status = "blocked"
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_BLOCKED_OBSERVER_UNAVAILABLE"
+        )
+        reason_class = "OBSERVER_CAPABILITY_UNAVAILABLE"
+        separate_live_admissible = False
+    elif not quiescent_ok:
+        status = "blocked"
+        final_status = (
+            "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_BLOCKED_CURRENT_NOISE"
+        )
+        reason_class = quiescent_network_precondition_packet.get(
+            "reason_class", "QUIESCENT_PRECONDITION_FAILED"
+        )
+        separate_live_admissible = False
+    else:
+        status = "ok"
+        final_status = "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_CLASSIFIED"
+        reason_class = ""
+        separate_live_admissible = True
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "network_observer_feasibility_decision",
+        "status": status,
+        "final_status": final_status,
+        "reason_class": reason_class,
+        "prior_blocker_replay_ok": prior_ok,
+        "observer_capability_ok": observer_ok,
+        "quiescent_network_precondition_ok": quiescent_ok,
+        "separate_live_bounded_egress_contour_admissible": separate_live_admissible,
+        "fresh_native_launch_attempted": False,
+        "fresh_native_launch_claimed": False,
+        "direct_egress_absence_proven": False,
+        "api_openai_com_absence_proven": False,
+        "full_network_absence_proven": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def build_network_claim_limits_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "network_claim_limits",
+        "status": "ok",
+        "allowed_claims": [
+            "prior native egress blocker replayed",
+            "observer capability classified",
+            "current quiescence feasibility classified",
+            "separate live bounded egress contour admissibility classified",
+        ],
+        "forbidden_claims": [
+            "direct egress absence proven",
+            "api.openai.com absence proven",
+            "full network absence proven",
+            "fresh native launch performed",
+            "native UX proven",
+            "filesystem safety proven",
+            "model availability proven",
+            "auth strategy proven",
+            "Original Codex via WBP proven",
+            "final E2E proven",
+        ],
+        "historical_route_trace_may_support": "historical_route_context_only",
+        "historical_route_trace_may_not_support": "current_egress_absence",
+        "owner_ux_may_support": "non_network_context_only",
+        "owner_ux_may_not_support": "network_proof",
+        "screenshot_may_support": "narrative_only",
+        "screenshot_may_not_support": "packet_truth_or_network_proof",
+        "bounded_process_peer_absence_claimed": False,
+        "direct_egress_absence_claimed": False,
+        "api_openai_com_absence_claimed": False,
+    }
+
+
+def build_native_egress_observer_false_green_audit(
+    *,
+    historical_route_context_packet: dict[str, Any],
+    network_observer_feasibility_decision_packet: dict[str, Any],
+    network_claim_limits_packet: dict[str, Any],
+    owner_ux_used_as_network_proof: bool = False,
+    screenshot_used_as_network_proof: bool = False,
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        network_observer_feasibility_decision_packet.get("direct_egress_absence_proven")
+        is True
+        or network_observer_feasibility_decision_packet.get("api_openai_com_absence_proven")
+        is True
+        or network_observer_feasibility_decision_packet.get("full_network_absence_proven")
+        is True
+        or network_observer_feasibility_decision_packet.get("fresh_native_launch_claimed")
+        is True
+        or network_observer_feasibility_decision_packet.get("final_e2e_claimed")
+        is True
+        or network_claim_limits_packet.get("direct_egress_absence_claimed") is True
+        or network_claim_limits_packet.get("api_openai_com_absence_claimed") is True
+        or owner_ux_used_as_network_proof
+        or screenshot_used_as_network_proof
+    )
+    checks = [
+        {
+            "name": "historical_route_trace_not_current_egress_proof",
+            "passed": historical_route_context_packet.get(
+                "historical_route_counted_as_egress_absence"
+            )
+            is False,
+        },
+        {
+            "name": "owner_ux_not_network_proof",
+            "passed": owner_ux_used_as_network_proof is False,
+        },
+        {
+            "name": "screenshot_not_network_proof",
+            "passed": screenshot_used_as_network_proof is False,
+        },
+        {
+            "name": "observer_feasibility_not_absence_claim",
+            "passed": network_observer_feasibility_decision_packet.get(
+                "direct_egress_absence_proven"
+            )
+            is False,
+        },
+        {
+            "name": "no_api_or_full_network_absence_claim",
+            "passed": not (
+                network_observer_feasibility_decision_packet.get(
+                    "api_openai_com_absence_proven"
+                )
+                or network_observer_feasibility_decision_packet.get(
+                    "full_network_absence_proven"
+                )
+            ),
+        },
+        {
+            "name": "no_live_native_launch_claim",
+            "passed": network_observer_feasibility_decision_packet.get(
+                "fresh_native_launch_attempted"
+            )
+            is False,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_egress_observer_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) and not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "blocked_observer_counted_as_pass": False,
+    }

@@ -75,7 +75,14 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_two_lane_result_matrix,
     build_screenshot_limit_packet,
     build_historical_routing_trace_reference_packet,
+    build_current_background_codex_noise_packet,
+    build_egress_prior_blocker_replay_packet,
+    build_historical_route_context_packet,
+    build_native_egress_observer_false_green_audit,
     build_wbp_trace_observation_packet,
+    build_network_claim_limits_packet,
+    build_network_observer_feasibility_decision_packet,
+    build_quiescent_network_precondition_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
@@ -428,6 +435,263 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
         )
         self.assertFalse(packet["direct_non_wbp_model_egress_absent_proven"])
+
+    def test_egress_prior_blocker_replay_required(self) -> None:
+        replay = build_egress_prior_blocker_replay_packet(
+            prior_claim_packet={
+                "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+                "reason_class": "BACKGROUND_CODEX_NOISE",
+                "observer_classification": "direct_model_egress_observed",
+                "direct_model_egress_observed": True,
+                "direct_non_wbp_model_egress_absent_proven": False,
+                "full_network_absence_proven": False,
+            },
+            prior_process_network_observation_packet={
+                "classification": "direct_model_egress_observed",
+            },
+            prior_background_noise_packet={
+                "background_codex_noise_detected": True,
+            },
+            prior_wbp_trace_observation_packet={
+                "route_status": "confirmed",
+            },
+        )
+        mismatch = build_egress_prior_blocker_replay_packet(
+            prior_claim_packet={
+                "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_CLASSIFIED_DIRECT_EGRESS_ABSENT_WITH_LIMITS",
+                "direct_non_wbp_model_egress_absent_proven": True,
+            },
+            prior_process_network_observation_packet={},
+            prior_background_noise_packet={
+                "background_codex_noise_detected": False,
+            },
+            prior_wbp_trace_observation_packet={"route_status": "confirmed"},
+        )
+
+        self.assertEqual(replay["status"], "ok")
+        self.assertTrue(replay["prior_background_codex_noise_detected"])
+        self.assertFalse(replay["prior_direct_egress_absence_proven"])
+        self.assertFalse(replay["current_egress_absence_claimed"])
+        self.assertEqual(mismatch["status"], "blocked")
+
+    def test_egress_route_trace_alone_not_absence(self) -> None:
+        route = build_historical_route_context_packet(
+            wbp_trace_observation_packet={
+                "route_status": "confirmed",
+                "forwarded_to_wbp": True,
+                "trace_path": "/v1/responses",
+                "upstream_status": 200,
+            },
+            source_trace_path="audit_results/source/source_wbp_trace_packet.json",
+        )
+        limits = build_network_claim_limits_packet()
+        decision = build_network_observer_feasibility_decision_packet(
+            prior_blocker_replay_packet={"status": "ok"},
+            observer_capability_packet={"status": "ok"},
+            quiescent_network_precondition_packet={"status": "blocked"},
+        )
+        audit = build_native_egress_observer_false_green_audit(
+            historical_route_context_packet=route,
+            network_observer_feasibility_decision_packet=decision,
+            network_claim_limits_packet=limits,
+        )
+
+        self.assertEqual(route["status"], "ok")
+        self.assertFalse(route["historical_route_counted_as_egress_absence"])
+        self.assertFalse(decision["direct_egress_absence_proven"])
+        self.assertEqual(audit["status"], "ok")
+
+    def test_egress_owner_ux_and_screenshot_not_network_proof(self) -> None:
+        route = build_historical_route_context_packet(
+            wbp_trace_observation_packet={"route_status": "confirmed"},
+            source_trace_path="source.json",
+        )
+        decision = build_network_observer_feasibility_decision_packet(
+            prior_blocker_replay_packet={"status": "ok"},
+            observer_capability_packet={"status": "ok"},
+            quiescent_network_precondition_packet={"status": "ok"},
+        )
+        limits = build_network_claim_limits_packet()
+        owner_bad = build_native_egress_observer_false_green_audit(
+            historical_route_context_packet=route,
+            network_observer_feasibility_decision_packet=decision,
+            network_claim_limits_packet=limits,
+            owner_ux_used_as_network_proof=True,
+        )
+        screenshot_bad = build_native_egress_observer_false_green_audit(
+            historical_route_context_packet=route,
+            network_observer_feasibility_decision_packet=decision,
+            network_claim_limits_packet=limits,
+            screenshot_used_as_network_proof=True,
+        )
+
+        self.assertEqual(owner_bad["status"], "blocked")
+        self.assertTrue(owner_bad["forbidden_claims_present"])
+        self.assertEqual(screenshot_bad["status"], "blocked")
+        self.assertTrue(screenshot_bad["forbidden_claims_present"])
+
+    def test_egress_background_noise_blocks_feasibility(self) -> None:
+        current_noise = build_current_background_codex_noise_packet(
+            current_process_inventory_packet={
+                "line_count": 3,
+                "root_app_pids": [111],
+                "default_process_count": 2,
+                "custom_process_count": 0,
+            },
+            hosted_by_codex_context=True,
+        )
+        precondition = build_quiescent_network_precondition_packet(
+            observer_capability_packet={
+                "observer_usable_for_bounded_native_classification": True,
+            },
+            current_background_codex_noise_packet=current_noise,
+        )
+        decision = build_network_observer_feasibility_decision_packet(
+            prior_blocker_replay_packet={"status": "ok"},
+            observer_capability_packet={"status": "ok"},
+            quiescent_network_precondition_packet=precondition,
+        )
+
+        self.assertEqual(current_noise["status"], "blocked")
+        self.assertTrue(current_noise["background_codex_noise_detected"])
+        self.assertEqual(precondition["status"], "blocked")
+        self.assertTrue(precondition["owner_assisted_quiescent_window_required"])
+        self.assertEqual(
+            decision["final_status"],
+            "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_BLOCKED_CURRENT_NOISE",
+        )
+        self.assertFalse(decision["direct_egress_absence_proven"])
+
+    def test_egress_observer_feasibility_does_not_claim_absence_or_launch(self) -> None:
+        clean_noise = build_current_background_codex_noise_packet(
+            current_process_inventory_packet={
+                "line_count": 0,
+                "root_app_pids": [],
+                "default_process_count": 0,
+                "custom_process_count": 0,
+            },
+            hosted_by_codex_context=False,
+        )
+        precondition = build_quiescent_network_precondition_packet(
+            observer_capability_packet={
+                "observer_usable_for_bounded_native_classification": True,
+            },
+            current_background_codex_noise_packet=clean_noise,
+        )
+        decision = build_network_observer_feasibility_decision_packet(
+            prior_blocker_replay_packet={"status": "ok"},
+            observer_capability_packet={"status": "ok"},
+            quiescent_network_precondition_packet=precondition,
+        )
+
+        self.assertEqual(decision["status"], "ok")
+        self.assertTrue(decision["separate_live_bounded_egress_contour_admissible"])
+        self.assertFalse(decision["fresh_native_launch_attempted"])
+        self.assertFalse(decision["direct_egress_absence_proven"])
+        self.assertFalse(decision["api_openai_com_absence_proven"])
+
+    def test_egress_observer_feasibility_probe_is_no_launch(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_wbp_route_network_observer_feasibility_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            prior_dir = temp_repo / "audit_results" / "prior"
+            prior_dir.mkdir(parents=True)
+            (prior_dir / "native_direct_egress_claim_packet.json").write_text(
+                json.dumps(
+                    {
+                        "final_status": "NATIVE_WBP_ROUTE_NETWORK_CLAIM_BLOCKED_BACKGROUND_CODEX_NOISE",
+                        "reason_class": "BACKGROUND_CODEX_NOISE",
+                        "observer_classification": "direct_model_egress_observed",
+                        "direct_model_egress_observed": True,
+                        "direct_non_wbp_model_egress_absent_proven": False,
+                        "full_network_absence_proven": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (prior_dir / "native_process_network_observation_packet.json").write_text(
+                json.dumps({"classification": "direct_model_egress_observed"}),
+                encoding="utf-8",
+            )
+            (prior_dir / "native_background_codex_noise_packet.json").write_text(
+                json.dumps({"background_codex_noise_detected": True}),
+                encoding="utf-8",
+            )
+            (prior_dir / "source_wbp_trace_packet.json").write_text(
+                json.dumps(
+                    {
+                        "request_observed": True,
+                        "response_observed": True,
+                        "forwarded_to_wbp": True,
+                        "path": "/v1/responses",
+                        "upstream_status": 200,
+                        "response_body_sha256": "response-hash",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "add", "README.md", "audit_results"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            evidence_dir = temp_repo / "audit_results" / "observer_feasibility"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--prior-evidence-dir",
+                    str(prior_dir),
+                    "--hosted-by-codex-context",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads(
+                (evidence_dir / "network_observer_feasibility_summary_packet.json").read_text()
+            )
+            decision = json.loads(
+                (
+                    evidence_dir / "network_observer_feasibility_decision_packet.json"
+                ).read_text()
+            )
+            false_green = json.loads(
+                (evidence_dir / "native_egress_observer_false_green_audit.json").read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "NATIVE_WBP_ROUTE_NETWORK_OBSERVER_FEASIBILITY_BLOCKED_CURRENT_NOISE",
+            )
+            self.assertFalse(summary["fresh_native_launch_attempted"])
+            self.assertFalse(summary["direct_egress_absence_proven"])
+            self.assertFalse(decision["separate_live_bounded_egress_contour_admissible"])
+            self.assertEqual(false_green["status"], "ok")
 
     def test_environment_blocked_result_not_counted_as_pass(self) -> None:
         packet = classify_environment_blocked_result(
