@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T20:13:15.242874Z",
+  "current_hosted_context_must_not_run_live": true,
+  "fresh_native_launch_attempted": false,
+  "if_background_noise_present_result_must_block": true,
+  "live_network_capture_attempted": false,
+  "observer_must_bind_isolated_custom_process": true,
+  "owner_should_minimize_background_codex": true,
+  "packet_kind": "quiescent_precondition_requirement",
+  "status": "ok"
+}

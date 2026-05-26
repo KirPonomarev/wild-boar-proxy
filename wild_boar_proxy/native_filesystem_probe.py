@@ -5432,6 +5432,292 @@ def build_bounded_process_egress_false_green_audit(
     }
 
 
+def build_detached_egress_execution_command_packet(
+    *,
+    repo_root: Path,
+    evidence_dir: Path,
+    model: str = "gpt-5.4-mini",
+    wait_seconds: int = 90,
+    python_bin: str = "python3",
+) -> dict[str, Any]:
+    repo_root = repo_root.resolve()
+    evidence_dir = evidence_dir.resolve()
+    tool_path = repo_root / "tools" / "native_custom_direct_egress_classification_probe.py"
+    argv = [
+        python_bin,
+        str(tool_path),
+        "--repo-root",
+        str(repo_root),
+        "--evidence-dir",
+        str(evidence_dir),
+        "--mode",
+        "live",
+        "--model",
+        model,
+        "--wait-seconds",
+        str(wait_seconds),
+    ]
+    shell_command = (
+        f"cd {shlex.quote(str(repo_root))} && "
+        + " ".join(shlex.quote(part) for part in argv)
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_execution_command",
+        "status": "ok",
+        "cwd": str(repo_root),
+        "argv": argv,
+        "shell_command": shell_command,
+        "target_tool": str(tool_path),
+        "evidence_dir": str(evidence_dir),
+        "model": model,
+        "wait_seconds": wait_seconds,
+        "command_executed": False,
+        "external_result_imported": False,
+        "native_launch_attempted_from_current_thread": False,
+        "owner_prompt_body_recorded": False,
+    }
+
+
+def build_detached_egress_command_hash_packet(
+    *,
+    command_packet: dict[str, Any],
+) -> dict[str, Any]:
+    shell_command = str(command_packet.get("shell_command") or "")
+    argv = [str(part) for part in command_packet.get("argv", [])]
+    canonical = json.dumps(
+        {
+            "argv": argv,
+            "cwd": command_packet.get("cwd", ""),
+            "evidence_dir": command_packet.get("evidence_dir", ""),
+            "shell_command": shell_command,
+            "target_tool": command_packet.get("target_tool", ""),
+        },
+        sort_keys=True,
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_command_hash",
+        "status": "ok" if shell_command and argv else "blocked",
+        "command_sha256": _sha256_text(canonical),
+        "shell_command_sha256": _sha256_text(shell_command),
+        "shell_command_recorded": True,
+        "command_executed": False,
+        "hash_covers_argv_cwd_target_and_evidence_dir": True,
+    }
+
+
+def build_detached_egress_command_admission_packet(
+    *,
+    command_packet: dict[str, Any],
+    repo_root: Path,
+) -> dict[str, Any]:
+    repo_root = repo_root.resolve()
+    argv = [str(part) for part in command_packet.get("argv", [])]
+    cwd = Path(str(command_packet.get("cwd", ""))).expanduser()
+    evidence_dir = Path(str(command_packet.get("evidence_dir", ""))).expanduser()
+    target_tool = str(command_packet.get("target_tool", ""))
+    expected_tool = str(
+        repo_root / "tools" / "native_custom_direct_egress_classification_probe.py"
+    )
+    failed_checks: list[str] = []
+    if cwd.resolve(strict=False) != repo_root:
+        failed_checks.append("cwd_must_equal_repo_root")
+    if len(argv) < 10:
+        failed_checks.append("argv_shape_required")
+    if target_tool != expected_tool:
+        failed_checks.append("target_tool_must_be_native_custom_direct_egress_classifier")
+    if "--mode" not in argv or "live" not in argv:
+        failed_checks.append("live_mode_argument_required_for_detached_owner_run")
+    try:
+        evidence_dir.resolve(strict=False).relative_to(repo_root / "audit_results")
+    except ValueError:
+        failed_checks.append("evidence_dir_must_be_under_audit_results")
+    if "EXTERNAL" not in evidence_dir.name:
+        failed_checks.append("external_evidence_dir_marker_required")
+    if any(any(char in part for char in "*?[") for part in argv):
+        failed_checks.append("shell_wildcards_forbidden")
+    if any("$" in part or "`" in part for part in argv):
+        failed_checks.append("shell_expansion_forbidden")
+    if command_packet.get("command_executed"):
+        failed_checks.append("handoff_command_must_not_be_executed_in_phase_a")
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_command_admission",
+        "status": "ok" if not failed_checks else "blocked",
+        "reason_class": "" if not failed_checks else "UNSAFE_DETACHED_EGRESS_COMMAND",
+        "failed_checks": failed_checks,
+        "cwd_fixed": cwd.resolve(strict=False) == repo_root,
+        "target_tool_expected": target_tool == expected_tool,
+        "evidence_dir_under_audit_results": "evidence_dir_must_be_under_audit_results"
+        not in failed_checks,
+        "external_evidence_dir_marker_present": "external_evidence_dir_marker_required"
+        not in failed_checks,
+        "no_shell_wildcard": "shell_wildcards_forbidden" not in failed_checks,
+        "no_shell_variable_expansion": "shell_expansion_forbidden" not in failed_checks,
+        "expected_writes": [
+            str(evidence_dir),
+            "/tmp/wbp-native-egress-* only during owner/detached live run",
+        ],
+        "protected_surfaces_write_allowed": False,
+        "original_codex_profile_write_allowed": False,
+        "route_model_account_provider_mutation_allowed": False,
+        "command_executed": False,
+        "external_result_imported": False,
+    }
+
+
+def build_detached_egress_quiescent_requirement_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "quiescent_precondition_requirement",
+        "status": "ok",
+        "current_hosted_context_must_not_run_live": True,
+        "owner_should_minimize_background_codex": True,
+        "observer_must_bind_isolated_custom_process": True,
+        "if_background_noise_present_result_must_block": True,
+        "fresh_native_launch_attempted": False,
+        "live_network_capture_attempted": False,
+    }
+
+
+def build_detached_egress_future_result_required_packets_packet() -> dict[str, Any]:
+    required_packets = [
+        "native_process_network_observation_packet.json",
+        "source_wbp_trace_packet.json",
+        "wbp_trace_observation_packet.json",
+        "native_direct_egress_claim_packet.json",
+        "domain_attribution_limit_packet.json or import-derived domain attribution limit",
+        "owner_visible_response_context_packet.json or import-derived context-only packet",
+        "temp_custom_cleanup_packet.json or cleanup_reversibility_packet.json",
+        "native_direct_egress_false_green_audit.json",
+        "independent_native_direct_egress_audit.json or import audit packet",
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "future_result_required_packets",
+        "status": "ok",
+        "required_packets": required_packets,
+        "phase_b_required": True,
+        "phase_a_imported_result": False,
+    }
+
+
+def build_detached_egress_future_result_import_contract_packet(
+    *,
+    required_packets_packet: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "future_result_import_contract",
+        "status": "ok",
+        "required_packets": required_packets_packet.get("required_packets", []),
+        "future_import_must_verify_json": True,
+        "future_import_must_verify_no_secrets": True,
+        "future_import_must_verify_command_hash": True,
+        "future_import_must_verify_owner_boundary": True,
+        "future_import_must_verify_domain_claim_limits": True,
+        "future_import_must_verify_false_green_audit": True,
+        "external_result_imported_in_this_contour": False,
+        "direct_egress_absence_claim_allowed_in_phase_a": False,
+        "api_openai_com_absence_claim_allowed_in_phase_a": False,
+        "final_e2e_claim_allowed_in_phase_a": False,
+    }
+
+
+def build_detached_egress_owner_action_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "detached_egress_owner_action_boundary",
+        "status": "ok",
+        "owner_allowed_actions_after_phase_a": [
+            "run exactly the generated detached command outside the current Codex thread",
+            "type the exact prompt shown by the detached command if isolated Custom window appears",
+            "report visible response only as context",
+            "preserve generated evidence directory for Phase B import",
+        ],
+        "owner_forbidden_actions": [
+            "edit command",
+            "edit config/model/provider/route/account",
+            "touch Original Codex config",
+            "perform hidden cleanup",
+            "treat screenshot or visible response as network proof",
+        ],
+        "owner_prompt_requested_in_phase_a": False,
+        "owner_command_edit_allowed": False,
+        "owner_runtime_authority_edit_allowed": False,
+        "owner_visible_response_counts_as_context_only": True,
+    }
+
+
+def build_detached_egress_handoff_false_green_audit(
+    *,
+    command_admission_packet: dict[str, Any],
+    command_hash_packet: dict[str, Any],
+    owner_action_boundary_packet: dict[str, Any],
+    future_result_import_contract_packet: dict[str, Any],
+    network_claim_limits_packet: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        command_admission_packet.get("command_executed") is True
+        or command_admission_packet.get("external_result_imported") is True
+        or future_result_import_contract_packet.get(
+            "direct_egress_absence_claim_allowed_in_phase_a"
+        )
+        is True
+        or future_result_import_contract_packet.get(
+            "api_openai_com_absence_claim_allowed_in_phase_a"
+        )
+        is True
+        or network_claim_limits_packet.get("direct_egress_absence_claimed") is True
+        or network_claim_limits_packet.get("api_openai_com_absence_claimed") is True
+    )
+    checks = [
+        {
+            "name": "command_admission_ok",
+            "passed": command_admission_packet.get("status") == "ok",
+        },
+        {
+            "name": "command_hash_recorded",
+            "passed": command_hash_packet.get("status") == "ok"
+            and bool(command_hash_packet.get("command_sha256")),
+        },
+        {
+            "name": "owner_boundary_context_only",
+            "passed": owner_action_boundary_packet.get(
+                "owner_visible_response_counts_as_context_only"
+            )
+            is True,
+        },
+        {
+            "name": "no_phase_a_result_import",
+            "passed": future_result_import_contract_packet.get(
+                "external_result_imported_in_this_contour"
+            )
+            is False,
+        },
+        {
+            "name": "no_phase_a_egress_absence_claim",
+            "passed": network_claim_limits_packet.get("direct_egress_absence_claimed")
+            is False
+            and network_claim_limits_packet.get("api_openai_com_absence_claimed")
+            is False,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "handoff_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) and not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+        "native_launch_attempted": False,
+        "live_network_capture_attempted": False,
+        "external_result_imported": False,
+        "direct_egress_absence_claimed": False,
+        "api_openai_com_absence_claimed": False,
+    }
+
+
 def build_egress_prior_blocker_replay_packet(
     *,
     prior_claim_packet: dict[str, Any],

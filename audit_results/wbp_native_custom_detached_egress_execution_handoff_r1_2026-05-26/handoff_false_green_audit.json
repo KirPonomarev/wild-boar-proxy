@@ -1,0 +1,33 @@
+{
+  "api_openai_com_absence_claimed": false,
+  "captured_at_utc": "2026-05-26T20:13:15.242888Z",
+  "checks": [
+    {
+      "name": "command_admission_ok",
+      "passed": true
+    },
+    {
+      "name": "command_hash_recorded",
+      "passed": true
+    },
+    {
+      "name": "owner_boundary_context_only",
+      "passed": true
+    },
+    {
+      "name": "no_phase_a_result_import",
+      "passed": true
+    },
+    {
+      "name": "no_phase_a_egress_absence_claim",
+      "passed": true
+    }
+  ],
+  "direct_egress_absence_claimed": false,
+  "external_result_imported": false,
+  "forbidden_claims_present": false,
+  "live_network_capture_attempted": false,
+  "native_launch_attempted": false,
+  "packet_kind": "handoff_false_green_audit",
+  "status": "ok"
+}

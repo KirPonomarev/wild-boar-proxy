@@ -69,6 +69,14 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_direct_egress_false_green_audit,
     build_bounded_observation_window_packet,
     build_custom_process_binding_packet,
+    build_detached_egress_command_admission_packet,
+    build_detached_egress_command_hash_packet,
+    build_detached_egress_execution_command_packet,
+    build_detached_egress_future_result_import_contract_packet,
+    build_detached_egress_future_result_required_packets_packet,
+    build_detached_egress_handoff_false_green_audit,
+    build_detached_egress_owner_action_boundary_packet,
+    build_detached_egress_quiescent_requirement_packet,
     build_domain_attribution_limit_packet,
     build_owner_visible_response_context_packet,
     build_temp_custom_cleanup_packet,
@@ -4156,6 +4164,126 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             "EXTERNAL_DETACHED_CONTEXT_PROVEN_BUT_PHASE7_NOT_ADMISSIBLE",
         )
         self.assertTrue(packet["protected_codex_ancestry_disproven"])
+
+    def test_detached_egress_command_targets_live_direct_egress_probe(self) -> None:
+        repo_root = Path("/tmp/wbp-repo")
+        evidence_dir = repo_root / "audit_results" / "egress_EXTERNAL_2026-05-26"
+        packet = build_detached_egress_execution_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+            wait_seconds=45,
+        )
+        self.assertEqual(packet["status"], "ok")
+        self.assertIn("native_custom_direct_egress_classification_probe.py", packet["target_tool"])
+        self.assertIn("--mode", packet["argv"])
+        self.assertIn("live", packet["argv"])
+        self.assertEqual(packet["wait_seconds"], 45)
+        self.assertFalse(packet["command_executed"])
+        self.assertFalse(packet["native_launch_attempted_from_current_thread"])
+
+    def test_detached_egress_command_admission_and_hash_are_bounded(self) -> None:
+        repo_root = Path("/tmp/wbp-repo")
+        evidence_dir = repo_root / "audit_results" / "egress_EXTERNAL_2026-05-26"
+        command = build_detached_egress_execution_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+        )
+        admission = build_detached_egress_command_admission_packet(
+            command_packet=command,
+            repo_root=repo_root,
+        )
+        command_hash = build_detached_egress_command_hash_packet(
+            command_packet=command,
+        )
+        self.assertEqual(admission["status"], "ok")
+        self.assertTrue(admission["evidence_dir_under_audit_results"])
+        self.assertTrue(admission["external_evidence_dir_marker_present"])
+        self.assertFalse(admission["protected_surfaces_write_allowed"])
+        self.assertEqual(command_hash["status"], "ok")
+        self.assertTrue(command_hash["hash_covers_argv_cwd_target_and_evidence_dir"])
+
+    def test_detached_egress_import_contract_forbids_phase_a_absence_claim(self) -> None:
+        required = build_detached_egress_future_result_required_packets_packet()
+        contract = build_detached_egress_future_result_import_contract_packet(
+            required_packets_packet=required,
+        )
+        self.assertIn(
+            "native_direct_egress_claim_packet.json",
+            contract["required_packets"],
+        )
+        self.assertFalse(contract["external_result_imported_in_this_contour"])
+        self.assertFalse(contract["direct_egress_absence_claim_allowed_in_phase_a"])
+        self.assertFalse(contract["api_openai_com_absence_claim_allowed_in_phase_a"])
+
+    def test_detached_egress_false_green_blocks_unadmitted_command(self) -> None:
+        admission = {"status": "blocked", "command_executed": False, "external_result_imported": False}
+        command_hash = {"status": "ok", "command_sha256": "abc"}
+        owner_boundary = build_detached_egress_owner_action_boundary_packet()
+        required = build_detached_egress_future_result_required_packets_packet()
+        contract = build_detached_egress_future_result_import_contract_packet(
+            required_packets_packet=required,
+        )
+        network_limits = build_network_claim_limits_packet()
+        audit = build_detached_egress_handoff_false_green_audit(
+            command_admission_packet=admission,
+            command_hash_packet=command_hash,
+            owner_action_boundary_packet=owner_boundary,
+            future_result_import_contract_packet=contract,
+            network_claim_limits_packet=network_limits,
+        )
+        self.assertEqual(audit["status"], "blocked")
+        self.assertFalse(audit["direct_egress_absence_claimed"])
+
+    def test_detached_egress_quiescent_requirement_is_handoff_only(self) -> None:
+        packet = build_detached_egress_quiescent_requirement_packet()
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["current_hosted_context_must_not_run_live"])
+        self.assertFalse(packet["fresh_native_launch_attempted"])
+        self.assertFalse(packet["live_network_capture_attempted"])
+
+    def test_detached_egress_handoff_tool_emits_phase_a_packets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            real_repo = Path(__file__).resolve().parents[1]
+            tool_dir = repo_root / "tools"
+            tool_dir.mkdir()
+            (tool_dir / "native_custom_direct_egress_classification_probe.py").write_text(
+                "# placeholder\n",
+                encoding="utf-8",
+            )
+            evidence_dir = repo_root / "audit_results" / "handoff"
+            script = real_repo / "tools" / "native_custom_detached_egress_execution_handoff_probe.py"
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--repo-root",
+                    str(repo_root),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--skip-git",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(process.returncode, 0, process.stderr)
+            summary = json.loads(
+                (evidence_dir / "handoff_summary_packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            command = json.loads(
+                (evidence_dir / "detached_egress_execution_command_packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+            )
+            self.assertFalse(summary["native_launch_attempted"])
+            self.assertIn("--mode", command["argv"])
 
 
 if __name__ == "__main__":
