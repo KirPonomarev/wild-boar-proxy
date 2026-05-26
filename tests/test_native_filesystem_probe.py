@@ -4475,6 +4475,24 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 encoding="utf-8",
             )
             evidence_dir = repo_root / "audit_results" / "handoff"
+            external_evidence_dir = (
+                repo_root
+                / "audit_results"
+                / "wbp_native_custom_detached_egress_execution_EXTERNAL_R2_2026-05-27"
+            )
+            safety_path = repo_root / "audit_results" / "safety.json"
+            safety_path.parent.mkdir(parents=True, exist_ok=True)
+            safety_path.write_text(
+                json.dumps(
+                    {
+                        "status": "ok",
+                        "allowed_final_claim": "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED",
+                        "native_launch_attempted": False,
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
             script = real_repo / "tools" / "native_custom_detached_egress_execution_handoff_probe.py"
             process = subprocess.run(
                 [
@@ -4484,6 +4502,12 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                     str(repo_root),
                     "--evidence-dir",
                     str(evidence_dir),
+                    "--external-evidence-dir",
+                    str(external_evidence_dir),
+                    "--safety-admission-path",
+                    str(safety_path),
+                    "--ready-final-status",
+                    "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED",
                     "--skip-git",
                 ],
                 text=True,
@@ -4503,10 +4527,22 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             )
             self.assertEqual(
                 summary["final_status"],
-                "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+                "WBP_DETACHED_NATIVE_CUSTOM_EGRESS_HANDOFF_REFRESH_R2_READY_OWNER_ACTION_REQUIRED",
             )
             self.assertFalse(summary["native_launch_attempted"])
+            self.assertEqual(
+                summary["external_evidence_dir"],
+                str(external_evidence_dir.resolve()),
+            )
             self.assertIn("--mode", command["argv"])
+            self.assertEqual(command["evidence_dir"], str(external_evidence_dir.resolve()))
+            safety_reference = json.loads(
+                (evidence_dir / "safety_admission_reference_packet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(safety_reference["status"], "ok")
+            self.assertTrue(safety_reference["reference_only"])
 
     def test_detached_egress_safety_admission_prerequisite_is_reference_only(self) -> None:
         packet = build_detached_egress_safety_admission_prerequisite_packet(

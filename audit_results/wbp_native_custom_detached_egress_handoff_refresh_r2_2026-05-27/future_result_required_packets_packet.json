@@ -1,0 +1,18 @@
+{
+  "captured_at_utc": "2026-05-26T21:51:59.154302Z",
+  "packet_kind": "future_result_required_packets",
+  "phase_a_imported_result": false,
+  "phase_b_required": true,
+  "required_packets": [
+    "native_process_network_observation_packet.json",
+    "source_wbp_trace_packet.json",
+    "wbp_trace_observation_packet.json",
+    "native_direct_egress_claim_packet.json",
+    "domain_attribution_limit_packet.json or import-derived domain attribution limit",
+    "owner_visible_response_context_packet.json or import-derived context-only packet",
+    "temp_custom_cleanup_packet.json or cleanup_reversibility_packet.json",
+    "native_direct_egress_false_green_audit.json",
+    "independent_native_direct_egress_audit.json or import audit packet"
+  ],
+  "status": "ok"
+}

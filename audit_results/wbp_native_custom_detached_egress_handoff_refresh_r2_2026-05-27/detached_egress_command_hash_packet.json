@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T21:51:59.154130Z",
+  "command_executed": false,
+  "command_sha256": "edf3e6c0c73971622b787e51b913f7f944630f2090b514e6c5ba4f1dd07f8caa",
+  "hash_covers_argv_cwd_target_and_evidence_dir": true,
+  "packet_kind": "detached_egress_command_hash",
+  "shell_command_recorded": true,
+  "shell_command_sha256": "51eb12961bb149ade46fb195b7bacc45f1b9e8ead6b6030c97b7c0c47938a415",
+  "status": "ok"
+}

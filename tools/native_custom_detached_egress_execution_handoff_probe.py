@@ -141,12 +141,49 @@ def _current_wbp_status_packet() -> dict[str, Any]:
     }
 
 
+def _read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"status": "missing", "source_path": str(path)}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {
+            "status": "invalid_json",
+            "source_path": str(path),
+            "error": str(exc),
+        }
+
+
+def _safety_admission_reference_packet(path: Path) -> dict[str, Any]:
+    packet = _read_json(path)
+    ok = (
+        packet.get("status") == "ok"
+        and packet.get("allowed_final_claim")
+        == "NATIVE_CUSTOM_SAFETY_ADMISSION_INSPECTION_ONLY_CLASSIFIED"
+        and packet.get("native_launch_attempted") is False
+    )
+    return {
+        "captured_at_utc": _utc_now(),
+        "packet_kind": "safety_admission_reference",
+        "status": "ok" if ok else "blocked",
+        "reason_class": "" if ok else "SAFETY_ADMISSION_REFERENCE_NOT_OK",
+        "source_path": str(path),
+        "source_status": packet.get("status", "missing"),
+        "source_allowed_final_claim": packet.get("allowed_final_claim", ""),
+        "source_native_launch_attempted": packet.get("native_launch_attempted"),
+        "reference_only": True,
+        "counts_as_native_launch_proof": False,
+        "counts_as_network_claim": False,
+    }
+
+
 def _independent_handoff_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
     required = {
         "sync_gate_packet.json",
         "historical_dirt_quarantine_packet.json",
         "declared_write_surfaces_packet.json",
         "version_pinning_packet.json",
+        "safety_admission_reference_packet.json",
         "current_wbp_status_packet.json",
         "observer_capability_packet.json",
         "detached_egress_execution_command_packet.json",
@@ -180,6 +217,8 @@ def _independent_handoff_audit(packets: dict[str, dict[str, Any]]) -> dict[str, 
         "status": "ok"
         if not missing
         and false_green.get("status") == "ok"
+        and packets.get("safety_admission_reference_packet.json", {}).get("status")
+        == "ok"
         and not forbidden_claim
         and "native_custom_direct_egress_classification_probe.py" in command.get("target_tool", "")
         else "blocked",
@@ -206,6 +245,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", default=str(ROOT))
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--external-evidence-dir", default="")
+    parser.add_argument(
+        "--safety-admission-path",
+        default=str(
+            ROOT
+            / "audit_results/wbp_native_custom_safety_admission_refresh_r1_2026-05-27/native_safety_admission_result_packet.json"
+        ),
+    )
+    parser.add_argument(
+        "--ready-final-status",
+        default="NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED",
+    )
+    parser.add_argument(
+        "--blocked-final-status",
+        default="NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_BLOCKED",
+    )
     parser.add_argument("--model", default="gpt-5.4-mini")
     parser.add_argument("--wait-seconds", type=int, default=90)
     parser.add_argument("--skip-git", action="store_true")
@@ -225,6 +279,9 @@ def main() -> int:
         else repo_root
         / "audit_results"
         / "wbp_native_custom_detached_egress_execution_EXTERNAL_2026-05-26"
+    )
+    safety_reference = _safety_admission_reference_packet(
+        Path(args.safety_admission_path).resolve()
     )
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
@@ -304,6 +361,7 @@ def main() -> int:
         "historical_dirt_quarantine_packet.json": dirt_packet,
         "declared_write_surfaces_packet.json": write_surfaces,
         "version_pinning_packet.json": _version_packet(repo_root, skip_git=args.skip_git),
+        "safety_admission_reference_packet.json": safety_reference,
         "current_wbp_status_packet.json": _current_wbp_status_packet(),
         "observer_capability_packet.json": capability,
         "detached_egress_execution_command_packet.json": command,
@@ -327,12 +385,13 @@ def main() -> int:
         and independent_audit["status"] == "ok"
         else "blocked",
         "final_status": (
-            "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_READY_OWNER_ACTION_REQUIRED"
+            args.ready_final_status
             if sync_packet["status"] == "ok"
+            and safety_reference["status"] == "ok"
             and admission["status"] == "ok"
             and false_green["status"] == "ok"
             and independent_audit["status"] == "ok"
-            else "NATIVE_DETACHED_EGRESS_EXECUTION_HANDOFF_BLOCKED"
+            else args.blocked_final_status
         ),
         "owner_action_required": True,
         "external_command_sha256": command_hash["command_sha256"],

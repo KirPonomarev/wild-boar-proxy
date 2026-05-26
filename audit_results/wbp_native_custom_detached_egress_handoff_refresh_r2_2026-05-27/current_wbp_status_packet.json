@@ -1,0 +1,8 @@
+{
+  "captured_at_utc": "2026-05-26T21:51:59.227011Z",
+  "live_wbp_route_verified_in_this_contour": false,
+  "packet_kind": "current_wbp_status",
+  "phase_a_counts_as_wbp_runtime_proof": false,
+  "status": "ok",
+  "wbp_required_for_future_detached_run": true
+}
