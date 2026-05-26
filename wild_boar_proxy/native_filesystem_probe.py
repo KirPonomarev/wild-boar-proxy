@@ -3277,6 +3277,312 @@ def build_native_owner_ux_false_green_audit(
     }
 
 
+def build_owner_historical_observation_import_packet(
+    *,
+    owner_confirmation_text: str,
+    owner_reported_agent_answered: bool,
+    owner_reported_config_model_route_untouched: bool,
+    owner_reported_hidden_cleanup_not_performed: bool,
+    owner_reported_first_custom_answered: bool = False,
+) -> dict[str, Any]:
+    status_ok = (
+        bool(owner_confirmation_text)
+        and owner_reported_agent_answered
+        and owner_reported_config_model_route_untouched
+        and owner_reported_hidden_cleanup_not_performed
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_historical_observation_import",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "OWNER_HISTORICAL_OBSERVATION_INCOMPLETE",
+        "source_class": "thread_owner_statement",
+        "historical_only": True,
+        "fresh_live_native_launch_performed": False,
+        "fresh_live_native_launch_claimed": False,
+        "owner_confirmation_text_sha256": _sha256_text(owner_confirmation_text),
+        "owner_confirmation_text_recorded": True,
+        "owner_reported_agent_answered": owner_reported_agent_answered,
+        "owner_reported_first_custom_answered": owner_reported_first_custom_answered,
+        "owner_reported_config_model_route_untouched": (
+            owner_reported_config_model_route_untouched
+        ),
+        "owner_reported_hidden_cleanup_not_performed": (
+            owner_reported_hidden_cleanup_not_performed
+        ),
+        "owner_observation_replaces_route_trace": False,
+        "owner_observation_replaces_machine_ui_proof": False,
+    }
+
+
+def build_owner_visible_response_observation_packet(
+    *,
+    historical_observation_import_packet: dict[str, Any],
+    screenshot_limit_packet: dict[str, Any],
+) -> dict[str, Any]:
+    owner_saw_response = (
+        historical_observation_import_packet.get("owner_reported_agent_answered") is True
+    )
+    screenshot_support_ok = screenshot_limit_packet.get("status") == "ok"
+    status_ok = (
+        historical_observation_import_packet.get("status") == "ok"
+        and owner_saw_response
+        and screenshot_support_ok
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_visible_response_observation",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "OWNER_VISIBLE_RESPONSE_UNPROVEN",
+        "historical_only": True,
+        "owner_saw_response": owner_saw_response,
+        "owner_reported_first_custom_answered": (
+            historical_observation_import_packet.get("owner_reported_first_custom_answered")
+            is True
+        ),
+        "screenshots_used_as_narrative_support": (
+            screenshot_limit_packet.get("screenshots_used_as_narrative_support") is True
+        ),
+        "screenshot_counts_as_packet_truth": False,
+        "machine_ui_input_field_proven": False,
+        "machine_observed_response_text_proven": False,
+        "route_claimed": False,
+    }
+
+
+def build_owner_cleanup_perception_packet(
+    *,
+    owner_reported_hidden_cleanup_not_performed: bool,
+    owner_confirmed_cleanup_result: bool = False,
+) -> dict[str, Any]:
+    status_ok = owner_reported_hidden_cleanup_not_performed
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_cleanup_perception",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": "" if status_ok else "OWNER_HIDDEN_CLEANUP_REPORTED",
+        "historical_only": True,
+        "owner_confirmed_cleanup_result": owner_confirmed_cleanup_result,
+        "owner_reported_hidden_cleanup_not_performed": (
+            owner_reported_hidden_cleanup_not_performed
+        ),
+        "cleanup_perception_recorded": True,
+        "cleanup_perception_counts_as_filesystem_proof": False,
+        "filesystem_cleanup_proven": False,
+        "protected_surface_diff_proven": False,
+        "tmp_root_removed_proven": False,
+    }
+
+
+def build_screenshot_limit_packet(
+    *,
+    screenshot_count: int,
+    screenshots_used_as_narrative_support: bool,
+    screenshot_claims_packet_truth: bool = False,
+    max_narrative_screenshots: int = 3,
+) -> dict[str, Any]:
+    count = max(0, int(screenshot_count))
+    cap_ok = count <= max_narrative_screenshots
+    status_ok = cap_ok and not screenshot_claims_packet_truth
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "screenshot_limit",
+        "status": "ok" if status_ok else "blocked",
+        "reason_class": (
+            ""
+            if status_ok
+            else (
+                "SCREENSHOT_PROMOTED_TO_PACKET_TRUTH"
+                if screenshot_claims_packet_truth
+                else "SCREENSHOT_NARRATIVE_CAP_EXCEEDED"
+            )
+        ),
+        "screenshot_count": count,
+        "max_narrative_screenshots": max_narrative_screenshots,
+        "screenshots_used_as_narrative_support": screenshots_used_as_narrative_support,
+        "screenshot_claims_packet_truth": screenshot_claims_packet_truth,
+        "screenshot_counts_as_packet_truth": False,
+        "screenshot_counts_as_route_proof": False,
+        "screenshot_counts_as_machine_ui_proof": False,
+        "screenshot_counts_as_filesystem_proof": False,
+    }
+
+
+def build_historical_routing_trace_reference_packet(
+    *,
+    wbp_trace_observation_packet: dict[str, Any],
+    source_trace_path: str,
+    source_closeout_path: str = "",
+) -> dict[str, Any]:
+    trace_confirmed = wbp_trace_observation_packet.get("route_status") == "confirmed"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "historical_routing_trace_reference",
+        "status": "ok" if trace_confirmed else "blocked",
+        "reason_class": "" if trace_confirmed else "HISTORICAL_ROUTE_TRACE_UNCONFIRMED",
+        "historical_only": True,
+        "source_trace_path": source_trace_path,
+        "source_closeout_path": source_closeout_path,
+        "historical_route_trace_referenced": trace_confirmed,
+        "historical_trace_path": wbp_trace_observation_packet.get("trace_path", ""),
+        "historical_forwarded_to_wbp": (
+            wbp_trace_observation_packet.get("forwarded_to_wbp") is True
+        ),
+        "historical_upstream_status": wbp_trace_observation_packet.get("upstream_status"),
+        "historical_response_hash_recorded": (
+            wbp_trace_observation_packet.get("response_hash_recorded") is True
+        ),
+        "routing_reproved_in_this_contour": False,
+        "fresh_trace_claimed": False,
+        "owner_observation_replaces_trace": False,
+    }
+
+
+def build_owner_ux_layer_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_ux_layer_boundary",
+        "status": "ok",
+        "this_contour_proves": [
+            "historical owner-visible Custom native response observation",
+            "owner action boundary stayed within allowed manual actions",
+            "screenshots remain narrative support only",
+        ],
+        "this_contour_does_not_prove": [
+            "fresh native launch",
+            "fresh WBP routing",
+            "machine UI input field proof",
+            "machine-observed UI response text",
+            "protected filesystem safety",
+            "direct egress absence",
+            "auth strategy",
+            "model availability",
+            "Original Codex via WBP",
+            "final E2E",
+        ],
+        "fresh_live_native_launch_claimed": False,
+        "fresh_route_claimed": False,
+        "machine_ui_proof_claimed": False,
+        "filesystem_safety_claimed": False,
+        "direct_egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+        "original_codex_via_wbp_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def build_owner_ux_historical_false_green_audit(
+    *,
+    historical_observation_import_packet: dict[str, Any],
+    visible_response_observation_packet: dict[str, Any],
+    cleanup_perception_packet: dict[str, Any],
+    screenshot_limit_packet: dict[str, Any],
+    historical_routing_trace_reference_packet: dict[str, Any],
+    layer_boundary_packet: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = any(
+        layer_boundary_packet.get(key) is True
+        for key in (
+            "fresh_live_native_launch_claimed",
+            "fresh_route_claimed",
+            "machine_ui_proof_claimed",
+            "filesystem_safety_claimed",
+            "direct_egress_claimed",
+            "auth_strategy_reproved",
+            "model_availability_reproved",
+            "original_codex_via_wbp_claimed",
+            "final_e2e_claimed",
+        )
+    ) or any(
+        packet.get(key) is True
+        for packet in (
+            historical_observation_import_packet,
+            visible_response_observation_packet,
+            cleanup_perception_packet,
+            screenshot_limit_packet,
+            historical_routing_trace_reference_packet,
+        )
+        for key in (
+            "fresh_live_native_launch_claimed",
+            "fresh_trace_claimed",
+            "route_claimed",
+            "screenshot_claims_packet_truth",
+            "cleanup_perception_counts_as_filesystem_proof",
+            "owner_observation_replaces_route_trace",
+            "owner_observation_replaces_trace",
+            "machine_ui_input_field_proven",
+            "machine_observed_response_text_proven",
+            "filesystem_cleanup_proven",
+            "protected_surface_diff_proven",
+        )
+    )
+    checks = [
+        {
+            "name": "historical_import_not_fresh_native_launch",
+            "passed": (
+                historical_observation_import_packet.get("historical_only") is True
+                and historical_observation_import_packet.get(
+                    "fresh_live_native_launch_claimed"
+                )
+                is False
+            ),
+        },
+        {
+            "name": "visible_response_not_machine_ui_proof",
+            "passed": not (
+                visible_response_observation_packet.get("machine_ui_input_field_proven")
+                or visible_response_observation_packet.get(
+                    "machine_observed_response_text_proven"
+                )
+            ),
+        },
+        {
+            "name": "cleanup_perception_not_filesystem_proof",
+            "passed": cleanup_perception_packet.get(
+                "cleanup_perception_counts_as_filesystem_proof"
+            )
+            is False,
+        },
+        {
+            "name": "screenshot_not_packet_truth",
+            "passed": screenshot_limit_packet.get("screenshot_counts_as_packet_truth")
+            is False
+            and screenshot_limit_packet.get("screenshot_claims_packet_truth") is False,
+        },
+        {
+            "name": "historical_route_reference_not_fresh_route_reproof",
+            "passed": historical_routing_trace_reference_packet.get(
+                "routing_reproved_in_this_contour"
+            )
+            is False
+            and historical_routing_trace_reference_packet.get("fresh_trace_claimed")
+            is False,
+        },
+        {
+            "name": "no_adjacent_layer_claims",
+            "passed": not any(
+                layer_boundary_packet.get(key) is True
+                for key in (
+                    "filesystem_safety_claimed",
+                    "direct_egress_claimed",
+                    "auth_strategy_reproved",
+                    "model_availability_reproved",
+                    "original_codex_via_wbp_claimed",
+                    "final_e2e_claimed",
+                )
+            ),
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_ux_historical_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) and not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
+    }
+
+
 def build_native_direct_egress_capability_packet(
     *,
     lsof_path: str,

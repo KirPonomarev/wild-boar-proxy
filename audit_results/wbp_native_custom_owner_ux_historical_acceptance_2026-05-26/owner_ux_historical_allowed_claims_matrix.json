@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T13:40:33.757785Z",
+  "direct_egress_claim_allowed": false,
+  "filesystem_safety_claim_allowed": false,
+  "final_e2e_claim_allowed": false,
+  "fresh_native_launch_claim_allowed": false,
+  "fresh_route_claim_allowed": false,
+  "historical_owner_visible_response_claim_allowed": true,
+  "historical_route_reference_allowed": true,
+  "machine_ui_proof_claim_allowed": false,
+  "original_codex_via_wbp_claim_allowed": false,
+  "packet_kind": "owner_ux_historical_allowed_claims_matrix",
+  "status": "ok"
+}

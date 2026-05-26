@@ -47,10 +47,12 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_external_execution_minimal_json_packet,
     build_no_safety_interpretation_packet,
     build_owner_command_reverification_packet,
+    build_owner_cleanup_perception_packet,
     build_owner_execution_attestation_packet,
     build_owner_execution_false_green_audit,
     build_owner_execution_layer_separation_packet,
     build_owner_execution_observation_packet,
+    build_owner_historical_observation_import_packet,
     build_machine_ui_waiver_packet,
     build_native_owner_ux_false_green_audit,
     build_native_direct_egress_capability_packet,
@@ -60,7 +62,10 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_owner_manual_ux_check_packet,
     build_owner_nonce_prompt_packet,
     build_owner_ux_action_boundary_packet,
+    build_owner_ux_historical_false_green_audit,
+    build_owner_ux_layer_boundary_packet,
     build_owner_action_boundary_packet,
+    build_owner_visible_response_observation_packet,
     build_owner_external_execution_result_packet,
     build_owner_execution_boundary_packet,
     build_protected_surface_import_summary,
@@ -68,6 +73,8 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_quiescent_retry_blocker_packet,
     build_quiescent_retry_launch_admission_packet,
     build_two_lane_result_matrix,
+    build_screenshot_limit_packet,
+    build_historical_routing_trace_reference_packet,
     build_wbp_trace_observation_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
@@ -1794,6 +1801,144 @@ class NativeFilesystemProbeTests(unittest.TestCase):
         self.assertEqual(matrix["final_status"], "OWNER_UX_ROUTE_BLOCKED_MODEL_FAILURE")
         self.assertFalse(matrix["route_trace_confirmed"])
 
+    def test_owner_ux_historical_import_separates_observation_from_fresh_proof(self) -> None:
+        imported = build_owner_historical_observation_import_packet(
+            owner_confirmation_text=(
+                "вижу ответ, конфиг/модель/роут не трогал, hidden cleanup не делал"
+            ),
+            owner_reported_agent_answered=True,
+            owner_reported_config_model_route_untouched=True,
+            owner_reported_hidden_cleanup_not_performed=True,
+            owner_reported_first_custom_answered=True,
+        )
+        screenshots = build_screenshot_limit_packet(
+            screenshot_count=2,
+            screenshots_used_as_narrative_support=True,
+        )
+        visible = build_owner_visible_response_observation_packet(
+            historical_observation_import_packet=imported,
+            screenshot_limit_packet=screenshots,
+        )
+        cleanup = build_owner_cleanup_perception_packet(
+            owner_reported_hidden_cleanup_not_performed=True,
+            owner_confirmed_cleanup_result=False,
+        )
+
+        self.assertEqual(imported["status"], "ok")
+        self.assertTrue(imported["historical_only"])
+        self.assertFalse(imported["fresh_live_native_launch_claimed"])
+        self.assertEqual(visible["status"], "ok")
+        self.assertTrue(visible["owner_saw_response"])
+        self.assertFalse(visible["machine_observed_response_text_proven"])
+        self.assertFalse(cleanup["cleanup_perception_counts_as_filesystem_proof"])
+        self.assertFalse(cleanup["filesystem_cleanup_proven"])
+
+    def test_owner_ux_screenshot_limit_blocks_packet_truth_promotion(self) -> None:
+        ok = build_screenshot_limit_packet(
+            screenshot_count=2,
+            screenshots_used_as_narrative_support=True,
+        )
+        promoted = build_screenshot_limit_packet(
+            screenshot_count=1,
+            screenshots_used_as_narrative_support=True,
+            screenshot_claims_packet_truth=True,
+        )
+        too_many = build_screenshot_limit_packet(
+            screenshot_count=4,
+            screenshots_used_as_narrative_support=True,
+            max_narrative_screenshots=3,
+        )
+
+        self.assertEqual(ok["status"], "ok")
+        self.assertFalse(ok["screenshot_counts_as_packet_truth"])
+        self.assertEqual(promoted["status"], "blocked")
+        self.assertEqual(promoted["reason_class"], "SCREENSHOT_PROMOTED_TO_PACKET_TRUTH")
+        self.assertEqual(too_many["status"], "blocked")
+        self.assertEqual(too_many["reason_class"], "SCREENSHOT_NARRATIVE_CAP_EXCEEDED")
+
+    def test_owner_ux_historical_route_reference_does_not_reprove_route(self) -> None:
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 200,
+                "request_body_sha256": "request-hash",
+                "response_body_sha256": "response-hash",
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+        reference = build_historical_routing_trace_reference_packet(
+            wbp_trace_observation_packet=trace,
+            source_trace_path="audit_results/source/source_wbp_trace_packet.json",
+            source_closeout_path="audit_results/source/closeout.md",
+        )
+
+        self.assertEqual(reference["status"], "ok")
+        self.assertTrue(reference["historical_route_trace_referenced"])
+        self.assertFalse(reference["routing_reproved_in_this_contour"])
+        self.assertFalse(reference["fresh_trace_claimed"])
+        self.assertFalse(reference["owner_observation_replaces_trace"])
+
+    def test_owner_ux_historical_false_green_blocks_adjacent_layer_claims(self) -> None:
+        imported = build_owner_historical_observation_import_packet(
+            owner_confirmation_text="owner saw response",
+            owner_reported_agent_answered=True,
+            owner_reported_config_model_route_untouched=True,
+            owner_reported_hidden_cleanup_not_performed=True,
+        )
+        screenshots = build_screenshot_limit_packet(
+            screenshot_count=1,
+            screenshots_used_as_narrative_support=True,
+        )
+        visible = build_owner_visible_response_observation_packet(
+            historical_observation_import_packet=imported,
+            screenshot_limit_packet=screenshots,
+        )
+        cleanup = build_owner_cleanup_perception_packet(
+            owner_reported_hidden_cleanup_not_performed=True
+        )
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 200,
+                "response_body_sha256": "response-hash",
+            }
+        )
+        reference = build_historical_routing_trace_reference_packet(
+            wbp_trace_observation_packet=trace,
+            source_trace_path="audit_results/source/source_wbp_trace_packet.json",
+        )
+        layer = build_owner_ux_layer_boundary_packet()
+        clean = build_owner_ux_historical_false_green_audit(
+            historical_observation_import_packet=imported,
+            visible_response_observation_packet=visible,
+            cleanup_perception_packet=cleanup,
+            screenshot_limit_packet=screenshots,
+            historical_routing_trace_reference_packet=reference,
+            layer_boundary_packet=layer,
+        )
+        bad_layer = dict(layer)
+        bad_layer["direct_egress_claimed"] = True
+        blocked = build_owner_ux_historical_false_green_audit(
+            historical_observation_import_packet=imported,
+            visible_response_observation_packet=visible,
+            cleanup_perception_packet=cleanup,
+            screenshot_limit_packet=screenshots,
+            historical_routing_trace_reference_packet=reference,
+            layer_boundary_packet=bad_layer,
+        )
+
+        self.assertEqual(clean["status"], "ok")
+        self.assertEqual(blocked["status"], "blocked")
+        self.assertTrue(blocked["forbidden_claims_present"])
+
     def test_owner_ux_route_confirmation_probe_emits_two_lane_success(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         tool = repo_root / "tools" / "native_custom_owner_ux_route_confirmation_probe.py"
@@ -1939,6 +2084,130 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             self.assertEqual(summary["final_status"], "OWNER_UX_CONFIRMED_ROUTE_UNPROVEN")
             self.assertTrue(summary["owner_ux_confirmed"])
             self.assertFalse(summary["route_trace_confirmed"])
+
+    def test_owner_ux_historical_acceptance_probe_emits_limited_status(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_ux_historical_acceptance_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            (temp_repo / "audit_results").mkdir()
+            (temp_repo / "audit_results" / ".gitkeep").write_text("", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(["git", "add", "audit_results/.gitkeep"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            source_dir = temp_repo / "audit_results" / "source"
+            source_dir.mkdir()
+            trace_path = source_dir / "source_wbp_trace_packet.json"
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "request_observed": True,
+                        "response_observed": True,
+                        "forwarded_to_wbp": True,
+                        "path": "/v1/responses",
+                        "upstream_status": 200,
+                        "request_body_sha256": "request-hash",
+                        "response_body_sha256": "response-hash",
+                        "prompt_body_recorded": False,
+                        "auth_header_recorded": False,
+                        "secret_value_recorded": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            closeout_path = source_dir / "closeout.md"
+            closeout_path.write_text("# Source closeout\n", encoding="utf-8")
+            subprocess.run(
+                ["git", "add", "audit_results/source"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "source evidence"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            evidence_dir = temp_repo / "audit_results" / "owner_ux_historical"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--source-trace-packet",
+                    str(trace_path),
+                    "--source-closeout",
+                    str(closeout_path),
+                    "--owner-confirmation-text",
+                    "owner saw response and did not edit config model route",
+                    "--owner-reported-agent-answered",
+                    "--owner-reported-first-custom-answered",
+                    "--owner-reported-config-model-route-untouched",
+                    "--owner-reported-hidden-cleanup-not-performed",
+                    "--owner-waives-machine-ui",
+                    "--screenshot-count",
+                    "2",
+                    "--screenshots-used-as-narrative-support",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads(
+                (
+                    evidence_dir / "owner_ux_historical_acceptance_summary_packet.json"
+                ).read_text()
+            )
+            false_green = json.loads(
+                (evidence_dir / "native_ux_false_green_audit.json").read_text()
+            )
+            route_ref = json.loads(
+                (
+                    evidence_dir / "historical_routing_trace_reference_packet.json"
+                ).read_text()
+            )
+            allowed = json.loads(
+                (
+                    evidence_dir / "owner_ux_historical_allowed_claims_matrix.json"
+                ).read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "CODEX_CUSTOM_NATIVE_OWNER_UX_HISTORICAL_ACCEPTED_WITH_LIMITS",
+            )
+            self.assertFalse(summary["fresh_native_launch_claimed"])
+            self.assertFalse(summary["fresh_route_claimed"])
+            self.assertFalse(summary["direct_egress_claimed"])
+            self.assertEqual(false_green["status"], "ok")
+            self.assertFalse(route_ref["routing_reproved_in_this_contour"])
+            self.assertFalse(allowed["fresh_native_launch_claim_allowed"])
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(

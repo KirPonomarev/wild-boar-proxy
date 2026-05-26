@@ -1,0 +1,31 @@
+{
+  "auth_strategy_reproved": false,
+  "captured_at_utc": "2026-05-26T13:40:33.757778Z",
+  "direct_egress_claimed": false,
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "fresh_live_native_launch_claimed": false,
+  "fresh_route_claimed": false,
+  "machine_ui_proof_claimed": false,
+  "model_availability_reproved": false,
+  "original_codex_via_wbp_claimed": false,
+  "packet_kind": "owner_ux_layer_boundary",
+  "status": "ok",
+  "this_contour_does_not_prove": [
+    "fresh native launch",
+    "fresh WBP routing",
+    "machine UI input field proof",
+    "machine-observed UI response text",
+    "protected filesystem safety",
+    "direct egress absence",
+    "auth strategy",
+    "model availability",
+    "Original Codex via WBP",
+    "final E2E"
+  ],
+  "this_contour_proves": [
+    "historical owner-visible Custom native response observation",
+    "owner action boundary stayed within allowed manual actions",
+    "screenshots remain narrative support only"
+  ]
+}
