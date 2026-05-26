@@ -22,8 +22,11 @@ from wild_boar_proxy.provider_auth_strategy import (
     build_auth_command_output_format_packet,
     build_auth_strategy_decision_matrix,
     build_auth_strategy_false_green_audit,
+    build_auth_token_boundary_packet,
     build_current_codex_auth_independence_packet,
     build_file_auth_fallback_deferred_packet,
+    build_file_auth_non_substitution_packet,
+    build_no_ambient_authority_packet,
     build_provider_auth_strategy_packet,
     build_secret_source_confusion_guard_packet,
     classify_native_config_auth_surface,
@@ -189,7 +192,10 @@ def _independent_audit(packets: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "auth_command_output_format_packet.json",
         "bounded_bearer_fallback_packet.json",
         "file_auth_fallback_deferred_packet.json",
+        "file_auth_non_substitution_packet.json",
         "current_codex_auth_independence_packet.json",
+        "no_ambient_authority_packet.json",
+        "auth_token_boundary_packet.json",
         "secret_source_confusion_guard_packet.json",
         "secret_redaction_audit.json",
         "auth_strategy_false_green_audit.json",
@@ -256,8 +262,11 @@ def main() -> int:
     decision_matrix = build_auth_strategy_decision_matrix(provider_packet)
     output_format = build_auth_command_output_format_packet(provider_packet)
     file_auth = build_file_auth_fallback_deferred_packet(provider_packet)
+    file_auth_non_substitution = build_file_auth_non_substitution_packet(provider_packet)
     current_auth = build_current_codex_auth_independence_packet(provider_packet)
+    no_ambient_authority = build_no_ambient_authority_packet(provider_packet)
     source_guard = build_secret_source_confusion_guard_packet(provider_packet)
+    auth_token_boundary = build_auth_token_boundary_packet(provider_packet)
     false_green = build_auth_strategy_false_green_audit(
         provider_auth_strategy_packet=provider_packet,
         decision_matrix_packet=decision_matrix,
@@ -310,7 +319,10 @@ def main() -> int:
                 "native_launch_attempted": False,
             },
             "file_auth_fallback_deferred_packet.json": file_auth,
+            "file_auth_non_substitution_packet.json": file_auth_non_substitution,
             "current_codex_auth_independence_packet.json": current_auth,
+            "no_ambient_authority_packet.json": no_ambient_authority,
+            "auth_token_boundary_packet.json": auth_token_boundary,
             "secret_source_confusion_guard_packet.json": source_guard,
             "auth_strategy_false_green_audit.json": false_green,
         }

@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-05-26T18:32:48.794867Z",
+  "current_codex_auth_json_copied": false,
+  "current_codex_auth_json_execution_dependency": false,
+  "current_codex_auth_json_inspection_only_allowed": true,
+  "current_codex_auth_json_read_as_runtime_input": false,
+  "current_codex_auth_json_symlinked": false,
+  "file_auth_used_in_this_contour": false,
+  "native_filesystem_safety_claimed": false,
+  "packet_kind": "current_codex_auth_independence",
+  "status": "ok"
+}

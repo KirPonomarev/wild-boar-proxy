@@ -1,0 +1,37 @@
+{
+  "captured_at_utc": "2026-05-26T18:33:30Z",
+  "findings": [
+    {
+      "classification": "gap_addressed",
+      "evidence": [
+        "tests/test_provider_auth_strategy.py::test_redact_provider_auth_text_covers_bearer_and_openai_key_shapes",
+        "verification_results_packet.json"
+      ],
+      "finding": "redact_provider_auth_text lacked direct OPENAI_API_KEY and Bearer regex test coverage",
+      "resolution": "direct unit test added and passing"
+    },
+    {
+      "classification": "out_of_scope_for_this_contour",
+      "evidence": [
+        "provider_auth_strategy_summary_packet.json",
+        "auth_strategy_false_green_audit.json"
+      ],
+      "finding": "full Codex/provider invocation path is not exercised",
+      "resolution": "not claimed by this provider/auth classification contour"
+    },
+    {
+      "classification": "out_of_scope_for_this_contour",
+      "evidence": [
+        "current_codex_auth_independence_packet.json",
+        "file_auth_non_substitution_packet.json"
+      ],
+      "finding": "real current ~/.codex/auth.json and real FILE_AUTH fallback execution are not live-tested",
+      "resolution": "classified as non-runtime input and separate fallback contour, not counted as provider auth pass"
+    }
+  ],
+  "native_launch_claimed": false,
+  "packet_kind": "independent_agent_auth_strategy_audit",
+  "referenced_agent_role": "read_only_auth_surface_inspector",
+  "status": "ok",
+  "unresolved_blockers": []
+}

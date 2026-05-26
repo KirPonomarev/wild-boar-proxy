@@ -1,0 +1,49 @@
+{
+  "captured_at_utc": "2026-05-26T18:33:30Z",
+  "commands": [
+    {
+      "command": "python3 -m unittest -q tests.test_provider_auth_strategy",
+      "exit_code": 0,
+      "observed_result": "Ran 21 tests; OK"
+    },
+    {
+      "command": "python3 -m pytest tests/test_provider_auth_strategy.py -q",
+      "exit_code": 0,
+      "observed_result": "21 passed in 0.06s"
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_provider_auth_strategy tests.test_cli_token_command tests.test_cli_runner tests.test_wbp_model_catalog_contract tests.test_operator_surface tests.test_repo_hygiene tests.test_closeout_resilience",
+      "exit_code": 0,
+      "non_blocking_warnings": [
+        "ResourceWarning cleanup messages for expected HTTPError 401/403/429 fixtures"
+      ],
+      "observed_result": "Ran 75 tests in 6.571s; OK"
+    },
+    {
+      "command": "python3 -m py_compile wild_boar_proxy/provider_auth_strategy.py tools/provider_auth_strategy_contract_probe.py tests/test_provider_auth_strategy.py wbp_codex_auth_command.py wild_boar_proxy/token_command.py",
+      "exit_code": 0,
+      "observed_result": "py_compile completed with no output"
+    },
+    {
+      "command": "python3 tools/provider_auth_strategy_contract_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26",
+      "exit_code": 0,
+      "observed_result": "provider_auth_strategy_summary_packet.json status ok, final_status WBP_PROVIDER_AUTH_STRATEGY_CLASSIFIED"
+    },
+    {
+      "command": "JSON packet audit for audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26/*.json",
+      "exit_code": 0,
+      "observed_result": "json and secret audit ok: 24 packets checked"
+    },
+    {
+      "command": "strict local secret scan for audit_results/wbp_provider_auth_strategy_contract_r1_2026-05-26",
+      "exit_code": 0,
+      "observed_result": "secret scan ok"
+    }
+  ],
+  "external_result_imported": false,
+  "final_e2e_proven": false,
+  "model_availability_proven": false,
+  "native_launch_attempted": false,
+  "packet_kind": "verification_results",
+  "status": "ok"
+}

@@ -146,6 +146,7 @@ def build_provider_auth_strategy_packet(
     native_config_text: str = "",
     explicit_bearer_contract: bool = False,
     browser_payload: Any | None = None,
+    remote_payload: Any | None = None,
 ) -> dict[str, Any]:
     auth_command_path_text = str(Path(auth_command_path).expanduser())
     native_surface = classify_native_config_auth_surface(
@@ -153,9 +154,12 @@ def build_provider_auth_strategy_packet(
         explicit_bearer_contract=explicit_bearer_contract,
     )
     forbidden_browser_fields = forbidden_auth_browser_fields(browser_payload or {})
+    forbidden_remote_fields = forbidden_auth_browser_fields(remote_payload or {})
     failed_checks = list(native_surface["failed_checks"])
     if forbidden_browser_fields:
         failed_checks.append("browser_auth_authority_detected")
+    if forbidden_remote_fields:
+        failed_checks.append("remote_auth_authority_detected")
     return {
         "schema_version": AUTH_STRATEGY_SCHEMA_VERSION,
         "packet_kind": "provider_auth_strategy",
@@ -201,6 +205,15 @@ def build_provider_auth_strategy_packet(
             "browser_can_supply_provider": False,
             "browser_can_supply_model": False,
             "browser_authority_blocked": not forbidden_browser_fields,
+        },
+        "remote_authority": {
+            "remote_payload_checked": remote_payload is not None,
+            "forbidden_fields": forbidden_remote_fields,
+            "remote_can_supply_token": False,
+            "remote_can_supply_auth_command": False,
+            "remote_can_supply_provider": False,
+            "remote_can_supply_model": False,
+            "remote_authority_blocked": not forbidden_remote_fields,
         },
         "runtime_dependency": {
             "current_codex_auth_json_dependency": False,
@@ -275,6 +288,11 @@ def build_auth_strategy_decision_matrix(
         if isinstance(provider_auth_strategy_packet.get("browser_authority"), dict)
         else {}
     )
+    remote_authority = (
+        provider_auth_strategy_packet.get("remote_authority")
+        if isinstance(provider_auth_strategy_packet.get("remote_authority"), dict)
+        else {}
+    )
     native_surface = (
         provider_auth_strategy_packet.get("native_config_auth_surface")
         if isinstance(provider_auth_strategy_packet.get("native_config_auth_surface"), dict)
@@ -298,6 +316,117 @@ def build_auth_strategy_decision_matrix(
         failed_checks.append("current_codex_auth_json_dependency_detected")
     if browser_authority.get("browser_authority_blocked") is not True:
         failed_checks.append("browser_authority_not_blocked")
+    if remote_authority.get("remote_authority_blocked") is not True:
+        failed_checks.append("remote_authority_not_blocked")
+    strategy_rows = [
+        {
+            "strategy_id": PREFERRED_STRATEGY,
+            "available": bool(auth_command.get("path")),
+            "selected": selected_strategy == PREFERRED_STRATEGY,
+            "rejected": selected_strategy != PREFERRED_STRATEGY,
+            "selection_reason": provider_auth_strategy_packet.get(
+                "preferred_strategy_reason", ""
+            ),
+            "rejection_reason": "",
+            "required_contract_present": bool(auth_command.get("path")),
+            "runtime_secret_source": auth_command.get("token_source_kind", ""),
+            "token_locality": auth_command.get("scope", ""),
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": auth_command.get("raw_upstream_secret") is True,
+            "evidence_redaction_policy": "secret_value_not_recorded",
+        },
+        {
+            "strategy_id": BOUNDED_BEARER_FALLBACK,
+            "available": native_surface.get("experimental_bearer_token_configured") is True,
+            "selected": selected_strategy == BOUNDED_BEARER_FALLBACK,
+            "rejected": selected_strategy != BOUNDED_BEARER_FALLBACK,
+            "selection_reason": "",
+            "rejection_reason": "not_selected_preferred_auth_command_available",
+            "required_contract_present": bounded_bearer.get("allowed") is True,
+            "runtime_secret_source": "bounded_local_proxy_token",
+            "token_locality": "local_wbp_listener_only",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "raw_value_redacted",
+        },
+        {
+            "strategy_id": FILE_AUTH_FALLBACK,
+            "available": False,
+            "selected": selected_strategy == FILE_AUTH_FALLBACK,
+            "rejected": True,
+            "selection_reason": "",
+            "rejection_reason": "separate_fallback_contour_required",
+            "required_contract_present": False,
+            "runtime_secret_source": "not_used",
+            "token_locality": "not_used",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "not_applicable",
+        },
+        {
+            "strategy_id": "experimental_bearer_token",
+            "available": native_surface.get("experimental_bearer_token_configured") is True,
+            "selected": False,
+            "rejected": True,
+            "selection_reason": "",
+            "rejection_reason": "not_preferred_requires_explicit_contract",
+            "required_contract_present": bounded_bearer.get("allowed") is True,
+            "runtime_secret_source": "bounded_local_proxy_token_if_contract_present",
+            "token_locality": "local_wbp_listener_only",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "raw_value_redacted",
+        },
+        {
+            "strategy_id": "current_codex_auth_json",
+            "available": False,
+            "selected": False,
+            "rejected": True,
+            "selection_reason": "",
+            "rejection_reason": "inspection_only_not_runtime_input",
+            "required_contract_present": False,
+            "runtime_secret_source": "forbidden",
+            "token_locality": "not_used",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "not_recorded",
+        },
+        {
+            "strategy_id": "browser_supplied_auth",
+            "available": bool(browser_authority.get("forbidden_fields")),
+            "selected": False,
+            "rejected": True,
+            "selection_reason": "",
+            "rejection_reason": "browser_authority_forbidden",
+            "required_contract_present": False,
+            "runtime_secret_source": "forbidden",
+            "token_locality": "not_used",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "not_recorded",
+        },
+        {
+            "strategy_id": "remote_client_supplied_auth",
+            "available": bool(remote_authority.get("forbidden_fields")),
+            "selected": False,
+            "rejected": True,
+            "selection_reason": "",
+            "rejection_reason": "remote_client_authority_forbidden",
+            "required_contract_present": False,
+            "runtime_secret_source": "forbidden",
+            "token_locality": "not_used",
+            "browser_authority_allowed": False,
+            "remote_authority_allowed": False,
+            "raw_upstream_secret_exposed": False,
+            "evidence_redaction_policy": "not_recorded",
+        },
+    ]
     return {
         "captured_at_utc": utc_now(),
         "packet_kind": "auth_strategy_decision_matrix",
@@ -330,6 +459,8 @@ def build_auth_strategy_decision_matrix(
         is True,
         "browser_authority_used": browser_authority.get("browser_authority_blocked")
         is not True,
+        "remote_authority_used": remote_authority.get("remote_authority_blocked")
+        is not True,
         "silent_fallback_detected": silent_fallback_detected,
         "selected_strategy": selected_strategy,
         "selection_reason": provider_auth_strategy_packet.get(
@@ -338,7 +469,12 @@ def build_auth_strategy_decision_matrix(
         "rejection_reason_per_unselected_strategy": {
             BOUNDED_BEARER_FALLBACK: "fallback_only_requires_explicit_contract_not_selected",
             FILE_AUTH_FALLBACK: "separate_fallback_contour_required",
+            "experimental_bearer_token": "not_preferred_requires_explicit_contract",
+            "current_codex_auth_json": "inspection_only_not_runtime_input",
+            "browser_supplied_auth": "browser_authority_forbidden",
+            "remote_client_supplied_auth": "remote_client_authority_forbidden",
         },
+        "strategy_rows": strategy_rows,
         "failed_checks": sorted(set(str(item) for item in failed_checks)),
     }
 
@@ -406,6 +542,19 @@ def build_file_auth_fallback_deferred_packet(
     }
 
 
+def build_file_auth_non_substitution_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    deferred = build_file_auth_fallback_deferred_packet(provider_auth_strategy_packet)
+    return {
+        **deferred,
+        "packet_kind": "file_auth_non_substitution",
+        "file_auth_equals_proxy_auth": False,
+        "file_auth_may_satisfy_proxy_auth": False,
+        "file_auth_selected_as_provider_auth": False,
+    }
+
+
 def build_current_codex_auth_independence_packet(
     provider_auth_strategy_packet: dict[str, Any],
 ) -> dict[str, Any]:
@@ -435,6 +584,54 @@ def build_current_codex_auth_independence_packet(
     }
 
 
+def build_no_ambient_authority_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    runtime_dependency = (
+        provider_auth_strategy_packet.get("runtime_dependency")
+        if isinstance(provider_auth_strategy_packet.get("runtime_dependency"), dict)
+        else {}
+    )
+    browser_authority = (
+        provider_auth_strategy_packet.get("browser_authority")
+        if isinstance(provider_auth_strategy_packet.get("browser_authority"), dict)
+        else {}
+    )
+    remote_authority = (
+        provider_auth_strategy_packet.get("remote_authority")
+        if isinstance(provider_auth_strategy_packet.get("remote_authority"), dict)
+        else {}
+    )
+    checks = [
+        {
+            "name": "current_codex_auth_json_not_runtime_input",
+            "passed": runtime_dependency.get("current_codex_auth_json_dependency")
+            is False,
+        },
+        {
+            "name": "browser_authority_blocked",
+            "passed": browser_authority.get("browser_authority_blocked") is True,
+        },
+        {
+            "name": "remote_authority_blocked",
+            "passed": remote_authority.get("remote_authority_blocked") is True,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "no_ambient_authority",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "openai_api_key_env_required": False,
+        "http_proxy_env_required": False,
+        "https_proxy_env_required": False,
+        "all_proxy_env_required": False,
+        "current_codex_auth_json_runtime_input": False,
+        "browser_token_path_model_provider_authority": False,
+        "remote_token_path_model_provider_authority": False,
+    }
+
+
 def build_secret_source_confusion_guard_packet(
     provider_auth_strategy_packet: dict[str, Any],
 ) -> dict[str, Any]:
@@ -451,6 +648,11 @@ def build_secret_source_confusion_guard_packet(
     file_auth = (
         fallbacks.get(FILE_AUTH_FALLBACK)
         if isinstance(fallbacks.get(FILE_AUTH_FALLBACK), dict)
+        else {}
+    )
+    remote_authority = (
+        provider_auth_strategy_packet.get("remote_authority")
+        if isinstance(provider_auth_strategy_packet.get("remote_authority"), dict)
         else {}
     )
     checks = [
@@ -480,6 +682,10 @@ def build_secret_source_confusion_guard_packet(
             )
             is True,
         },
+        {
+            "name": "remote_client_field_not_server_authority",
+            "passed": remote_authority.get("remote_authority_blocked") is True,
+        },
     ]
     return {
         "captured_at_utc": utc_now(),
@@ -491,7 +697,50 @@ def build_secret_source_confusion_guard_packet(
         "file_auth_token_equals_proxy_auth_token": False,
         "current_codex_auth_json_allowed_execution_input": False,
         "browser_hidden_field_allowed_authority": False,
+        "remote_client_allowed_authority": False,
         "model_catalog_allowed_auth_authority": False,
+    }
+
+
+def build_auth_token_boundary_packet(
+    provider_auth_strategy_packet: dict[str, Any],
+) -> dict[str, Any]:
+    auth_command = (
+        provider_auth_strategy_packet.get("auth_command")
+        if isinstance(provider_auth_strategy_packet.get("auth_command"), dict)
+        else {}
+    )
+    native_surface = (
+        provider_auth_strategy_packet.get("native_config_auth_surface")
+        if isinstance(provider_auth_strategy_packet.get("native_config_auth_surface"), dict)
+        else {}
+    )
+    checks = [
+        {
+            "name": "wbp_local_token_not_upstream_secret",
+            "passed": auth_command.get("raw_upstream_secret") is False,
+        },
+        {
+            "name": "auth_command_scope_local",
+            "passed": auth_command.get("scope") == AUTH_COMMAND_SCOPE,
+        },
+        {
+            "name": "redacted_config_has_no_secret",
+            "passed": native_surface.get("raw_secret_after_redaction") is False,
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "auth_token_boundary",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "wbp_local_bearer_token_is_upstream_provider_secret": False,
+        "auth_command_output_is_raw_upstream_secret": False,
+        "upstream_provider_secret_in_codex_config": False,
+        "upstream_provider_secret_in_browser_payload": False,
+        "upstream_provider_secret_in_remote_payload": False,
+        "upstream_provider_secret_in_evidence": False,
+        "auth_command_output_recorded_raw": False,
     }
 
 
@@ -564,6 +813,8 @@ def build_auth_strategy_false_green_audit(
             "bounded_bearer_selected"
         )
         is True,
+        "remote_authority_used": decision_matrix_packet.get("remote_authority_used")
+        is True,
     }
 
 
@@ -595,4 +846,9 @@ def validate_provider_auth_strategy_packet(packet: dict[str, Any]) -> list[str]:
         if claims.get(forbidden_claim) is not False:
             failures.append(f"{forbidden_claim}_overclaimed")
     failures.extend(str(item) for item in packet.get("failed_checks", []))
+    remote_authority = packet.get("remote_authority")
+    if isinstance(remote_authority, dict) and remote_authority.get(
+        "remote_authority_blocked"
+    ) is not True:
+        failures.append("remote_authority_not_blocked")
     return sorted(set(failures))
