@@ -432,7 +432,32 @@ def _token_json_payload(token_value: str) -> dict[str, str]:
     return {"OPENAI_API_KEY": token_value}
 
 
+def _cli_proxy_api_key() -> str:
+    config_path = Path.home() / ".cli-proxy-api" / "config.yaml"
+    if not config_path.exists():
+        return ""
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- ") and "sk-cliproxy" in stripped:
+            return stripped[2:].strip().strip("\"'")
+    return ""
+
+
 def build_provider_config(*, endpoint: str, model: str, auth_command_path: Path) -> str:
+    cli_key = _cli_proxy_api_key()
+    if cli_key:
+        return (
+            f'model = "{model}"\n'
+            'model_provider = "wbp"\n'
+            'approval_policy = "never"\n'
+            'sandbox_mode = "read-only"\n\n'
+            "[model_providers.wbp]\n"
+            'name = "Wild Boar Proxy"\n'
+            f'base_url = "{endpoint}"\n'
+            'wire_api = "responses"\n'
+            "requires_openai_auth = false\n"
+            f'experimental_bearer_token = "{cli_key}"\n'
+        )
     auth_command = str(auth_command_path.resolve())
     return (
         f'model = "{model}"\n'
