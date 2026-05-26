@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T12:03:37.735717Z",
+  "machine_observed_response_text_proven": false,
+  "machine_ui_input_field_proven": false,
+  "manual_ui_confirmation_allowed": false,
+  "manual_ui_confirmation_replaces_route_trace": false,
+  "owner_waives_machine_ui": false,
+  "packet_kind": "machine_ui_waiver",
+  "route_trace_replaces_owner_ux_confirmation": false,
+  "status": "blocked"
+}

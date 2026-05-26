@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T12:03:37.735802Z",
+  "nonce_recorded": true,
+  "owner_ux_claimed": false,
+  "packet_kind": "native_route_trace_binding",
+  "prompt_hash_recorded": true,
+  "raw_prompt_recorded": false,
+  "route_status": "missing",
+  "route_trace_bound": false,
+  "status": "blocked",
+  "trace_path": "",
+  "trace_request_body_sha256": "",
+  "trace_response_body_sha256": ""
+}

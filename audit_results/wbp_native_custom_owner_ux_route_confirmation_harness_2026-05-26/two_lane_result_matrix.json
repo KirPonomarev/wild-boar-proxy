@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T12:03:37.735806Z",
+  "direct_egress_claimed": false,
+  "filesystem_safety_claimed": false,
+  "final_e2e_claimed": false,
+  "final_status": "OWNER_UX_AND_ROUTE_BLOCKED",
+  "machine_ui_proof_claimed": false,
+  "owner_ux_confirmed": false,
+  "packet_kind": "two_lane_result_matrix",
+  "route_status": "missing",
+  "route_trace_bound": false,
+  "route_trace_confirmed": false,
+  "status": "blocked",
+  "ux_status": "blocked_no_window"
+}

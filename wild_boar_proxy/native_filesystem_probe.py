@@ -457,6 +457,46 @@ def build_owner_action_boundary_packet(
     }
 
 
+def build_owner_ux_action_boundary_packet(
+    *,
+    owner_typed_specified_prompt: bool,
+    runtime_authority_edited: bool = False,
+    provider_or_model_authority_edited: bool = False,
+    hidden_cleanup_performed: bool = False,
+) -> dict[str, Any]:
+    violation = (
+        runtime_authority_edited
+        or provider_or_model_authority_edited
+        or hidden_cleanup_performed
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_ux_action_boundary",
+        "status": "blocked" if violation else "ok",
+        "reason_class": "OWNER_ACTION_BOUNDARY_VIOLATED" if violation else "",
+        "allowed_actions": [
+            "observe isolated Custom native window",
+            "type the specified nonce prompt into isolated Custom window",
+            "confirm visible response",
+            "press Cancel on Keychain prompt if it appears",
+            "confirm cleanup result",
+        ],
+        "forbidden_actions": [
+            "edit config",
+            "edit model/provider/route/account",
+            "move profile paths",
+            "patch app/runtime",
+            "perform hidden cleanup outside packet",
+        ],
+        "owner_typed_specified_prompt": owner_typed_specified_prompt,
+        "runtime_authority_edited": runtime_authority_edited,
+        "provider_or_model_authority_edited": provider_or_model_authority_edited,
+        "hidden_cleanup_performed": hidden_cleanup_performed,
+        "owner_prompt_action_allowed": True,
+        "owner_prompt_action_grants_route_claim": False,
+    }
+
+
 def classify_host_context(host_process_chain: list[dict[str, Any]]) -> dict[str, Any]:
     host_negative = classify_protected_codex_host_negative(host_process_chain)
     if not host_process_chain:
@@ -2733,4 +2773,251 @@ def classify_external_detached_context_outcome(
         "filesystem_retry_attempted": False,
         "protected_surface_mutation_performed": False,
         "forbidden_claims_present": False,
+    }
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def build_machine_ui_waiver_packet(*, owner_waives_machine_ui: bool) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "machine_ui_waiver",
+        "status": "ok" if owner_waives_machine_ui else "blocked",
+        "owner_waives_machine_ui": owner_waives_machine_ui,
+        "machine_ui_input_field_proven": False,
+        "machine_observed_response_text_proven": False,
+        "manual_ui_confirmation_allowed": owner_waives_machine_ui,
+        "manual_ui_confirmation_replaces_route_trace": False,
+        "route_trace_replaces_owner_ux_confirmation": False,
+    }
+
+
+def build_owner_nonce_prompt_packet(*, nonce: str, prompt_template: str | None = None) -> dict[str, Any]:
+    prompt = prompt_template or f"WBP owner UX route check {nonce}. Reply with OK and the nonce only."
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_nonce_prompt",
+        "status": "ok" if nonce else "blocked",
+        "nonce": nonce,
+        "nonce_recorded": bool(nonce),
+        "prompt_sha256": _sha256_text(prompt) if prompt else "",
+        "prompt_hash_recorded": bool(prompt),
+        "raw_prompt_recorded": False,
+        "prompt_template_shape": "WBP owner UX route check <nonce>. Reply with OK and the nonce only.",
+    }
+
+
+def build_owner_manual_ux_check_packet(
+    *,
+    owner_saw_window: bool,
+    owner_typed_prompt: bool,
+    owner_saw_response: bool,
+    machine_ui_waiver_packet: dict[str, Any],
+) -> dict[str, Any]:
+    if owner_saw_window and owner_typed_prompt and owner_saw_response:
+        ux_status = "confirmed"
+        status = "ok"
+    elif not owner_saw_window:
+        ux_status = "blocked_no_window"
+        status = "blocked"
+    elif not owner_typed_prompt:
+        ux_status = "blocked_no_prompt_entry"
+        status = "blocked"
+    else:
+        ux_status = "blocked_no_visible_response"
+        status = "blocked"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_manual_ux_check",
+        "status": status,
+        "ux_status": ux_status,
+        "owner_saw_window": owner_saw_window,
+        "owner_typed_prompt": owner_typed_prompt,
+        "owner_saw_response": owner_saw_response,
+        "machine_ui_waived": machine_ui_waiver_packet.get("owner_waives_machine_ui") is True,
+        "machine_ui_input_field_proven": False,
+        "machine_observed_response_text_proven": False,
+        "route_claimed": False,
+    }
+
+
+def build_wbp_trace_observation_packet(*, trace_packet: dict[str, Any] | None) -> dict[str, Any]:
+    trace = trace_packet or {}
+    request_observed = trace.get("request_observed") is True
+    response_observed = trace.get("response_observed") is True
+    forwarded_to_wbp = trace.get("forwarded_to_wbp") is True
+    path_ok = trace.get("path") == "/v1/responses"
+    upstream_status = trace.get("upstream_status")
+    try:
+        upstream_status_code = int(upstream_status)
+    except (TypeError, ValueError):
+        upstream_status_code = None
+    upstream_status_ok = (
+        upstream_status_code is not None and 200 <= upstream_status_code < 300
+    )
+    response_body_sha256 = str(trace.get("response_body_sha256", ""))
+    response_hash_recorded = bool(response_body_sha256)
+    raw_secret_or_prompt = (
+        trace.get("secret_value_recorded") is True
+        or trace.get("auth_header_recorded") is True
+        or trace.get("prompt_body_recorded") is True
+    )
+    transport_observed = request_observed and response_observed and forwarded_to_wbp and path_ok
+    if raw_secret_or_prompt:
+        route_status = "blocked_secret_risk"
+        status = "blocked"
+    elif transport_observed and upstream_status_code is not None and not upstream_status_ok:
+        route_status = "blocked_model_failure"
+        status = "blocked"
+    elif transport_observed and upstream_status_ok and response_hash_recorded:
+        route_status = "confirmed"
+        status = "ok"
+    elif request_observed or response_observed:
+        route_status = "blocked_trace_mismatch"
+        status = "blocked"
+    else:
+        route_status = "missing"
+        status = "blocked"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "wbp_trace_observation",
+        "status": status,
+        "route_status": route_status,
+        "request_observed": request_observed,
+        "response_observed": response_observed,
+        "forwarded_to_wbp": forwarded_to_wbp,
+        "trace_path": trace.get("path", ""),
+        "upstream_status": upstream_status,
+        "upstream_status_ok": upstream_status_ok,
+        "request_body_sha256": trace.get("request_body_sha256", ""),
+        "response_body_sha256": response_body_sha256,
+        "response_hash_recorded": response_hash_recorded,
+        "model_id": trace.get("model_id", ""),
+        "raw_prompt_recorded": trace.get("prompt_body_recorded") is True,
+        "auth_header_recorded": trace.get("auth_header_recorded") is True,
+        "raw_auth_recorded": trace.get("secret_value_recorded") is True,
+    }
+
+
+def build_native_route_trace_binding_packet(
+    *,
+    owner_nonce_prompt_packet: dict[str, Any],
+    wbp_trace_observation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    route_confirmed = wbp_trace_observation_packet.get("route_status") == "confirmed"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_route_trace_binding",
+        "status": "ok" if route_confirmed else "blocked",
+        "route_status": wbp_trace_observation_packet.get("route_status", "missing"),
+        "route_trace_bound": route_confirmed,
+        "nonce_recorded": owner_nonce_prompt_packet.get("nonce_recorded") is True,
+        "prompt_hash_recorded": owner_nonce_prompt_packet.get("prompt_hash_recorded") is True,
+        "raw_prompt_recorded": False,
+        "trace_request_body_sha256": wbp_trace_observation_packet.get("request_body_sha256", ""),
+        "trace_response_body_sha256": wbp_trace_observation_packet.get("response_body_sha256", ""),
+        "trace_path": wbp_trace_observation_packet.get("trace_path", ""),
+        "owner_ux_claimed": False,
+    }
+
+
+def build_two_lane_result_matrix(
+    *,
+    owner_manual_ux_check_packet: dict[str, Any],
+    route_trace_binding_packet: dict[str, Any],
+    wbp_trace_observation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    ux_status = str(owner_manual_ux_check_packet.get("ux_status") or "blocked_no_visible_response")
+    route_status = str(wbp_trace_observation_packet.get("route_status") or "missing")
+    route_trace_bound = route_trace_binding_packet.get("route_trace_bound") is True
+    if route_status == "blocked_secret_risk":
+        final_status = "OWNER_UX_ROUTE_BLOCKED_SECRET_RISK"
+        status = "blocked"
+    elif route_status == "blocked_model_failure":
+        final_status = "OWNER_UX_ROUTE_BLOCKED_MODEL_FAILURE"
+        status = "blocked"
+    elif ux_status == "confirmed" and route_status == "confirmed" and route_trace_bound:
+        final_status = "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION"
+        status = "ok"
+    elif ux_status == "confirmed":
+        final_status = "OWNER_UX_CONFIRMED_ROUTE_UNPROVEN"
+        status = "blocked"
+    elif route_status == "confirmed" and route_trace_bound:
+        final_status = "ROUTE_CONFIRMED_OWNER_UX_UNCONFIRMED"
+        status = "blocked"
+    else:
+        final_status = "OWNER_UX_AND_ROUTE_BLOCKED"
+        status = "blocked"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "two_lane_result_matrix",
+        "status": status,
+        "ux_status": ux_status,
+        "route_status": route_status,
+        "final_status": final_status,
+        "owner_ux_confirmed": ux_status == "confirmed",
+        "route_trace_bound": route_trace_bound,
+        "route_trace_confirmed": route_status == "confirmed" and route_trace_bound,
+        "machine_ui_proof_claimed": False,
+        "filesystem_safety_claimed": False,
+        "direct_egress_claimed": False,
+        "final_e2e_claimed": False,
+    }
+
+
+def build_native_owner_ux_false_green_audit(
+    *,
+    machine_ui_waiver_packet: dict[str, Any],
+    owner_manual_ux_check_packet: dict[str, Any],
+    wbp_trace_observation_packet: dict[str, Any],
+    two_lane_result_matrix: dict[str, Any],
+) -> dict[str, Any]:
+    forbidden_claims_present = (
+        two_lane_result_matrix.get("machine_ui_proof_claimed") is True
+        or two_lane_result_matrix.get("filesystem_safety_claimed") is True
+        or two_lane_result_matrix.get("direct_egress_claimed") is True
+        or two_lane_result_matrix.get("final_e2e_claimed") is True
+        or owner_manual_ux_check_packet.get("route_claimed") is True
+        or wbp_trace_observation_packet.get("raw_prompt_recorded") is True
+        or wbp_trace_observation_packet.get("auth_header_recorded") is True
+        or wbp_trace_observation_packet.get("raw_auth_recorded") is True
+    )
+    checks = [
+        {
+            "name": "manual_ui_waiver_does_not_replace_route_trace",
+            "passed": machine_ui_waiver_packet.get("manual_ui_confirmation_replaces_route_trace") is False,
+        },
+        {
+            "name": "route_trace_does_not_replace_owner_ux",
+            "passed": machine_ui_waiver_packet.get("route_trace_replaces_owner_ux_confirmation") is False,
+        },
+        {
+            "name": "two_lane_matrix_present",
+            "passed": two_lane_result_matrix.get("packet_kind") == "two_lane_result_matrix",
+        },
+        {
+            "name": "no_raw_prompt_or_auth",
+            "passed": not (
+                wbp_trace_observation_packet.get("raw_prompt_recorded")
+                or wbp_trace_observation_packet.get("auth_header_recorded")
+                or wbp_trace_observation_packet.get("raw_auth_recorded")
+            ),
+        },
+        {
+            "name": "no_filesystem_or_egress_or_final_claim",
+            "passed": not (
+                two_lane_result_matrix.get("filesystem_safety_claimed")
+                or two_lane_result_matrix.get("direct_egress_claimed")
+                or two_lane_result_matrix.get("final_e2e_claimed")
+            ),
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "native_owner_ux_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) and not forbidden_claims_present else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": forbidden_claims_present,
     }

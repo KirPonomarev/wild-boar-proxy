@@ -45,6 +45,12 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_owner_execution_false_green_audit,
     build_owner_execution_layer_separation_packet,
     build_owner_execution_observation_packet,
+    build_machine_ui_waiver_packet,
+    build_native_owner_ux_false_green_audit,
+    build_native_route_trace_binding_packet,
+    build_owner_manual_ux_check_packet,
+    build_owner_nonce_prompt_packet,
+    build_owner_ux_action_boundary_packet,
     build_owner_action_boundary_packet,
     build_owner_external_execution_result_packet,
     build_owner_execution_boundary_packet,
@@ -52,6 +58,8 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_protected_surface_read_classification_packet,
     build_quiescent_retry_blocker_packet,
     build_quiescent_retry_launch_admission_packet,
+    build_two_lane_result_matrix,
+    build_wbp_trace_observation_packet,
     classify_native_safety_retry_import,
     classify_environment_blocked_result,
     classify_external_detached_context_outcome,
@@ -629,7 +637,10 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 capture_output=True,
             )
             (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            (temp_repo / "audit_results").mkdir()
+            (temp_repo / "audit_results" / ".gitkeep").write_text("", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(["git", "add", "audit_results/.gitkeep"], cwd=temp_repo, check=True)
             subprocess.run(
                 ["git", "commit", "-m", "fixture"],
                 cwd=temp_repo,
@@ -870,7 +881,10 @@ class NativeFilesystemProbeTests(unittest.TestCase):
                 capture_output=True,
             )
             (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            (temp_repo / "audit_results").mkdir()
+            (temp_repo / "audit_results" / ".gitkeep").write_text("", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(["git", "add", "audit_results/.gitkeep"], cwd=temp_repo, check=True)
             subprocess.run(
                 ["git", "commit", "-m", "fixture"],
                 cwd=temp_repo,
@@ -1359,6 +1373,344 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             self.assertEqual(packet["reason_class"], "EVIDENCE_DIR_OUTSIDE_REPO")
             self.assertFalse(packet["traceback_emitted"])
             self.assertNotIn("Traceback", result.stderr)
+
+    def test_owner_ux_two_lane_success_requires_owner_and_trace(self) -> None:
+        waiver = build_machine_ui_waiver_packet(owner_waives_machine_ui=True)
+        nonce = build_owner_nonce_prompt_packet(nonce="nonce-123")
+        ux = build_owner_manual_ux_check_packet(
+            owner_saw_window=True,
+            owner_typed_prompt=True,
+            owner_saw_response=True,
+            machine_ui_waiver_packet=waiver,
+        )
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 200,
+                "request_body_sha256": "request-hash",
+                "response_body_sha256": "response-hash",
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+        route = build_native_route_trace_binding_packet(
+            owner_nonce_prompt_packet=nonce,
+            wbp_trace_observation_packet=trace,
+        )
+        matrix = build_two_lane_result_matrix(
+            owner_manual_ux_check_packet=ux,
+            route_trace_binding_packet=route,
+            wbp_trace_observation_packet=trace,
+        )
+
+        self.assertEqual(ux["ux_status"], "confirmed")
+        self.assertEqual(trace["route_status"], "confirmed")
+        self.assertTrue(route["route_trace_bound"])
+        self.assertEqual(
+            matrix["final_status"],
+            "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+        )
+        self.assertFalse(matrix["machine_ui_proof_claimed"])
+        self.assertFalse(matrix["filesystem_safety_claimed"])
+
+    def test_owner_ux_two_lane_owner_confirmation_does_not_replace_trace(self) -> None:
+        waiver = build_machine_ui_waiver_packet(owner_waives_machine_ui=True)
+        nonce = build_owner_nonce_prompt_packet(nonce="nonce-123")
+        ux = build_owner_manual_ux_check_packet(
+            owner_saw_window=True,
+            owner_typed_prompt=True,
+            owner_saw_response=True,
+            machine_ui_waiver_packet=waiver,
+        )
+        trace = build_wbp_trace_observation_packet(trace_packet=None)
+        route = build_native_route_trace_binding_packet(
+            owner_nonce_prompt_packet=nonce,
+            wbp_trace_observation_packet=trace,
+        )
+        matrix = build_two_lane_result_matrix(
+            owner_manual_ux_check_packet=ux,
+            route_trace_binding_packet=route,
+            wbp_trace_observation_packet=trace,
+        )
+
+        self.assertEqual(trace["route_status"], "missing")
+        self.assertFalse(route["route_trace_bound"])
+        self.assertEqual(matrix["final_status"], "OWNER_UX_CONFIRMED_ROUTE_UNPROVEN")
+
+    def test_owner_ux_two_lane_trace_does_not_replace_owner_ux(self) -> None:
+        waiver = build_machine_ui_waiver_packet(owner_waives_machine_ui=True)
+        nonce = build_owner_nonce_prompt_packet(nonce="nonce-123")
+        ux = build_owner_manual_ux_check_packet(
+            owner_saw_window=True,
+            owner_typed_prompt=True,
+            owner_saw_response=False,
+            machine_ui_waiver_packet=waiver,
+        )
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 200,
+                "response_body_sha256": "response-hash",
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+        route = build_native_route_trace_binding_packet(
+            owner_nonce_prompt_packet=nonce,
+            wbp_trace_observation_packet=trace,
+        )
+        matrix = build_two_lane_result_matrix(
+            owner_manual_ux_check_packet=ux,
+            route_trace_binding_packet=route,
+            wbp_trace_observation_packet=trace,
+        )
+
+        self.assertEqual(ux["ux_status"], "blocked_no_visible_response")
+        self.assertEqual(trace["route_status"], "confirmed")
+        self.assertEqual(matrix["final_status"], "ROUTE_CONFIRMED_OWNER_UX_UNCONFIRMED")
+
+    def test_owner_ux_false_green_blocks_raw_prompt_or_auth(self) -> None:
+        waiver = build_machine_ui_waiver_packet(owner_waives_machine_ui=True)
+        ux = build_owner_manual_ux_check_packet(
+            owner_saw_window=True,
+            owner_typed_prompt=True,
+            owner_saw_response=True,
+            machine_ui_waiver_packet=waiver,
+        )
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "prompt_body_recorded": True,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+        matrix = build_two_lane_result_matrix(
+            owner_manual_ux_check_packet=ux,
+            route_trace_binding_packet={"route_trace_bound": False},
+            wbp_trace_observation_packet=trace,
+        )
+        audit = build_native_owner_ux_false_green_audit(
+            machine_ui_waiver_packet=waiver,
+            owner_manual_ux_check_packet=ux,
+            wbp_trace_observation_packet=trace,
+            two_lane_result_matrix=matrix,
+        )
+
+        self.assertEqual(trace["route_status"], "blocked_secret_risk")
+        self.assertEqual(audit["status"], "blocked")
+        self.assertTrue(audit["forbidden_claims_present"])
+
+    def test_owner_ux_action_boundary_allows_only_specified_prompt(self) -> None:
+        packet = build_owner_ux_action_boundary_packet(
+            owner_typed_specified_prompt=True,
+            runtime_authority_edited=False,
+            provider_or_model_authority_edited=False,
+            hidden_cleanup_performed=False,
+        )
+        violated = build_owner_ux_action_boundary_packet(
+            owner_typed_specified_prompt=True,
+            provider_or_model_authority_edited=True,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertTrue(packet["owner_prompt_action_allowed"])
+        self.assertFalse(packet["owner_prompt_action_grants_route_claim"])
+        self.assertEqual(violated["status"], "blocked")
+
+    def test_owner_ux_route_blocks_model_failure_without_secret_leak(self) -> None:
+        waiver = build_machine_ui_waiver_packet(owner_waives_machine_ui=True)
+        nonce = build_owner_nonce_prompt_packet(nonce="nonce-123")
+        ux = build_owner_manual_ux_check_packet(
+            owner_saw_window=True,
+            owner_typed_prompt=True,
+            owner_saw_response=True,
+            machine_ui_waiver_packet=waiver,
+        )
+        trace = build_wbp_trace_observation_packet(
+            trace_packet={
+                "request_observed": True,
+                "response_observed": True,
+                "forwarded_to_wbp": True,
+                "path": "/v1/responses",
+                "upstream_status": 503,
+                "request_body_sha256": "request-hash",
+                "response_body_sha256": "response-hash",
+                "prompt_body_recorded": False,
+                "auth_header_recorded": False,
+                "secret_value_recorded": False,
+            }
+        )
+        route = build_native_route_trace_binding_packet(
+            owner_nonce_prompt_packet=nonce,
+            wbp_trace_observation_packet=trace,
+        )
+        matrix = build_two_lane_result_matrix(
+            owner_manual_ux_check_packet=ux,
+            route_trace_binding_packet=route,
+            wbp_trace_observation_packet=trace,
+        )
+
+        self.assertEqual(trace["route_status"], "blocked_model_failure")
+        self.assertEqual(matrix["final_status"], "OWNER_UX_ROUTE_BLOCKED_MODEL_FAILURE")
+        self.assertFalse(matrix["route_trace_confirmed"])
+
+    def test_owner_ux_route_confirmation_probe_emits_two_lane_success(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_ux_route_confirmation_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            (temp_repo / "audit_results").mkdir()
+            (temp_repo / "audit_results" / ".gitkeep").write_text("", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(["git", "add", "audit_results/.gitkeep"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            evidence_dir = temp_repo / "audit_results" / "owner_ux_route"
+            evidence_dir.mkdir(parents=True)
+            trace_path = evidence_dir / "source_wbp_trace_packet.json"
+            trace_path.write_text(
+                json.dumps(
+                    {
+                        "request_observed": True,
+                        "response_observed": True,
+                        "forwarded_to_wbp": True,
+                        "path": "/v1/responses",
+                        "upstream_status": 200,
+                        "request_body_sha256": "request-hash",
+                        "response_body_sha256": "response-hash",
+                        "prompt_body_recorded": False,
+                        "auth_header_recorded": False,
+                        "secret_value_recorded": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--nonce",
+                    "nonce-123",
+                    "--trace-packet",
+                    str(trace_path),
+                    "--owner-waives-machine-ui",
+                    "--owner-saw-window",
+                    "--owner-typed-prompt",
+                    "--owner-saw-response",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads((evidence_dir / "owner_ux_route_summary_packet.json").read_text())
+            matrix = json.loads((evidence_dir / "two_lane_result_matrix.json").read_text())
+            allowed = json.loads(
+                (evidence_dir / "native_owner_ux_allowed_claims_matrix.json").read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "CODEX_CUSTOM_NATIVE_APP_VIA_WBP_USABLE_WITH_OWNER_CONFIRMATION",
+            )
+            self.assertTrue(matrix["owner_ux_confirmed"])
+            self.assertTrue(matrix["route_trace_confirmed"])
+            self.assertFalse(allowed["machine_ui_proof_claim_allowed"])
+            self.assertFalse(allowed["direct_egress_claim_allowed"])
+
+    def test_owner_ux_route_confirmation_probe_blocks_without_trace(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_owner_ux_route_confirmation_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            (temp_repo / "audit_results").mkdir()
+            (temp_repo / "audit_results" / ".gitkeep").write_text("", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(["git", "add", "audit_results/.gitkeep"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            evidence_dir = temp_repo / "audit_results" / "owner_ux_route"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--nonce",
+                    "nonce-123",
+                    "--owner-waives-machine-ui",
+                    "--owner-saw-window",
+                    "--owner-typed-prompt",
+                    "--owner-saw-response",
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            summary = json.loads((evidence_dir / "owner_ux_route_summary_packet.json").read_text())
+            self.assertEqual(summary["final_status"], "OWNER_UX_CONFIRMED_ROUTE_UNPROVEN")
+            self.assertTrue(summary["owner_ux_confirmed"])
+            self.assertFalse(summary["route_trace_confirmed"])
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:
         packet = classify_current_codex_delta(
