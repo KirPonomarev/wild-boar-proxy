@@ -1,0 +1,26 @@
+{
+  "branch": "codex/external-agent-lab-isolated",
+  "captured_at_utc": "2026-05-26T05:45:28.042886Z",
+  "contour": "NATIVE_CUSTOM_ROUTING_SMOKE_AFTER_AUTH_FIX_R1",
+  "git_status_short_branch": [
+    "## codex/external-agent-lab-isolated...origin/codex/external-agent-lab-isolated",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json",
+    " M audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json",
+    "?? audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+    "?? audit_results/wbp_host_quartz_enabled_retry_2026-05-25/"
+  ],
+  "head": "5977c9a70e7e265b7ae387c103e1062bfad0071f",
+  "preexisting_dirty_evidence_present": true,
+  "preexisting_dirty_evidence_used_as_current_proof": false,
+  "source_code_changed_by_this_contour": false,
+  "upstream_ahead_behind": "0\t0"
+}

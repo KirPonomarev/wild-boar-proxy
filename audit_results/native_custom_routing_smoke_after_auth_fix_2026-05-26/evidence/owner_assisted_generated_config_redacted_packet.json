@@ -1,0 +1,10 @@
+{
+  "captured_at_utc": "2026-05-26T05:49:35.684683Z",
+  "config_path": "/tmp/wbp-owner-assisted-native-routing-slgm6j6y/profile/config.toml",
+  "endpoint": "http://127.0.0.1:54849/v1",
+  "experimental_bearer_token_present": true,
+  "model": "gpt-5.4-mini",
+  "profile_dir": "/tmp/wbp-owner-assisted-native-routing-slgm6j6y/profile",
+  "redacted_config": "model = \"gpt-5.4-mini\"\nmodel_provider = \"wbp\"\napproval_policy = \"never\"\nsandbox_mode = \"read-only\"\n\n[model_providers.wbp]\nname = \"Wild Boar Proxy\"\nbase_url = \"http://127.0.0.1:54849/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = false\nexperimental_bearer_token = \"<redacted>\"\n\n",
+  "secret_value_recorded": false
+}

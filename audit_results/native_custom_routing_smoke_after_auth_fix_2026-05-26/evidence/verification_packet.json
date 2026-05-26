@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "contour": "NATIVE_CUSTOM_ROUTING_SMOKE_AFTER_AUTH_FIX_R1",
+  "checks": [
+    {
+      "command": "JSON parse all packets under audit_results/native_custom_routing_smoke_after_auth_fix_2026-05-26",
+      "status": "passed"
+    },
+    {
+      "command": "raw secret scan over new contour evidence",
+      "status": "passed",
+      "finding_count": 0
+    },
+    {
+      "command": "python3 -m unittest -q tests.test_native_launch_contract tests.test_native_launch_dispatch tests.test_operator_surface tests.test_closeout_resilience",
+      "status": "passed",
+      "tests_run": 75
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "live_codex_launch_attempted": true,
+  "owner_assisted_input_used": true,
+  "request_forwarded_to_wbp": true,
+  "trace_upstream_status": 503,
+  "prompt_response_success": false,
+  "full_native_or_provider_pass_claimed": false,
+  "secret_value_recorded": false
+}

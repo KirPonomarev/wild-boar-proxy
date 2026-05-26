@@ -1,0 +1,11 @@
+{
+  "attempted": true,
+  "captured_at_utc": "2026-05-26T05:45:38.728083Z",
+  "direct_api_openai_egress_absence_proven": false,
+  "direct_api_openai_egress_detected": false,
+  "full_provider_network_pass": false,
+  "method": "local process/socket inspection not implemented for GUI process in this contour",
+  "narrow_routing_smoke_can_pass_if_trace_present": true,
+  "secret_value_recorded": false,
+  "status": "blocked_or_unproven_for_direct_egress"
+}

@@ -1,0 +1,14 @@
+{
+  "captured_at_utc": "2026-05-26T05:45:33.720112Z",
+  "codex_home": "/tmp/wbp-native-routing-smoke-iqfnzqgv/profile",
+  "custom_user_data_dir": "/tmp/wbp-native-routing-smoke-iqfnzqgv/profile/electron-user-data",
+  "identity_chain_complete_for_routing": false,
+  "input_capable_ui_observed": false,
+  "native_ux_pass_claimed": false,
+  "process_id": 82597,
+  "profile_dir": "/tmp/wbp-native-routing-smoke-iqfnzqgv/profile",
+  "secret_value_recorded": false,
+  "trace_observer_endpoint": "http://127.0.0.1:52688/v1",
+  "wbp_action_id": "native-custom-routing-smoke-after-auth-fix",
+  "window_observed": false
+}

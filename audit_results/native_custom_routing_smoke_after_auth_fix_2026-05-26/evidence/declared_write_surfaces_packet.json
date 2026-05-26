@@ -1,0 +1,19 @@
+{
+  "allowed_write_surfaces": [
+    "temporary isolated profile under /tmp",
+    "temporary isolated CODEX_HOME under /tmp",
+    "temporary isolated electron user-data-dir under /tmp",
+    "/Volumes/Work/wild-boar-proxy/audit_results/native_custom_routing_smoke_after_auth_fix_2026-05-26",
+    "normal WBP/CLIProxy request logs if produced by existing running service"
+  ],
+  "captured_at_utc": "2026-05-26T05:45:28.361156Z",
+  "forbidden_write_surfaces": [
+    "~/.codex",
+    "~/Library/Application Support/Codex",
+    "~/Library/Caches/com.openai.codex",
+    "~/Library/HTTPStorages/com.openai.codex",
+    "Keychain edits",
+    "auth.json copy or symlink from current Codex"
+  ],
+  "rollback_expectation": "terminate custom processes by custom user-data-dir and remove temporary profile tree only"
+}

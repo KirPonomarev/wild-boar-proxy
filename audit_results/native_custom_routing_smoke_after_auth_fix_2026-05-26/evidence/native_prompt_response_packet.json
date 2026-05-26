@@ -1,0 +1,15 @@
+{
+  "captured_at_utc": "2026-05-26T05:45:38.727751Z",
+  "honest_route_error": false,
+  "machine_error_code": "WBP_TRACE_MISSING_OR_NO_RESPONSE",
+  "prompt_marker": "",
+  "prompt_response_success": false,
+  "prompt_sent": false,
+  "request_reached_wbp": false,
+  "response_body_sha256": "",
+  "response_observed": false,
+  "response_text_recorded": false,
+  "secret_value_recorded": false,
+  "trace_path": "",
+  "trace_upstream_status": null
+}

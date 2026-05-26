@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:55:37Z",
+  "contour": "NATIVE_CUSTOM_ROUTING_SMOKE_AFTER_AUTH_FIX_R1",
+  "final_status": "blocked_with_route_trace_evidence",
+  "native_launch_attempt_count": 3,
+  "owner_assisted_attempt_count": 2,
+  "custom_process_observed": true,
+  "keychain_prompt_observed": true,
+  "owner_cancelled_keychain_prompt": true,
+  "request_forwarded_to_wbp": true,
+  "trace_path": "/v1/responses",
+  "trace_upstream_status": 503,
+  "prompt_response_success": false,
+  "direct_egress_absence_proven": false,
+  "protected_surface_safety_pass": false,
+  "raw_secret_findings": 0,
+  "independent_audit_status": "pass",
+  "closeout_state": "CLOSED",
+  "closure_recorded_at_utc": "2026-05-26T05:55:37Z"
+}
