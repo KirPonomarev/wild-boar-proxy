@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from wild_boar_proxy.native_filesystem_probe import (
+    build_provider_config,
     classify_external_detached_context_outcome,
     classify_protected_codex_host_negative,
     classify_fresh_context_acquisition,
@@ -24,6 +26,38 @@ from wild_boar_proxy.native_filesystem_probe import (
 
 
 class NativeFilesystemProbeTests(unittest.TestCase):
+    def test_provider_config_uses_auth_command_when_cli_proxy_key_is_absent(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
+            return_value="",
+        ):
+            config = build_provider_config(
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.4-mini",
+                auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
+            )
+
+        self.assertIn("[model_providers.wbp.auth]", config)
+        self.assertIn('command = "/repo/wbp_codex_auth_command.py"', config)
+        self.assertIn('wire_api = "responses"', config)
+        self.assertIn("requires_openai_auth = false", config)
+        self.assertNotIn("experimental_bearer_token", config)
+
+    def test_provider_config_bearer_branch_is_explicit_auth_surface(self) -> None:
+        with mock.patch(
+            "wild_boar_proxy.native_filesystem_probe._cli_proxy_api_key",
+            return_value="fixture-token",
+        ):
+            config = build_provider_config(
+                endpoint="http://127.0.0.1:8318/v1",
+                model="gpt-5.4-mini",
+                auth_command_path=Path("/repo/wbp_codex_auth_command.py"),
+            )
+
+        self.assertIn('experimental_bearer_token = "fixture-token"', config)
+        self.assertNotIn("[model_providers.wbp.auth]", config)
+        self.assertIn('wire_api = "responses"', config)
+
     def test_recursive_scan_and_diff_report_created_deleted_and_changed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

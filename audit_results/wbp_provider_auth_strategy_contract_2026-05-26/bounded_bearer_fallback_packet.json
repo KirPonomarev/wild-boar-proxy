@@ -1,0 +1,13 @@
+{
+  "captured_at_utc": "2026-05-26T09:27:12.371345Z",
+  "explicit_contract_present_in_packet": true,
+  "explicit_contract_required": true,
+  "native_launch_attempted": false,
+  "packet_kind": "bounded_bearer_fallback",
+  "preferred_strategy": false,
+  "raw_token_in_packet": false,
+  "raw_value_redacted": true,
+  "silent_fallback_allowed": false,
+  "status": "ok",
+  "temporary_fallback": true
+}
