@@ -8,7 +8,13 @@ import unittest
 from pathlib import Path
 
 from wild_boar_proxy.provider_auth_strategy import (
+    build_auth_command_output_format_packet,
+    build_auth_strategy_decision_matrix,
+    build_auth_strategy_false_green_audit,
+    build_current_codex_auth_independence_packet,
+    build_file_auth_fallback_deferred_packet,
     build_provider_auth_strategy_packet,
+    build_secret_source_confusion_guard_packet,
     classify_native_config_auth_surface,
     validate_provider_auth_strategy_packet,
 )
@@ -156,6 +162,111 @@ class ProviderAuthStrategyTests(unittest.TestCase):
         self.assertFalse(packet["claims"]["account_pool_validity_proven"])
         self.assertFalse(packet["claims"]["direct_egress_absence_proven"])
         self.assertFalse(packet["claims"]["final_e2e_proven"])
+
+    def test_auth_strategy_decision_matrix_classifies_all_lanes(self) -> None:
+        packet = build_provider_auth_strategy_packet(
+            auth_command_path=AUTH_COMMAND,
+            native_config_text=bearer_config(),
+            explicit_bearer_contract=True,
+        )
+        matrix = build_auth_strategy_decision_matrix(packet)
+
+        self.assertEqual(matrix["status"], "ok")
+        self.assertTrue(matrix["auth_command_supported"])
+        self.assertTrue(matrix["auth_command_available"])
+        self.assertTrue(matrix["auth_command_selected"])
+        self.assertTrue(matrix["bounded_bearer_available"])
+        self.assertFalse(matrix["bounded_bearer_selected"])
+        self.assertFalse(matrix["file_auth_selected"])
+        self.assertTrue(matrix["file_auth_deferred_to_separate_contour"])
+        self.assertFalse(matrix["current_codex_auth_json_used"])
+        self.assertFalse(matrix["browser_authority_used"])
+        self.assertFalse(matrix["silent_fallback_detected"])
+
+    def test_auth_command_output_format_classified(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        output = build_auth_command_output_format_packet(packet)
+
+        self.assertEqual(output["status"], "ok")
+        self.assertEqual(output["output_shape"], "plain_token_stdout")
+        self.assertTrue(output["plain_token_stdout"])
+        self.assertFalse(output["json_access_token_stdout"])
+        self.assertFalse(output["raw_upstream_secret"])
+        self.assertFalse(output["secret_value_emitted_in_packet"])
+
+    def test_file_auth_fallback_deferred_to_separate_contour(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        deferred = build_file_auth_fallback_deferred_packet(packet)
+
+        self.assertEqual(deferred["status"], "ok")
+        self.assertFalse(deferred["allowed_in_this_contour"])
+        self.assertTrue(deferred["requires_separate_contour"])
+        self.assertFalse(deferred["can_satisfy_proxy_auth_contract"])
+        self.assertFalse(deferred["file_auth_silently_replaced_proxy_auth"])
+        self.assertFalse(deferred["copy_current_auth_json_allowed"])
+
+    def test_current_codex_auth_json_not_runtime_dependency(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        independence = build_current_codex_auth_independence_packet(packet)
+
+        self.assertEqual(independence["status"], "ok")
+        self.assertFalse(independence["current_codex_auth_json_execution_dependency"])
+        self.assertFalse(independence["current_codex_auth_json_read_as_runtime_input"])
+        self.assertFalse(independence["current_codex_auth_json_copied"])
+        self.assertFalse(independence["current_codex_auth_json_symlinked"])
+
+    def test_secret_source_confusion_guard(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        guard = build_secret_source_confusion_guard_packet(packet)
+
+        self.assertEqual(guard["status"], "ok")
+        self.assertFalse(guard["local_wbp_bearer_equals_upstream_provider_token"])
+        self.assertFalse(guard["auth_command_output_equals_raw_upstream_secret"])
+        self.assertFalse(guard["file_auth_token_equals_proxy_auth_token"])
+        self.assertFalse(guard["current_codex_auth_json_allowed_execution_input"])
+        self.assertFalse(guard["browser_hidden_field_allowed_authority"])
+
+    def test_auth_strategy_false_green_blocks_silent_fallback_with_matrix(self) -> None:
+        packet = build_provider_auth_strategy_packet(
+            auth_command_path=AUTH_COMMAND,
+            native_config_text=bearer_config(),
+            explicit_bearer_contract=False,
+        )
+        matrix = build_auth_strategy_decision_matrix(packet)
+        file_auth = build_file_auth_fallback_deferred_packet(packet)
+        independence = build_current_codex_auth_independence_packet(packet)
+        guard = build_secret_source_confusion_guard_packet(packet)
+        audit = build_auth_strategy_false_green_audit(
+            provider_auth_strategy_packet=packet,
+            decision_matrix_packet=matrix,
+            file_auth_fallback_deferred_packet=file_auth,
+            current_codex_auth_independence_packet=independence,
+            secret_source_confusion_guard_packet=guard,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertTrue(matrix["silent_fallback_detected"])
+        self.assertEqual(audit["status"], "blocked")
+
+    def test_auth_strategy_false_green_allows_clean_auth_command_contract(self) -> None:
+        packet = build_provider_auth_strategy_packet(auth_command_path=AUTH_COMMAND)
+        matrix = build_auth_strategy_decision_matrix(packet)
+        file_auth = build_file_auth_fallback_deferred_packet(packet)
+        independence = build_current_codex_auth_independence_packet(packet)
+        guard = build_secret_source_confusion_guard_packet(packet)
+        audit = build_auth_strategy_false_green_audit(
+            provider_auth_strategy_packet=packet,
+            decision_matrix_packet=matrix,
+            file_auth_fallback_deferred_packet=file_auth,
+            current_codex_auth_independence_packet=independence,
+            secret_source_confusion_guard_packet=guard,
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["native_launch_claimed"])
+        self.assertFalse(audit["model_availability_claimed"])
+        self.assertFalse(audit["direct_egress_claimed"])
+        self.assertFalse(audit["file_auth_used"])
 
 
 if __name__ == "__main__":
