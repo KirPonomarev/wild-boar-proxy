@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "inventory_scope": "pre-existing dirty and untracked audit_results surfaces",
+  "items": [
+    {
+      "path": "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence",
+      "tracked_state": "tracked_modified_files",
+      "file_count": 12,
+      "total_size_bytes": 11132,
+      "mtime_ns": 1779722551571829392,
+      "changed_file_count": 11,
+      "diff_stat_summary": "11 files changed, 68 insertions, 113 deletions",
+      "sample_hashes": [
+        {
+          "relative_path": "current_codex_running_state_packet.json",
+          "size": 516,
+          "sha256": "03f0553631cea73d4d5c272604e23b2a8e934009c4f18a02aacc96bf7f00c0e4"
+        },
+        {
+          "relative_path": "quiescent_current_codex_precondition_packet.json",
+          "size": 797,
+          "sha256": "981a3e0d1a2d96c6080c2cae6bf24aaf54631e3819b4fae9824e907343e9a413"
+        },
+        {
+          "relative_path": "version_pinning_packet.json",
+          "size": 1101,
+          "sha256": "11f6312ccfbbab5c4c8168d6ba14c78e830316862f6aa683bd802f2e379dc2db"
+        }
+      ]
+    },
+    {
+      "path": "audit_results/wbp_host_accessibility_enabled_retry_2026-05-25",
+      "tracked_state": "untracked_dir",
+      "file_count": 11,
+      "total_size_bytes": 11610,
+      "mtime_ns": 1779764435487031996,
+      "summary_file": "evidence/native_window_proof_summary.json",
+      "summary_sha256": "d910cc533474987e8f1523c2a017a7cbb71be64778723980ad888c77f8f20fd4"
+    },
+    {
+      "path": "audit_results/wbp_host_quartz_enabled_retry_2026-05-25",
+      "tracked_state": "untracked_dir",
+      "file_count": 11,
+      "total_size_bytes": 11585,
+      "mtime_ns": 1779764566122186080,
+      "summary_file": "evidence/native_window_proof_summary.json",
+      "summary_sha256": "f8b567545d63c59af13624f4833f17f040e7601ff80ed149ec8e97217dfa953c"
+    }
+  ],
+  "secret_material_captured": false,
+  "current_contour_consumes_these_as_proof": false
+}

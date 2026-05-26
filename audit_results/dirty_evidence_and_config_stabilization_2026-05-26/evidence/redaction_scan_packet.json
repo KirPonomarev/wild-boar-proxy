@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "scan_patterns": [
+    "sk-[A-Za-z0-9]",
+    "Bearer [A-Za-z0-9]",
+    "access_token JSON values",
+    "refresh_token JSON values",
+    "email-like auth filenames"
+  ],
+  "scanned_paths": [
+    "audit_results/dirty_evidence_and_config_stabilization_2026-05-26",
+    "audit_results/cliproxy_account_session_recovery_audit_2026-05-26",
+    "audit_results/wbp_codex_custom_native_filesystem_proof_pass_2026-05-25",
+    "audit_results/wbp_codex_custom_native_routing_proof_pass_2026-05-25"
+  ],
+  "raw_secret_or_email_findings_in_new_contour": 0,
+  "raw_secret_or_email_findings_in_checked_existing_evidence": 0,
+  "scan_status": "passed",
+  "notes": "Search was targeted to key/token/email-like leak shapes and excluded narrative keyword-only matches."
+}

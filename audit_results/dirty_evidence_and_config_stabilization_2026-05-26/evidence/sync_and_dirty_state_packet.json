@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-05-26T05:27:11Z",
+  "contour": "DIRTY_EVIDENCE_AND_CONFIG_STABILIZATION_CONTOUR_R2",
+  "branch": "codex/external-agent-lab-isolated",
+  "head": "e75de8507b06583144577486127a475163f9e144",
+  "upstream_ahead": 0,
+  "upstream_behind": 0,
+  "source_code_dirty": false,
+  "tracked_dirty_count": 11,
+  "untracked_dir_count": 2,
+  "tracked_dirty_paths": [
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/ambient_env_context_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/current_codex_running_state_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_context_acquisition_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_admission_summary.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/fresh_detached_context_host_chain_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/independent_fresh_detached_context_audit.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/probe.stdout.log",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/protected_codex_host_negative_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/quiescent_current_codex_precondition_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/sync_gate_packet.json",
+    "audit_results/wbp_codex_native_external_owner_executor_packet_capture_pass_2026-05-25/evidence/version_pinning_packet.json"
+  ],
+  "untracked_dirs": [
+    "audit_results/wbp_host_accessibility_enabled_retry_2026-05-25/",
+    "audit_results/wbp_host_quartz_enabled_retry_2026-05-25/"
+  ],
+  "boundary": {
+    "dirty_state_admitted": true,
+    "dirty_state_consumed_as_current_proof": false,
+    "unrelated_changes_reverted": false,
+    "live_codex_launch_attempted": false,
+    "provider_repair_attempted": false,
+    "oauth_attempted": false
+  }
+}
