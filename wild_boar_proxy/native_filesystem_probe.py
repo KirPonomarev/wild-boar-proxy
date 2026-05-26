@@ -1221,6 +1221,342 @@ def build_native_safety_import_false_green_audit(
     }
 
 
+EXTERNAL_EXECUTION_MINIMAL_EXPECTED_PACKETS = [
+    "sync_gate_packet.json",
+    "historical_dirt_quarantine_packet.json",
+    "version_pinning_packet.json",
+    "host_context_packet.json",
+    "owner_action_boundary_packet.json",
+    "current_codex_running_state_initial.json",
+    "quiescent_current_codex_precondition_packet.json",
+    "pre_custom_idle_stability_packet.json",
+    "launch_admission_packet.json",
+    "allowed_claims_matrix.json",
+    "native_safety_false_green_audit.json",
+]
+
+
+def build_external_execution_scope_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_scope_boundary",
+        "status": "ok",
+        "current_contour_scope": "external_execution_evidence_only",
+        "safety_result_imported": False,
+        "filesystem_safety_classified": False,
+        "native_safety_pass_claimed": False,
+        "routing_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+    }
+
+
+def build_owner_execution_boundary_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "owner_external_execution_boundary",
+        "status": "ok",
+        "owner_allowed_actions": [
+            "open external Terminal",
+            "run exactly generated shell_command",
+            "report exit code if visible",
+            "leave evidence directory untouched",
+        ],
+        "owner_forbidden_actions": [
+            "edit command",
+            "change config/model/provider/account",
+            "move evidence/profile paths",
+            "patch app/runtime",
+            "manually cleanup hidden Codex files",
+            "type prompt into Custom window",
+            "declare pass from screenshot",
+        ],
+        "owner_command_edit_allowed": False,
+        "owner_runtime_authority_edits_allowed": False,
+        "owner_prompt_allowed": False,
+    }
+
+
+def build_external_execution_command_verification_packet(
+    *,
+    handoff_command_packet: dict[str, Any],
+    external_evidence_dir: Path,
+    repo_root: Path,
+) -> dict[str, Any]:
+    integrity = build_external_result_command_integrity_packet(
+        handoff_command_packet=handoff_command_packet,
+        external_evidence_dir=external_evidence_dir,
+        repo_root=repo_root,
+    )
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_command_verification",
+        "status": integrity["status"],
+        "failed_checks": integrity["failed_checks"],
+        "cwd": integrity["cwd"],
+        "target_tool": integrity["target_tool"],
+        "expected_external_evidence_dir": integrity["expected_external_evidence_dir"],
+        "actual_external_evidence_dir": integrity["actual_external_evidence_dir"],
+        "external_evidence_path_matches_handoff": integrity[
+            "external_evidence_path_matches_handoff"
+        ],
+        "no_shell_wildcard": integrity["no_shell_wildcard"],
+        "no_shell_variable_expansion": integrity["no_shell_variable_expansion"],
+        "command_executed_in_current_thread": False,
+        "shell_command": handoff_command_packet.get("shell_command", ""),
+    }
+
+
+def build_external_execution_observation_packet(
+    *,
+    shell_command: str,
+    reported_exit_code: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_observation",
+        "status": "ok",
+        "owner_execution_requested": True,
+        "reported_exit_code": reported_exit_code,
+        "shell_command_presented_to_owner": shell_command,
+        "current_thread_executed_command": False,
+        "native_launch_from_current_thread": False,
+        "owner_prompt_submitted": False,
+    }
+
+
+def build_external_evidence_presence_packet(
+    *,
+    external_evidence_dir: Path,
+    minimal_expected_packets: list[str] | None = None,
+) -> dict[str, Any]:
+    external_evidence_dir = external_evidence_dir.resolve()
+    expected = minimal_expected_packets or EXTERNAL_EXECUTION_MINIMAL_EXPECTED_PACKETS
+    file_list: list[str] = []
+    packet_statuses: dict[str, str] = {}
+    missing_packets: list[str] = []
+    invalid_json_packets: list[str] = []
+    alternative_block_present = False
+    if external_evidence_dir.exists():
+        file_list = sorted(
+            str(path.relative_to(external_evidence_dir))
+            for path in external_evidence_dir.rglob("*")
+            if path.is_file()
+        )
+        for packet in expected:
+            path = external_evidence_dir / packet
+            if not path.exists():
+                packet_statuses[packet] = "missing"
+                missing_packets.append(packet)
+                continue
+            try:
+                json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                packet_statuses[packet] = "invalid_json"
+                invalid_json_packets.append(packet)
+                continue
+            packet_statuses[packet] = "present"
+        alternative_block_present = (
+            (external_evidence_dir / "native_safety_blocker_packet.json").exists()
+            or (external_evidence_dir / "protected_surface_recursive_diff.json").exists()
+        )
+        if not alternative_block_present:
+            missing_packets.append(
+                "native_safety_blocker_packet.json OR protected surface packet set"
+            )
+    classification = "evidence_dir_present"
+    status = "ok"
+    reason_class = ""
+    if not external_evidence_dir.exists():
+        classification = "evidence_dir_missing"
+        status = "blocked"
+        reason_class = "EXTERNAL_EVIDENCE_DIR_MISSING"
+    elif invalid_json_packets:
+        classification = "evidence_present_but_invalid_json"
+        status = "blocked"
+        reason_class = "EXTERNAL_EVIDENCE_INVALID_JSON"
+    elif missing_packets:
+        classification = "evidence_present_but_required_packets_missing"
+        status = "blocked"
+        reason_class = "EXTERNAL_EVIDENCE_REQUIRED_PACKETS_MISSING"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_evidence_presence",
+        "status": status,
+        "reason_class": reason_class,
+        "classification": classification,
+        "external_evidence_dir": str(external_evidence_dir),
+        "external_evidence_dir_exists": external_evidence_dir.exists(),
+        "file_list": file_list,
+        "minimal_expected_packets": expected,
+        "packet_statuses": packet_statuses,
+        "missing_packets": missing_packets,
+        "invalid_json_packets": invalid_json_packets,
+        "json_parse_check_completed": external_evidence_dir.exists(),
+        "safety_result_imported": False,
+        "filesystem_safety_classified": False,
+    }
+
+
+def build_external_execution_secret_scan_packet(
+    *,
+    external_evidence_dir: Path,
+    matches: list[str],
+) -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_secret_scan",
+        "status": "ok" if not matches else "blocked",
+        "external_evidence_dir": str(external_evidence_dir.resolve()),
+        "secret_scan_performed": True,
+        "raw_secret_matches": matches,
+        "raw_secrets_found": bool(matches),
+    }
+
+
+def build_execution_layer_separation_packet() -> dict[str, Any]:
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_layer_separation",
+        "status": "ok",
+        "current_contour_scope": "evidence_production_only",
+        "incidental_only": [
+            "native process",
+            "native window",
+            "Keychain prompt",
+            "WBP trace",
+            "HTTP status",
+            "model id",
+            "network egress",
+            "owner screenshot",
+            "owner visual confirmation",
+        ],
+        "safety_result_imported": False,
+        "filesystem_safety_classified": False,
+        "native_safety_pass_claimed": False,
+        "route_claim_allowed": False,
+        "ux_claim_allowed": False,
+        "egress_claim_allowed": False,
+        "auth_strategy_reproof_allowed": False,
+        "model_availability_reproof_allowed": False,
+    }
+
+
+def build_external_execution_result_packet(
+    *,
+    command_verification_packet: dict[str, Any],
+    evidence_presence_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+) -> dict[str, Any]:
+    if command_verification_packet.get("status") != "ok":
+        final_status = "EXTERNAL_NATIVE_SAFETY_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif secret_scan_packet.get("status") != "ok":
+        final_status = "EXTERNAL_NATIVE_SAFETY_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    elif evidence_presence_packet.get("classification") == "evidence_dir_missing":
+        final_status = "EXTERNAL_NATIVE_SAFETY_EXECUTION_NO_EVIDENCE_PRODUCED"
+    elif evidence_presence_packet.get("status") == "ok":
+        final_status = "EXTERNAL_NATIVE_SAFETY_EXECUTION_EVIDENCE_PRODUCED"
+    else:
+        final_status = "EXTERNAL_NATIVE_SAFETY_EXECUTION_BLOCKED_WITH_PACKET_TRUTH"
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_result",
+        "status": "ok"
+        if final_status == "EXTERNAL_NATIVE_SAFETY_EXECUTION_EVIDENCE_PRODUCED"
+        else "blocked",
+        "final_status": final_status,
+        "external_evidence_dir": evidence_presence_packet.get("external_evidence_dir", ""),
+        "external_evidence_dir_exists": evidence_presence_packet.get(
+            "external_evidence_dir_exists", False
+        ),
+        "safety_result_imported": False,
+        "filesystem_safety_classified": False,
+        "native_safety_pass_claimed": False,
+        "routing_claimed": False,
+        "ux_claimed": False,
+        "egress_claimed": False,
+        "auth_strategy_reproved": False,
+        "model_availability_reproved": False,
+    }
+
+
+def build_external_execution_false_green_audit(
+    *,
+    scope_boundary_packet: dict[str, Any],
+    command_verification_packet: dict[str, Any],
+    owner_boundary_packet: dict[str, Any],
+    observation_packet: dict[str, Any],
+    evidence_presence_packet: dict[str, Any],
+    secret_scan_packet: dict[str, Any],
+    result_packet: dict[str, Any],
+    layer_separation_packet: dict[str, Any],
+) -> dict[str, Any]:
+    checks = [
+        {
+            "name": "current_thread_did_not_execute_external_command",
+            "passed": observation_packet.get("current_thread_executed_command") is False,
+        },
+        {
+            "name": "current_thread_did_not_launch_native_app",
+            "passed": observation_packet.get("native_launch_from_current_thread") is False,
+        },
+        {
+            "name": "command_integrity_verified_or_blocked",
+            "passed": command_verification_packet.get("status") in {"ok", "blocked"},
+        },
+        {
+            "name": "owner_boundary_recorded",
+            "passed": owner_boundary_packet.get("owner_command_edit_allowed") is False,
+        },
+        {
+            "name": "evidence_presence_classified",
+            "passed": evidence_presence_packet.get("classification")
+            in {
+                "evidence_dir_present",
+                "evidence_dir_missing",
+                "evidence_present_but_invalid_json",
+                "evidence_present_but_required_packets_missing",
+            },
+        },
+        {
+            "name": "secret_scan_recorded",
+            "passed": secret_scan_packet.get("secret_scan_performed") is True,
+        },
+        {
+            "name": "safety_not_imported_or_classified",
+            "passed": scope_boundary_packet.get("safety_result_imported") is False
+            and scope_boundary_packet.get("filesystem_safety_classified") is False
+            and result_packet.get("native_safety_pass_claimed") is False,
+        },
+        {
+            "name": "route_ux_egress_auth_model_not_claimed",
+            "passed": result_packet.get("routing_claimed") is False
+            and result_packet.get("ux_claimed") is False
+            and result_packet.get("egress_claimed") is False
+            and result_packet.get("auth_strategy_reproved") is False
+            and result_packet.get("model_availability_reproved") is False,
+        },
+        {
+            "name": "blocked_or_no_evidence_not_counted_as_safety_pass",
+            "passed": result_packet.get("final_status")
+            != "NATIVE_CUSTOM_APP_SAFE_TO_CONTINUE_WITH_LIMITS",
+        },
+        {
+            "name": "layer_separation_respected",
+            "passed": layer_separation_packet.get("status") == "ok",
+        },
+    ]
+    return {
+        "captured_at_utc": utc_now(),
+        "packet_kind": "external_execution_false_green_audit",
+        "status": "ok" if all(check["passed"] for check in checks) else "blocked",
+        "checks": checks,
+        "forbidden_claims_present": False,
+    }
+
+
 def classify_environment_blocked_result(
     *,
     item: str,

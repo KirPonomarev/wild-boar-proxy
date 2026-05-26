@@ -1,0 +1,25 @@
+{
+  "auth_strategy_reproof_allowed": false,
+  "captured_at_utc": "2026-05-26T10:46:37.114388Z",
+  "current_contour_scope": "evidence_production_only",
+  "egress_claim_allowed": false,
+  "filesystem_safety_classified": false,
+  "incidental_only": [
+    "native process",
+    "native window",
+    "Keychain prompt",
+    "WBP trace",
+    "HTTP status",
+    "model id",
+    "network egress",
+    "owner screenshot",
+    "owner visual confirmation"
+  ],
+  "model_availability_reproof_allowed": false,
+  "native_safety_pass_claimed": false,
+  "packet_kind": "external_execution_layer_separation",
+  "route_claim_allowed": false,
+  "safety_result_imported": false,
+  "status": "ok",
+  "ux_claim_allowed": false
+}

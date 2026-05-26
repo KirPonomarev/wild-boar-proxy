@@ -20,6 +20,13 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_external_detached_handoff_false_green_audit,
     build_external_detached_import_contract_packet,
     build_external_detached_operator_boundary_packet,
+    build_external_evidence_presence_packet,
+    build_external_execution_command_verification_packet,
+    build_external_execution_false_green_audit,
+    build_external_execution_result_packet,
+    build_external_execution_scope_boundary_packet,
+    build_external_execution_secret_scan_packet,
+    build_external_execution_observation_packet,
     build_external_result_command_integrity_packet,
     build_external_result_execution_ownership_packet,
     build_external_result_import_packet,
@@ -31,6 +38,7 @@ from wild_boar_proxy.native_filesystem_probe import (
     build_native_safety_import_false_green_audit,
     build_no_launch_from_current_thread_packet,
     build_owner_action_boundary_packet,
+    build_owner_execution_boundary_packet,
     build_protected_surface_import_summary,
     build_protected_surface_read_classification_packet,
     build_quiescent_retry_blocker_packet,
@@ -680,6 +688,234 @@ class NativeFilesystemProbeTests(unittest.TestCase):
             self.assertFalse(summary["current_thread_native_launch_attempted"])
             self.assertFalse(summary["external_result_imported"])
             self.assertEqual(validation["reason_class"], "EXTERNAL_EVIDENCE_DIR_MISSING")
+            self.assertEqual(false_green["status"], "ok")
+
+    def test_external_execution_scope_forbids_safety_import(self) -> None:
+        packet = build_external_execution_scope_boundary_packet()
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["safety_result_imported"])
+        self.assertFalse(packet["filesystem_safety_classified"])
+        self.assertFalse(packet["native_safety_pass_claimed"])
+
+    def test_external_execution_command_verification_requires_handoff_packet(self) -> None:
+        repo_root = Path("/repo").resolve()
+        evidence_dir = repo_root / "audit_results" / "retry_EXTERNAL_2026"
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=evidence_dir,
+        )
+        packet = build_external_execution_command_verification_packet(
+            handoff_command_packet=command,
+            external_evidence_dir=evidence_dir,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(packet["status"], "ok")
+        self.assertFalse(packet["command_executed_in_current_thread"])
+        self.assertTrue(packet["external_evidence_path_matches_handoff"])
+
+    def test_external_execution_command_verification_rejects_mismatch(self) -> None:
+        repo_root = Path("/repo").resolve()
+        command = build_external_detached_handoff_command_packet(
+            repo_root=repo_root,
+            evidence_dir=repo_root / "audit_results" / "retry_EXTERNAL_2026",
+        )
+        packet = build_external_execution_command_verification_packet(
+            handoff_command_packet=command,
+            external_evidence_dir=repo_root / "audit_results" / "other_EXTERNAL_2026",
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertIn("external_evidence_path_mismatch", packet["failed_checks"])
+
+    def test_external_execution_presence_classifies_missing_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            packet = build_external_evidence_presence_packet(
+                external_evidence_dir=Path(tmpdir) / "missing_EXTERNAL",
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["classification"], "evidence_dir_missing")
+        self.assertFalse(packet["filesystem_safety_classified"])
+
+    def test_external_execution_presence_rejects_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            evidence = Path(tmpdir) / "evidence_EXTERNAL"
+            evidence.mkdir()
+            for name in [
+                "sync_gate_packet.json",
+                "historical_dirt_quarantine_packet.json",
+                "version_pinning_packet.json",
+                "host_context_packet.json",
+                "owner_action_boundary_packet.json",
+                "current_codex_running_state_initial.json",
+                "quiescent_current_codex_precondition_packet.json",
+                "pre_custom_idle_stability_packet.json",
+                "launch_admission_packet.json",
+                "allowed_claims_matrix.json",
+                "native_safety_false_green_audit.json",
+                "native_safety_blocker_packet.json",
+            ]:
+                (evidence / name).write_text("{}", encoding="utf-8")
+            (evidence / "sync_gate_packet.json").write_text("{", encoding="utf-8")
+            packet = build_external_evidence_presence_packet(
+                external_evidence_dir=evidence,
+            )
+
+        self.assertEqual(packet["status"], "blocked")
+        self.assertEqual(packet["classification"], "evidence_present_but_invalid_json")
+        self.assertIn("sync_gate_packet.json", packet["invalid_json_packets"])
+
+    def test_external_execution_result_does_not_classify_safety(self) -> None:
+        presence = {
+            "status": "blocked",
+            "classification": "evidence_dir_missing",
+            "external_evidence_dir": "/repo/audit_results/missing_EXTERNAL",
+            "external_evidence_dir_exists": False,
+        }
+        result = build_external_execution_result_packet(
+            command_verification_packet={"status": "ok"},
+            evidence_presence_packet=presence,
+            secret_scan_packet={"status": "ok"},
+        )
+
+        self.assertEqual(
+            result["final_status"],
+            "EXTERNAL_NATIVE_SAFETY_EXECUTION_NO_EVIDENCE_PRODUCED",
+        )
+        self.assertFalse(result["filesystem_safety_classified"])
+        self.assertFalse(result["native_safety_pass_claimed"])
+
+    def test_external_execution_false_green_blocks_safety_claim(self) -> None:
+        scope = build_external_execution_scope_boundary_packet()
+        observation = build_external_execution_observation_packet(shell_command="echo test")
+        result = build_external_execution_result_packet(
+            command_verification_packet={"status": "ok"},
+            evidence_presence_packet={
+                "status": "blocked",
+                "classification": "evidence_dir_missing",
+                "external_evidence_dir_exists": False,
+            },
+            secret_scan_packet={"status": "ok", "secret_scan_performed": True},
+        )
+        audit = build_external_execution_false_green_audit(
+            scope_boundary_packet=scope,
+            command_verification_packet={"status": "ok"},
+            owner_boundary_packet=build_owner_execution_boundary_packet(),
+            observation_packet=observation,
+            evidence_presence_packet={"classification": "evidence_dir_missing"},
+            secret_scan_packet={"secret_scan_performed": True},
+            result_packet=result,
+            layer_separation_packet={"status": "ok"},
+        )
+
+        self.assertEqual(audit["status"], "ok")
+        self.assertFalse(audit["forbidden_claims_present"])
+
+    def test_external_execution_false_green_blocks_route_ux_egress_claim(self) -> None:
+        result = build_external_execution_result_packet(
+            command_verification_packet={"status": "ok"},
+            evidence_presence_packet={
+                "status": "blocked",
+                "classification": "evidence_dir_missing",
+                "external_evidence_dir_exists": False,
+            },
+            secret_scan_packet={"status": "ok"},
+        )
+        result["routing_claimed"] = True
+        audit = build_external_execution_false_green_audit(
+            scope_boundary_packet=build_external_execution_scope_boundary_packet(),
+            command_verification_packet={"status": "ok"},
+            owner_boundary_packet=build_owner_execution_boundary_packet(),
+            observation_packet=build_external_execution_observation_packet(
+                shell_command="echo test"
+            ),
+            evidence_presence_packet={"classification": "evidence_dir_missing"},
+            secret_scan_packet={"secret_scan_performed": True},
+            result_packet=result,
+            layer_separation_packet={"status": "ok"},
+        )
+
+        self.assertEqual(audit["status"], "blocked")
+
+    def test_external_execution_probe_entrypoint_no_owner_run_blocks_or_no_evidence(
+        self,
+    ) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        tool = repo_root / "tools" / "native_custom_external_execution_evidence_probe.py"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_repo = Path(tmpdir)
+            subprocess.run(["git", "init"], cwd=temp_repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.invalid"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            (temp_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=temp_repo, check=True)
+            subprocess.run(
+                ["git", "commit", "-m", "fixture"],
+                cwd=temp_repo,
+                check=True,
+                capture_output=True,
+            )
+            external_evidence = temp_repo / "audit_results" / "retry_EXTERNAL_missing"
+            handoff_packet = temp_repo / "external_detached_command_packet.json"
+            evidence_dir = temp_repo / "audit_results" / "execution_result"
+            command = build_external_detached_handoff_command_packet(
+                repo_root=temp_repo,
+                evidence_dir=external_evidence,
+            )
+            handoff_packet.write_text(json.dumps(command), encoding="utf-8")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--repo-root",
+                    str(temp_repo),
+                    "--evidence-dir",
+                    str(evidence_dir),
+                    "--handoff-command-packet",
+                    str(handoff_packet),
+                ],
+                cwd=repo_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            summary = json.loads(
+                (evidence_dir / "external_execution_summary_packet.json").read_text()
+            )
+            scope = json.loads(
+                (evidence_dir / "execution_scope_boundary_packet.json").read_text()
+            )
+            presence = json.loads(
+                (evidence_dir / "external_evidence_presence_packet.json").read_text()
+            )
+            false_green = json.loads(
+                (evidence_dir / "external_execution_false_green_audit.json").read_text()
+            )
+            self.assertEqual(
+                summary["final_status"],
+                "EXTERNAL_NATIVE_SAFETY_EXECUTION_NO_EVIDENCE_PRODUCED",
+            )
+            self.assertFalse(summary["current_thread_executed_command"])
+            self.assertFalse(summary["native_launch_from_current_thread"])
+            self.assertFalse(summary["safety_result_imported"])
+            self.assertFalse(scope["filesystem_safety_classified"])
+            self.assertEqual(presence["classification"], "evidence_dir_missing")
             self.assertEqual(false_green["status"], "ok")
 
     def test_current_codex_delta_marks_missing_root_pid_as_touched(self) -> None:

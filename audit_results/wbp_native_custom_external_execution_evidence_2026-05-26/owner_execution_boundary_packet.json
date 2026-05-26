@@ -1,0 +1,23 @@
+{
+  "captured_at_utc": "2026-05-26T10:46:37.114054Z",
+  "owner_allowed_actions": [
+    "open external Terminal",
+    "run exactly generated shell_command",
+    "report exit code if visible",
+    "leave evidence directory untouched"
+  ],
+  "owner_command_edit_allowed": false,
+  "owner_forbidden_actions": [
+    "edit command",
+    "change config/model/provider/account",
+    "move evidence/profile paths",
+    "patch app/runtime",
+    "manually cleanup hidden Codex files",
+    "type prompt into Custom window",
+    "declare pass from screenshot"
+  ],
+  "owner_prompt_allowed": false,
+  "owner_runtime_authority_edits_allowed": false,
+  "packet_kind": "owner_external_execution_boundary",
+  "status": "ok"
+}

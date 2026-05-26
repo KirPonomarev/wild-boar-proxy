@@ -1,0 +1,11 @@
+{
+  "captured_at_utc": "2026-05-26T10:46:37.114335Z",
+  "current_thread_executed_command": false,
+  "native_launch_from_current_thread": false,
+  "owner_execution_requested": true,
+  "owner_prompt_submitted": false,
+  "packet_kind": "external_execution_observation",
+  "reported_exit_code": null,
+  "shell_command_presented_to_owner": "cd /Volumes/Work/wild-boar-proxy && python3 /Volumes/Work/wild-boar-proxy/tools/native_custom_quiescent_safety_retry_probe.py --repo-root /Volumes/Work/wild-boar-proxy --evidence-dir /Volumes/Work/wild-boar-proxy/audit_results/wbp_native_custom_quiescent_safety_retry_EXTERNAL_2026-05-26T000000Z",
+  "status": "ok"
+}
